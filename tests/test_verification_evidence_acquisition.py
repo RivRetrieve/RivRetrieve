@@ -6,6 +6,7 @@ import copy
 import hashlib
 import io
 import json
+import shlex
 import stat
 import sys
 import tarfile
@@ -180,6 +181,30 @@ def _acquire(tmp_path, index):
 def test_committed_index_matches_all_registered_providers():
     index = read_index(ROOT / "maintenance/evidence/index.json")
     assert {item.provider_id for item in index.providers} == set(BUILTIN_PROVIDER_IDS)
+
+
+def test_committed_full_checks_require_their_published_collections():
+    """Private-body checks must not appear executable with public inputs alone."""
+    index = read_index(ROOT / "maintenance/evidence/index.json")
+    providers = {entry.provider_id: entry for entry in index.providers}
+    full = {}
+    for provider_id in ("ba_fhmzbih", "fr_hubeau", "fr_hydroportail", "th_thaiwater"):
+        checks = providers[provider_id].verification
+        full[provider_id] = [check for check in checks if "--evidence-root" in shlex.split(check.command)]
+        assert full[provider_id]
+        assert all(check.requires_collections for check in full[provider_id])
+
+    # The mixed historical France verifier uses one shared acquisition, not two copies.
+    assert full["fr_hubeau"][0].requires_collections == full["fr_hydroportail"][0].requires_collections
+    thai_checks = providers["th_thaiwater"].verification
+    regression = next(
+        check
+        for check in thai_checks
+        if shlex.split(check.command)[3:]
+        == ["tests/test_thaiwater_governing_evidence.py", "tests/test_thaiwater_source_outcomes.py", "-q"]
+    )
+    assert regression.requires_collections == full["th_thaiwater"][0].requires_collections
+    assert thai_checks.index(full["th_thaiwater"][0]) < thai_checks.index(regression)
 
 
 @pytest.mark.parametrize(

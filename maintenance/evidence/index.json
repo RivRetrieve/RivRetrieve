@@ -27,10 +27,10 @@
         },
         {
           "kind": "controlled_original_acquisitions",
-          "purpose": "180-pair workbook baseline, routing metadata and ledger; four public source cases; small workbook replays and terms-absence recording.",
-          "location": "private retained Bosnia corpus; release identity pending",
-          "access": "Controlled local evidence; shared release reference not yet recorded.",
-          "integrity": "Validate source receipts and manifests with the complete provider verifier; release asset size and SHA-256 will be bound by the collection record.",
+          "purpose": "Retained original Bosnia workbook baseline, receipts and manifest for complete verification of 180 station-product pairs.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/ba_fhmzbih-2026-09-29-v1; collection ba_fhmzbih-2026-09-29-v1; verification_root .",
+          "access": "Private versioned GitHub release; authenticated maintainer organization access. Download the indexed collection explicitly.",
+          "integrity": "The collection record pins release and asset identities, compressed size, SHA-256 and extraction limits. The complete provider verifier separately checks original acquisition receipts and bodies.",
           "limitations": [
             "Original FILE_HASHES.json and relative body paths must survive migration."
           ]
@@ -56,16 +56,20 @@
         {
           "command": "uv run python maintenance/catalogue/ba_fhmzbih/scripts/verify_evidence.py --evidence-root \"$BOSNIA_EVIDENCE_ROOT\"",
           "purpose": "Verify the complete controlled original-body collection against source identities and governing claims.",
-          "requires_collections": [],
+          "requires_collections": [
+            "ba_fhmzbih-2026-09-29-v1"
+          ],
           "limitations": [
-            "Shared collection identity is not yet recorded; this command requires an explicit genuine local evidence root. Missing originals block this check."
+            "Use the indexed collection verification_root after a verified download. Transport integrity alone does not certify source claims; missing bodies or receipts fail this complete check."
           ]
         }
       ],
       "gaps": [
         "Full private workbook acceptance must run separately; no new pass claimed here."
       ],
-      "collections": []
+      "collections": [
+        "ba_fhmzbih-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "br_ana",
@@ -290,10 +294,10 @@
         },
         {
           "kind": "controlled_original_acquisitions",
-          "purpose": "Governing mixed historical ledger, public count/history bundles, native capture account and full station references; controlled original governing evidence; runtime daily/temperature replays; terms and OpenAPI; superseded combined-artifact fixtures.",
-          "location": "private retained France corpus; release identity pending",
-          "access": "Controlled local evidence; shared release reference not yet recorded.",
-          "integrity": "Validate source receipts and manifests with the complete provider verifier; release asset size and SHA-256 will be bound by the collection record.",
+          "purpose": "Retained mixed historical France governing acquisitions and receipts, shared by Hub\u2019Eau and HydroPortail historical lineage.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/fr_hubeau-2026-09-29-v1; collection fr_hubeau-2026-09-29-v1; verification_root .",
+          "access": "Private versioned GitHub release; authenticated maintainer organization access. Download the indexed collection explicitly.",
+          "integrity": "The collection record pins release and asset identities, compressed size, SHA-256 and extraction limits. The complete provider verifier separately checks original acquisition receipts and bodies.",
           "limitations": [
             "Preserve acquisition-relative paths including reused-pr231-head46b2fde/evidence."
           ]
@@ -319,17 +323,21 @@
         {
           "command": "uv run python maintenance/catalogue/fr_hubeau/scripts/verify_governing_evidence.py --native maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet --ledger maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz --bundle maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz --bundle maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz --evidence-root \"$FRANCE_EVIDENCE_ROOT\"",
           "purpose": "Verify the complete controlled original-body collection against source identities and governing claims.",
-          "requires_collections": [],
+          "requires_collections": [
+            "fr_hubeau-2026-09-29-v1"
+          ],
           "limitations": [
-            "Shared collection identity is not yet recorded; this command requires an explicit genuine local evidence root. Missing originals block this check.",
-            "The ledger binds the retained historical native-2026-08-02.parquet snapshot, not the current Hub’Eau native table after service separation."
+            "Use the indexed collection verification_root after a verified download. Transport integrity alone does not certify source claims; missing bodies or receipts fail this complete check.",
+            "The ledger binds the retained historical native-2026-08-02.parquet snapshot, not the current Hub\u2019Eau native table after service separation."
           ]
         }
       ],
       "gaps": [
-        "Public bundle checks are not complete private-body certification. Mixed historical acquisitions must retain service identity; HydroPortail historical claims are not modern Hub’Eau route coverage."
+        "Public bundle checks are not complete private-body certification. Mixed historical acquisitions must retain service identity; HydroPortail historical claims are not modern Hub\u2019Eau route coverage."
       ],
-      "collections": []
+      "collections": [
+        "fr_hubeau-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "fr_hydroportail",
@@ -356,10 +364,10 @@
         },
         {
           "kind": "shared_historical_ledger",
-          "purpose": "Anonymous native inventory originals and receipts, legal/about/JS source definitions, reconciliation and supporting captures archives, bounded identity/observation probes, selector recordings; historical lineage shared with France ledger.",
-          "location": "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz; private retained France corpus",
-          "access": "Retained code-repository support material; no private credentials required for ordinary tests.",
-          "integrity": "Existing source receipts, capture attestations and provider tests bind the retained bytes. Exact collection transport identities are separate from acquisition identity.",
+          "purpose": "Historical raw HydroPortail witnesses and their governing ledger, retained in the same France collection used for historical Hub\u2019Eau verification.",
+          "location": "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz; https://github.com/RivRetrieve/verification-evidence/releases/tag/fr_hubeau-2026-09-29-v1; collection fr_hubeau-2026-09-29-v1; verification_root .",
+          "access": "The ledger is public repository metadata. Complete historical source bodies require authenticated access to the indexed private France collection.",
+          "integrity": "The shared France collection pins archive integrity. The historical France verifier checks governing body and receipt identities against the retained ledger.",
           "limitations": [
             "Historical raw witnesses do not transfer to other selectors or to another publication service."
           ]
@@ -381,12 +389,26 @@
           "limitations": [
             "Requires existing public build inputs, including national modern USGS metadata and the provider-specific ledgers. Native rebuilding is distinct from original-body verification."
           ]
+        },
+        {
+          "command": "uv run python maintenance/catalogue/fr_hubeau/scripts/verify_governing_evidence.py --native maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet --ledger maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz --bundle maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz --bundle maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz --evidence-root \"$FRANCE_EVIDENCE_ROOT\"",
+          "purpose": "Verify the shared historical governing bodies and receipts, including retained HydroPortail raw witnesses.",
+          "requires_collections": [
+            "fr_hubeau-2026-09-29-v1"
+          ],
+          "limitations": [
+            "Use the indexed collection verification_root after a verified download. Transport integrity alone does not certify source claims; missing bodies or receipts fail this complete check.",
+            "The ledger binds the retained historical native-2026-08-02.parquet snapshot, not the current Hub\u2019Eau native table after service separation.",
+            "This historical mixed-service check is not a PHyC census and does not certify validated, combined or most_valid selector availability."
+          ]
         }
       ],
       "gaps": [
         "No separate census of PHyC is established. Raw historical witnesses do not establish validated/combined/most_valid availability. Official legal/about statements do not establish blanket redistribution or original authorship. scripts/rebuild.py writes packaged outputs; for read-only checks prefer generator tests writing tmp_path."
       ],
-      "collections": []
+      "collections": [
+        "fr_hubeau-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "jp_mlit",
@@ -621,10 +643,10 @@
         },
         {
           "kind": "controlled_original_acquisitions",
-          "purpose": "Controlled complete 825-station graph corpus; governing pair ledger; public null and database-error cases; genuine window-boundary recordings; source JS and terms; native station snapshot.",
-          "location": "private retained ThaiWater baseline-capture-2026-09-13 corpus; release identity pending",
-          "access": "Controlled local evidence; shared release reference not yet recorded.",
-          "integrity": "Validate source receipts and manifests with the complete provider verifier; release asset size and SHA-256 will be bound by the collection record.",
+          "purpose": "Retained ThaiWater review collection, including the complete 825-station governing graph bodies and acquisition receipts.",
+          "location": "https://github.com/RivRetrieve/verification-evidence/releases/tag/th_thaiwater-2026-09-29-v1; collection th_thaiwater-2026-09-29-v1; verification_root baseline-capture-2026-09-13",
+          "access": "Private versioned GitHub release; authenticated maintainer organization access. Download the indexed collection explicitly.",
+          "integrity": "The collection record pins release and asset identities, compressed size, SHA-256 and extraction limits. The complete provider verifier separately checks original acquisition receipts and bodies.",
           "limitations": [
             "825 governing graph acquisitions are distinct from the earlier national waterlevel_load metadata response."
           ]
@@ -650,15 +672,19 @@
         {
           "command": "uv run python maintenance/catalogue/th_thaiwater/scripts/verify_governing_evidence.py --ledger maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv --native src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet --evidence-root \"$THAIWATER_REVIEW_EVIDENCE_ROOT\"",
           "purpose": "Verify the complete controlled original-body collection against source identities and governing claims.",
-          "requires_collections": [],
+          "requires_collections": [
+            "th_thaiwater-2026-09-29-v1"
+          ],
           "limitations": [
-            "Shared collection identity is not yet recorded; this command requires an explicit genuine local evidence root. Missing originals block this check."
+            "Use the indexed collection verification_root after a verified download. Transport integrity alone does not certify source claims; missing bodies or receipts fail this complete check."
           ]
         },
         {
           "command": "uv run pytest tests/test_thaiwater_governing_evidence.py tests/test_thaiwater_source_outcomes.py -q",
           "purpose": "After full verifier success, run the cross-station regression against the same root.",
-          "requires_collections": [],
+          "requires_collections": [
+            "th_thaiwater-2026-09-29-v1"
+          ],
           "limitations": [
             "Export THAIWATER_REVIEW_EVIDENCE_ROOT first. An unset variable skips the mandatory private regression; an empty directory can satisfy its negative exception assertion, so regression success alone is insufficient."
           ]
@@ -667,7 +693,9 @@
       "gaps": [
         "Full success must precede negative cross-station test, which can pass on empty root. 825 graph bodies do not themselves prove retention of the earlier original full waterlevel_load metadata acquisition; tracked four-row subset/native table alone does not establish that separate original. API redistribution remains unestablished."
       ],
-      "collections": []
+      "collections": [
+        "th_thaiwater-2026-09-29-v1"
+      ]
     },
     {
       "provider_id": "usgs_nwis",
@@ -774,5 +802,76 @@
       "collections": []
     }
   ],
-  "collections": []
+  "collections": [
+    {
+      "collection_id": "ba_fhmzbih-2026-09-29-v1",
+      "release_id": 399069764,
+      "release_tag": "ba_fhmzbih-2026-09-29-v1",
+      "verification_root": ".",
+      "assets": [
+        {
+          "asset_id": 598025200,
+          "name": "ba_fhmzbih-2026-09-29-v1.tar.gz",
+          "byte_size": 64499840,
+          "sha256": "c74cea1a11c6a5904c0a655b067445e8e45082a72271fd9aafb69162acd3b0b0",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 153152544,
+          "member_count": 834
+        }
+      ],
+      "purpose": "Retained original Bosnia workbook baseline, receipts and manifest for complete verification of 180 station-product pairs.",
+      "limitations": [
+        "GitHub reported immutable=false for this published release on 2026-09-29. Release immutability protection is not enabled for this release. Pinned identities and digests detect changed bytes; they do not prevent deletion or provide recovery.",
+        "Whole retained provider directory includes both archives and expanded copies. Member count and expanded bytes describe transport contents, not unique acquisitions.",
+        "The complete verifier must check FILE_HASHES.json and the original body-relative paths before certifying workbook classifications."
+      ]
+    },
+    {
+      "collection_id": "fr_hubeau-2026-09-29-v1",
+      "release_id": 399069763,
+      "release_tag": "fr_hubeau-2026-09-29-v1",
+      "verification_root": ".",
+      "assets": [
+        {
+          "asset_id": 598025204,
+          "name": "fr_hubeau-2026-09-29-v1.tar.gz",
+          "byte_size": 4188214,
+          "sha256": "82bcafc52d9eccc169b2cf08e7f1a9c6a909b89ad30e132fb0f7accdee239792",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 38596112,
+          "member_count": 533
+        }
+      ],
+      "purpose": "Retained mixed historical France governing acquisitions and receipts, shared by Hub\u2019Eau and HydroPortail historical lineage.",
+      "limitations": [
+        "GitHub reported immutable=false for this published release on 2026-09-29. Release immutability protection is not enabled for this release. Pinned identities and digests detect changed bytes; they do not prevent deletion or provide recovery.",
+        "Whole retained provider directory includes both archives and expanded copies. Member count and expanded bytes describe transport contents, not unique acquisitions.",
+        "The governing ledger binds native-2026-08-02.parquet. Historical HydroPortail raw witnesses do not establish other selectors or modern Hub\u2019Eau route coverage."
+      ]
+    },
+    {
+      "collection_id": "th_thaiwater-2026-09-29-v1",
+      "release_id": 399069765,
+      "release_tag": "th_thaiwater-2026-09-29-v1",
+      "verification_root": "baseline-capture-2026-09-13",
+      "assets": [
+        {
+          "asset_id": 598025201,
+          "name": "th_thaiwater-2026-09-29-v1.tar.gz",
+          "byte_size": 44409274,
+          "sha256": "3719ac1f0ea7e51afa491e9daea28f0c0ab33649acc2266467b5ec0215d49144",
+          "archive_format": "tar.gz",
+          "extracted_byte_size": 530575858,
+          "member_count": 1689
+        }
+      ],
+      "purpose": "Retained ThaiWater review collection, including the complete 825-station governing graph bodies and acquisition receipts.",
+      "limitations": [
+        "GitHub reported immutable=false for this published release on 2026-09-29. Release immutability protection is not enabled for this release. Pinned identities and digests detect changed bytes; they do not prevent deletion or provide recovery.",
+        "Whole retained provider directory includes both archives and expanded copies. Member count and expanded bytes describe transport contents, not unique acquisitions.",
+        "The complete graph verifier must pass before the same-root cross-station regression. The collection does not establish retention of the earlier full waterlevel_load metadata acquisition.",
+        "API redistribution permission remains unestablished; private access does not authorize public publication."
+      ]
+    }
+  ]
 }
