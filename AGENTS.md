@@ -54,9 +54,9 @@ when changing an interface.
 
 ## Verification evidence
 
-Use [the maintainer guide](docs/maintenance/evidence.md) and
-[provider evidence index](maintenance/evidence/index.json) for retained source
-material and verification commands. Changes to governing claims, source bindings,
+Use [the maintainer guide](docs/maintenance/evidence.md) for verification and the
+private [source archive](https://github.com/RivRetrieve/verification-evidence)
+for retained material, exact collection selection and archive operations. Changes to governing claims, source bindings,
 verifiers or collections require the applicable full checks against genuine inputs.
 Report unavailable mandatory evidence as blocked; do not weaken checks or substitute
 derived data for originals. Keep controlled material and credentials out of public

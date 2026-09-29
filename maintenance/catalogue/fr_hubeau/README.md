@@ -1,8 +1,7 @@
 # France catalogue evidence
 
-See [shared verification evidence](../../../docs/maintenance/evidence.md) for access,
-collection selection and integrity checks. The [provider index](../../evidence/index.json)
-records retained material, applicable commands and known gaps.
+See [shared verification evidence](../../../docs/maintenance/evidence.md) for
+archive access, exact input selection and verification prerequisites.
 
 `inventory/governing_evidence.json.xz` binds the native station population to
 recorded station-product acquisitions. `inventory/inventory_summary.json` retains
