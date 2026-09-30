@@ -1,4 +1,4 @@
-"""Adopted ANA telemetry stages over exact recordings, not yet public registration.
+"""Tests for internal ANA adopted telemetry stages using exact recordings.
 
 Boundary literals were authored independently from source bytes. See the retained
 recording README and independent-expectations.md. No conventional daily claim is made.
