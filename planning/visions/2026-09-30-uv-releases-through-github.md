@@ -44,10 +44,30 @@ and making the first release are separate actions for another day.
 Keep `.github/workflows/publish-pypi.yml` and its production environment named
 `pypi`, preserving the identities used by Freddy's trusted-publisher setup.
 
-Only a published, normal GitHub release may trigger package publication. Drafts and
-GitHub prereleases must not publish. Remove manual dispatch and the TestPyPI
-publication route. No replacement manual publishing workflow is wanted. Removing
-the route does not require deleting Freddy's TestPyPI account, project or settings.
+Publishing a normal GitHub release triggers automatic package publication. Also
+provide a manual recovery route for an existing published, normal GitHub release.
+Recovery must require its explicit release tag and verify that the corresponding
+release exists and is neither a draft nor a prerelease. It is not an alternative
+route for publishing an arbitrary branch, an unreleased tag or a different source
+commit. Both routes use the same required checks, artifact tests and publishing
+authorization. Drafts and GitHub prereleases must not publish.
+
+Remove the TestPyPI publication route. This does not require deleting Freddy's
+TestPyPI account, project or settings.
+
+Manual recovery is useful when publication fails and the workflow itself needs a
+repair. Allow the repaired workflow to operate on the existing release's exact
+tagged source; do not make recovery depend on executing only the old workflow from
+that tag. Keep the workflow revision and the package source revision distinct and
+explicit. Recovery must not bypass checks or silently substitute a newer package
+source commit.
+
+A transient failure can normally be retried by rerunning the existing release run
+without increasing the version. Manual recovery does not permit replacing files
+already uploaded to PyPI. Handle partial publication without overwriting existing
+files or silently treating conflicting artifacts as equivalent. If correcting the
+package requires replacing published files, prepare a new version through the
+normal release process. Document these recovery limits.
 
 Build the exact release-tagged commit, not the moving tip of `main`. Require a tag
 such as `v0.1.0` to match distribution version `0.1.0`. Reject mismatches before
@@ -61,7 +81,8 @@ using uv does not mean replacing those platform operations.
 
 ## Checks and artifacts
 
-Automated checks belong to the release workflow only. Do not add test CI for pull
+Automated checks belong to the release workflow, including its manual recovery
+route. Do not add test CI for pull
 requests, merges or pushes to `main`, and do not add a merge-approval requirement.
 Maintainers are responsible for testing development changes.
 
@@ -118,7 +139,9 @@ This vision consumes the evidence design; it does not redesign that system.
 The requested [integration comment on #431](https://github.com/RivRetrieve/RivRetrieve/issues/431#issuecomment-5915021390)
 asks that Effort to check the completed archive interface, maintainer instructions,
 release checks and actual distributions together. Its broader publication-boundary
-review remains there. This release work neither duplicates that review nor changes
+review remains there. That comment predates the owner's agreement to manual recovery;
+its prohibition on manual publishing is superseded by the restricted recovery route
+in this vision. This release work neither duplicates that review nor changes
 Program membership or delivery state.
 
 ## Trusted-publisher evidence
@@ -141,16 +164,22 @@ owner and coordinate with Freddy. Do not silently replace his setup.
 
 - Version metadata and runtime reporting agree on `0.1.0`; obsolete bump tooling is
   removed and uv version preparation is documented accurately.
-- Workflow tests or equivalent safe verification demonstrate normal-release-only
-  publication, no manual or prerelease upload route, rejection of tag/version
-  mismatches, and failure propagation before publishing authorization is used.
+- Workflow tests or equivalent safe verification demonstrate automatic publication
+  from normal releases and manual recovery restricted to an existing published,
+  normal release tag. Reject arbitrary branches, unreleased tags, drafts,
+  prereleases and tag/version mismatches. Both routes enforce the same checks and
+  stop on failure before publishing authorization is used.
+- Verify that recovery can use a repaired workflow while building only the selected
+  release's tagged source. Cover retry and partial-upload behavior without replacing
+  already published files or accepting conflicting artifacts as equivalent.
 - Formatting, lint, source type checks and the final source-independent selection
   pass against the implementation. Required unavailable checks remain explicit
   blockers, not a passing or skipped acceptance result.
 - The exact wheel and source distribution intended for upload pass the artifact
   checks, including installation with declared dependencies outside the source tree.
 - Maintainer instructions explain version preparation, release notes, private
-  evidence responsibilities, the automated release sequence and its limits.
+  evidence responsibilities, the automated release sequence, manual recovery and
+  their limits.
 - The #429 integration is verified against its delivered interface. Coordinate the
   final cross-check with #431 without claiming either Effort delivered by this work.
 - Review the workflow's authorization and artifact isolation without uploading to
