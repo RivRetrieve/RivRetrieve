@@ -1,4 +1,8 @@
-"""Authored audit controls; fixtures below are synthetic, not publisher recordings."""
+"""USGS audit tests with mixed inputs.
+
+Authored controls use synthetic inputs. Other tests use retained publisher
+responses, acquisition receipts, frozen baseline data and derived audit outputs.
+"""
 
 import gzip
 import importlib.util
