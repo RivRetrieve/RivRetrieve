@@ -64,14 +64,14 @@ def test_fetch_coalesces_five_products_into_exactly_two_annual_calls() -> None:
 @pytest.mark.parametrize(
     ("recording", "products", "counts", "first", "last"),
     [
-        (_DQ, _PRODUCTS[:3], [365, 365, 365], datetime(2023, 1, 1), datetime(2023, 12, 31)),
-        (_HQ, _PRODUCTS[3:], [8760, 8760], datetime(2023, 1, 1), datetime(2023, 12, 31, 23)),
+        (_DQ.name, _PRODUCTS[:3], [365, 365, 365], datetime(2023, 1, 1), datetime(2023, 12, 31)),
+        (_HQ.name, _PRODUCTS[3:], [8760, 8760], datetime(2023, 1, 1), datetime(2023, 12, 31, 23)),
     ],
 )
 def test_parse_official_annual_recordings(
-    recording: Path, products: tuple[ProductId, ...], counts: list[int], first: datetime, last: datetime
+    recording: str, products: tuple[ProductId, ...], counts: list[int], first: datetime, last: datetime
 ) -> None:
-    replay = ReplayTransport([recording])
+    replay = ReplayTransport([_DATA / recording])
     rendered = MappingProxyType({product: (RenderedWindow("2023", None, _window()),) for product in products})
     fetched = fetch((_STATION,), products, rendered, _window(), config(), replay)
     rows = parse(fetched.value[0], config()).rows
