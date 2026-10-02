@@ -112,11 +112,12 @@ Remove evidence from the future public tree only after verified private preserva
 Do not delete sole originals or remove active inputs while their retained consumers
 still require them. Do not add a local fallback to conceal missing archive access.
 
-#429 remains paused and outside scope. Do not resume its shared test-input refactor,
-execute its unreviewed drafts, or claim its delivery. If necessary removal depends on
-consumer changes belonging to #429, report the exact dependency for owner resolution.
-Do not silently absorb that work, break consumers, or claim #457 complete with evidence
-still present. An unresolved dependency is a blocker, not permission to reduce the outcome.
+Complete #457 independently. Changes to tests and other evidence consumers are in
+scope when necessary for evidence removal and continued correctness. Use the existing
+archive infrastructure. Do not resume or integrate #429's unfinished drafts, execute
+its unreviewed code, or claim its delivery. Leave #429 paused; its implementation will
+adapt to the completed #457 changes. Do not break consumers or claim #457 complete
+with evidence still present.
 
 Deleting current files leaves older copies in Git. Establish a safe publication approach
 that prevents the future public repository's reachable history and retained public
