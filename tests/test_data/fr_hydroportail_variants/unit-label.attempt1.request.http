@@ -1,7 +1,0 @@
-GET /build/5621.4ab47ec9.js HTTP/1.1
-Host: hydro.eaufrance.fr
-User-Agent: RivRetrieve
-Accept-Encoding: gzip, deflate
-Accept: */*
-Connection: keep-alive
-

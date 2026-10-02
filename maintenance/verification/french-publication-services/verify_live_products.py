@@ -1,3 +1,4 @@
+import argparse
 import hashlib
 import json
 import traceback
@@ -5,8 +6,12 @@ from pathlib import Path
 
 import rivretrieve as rr
 
-out = Path(__file__).parent / "live-products"
-out.mkdir(exist_ok=True)
+parser = argparse.ArgumentParser(description="Record bounded live checks into an external directory.")
+parser.add_argument("--out", type=Path, required=True)
+out = parser.parse_args().out.resolve()
+if any((parent / ".git").exists() for parent in (out, *out.parents)):
+    parser.error("Output must be outside source checkouts")
+out.mkdir(parents=True, exist_ok=False)
 cases = [
     ("fr_hubeau", "1011000101", "discharge", "daily", "mean", "2025-01-03", "2025-01-03"),
     ("fr_hubeau", "1011000101", "discharge", "daily", "max", "2025-01-03", "2025-01-03"),
@@ -58,4 +63,3 @@ for provider, station, quantity, frequency, statistic, start, end in cases:
         entry["error"] = traceback.format_exc()
     results.append(entry)
     (out / "results.json").write_text(json.dumps(results, ensure_ascii=False, indent=2, default=str) + "\n")
-    print(name, entry.get("rows"), entry.get("issues", entry.get("error")), flush=True)

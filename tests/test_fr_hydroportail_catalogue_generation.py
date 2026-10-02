@@ -7,7 +7,8 @@ import pytest
 from rivretrieve._internal.catalogues.native import RetrievedAt
 from rivretrieve._internal.providers.fr_hydroportail.generate_catalogue import decode_inventory, read_inventory
 
-EVIDENCE = Path(__file__).resolve().parents[1] / "maintenance/catalogue/fr_hydroportail/evidence"
+ROOT = Path(__file__).resolve().parents[1]
+EVIDENCE = Path("maintenance/catalogue/fr_hydroportail/evidence")
 
 
 def station_body():
@@ -66,8 +67,11 @@ def test_invalid_coordinate_refused(value):
         decode(body)
 
 
-def test_retained_capture_identity():
-    native, receipt = read_inventory(EVIDENCE / "national-tests.body", EVIDENCE / "national-tests.receipt.json")
+def test_retained_capture_identity(retained_evidence_root):
+    native, receipt = read_inventory(
+        retained_evidence_root / EVIDENCE / "national-tests.body",
+        retained_evidence_root / EVIDENCE / "national-tests.receipt.json",
+    )
     assert native.data.height > 0
     assert receipt["params"]["hydro_entities_search[test]"] == "1"
 
@@ -82,16 +86,19 @@ def test_invalid_native_metadata_refused(field, value):
         decode(body)
 
 
-def test_history_projection_keeps_only_native_scopes():
+def test_history_projection_keeps_only_native_scopes(retained_evidence_root):
     import lzma
 
     from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
     from rivretrieve._internal.providers.fr_hydroportail.generate_catalogue import project_availability
 
     history = decode_availability(
-        lzma.decompress((EVIDENCE.parents[1] / "fr_hubeau/inventory/governing_evidence.json.xz").read_bytes())
+        lzma.decompress((ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz").read_bytes())
     )
-    native, _ = read_inventory(EVIDENCE / "national-tests.body", EVIDENCE / "national-tests.receipt.json")
+    native, _ = read_inventory(
+        retained_evidence_root / EVIDENCE / "national-tests.body",
+        retained_evidence_root / EVIDENCE / "national-tests.receipt.json",
+    )
     pairs = project_availability(tuple(native.data["bookmarkCode"].to_list()), history)
     expected_witnesses = {
         (p.code_station, p.product_id) for p in history.pairs if p.basis == "historical_positive_witness"
@@ -122,27 +129,27 @@ def test_missing_required_native_identity_or_coordinate_is_not_null(mutation):
         decode(body)
 
 
-def test_current_form_options_match_captured_native_query():
+def test_current_form_options_match_captured_native_query(retained_evidence_root):
     import runpy
 
-    script = EVIDENCE.parent / "scripts/acquire_inventory.py"
+    script = ROOT / "maintenance/catalogue/fr_hydroportail/scripts/acquire_inventory.py"
     namespace = runpy.run_path(str(script))
     parser = namespace["SiteTypeOptions"]()
-    parser.feed((EVIDENCE / "search-form.body").read_text())
-    receipt = json.loads((EVIDENCE / "national-tests.receipt.json").read_bytes())
+    parser.feed((retained_evidence_root / EVIDENCE / "search-form.body").read_text())
+    receipt = json.loads((retained_evidence_root / EVIDENCE / "national-tests.receipt.json").read_bytes())
     assert parser.options
     assert parser.options == {
         k: v for k, v in receipt["params"].items() if k.startswith("hydro_entities_search[siteTypes]")
     }
 
 
-def test_source_capture_receipt_tamper_refused(tmp_path):
-    receipt = json.loads((EVIDENCE / "national-tests.receipt.json").read_bytes())
+def test_source_capture_receipt_tamper_refused(retained_evidence_root, tmp_path):
+    receipt = json.loads((retained_evidence_root / EVIDENCE / "national-tests.receipt.json").read_bytes())
     receipt["bytes"] += 1
     path = tmp_path / "receipt.json"
     path.write_text(json.dumps(receipt))
     with pytest.raises(ValueError, match="identity mismatch"):
-        read_inventory(EVIDENCE / "national-tests.body", path)
+        read_inventory(retained_evidence_root / EVIDENCE / "national-tests.body", path)
 
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
@@ -170,11 +177,11 @@ def test_catalogue_availability_witnesses_remain_raw_scoped():
 
     from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
 
-    root = EVIDENCE.parents[3]
+    root = ROOT
     packaged = root / "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue"
     pairs = pl.read_parquet(packaged / "station_products.parquet")
     ledger = decode_availability(
-        lzma.decompress((EVIDENCE.parents[1] / "fr_hubeau/inventory/governing_evidence.json.xz").read_bytes())
+        lzma.decompress((ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz").read_bytes())
     )
     witnessed = {(p.code_station, p.product_id) for p in ledger.pairs if p.basis == "historical_positive_witness"}
     available = pairs.filter(pl.col("availability") == "available")

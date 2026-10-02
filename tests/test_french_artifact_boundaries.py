@@ -10,7 +10,7 @@ import rivretrieve as rr
 from rivretrieve._internal import discovery, export_bundle
 from rivretrieve._internal.store import ObservationStoreRefusedError, validation
 
-_ARTIFACT_ARCHIVE = Path(__file__).parent / "test_data/french_combined_artifacts.tar.xz"
+_ARTIFACT_ARCHIVE = Path("tests/test_data/french_combined_artifacts.tar.xz")
 _BUNDLES = (
     "combined-station-selection.bundle",
     "empty-selection.bundle",
@@ -26,11 +26,11 @@ _BUNDLES = (
 
 
 @pytest.fixture(scope="module")
-def artifacts(tmp_path_factory):
+def artifacts(retained_evidence_root, tmp_path_factory):
     import tarfile
 
     root = tmp_path_factory.mktemp("combined-french-artifacts")
-    with tarfile.open(_ARTIFACT_ARCHIVE) as archive:
+    with tarfile.open(retained_evidence_root / _ARTIFACT_ARCHIVE) as archive:
         archive.extractall(root, filter="data")
     return root
 
@@ -92,7 +92,7 @@ def test_fixture_bytes_match_baseline_attestation(artifacts):
         assert hashlib.sha256(content).hexdigest() == attestation["files"]["cache/fr_hubeau/store/" + name]["sha256"]
 
 
-def test_service_specific_daily_store_and_bundles_round_trip(tmp_path, monkeypatch):
+def test_service_specific_daily_store_and_bundles_round_trip(retained_evidence_root, tmp_path, monkeypatch):
     from io import BytesIO
     from zipfile import ZipFile
 
@@ -101,7 +101,7 @@ def test_service_specific_daily_store_and_bundles_round_trip(tmp_path, monkeypat
     from rivretrieve._internal.recordings import ReplayTransport
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    recording = Path(__file__).parent / "test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json"
+    recording = retained_evidence_root / "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json"
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selection = rr.find(
         provider="fr_hubeau",

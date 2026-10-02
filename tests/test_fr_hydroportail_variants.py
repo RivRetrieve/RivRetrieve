@@ -3,7 +3,6 @@
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 from polars.testing import assert_frame_equal
@@ -34,7 +33,8 @@ def test_public_discovery_exposes_all_source_variants(quantity):
 class SyntheticVariantTransport:
     """Authored protocol edge cases, not recordings or historical availability evidence."""
 
-    def __init__(self, *, empty=(), failed=(), mutation=None):
+    def __init__(self, retained_evidence_root, *, empty=(), failed=(), mutation=None):
+        self.retained_evidence_root = retained_evidence_root
         self.calls = []
         self.contents = {}
         self.empty = empty
@@ -53,7 +53,9 @@ class SyntheticVariantTransport:
         self.calls.append(variant)
         if variant in self.failed:
             raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
-        body = json.loads((Path(__file__).parent / "test_data/fr_hydroportail_J783301020_empty.body").read_bytes())
+        body = json.loads(
+            (self.retained_evidence_root / "tests/test_data/fr_hydroportail_J783301020_empty.body").read_bytes()
+        )
         body["series"].update(
             code="Y251002001",
             metric=metric,
@@ -91,8 +93,8 @@ def retrieve(selection, **kwargs):
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
 @pytest.mark.parametrize("variant", sorted(VARIANTS))
-def test_explicit_variant_requests_only_its_identity(monkeypatch, tmp_path, quantity, variant):
-    transport = SyntheticVariantTransport()
+def test_explicit_variant_requests_only_its_identity(retained_evidence_root, monkeypatch, tmp_path, quantity, variant):
+    transport = SyntheticVariantTransport(retained_evidence_root)
     install(monkeypatch, tmp_path, transport)
     selection = rr.pick(public_selection(quantity), variant=variant)
     result = retrieve(selection)
@@ -112,8 +114,10 @@ def test_explicit_variant_requests_only_its_identity(monkeypatch, tmp_path, quan
 
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
-def test_subset_cache_cannot_satisfy_all_variants_and_identical_rows_stay_distinct(monkeypatch, tmp_path, quantity):
-    transport = SyntheticVariantTransport()
+def test_subset_cache_cannot_satisfy_all_variants_and_identical_rows_stay_distinct(
+    retained_evidence_root, monkeypatch, tmp_path, quantity
+):
+    transport = SyntheticVariantTransport(retained_evidence_root)
     install(monkeypatch, tmp_path, transport)
     selection = public_selection(quantity)
     retrieve(rr.pick(selection, variant="raw"), cache="reuse")
@@ -136,8 +140,10 @@ def test_subset_cache_cannot_satisfy_all_variants_and_identical_rows_stay_distin
 
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
-def test_null_absent_empty_and_failed_variants_remain_distinct(monkeypatch, tmp_path, quantity):
-    transport = SyntheticVariantTransport(empty={"validated"}, failed={"pre_validated_and_validated"})
+def test_null_absent_empty_and_failed_variants_remain_distinct(retained_evidence_root, monkeypatch, tmp_path, quantity):
+    transport = SyntheticVariantTransport(
+        retained_evidence_root, empty={"validated"}, failed={"pre_validated_and_validated"}
+    )
     install(monkeypatch, tmp_path, transport)
     result = retrieve(public_selection(quantity))
     assert set(transport.calls) == VARIANTS
@@ -160,11 +166,11 @@ def test_null_absent_empty_and_failed_variants_remain_distinct(monkeypatch, tmp_
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
 @pytest.mark.parametrize("variant", sorted(VARIANTS))
 @pytest.mark.parametrize("field", ["code", "metric", "unit", "statuses", "timezone", "title"])
-def test_empty_variant_parser_checks_envelope_identity(quantity, variant, field):
+def test_empty_variant_parser_checks_envelope_identity(retained_evidence_root, quantity, variant, field):
     metric = "Q" if quantity == "discharge" else "H"
     recording = read_recording(
-        Path(__file__).parent
-        / "test_data/fr_hydroportail_variants"
+        retained_evidence_root
+        / "tests/test_data/fr_hydroportail_variants"
         / f"Y251002001_{metric}_padded_{variant}.recording.json"
     )
     payload = recorded_payload(
@@ -193,11 +199,13 @@ def test_empty_variant_parser_checks_envelope_identity(quantity, variant, field)
 
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
-def test_public_empty_variant_failure_keeps_identity_receipt_and_no_coverage(monkeypatch, tmp_path, quantity):
+def test_public_empty_variant_failure_keeps_identity_receipt_and_no_coverage(
+    retained_evidence_root, monkeypatch, tmp_path, quantity
+):
     def mutate(document):
         document["series"]["statuses"] = "unexpected"
 
-    transport = SyntheticVariantTransport(empty=VARIANTS, mutation=mutate)
+    transport = SyntheticVariantTransport(retained_evidence_root, empty=VARIANTS, mutation=mutate)
     install(monkeypatch, tmp_path, transport)
     selection = rr.pick(public_selection(quantity), variant="validated")
     result = retrieve(selection, cache="reuse")
@@ -213,12 +221,12 @@ def test_public_empty_variant_failure_keeps_identity_receipt_and_no_coverage(mon
     assert transport.calls == ["validated", "validated"]
 
 
-def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(monkeypatch, tmp_path):
+def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(retained_evidence_root, monkeypatch, tmp_path):
     import shutil
 
     from rivretrieve._internal.recordings import read_recording
 
-    artifact = Path(__file__).parent / "test_data/fr_hydroportail_legacy_raw"
+    artifact = retained_evidence_root / "tests/test_data/fr_hydroportail_legacy_raw"
     shutil.copytree(artifact / "cache", tmp_path / "cache")
     before = {p.relative_to(artifact): p.read_bytes() for p in artifact.rglob("*") if p.is_file()}
     legacy_result = rr.from_bundle((artifact / "result.zip").read_bytes())
@@ -226,7 +234,9 @@ def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(monkeypatch,
     assert rr.series(legacy_result)["variant"].to_list() == [None]
     assert rr.series(legacy_selection)["variant"].to_list() == [None]
     assert legacy_result.data.height == 282
-    recording = read_recording(Path(__file__).parent / "test_data/fr_hydroportail_station_Q_padded.recording.json")
+    recording = read_recording(
+        retained_evidence_root / "tests/test_data/fr_hydroportail_station_Q_padded.recording.json"
+    )
 
     class LegacyWindowTransport:
         def __init__(self):
@@ -280,12 +290,14 @@ def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(monkeypatch,
 )
 @pytest.mark.parametrize("metric,quantity", [("Q", "discharge"), ("H", "stage")])
 @pytest.mark.parametrize("variant", sorted(VARIANTS))
-def test_recorded_source_variant_public_path(monkeypatch, tmp_path, station, start, end, metric, quantity, variant):
+def test_recorded_source_variant_public_path(
+    retained_evidence_root, monkeypatch, tmp_path, station, start, end, metric, quantity, variant
+):
     from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
     recording = read_recording(
-        Path(__file__).parent
-        / "test_data/fr_hydroportail_variants"
+        retained_evidence_root
+        / "tests/test_data/fr_hydroportail_variants"
         / f"{station}_{metric}_padded_{variant}.recording.json"
     )
     install(monkeypatch, tmp_path, ReplayTransport((recording,)))
@@ -317,10 +329,12 @@ def test_recorded_source_variant_public_path(monkeypatch, tmp_path, station, sta
 
 
 @pytest.mark.parametrize("metric,quantity", [("Q", "discharge"), ("H", "stage")])
-def test_recorded_unrestricted_overlaps_keep_source_identities(monkeypatch, tmp_path, metric, quantity):
+def test_recorded_unrestricted_overlaps_keep_source_identities(
+    retained_evidence_root, monkeypatch, tmp_path, metric, quantity
+):
     from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
-    folder = Path(__file__).parent / "test_data/fr_hydroportail_variants"
+    folder = retained_evidence_root / "tests/test_data/fr_hydroportail_variants"
     recordings = tuple(
         read_recording(folder / f"Y251002001_{metric}_padded_{variant}.recording.json") for variant in sorted(VARIANTS)
     )

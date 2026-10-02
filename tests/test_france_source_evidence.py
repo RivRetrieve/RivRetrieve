@@ -38,9 +38,9 @@ def load_verifier():
         "extra",
     ],
 )
-def test_history_claim_must_match_recorded_body(tmp_path, defect):
+def test_history_claim_must_match_recorded_body(retained_evidence_root, tmp_path, defect):
     verifier = load_verifier()
-    original = FOLDER / "evidence/hydroportail_history.tar.xz"
+    original = retained_evidence_root / "maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz"
     with tarfile.open(original) as source:
         receipt_stream = source.extractfile("receipts.csv")
         assert receipt_stream is not None
@@ -93,9 +93,11 @@ def test_history_claim_must_match_recorded_body(tmp_path, defect):
 
 @pytest.mark.parametrize("defect", ["missing_answered_body", "request_url"])
 @pytest.mark.parametrize("status", ["200", "500"])
-def test_answered_count_requires_body_and_request_identity(tmp_path, defect, status):
+def test_answered_count_requires_body_and_request_identity(retained_evidence_root, tmp_path, defect, status):
     verifier = load_verifier()
-    with tarfile.open(FOLDER / "evidence/hubeau_counts.tar.xz") as source:
+    with tarfile.open(
+        retained_evidence_root / "maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz"
+    ) as source:
         stream = source.extractfile("receipts.csv")
         assert stream is not None
         rows = list(csv.DictReader(io.StringIO(stream.read().decode())))

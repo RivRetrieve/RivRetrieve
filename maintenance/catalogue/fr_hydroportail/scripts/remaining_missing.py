@@ -14,6 +14,9 @@ def main():
     parser.add_argument("--gaps", type=Path, required=True, help="Regenerated unmatched-stations.json")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
+    args.out = args.out.resolve()
+    if any((parent / ".git").exists() for parent in (args.out, *args.out.parents)):
+        parser.error("Output must be outside source checkouts")
     args.out.mkdir(parents=True, exist_ok=True)
     client = HttpClient()
     codes = [entry["station_id"] for entry in json.loads(args.gaps.read_bytes())]

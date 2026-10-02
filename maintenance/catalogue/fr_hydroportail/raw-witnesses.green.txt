@@ -1,9 +1,0 @@
-...............................                                          [100%]
-=============================== warnings summary ===============================
-tests/test_ba_fr_public.py::test_bosnia_public_path_clips_converts_and_keeps_exact_receipts
-tests/test_ba_fr_live.py::test_every_bosnia_and_france_product_has_exact_live_probe
-  /Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/effort-311-hydroportail-variants/.venv/lib/python3.13/site-packages/openpyxl/styles/stylesheet.py:237: UserWarning: Workbook contains no default style, apply openpyxl's default
-    warn("Workbook contains no default style, apply openpyxl's default")
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-31 passed, 2 warnings in 45.70s

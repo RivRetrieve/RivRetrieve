@@ -1,15 +1,12 @@
+import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 from rivretrieve._internal.transport import HttpClient, HttpMethod, TransportRequest
 
-out = Path(__file__).resolve().parents[1] / "evidence"
-client = HttpClient()
 
-
-def get(name, url, params=None):
+def get(client, out, name, url, params=None):
     r = client.send(TransportRequest(HttpMethod.GET, url, params=params))
     (out / (name + ".body")).write_bytes(r.content)
     (out / (name + ".receipt.json")).write_text(
@@ -26,9 +23,20 @@ def get(name, url, params=None):
             indent=2,
         )
     )
-    print(name, r.status_code, len(r.content), flush=True)
     return r.content
 
 
 if __name__ == "__main__":
-    get(sys.argv[1], sys.argv[2], json.loads(sys.argv[3]) if len(sys.argv) > 3 else None)
+    parser = argparse.ArgumentParser(description="Acquire one response into an explicit external directory.")
+    parser.add_argument("name")
+    parser.add_argument("url")
+    parser.add_argument("params", nargs="?", type=json.loads)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+    args.out = args.out.resolve()
+    if any((parent / ".git").exists() for parent in (args.out, *args.out.parents)):
+        parser.error("Output must be outside source checkouts")
+    if not args.name or Path(args.name).name != args.name or args.name in {".", ".."}:
+        parser.error("name must be a single filename stem")
+    args.out.mkdir(parents=True, exist_ok=True)
+    get(HttpClient(), args.out, args.name, args.url, args.params)

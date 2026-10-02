@@ -41,7 +41,7 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
 )
 from tests._catalogue_projection import copy_catalogue_projection
 
-_TEST_DATA_DIR = Path(__file__).parent / "test_data"
+_TEST_DATA_DIR = Path("tests/test_data")
 _HYDRO_FIXTURE = _TEST_DATA_DIR / "fr_hubeau_metadata.json"
 _TEMP_FIXTURE = _TEST_DATA_DIR / "fr_hubeau_temp_stations.json"
 _HYDRO_FULL_FIXTURE = _TEST_DATA_DIR / "fr_hubeau_referentiel_stations_full.json"
@@ -51,10 +51,8 @@ _OPENAPI_EVIDENCE = _TEST_DATA_DIR / "fr_hubeau_openapi_v2.json"
 _HYDRO_RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 17, 32, 58, tzinfo=UTC))
 _TEMP_RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 17, 33, 34, tzinfo=UTC))
 _PINNED_NATIVE_DIGEST = "f5c3d84a4e6674a1aa5e6b951576edf6bcbdf77867ab0e5c3ffe2f09adbf7322"
-NATIVE_PATH = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet"
-CURRENT_NATIVE_PATH = (
-    Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
-)
+NATIVE_PATH = Path("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
+CURRENT_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
 
 
 def _availability():
@@ -68,9 +66,9 @@ def _full_payload(path: Path) -> dict[str, object]:
     return value
 
 
-def _sample_payloads() -> tuple[dict[str, object], dict[str, object]]:
-    hydro_full = _full_payload(_HYDRO_FULL_FIXTURE)
-    temp_full = _full_payload(_TEMP_FULL_FIXTURE)
+def _sample_payloads(retained_evidence_root) -> tuple[dict[str, object], dict[str, object]]:
+    hydro_full = _full_payload(retained_evidence_root / _HYDRO_FULL_FIXTURE)
+    temp_full = _full_payload(retained_evidence_root / _TEMP_FULL_FIXTURE)
     hydro_rows = hydro_full["data"]
     temp_rows = temp_full["data"]
     assert isinstance(hydro_rows, list)
@@ -98,8 +96,10 @@ def _assert_issue(result: object, message: str) -> None:
 
 
 @pytest.fixture(scope="module")
-def _pristine_projection():
-    built = build_catalogue(read_native_table(NATIVE_PATH), FRANCE_ORIGIN_DECLARATIONS, _availability())
+def _pristine_projection(retained_evidence_root):
+    built = build_catalogue(
+        read_native_table(retained_evidence_root / NATIVE_PATH), FRANCE_ORIGIN_DECLARATIONS, _availability()
+    )
     return copy_catalogue_projection(built)
 
 
@@ -117,6 +117,7 @@ def catalogue(_pristine_projection):
     ids=["hydrometry", "temperature"],
 )
 def test_native_build_enforces_each_endpoint_origin_declaration(
+    retained_evidence_root,
     endpoint: str,
     endpoint_origins: dict[str, object],
 ) -> None:
@@ -132,7 +133,7 @@ def test_native_build_enforces_each_endpoint_origin_declaration(
         FatalContractError,
         match=r"^fr_hubeau\.longitude: canonical column has no origin declaration$",
     ):
-        build_catalogue(read_native_table(NATIVE_PATH), origins, _availability())
+        build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), origins, _availability())
 
 
 @pytest.mark.parametrize(
@@ -144,12 +145,13 @@ def test_native_build_enforces_each_endpoint_origin_declaration(
     ids=["hydrometry", "temperature"],
 )
 def test_native_build_rejects_unattested_partition_changes(
+    retained_evidence_root,
     endpoint: str,
     partition: str,
     remaining: int,
     expected: int,
 ) -> None:
-    native = read_native_table(NATIVE_PATH)
+    native = read_native_table(retained_evidence_root / NATIVE_PATH)
     row_to_remove = native.data.filter(pl.col("source_endpoint") == endpoint).row(0, named=True)
     shortened = NativeTable(
         native.data.filter(
@@ -190,8 +192,8 @@ def test_generate_catalogue_temp_station_fields(catalogue) -> None:
     assert station["crs"][0] == "EPSG:4326"
 
 
-def test_generate_catalogue_filters_no_stations(catalogue) -> None:
-    assert catalogue.stations.height == read_native_table(NATIVE_PATH).data.height
+def test_generate_catalogue_filters_no_stations(retained_evidence_root, catalogue) -> None:
+    assert catalogue.stations.height == read_native_table(retained_evidence_root / NATIVE_PATH).data.height
 
 
 def test_generate_catalogue_hydro_station_products(catalogue) -> None:
@@ -219,8 +221,8 @@ def _assert_fatal_issue(table: NativeTable, code: str, message: str) -> None:
     ]
 
 
-def test_native_builder_rejects_one_unknown_endpoint_row() -> None:
-    native = read_native_table(NATIVE_PATH)
+def test_native_builder_rejects_one_unknown_endpoint_row(retained_evidence_root) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE_PATH)
     station_id = native.data["code_station"][0]
     bad = NativeTable(
         native.data.with_columns(
@@ -244,8 +246,10 @@ def test_native_builder_rejects_one_unknown_endpoint_row() -> None:
         ("latitude", "fr_hubeau.latitude: native column 'latitude' does not exist"),
     ],
 )
-def test_native_builder_rejects_each_absent_endpoint_coordinate(column: str, message: str) -> None:
-    native = read_native_table(NATIVE_PATH)
+def test_native_builder_rejects_each_absent_endpoint_coordinate(
+    retained_evidence_root, column: str, message: str
+) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE_PATH)
     _assert_fatal_issue(
         NativeTable(native.data.drop(column)),
         "catalogue_origin.absent_native_column",
@@ -254,8 +258,8 @@ def test_native_builder_rejects_each_absent_endpoint_coordinate(column: str, mes
 
 
 @pytest.mark.parametrize("signature_column", ["coordonnee_x_station", "coordonnee_y_station"])
-def test_code_31_correction_requires_each_signature_half(signature_column: str) -> None:
-    native = read_native_table(NATIVE_PATH)
+def test_code_31_correction_requires_each_signature_half(retained_evidence_root, signature_column: str) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE_PATH)
     station_id = "H000000201"
     bad = NativeTable(
         native.data.with_columns(
@@ -282,9 +286,9 @@ def test_code_31_correction_requires_each_signature_half(signature_column: str) 
     ],
 )
 def test_code_31_correction_checks_each_inclusive_bound(
-    source_column: str, signature_column: str, value: float
+    retained_evidence_root, source_column: str, signature_column: str, value: float
 ) -> None:
-    native = read_native_table(NATIVE_PATH)
+    native = read_native_table(retained_evidence_root / NATIVE_PATH)
     station_id = "H000000201"
     condition = pl.col("code_station") == station_id
     bad = NativeTable(
@@ -300,8 +304,8 @@ def test_code_31_correction_checks_each_inclusive_bound(
     )
 
 
-def test_only_code_31_coordinates_are_transposed(catalogue) -> None:
-    native = read_native_table(NATIVE_PATH).data
+def test_only_code_31_coordinates_are_transposed(retained_evidence_root, catalogue) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE_PATH).data
     stations = catalogue.stations
     code_31 = native.filter(pl.col("code_projection") == 31)
     assert code_31.height == 54
@@ -401,7 +405,7 @@ def test_only_code_31_coordinates_are_transposed(catalogue) -> None:
     assert old_orientation["longitude_station"].max() == 49.9048593
 
 
-def test_code_26_changed_ids_pass_through_exactly(catalogue) -> None:
+def test_code_26_changed_ids_pass_through_exactly(retained_evidence_root, catalogue) -> None:
     ids = [
         "F462000701",
         "K040301001",
@@ -420,7 +424,7 @@ def test_code_26_changed_ids_pass_through_exactly(catalogue) -> None:
         "P302000101",
         "U321401001",
     ]
-    native = read_native_table(NATIVE_PATH).data
+    native = read_native_table(retained_evidence_root / NATIVE_PATH).data
     expected = (
         native.filter(pl.col("code_station").is_in(ids))
         .select(
@@ -437,8 +441,8 @@ def test_code_26_changed_ids_pass_through_exactly(catalogue) -> None:
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
-def test_native_envelope_must_be_object(endpoint: str) -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_envelope_must_be_object(retained_evidence_root, endpoint: str) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     if endpoint == "hydrometry":
         hydro = []
     else:
@@ -447,8 +451,8 @@ def test_native_envelope_must_be_object(endpoint: str) -> None:
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
-def test_native_data_must_be_list(endpoint: str) -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_data_must_be_list(retained_evidence_root, endpoint: str) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
     target["data"] = {}
     _assert_issue(_refresh(hydro, temperature), f"fr_hubeau {endpoint} response data must be a list")
@@ -456,8 +460,8 @@ def test_native_data_must_be_list(endpoint: str) -> None:
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
 @pytest.mark.parametrize("invalid_count", [True, "2"])
-def test_native_count_must_be_non_boolean_integer(endpoint: str, invalid_count: object) -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_count_must_be_non_boolean_integer(retained_evidence_root, endpoint: str, invalid_count: object) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
     target["count"] = invalid_count
     _assert_issue(
@@ -467,8 +471,8 @@ def test_native_count_must_be_non_boolean_integer(endpoint: str, invalid_count: 
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
-def test_native_count_must_match_rows(endpoint: str) -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_count_must_match_rows(retained_evidence_root, endpoint: str) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
     target["count"] = 3
     _assert_issue(
@@ -478,16 +482,16 @@ def test_native_count_must_match_rows(endpoint: str) -> None:
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
-def test_native_row_must_be_object(endpoint: str) -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_row_must_be_object(retained_evidence_root, endpoint: str) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
     target["data"][0] = []
     _assert_issue(_refresh(hydro, temperature), f"fr_hubeau {endpoint} station 0 must be an object")
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
-def test_native_row_requires_complete_endpoint_key_set(endpoint: str) -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_row_requires_complete_endpoint_key_set(retained_evidence_root, endpoint: str) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
     row = target["data"][0]
     station_id = row["code_station"]
@@ -499,8 +503,8 @@ def test_native_row_requires_complete_endpoint_key_set(endpoint: str) -> None:
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
-def test_native_scalar_value_must_inhabit_schema(endpoint: str) -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_scalar_value_must_inhabit_schema(retained_evidence_root, endpoint: str) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
     row = target["data"][0]
     station_id = row["code_station"]
@@ -511,8 +515,8 @@ def test_native_scalar_value_must_inhabit_schema(endpoint: str) -> None:
     )
 
 
-def test_native_list_value_must_inhabit_schema() -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_list_value_must_inhabit_schema(retained_evidence_root) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
     hydro["data"][0]["code_sandre_reseau_station"] = ["valid", 3]
     _assert_issue(
@@ -521,8 +525,8 @@ def test_native_list_value_must_inhabit_schema() -> None:
     )
 
 
-def test_native_list_value_must_be_a_list() -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_list_value_must_be_a_list(retained_evidence_root) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
     hydro["data"][0]["code_sandre_reseau_station"] = "BSH164"
     _assert_issue(
@@ -531,9 +535,9 @@ def test_native_list_value_must_be_a_list() -> None:
     )
 
 
-def test_native_float_value_must_be_finite() -> None:
+def test_native_float_value_must_be_finite(retained_evidence_root) -> None:
     for invalid_value in (float("nan"), float("inf")):
-        hydro, temperature = _sample_payloads()
+        hydro, temperature = _sample_payloads(retained_evidence_root)
         station_id = hydro["data"][0]["code_station"]
         hydro["data"][0]["longitude_station"] = invalid_value
         _assert_issue(
@@ -542,8 +546,8 @@ def test_native_float_value_must_be_finite() -> None:
         )
 
 
-def test_native_float_value_must_not_be_boolean() -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_float_value_must_not_be_boolean(retained_evidence_root) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
     hydro["data"][0]["longitude_station"] = True
     _assert_issue(
@@ -552,8 +556,8 @@ def test_native_float_value_must_not_be_boolean() -> None:
     )
 
 
-def test_native_integer_value_must_not_be_boolean() -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_integer_value_must_not_be_boolean(retained_evidence_root) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
     hydro["data"][0]["code_projection"] = True
     _assert_issue(
@@ -562,8 +566,8 @@ def test_native_integer_value_must_not_be_boolean() -> None:
     )
 
 
-def test_native_en_service_value_must_be_boolean() -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_en_service_value_must_be_boolean(retained_evidence_root) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
     hydro["data"][0]["en_service"] = 1
     _assert_issue(
@@ -580,9 +584,11 @@ def test_native_en_service_value_must_be_boolean() -> None:
         ("hydrometry", "nature_station"),
     ],
 )
-def test_native_upstream_field_addition_changes_nothing(endpoint: str, injected_field: str) -> None:
-    hydro = _full_payload(_HYDRO_FULL_FIXTURE)
-    temperature = _full_payload(_TEMP_FULL_FIXTURE)
+def test_native_upstream_field_addition_changes_nothing(
+    retained_evidence_root, endpoint: str, injected_field: str
+) -> None:
+    hydro = _full_payload(retained_evidence_root / _HYDRO_FULL_FIXTURE)
+    temperature = _full_payload(retained_evidence_root / _TEMP_FULL_FIXTURE)
     target = hydro if endpoint == "hydrometry" else temperature
     target["data"][0][injected_field] = "ignored"
 
@@ -686,9 +692,11 @@ def test_native_upstream_field_addition_changes_nothing(endpoint: str, injected_
         ),
     ],
 )
-def test_native_geometry_container_and_nested_members_are_strict(geometries: list[object]) -> None:
+def test_native_geometry_container_and_nested_members_are_strict(
+    retained_evidence_root, geometries: list[object]
+) -> None:
     for geometry in geometries:
-        hydro, temperature = _sample_payloads()
+        hydro, temperature = _sample_payloads(retained_evidence_root)
         station_id = hydro["data"][0]["code_station"]
         hydro["data"][0]["geometry"] = geometry
         message = f"fr_hubeau hydrometry station {station_id} has source values outside the native schema"
@@ -697,8 +705,10 @@ def test_native_geometry_container_and_nested_members_are_strict(geometries: lis
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
 @pytest.mark.parametrize("invalid_id", [7, "   "])
-def test_native_ids_are_nonempty_strings_without_normalization(endpoint: str, invalid_id: object) -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_ids_are_nonempty_strings_without_normalization(
+    retained_evidence_root, endpoint: str, invalid_id: object
+) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
     target["data"][0]["code_station"] = invalid_id
     _assert_issue(
@@ -708,8 +718,8 @@ def test_native_ids_are_nonempty_strings_without_normalization(endpoint: str, in
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
-def test_native_endpoint_duplicate_is_an_issue(endpoint: str) -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_endpoint_duplicate_is_an_issue(retained_evidence_root, endpoint: str) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
     station_id = target["data"][0]["code_station"]
     target["data"][1]["code_station"] = station_id
@@ -719,24 +729,24 @@ def test_native_endpoint_duplicate_is_an_issue(endpoint: str) -> None:
     )
 
 
-def test_native_cross_endpoint_collision_is_an_issue() -> None:
-    hydro, temperature = _sample_payloads()
+def test_native_cross_endpoint_collision_is_an_issue(retained_evidence_root) -> None:
+    hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
     temperature["data"][0]["code_station"] = station_id
     _assert_issue(_refresh(hydro, temperature), f"fr_hubeau station {station_id} occurs in both station endpoints")
 
 
-def test_native_population_is_not_frozen_to_historical_snapshot() -> None:
-    assert _refresh(*_sample_payloads()).issues == ()
+def test_native_population_is_not_frozen_to_historical_snapshot(retained_evidence_root) -> None:
+    assert _refresh(*_sample_payloads(retained_evidence_root)).issues == ()
 
 
-def test_capture_boundaries_and_documentation_evidence() -> None:
-    hydro = _full_payload(_HYDRO_FULL_FIXTURE)
-    temperature = _full_payload(_TEMP_FULL_FIXTURE)
+def test_capture_boundaries_and_documentation_evidence(retained_evidence_root) -> None:
+    hydro = _full_payload(retained_evidence_root / _HYDRO_FULL_FIXTURE)
+    temperature = _full_payload(retained_evidence_root / _TEMP_FULL_FIXTURE)
     assert hydro["count"] == len(hydro["data"]) == 6454
     assert temperature["count"] == len(temperature["data"]) == 869
 
-    geojson = _full_payload(_GEOJSON_EVIDENCE)
+    geojson = _full_payload(retained_evidence_root / _GEOJSON_EVIDENCE)
     crs_name = "urn:ogc:def:crs:OGC:1.3:CRS84"
     assert geojson["crs"]["properties"]["name"] == crs_name
     feature = geojson["features"][0]
@@ -809,7 +819,7 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
         captured_query = Counter(parse_qsl(captured.query, keep_blank_values=True))
         assert captured_query == declared_query + Counter(pagination_parameters)
 
-    openapi = _full_payload(_OPENAPI_EVIDENCE)
+    openapi = _full_payload(retained_evidence_root / _OPENAPI_EVIDENCE)
     station_properties = openapi["definitions"]["Station hydrométrique"]["properties"]
     for coordinate_name in (
         "latitude_station",
@@ -844,6 +854,10 @@ def test_capture_boundaries_and_documentation_evidence() -> None:
     ("argv", "message"),
     [
         (["--out", "out"], "--native is required for canonical build"),
+        (
+            ["--native", "native.parquet", "--out", "out", "--availability-ledger", "ledger.json.xz"],
+            "--evidence-root is required for canonical build",
+        ),
         (["--native", str(NATIVE_PATH)], "--out is required for canonical build"),
         (
             [
@@ -942,7 +956,7 @@ def test_fixture_refresh_cli_rejections(argv: list[str], message: str, capsys: p
 
 
 def test_fixture_native_cli_is_offline_and_prints_only_digest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     def fail_live(*args: object, **kwargs: object) -> object:
         pytest.fail("fixture-native CLI called the live reader")
@@ -952,9 +966,9 @@ def test_fixture_native_cli_is_offline_and_prints_only_digest(
     exit_code = generator.main(
         [
             "--hydro-fixture",
-            str(_HYDRO_FULL_FIXTURE),
+            str(retained_evidence_root / _HYDRO_FULL_FIXTURE),
             "--temp-fixture",
-            str(_TEMP_FULL_FIXTURE),
+            str(retained_evidence_root / _TEMP_FULL_FIXTURE),
             "--native-out",
             str(native_path),
             "--hydro-retrieved-at",
@@ -969,8 +983,8 @@ def test_fixture_native_cli_is_offline_and_prints_only_digest(
     assert capsys.readouterr().out == native_table_content_digest(committed) + "\n"
 
 
-def test_fixture_native_cli_rejects_census_error_without_writing(tmp_path: Path) -> None:
-    hydro = _full_payload(_HYDRO_FULL_FIXTURE)
+def test_fixture_native_cli_rejects_census_error_without_writing(retained_evidence_root, tmp_path: Path) -> None:
+    hydro = _full_payload(retained_evidence_root / _HYDRO_FULL_FIXTURE)
     hydro["data"] = hydro["data"][:5]
     hydro["count"] = 6454
     hydro_path = tmp_path / "truncated-hydrometry.json"
@@ -983,7 +997,7 @@ def test_fixture_native_cli_rejects_census_error_without_writing(tmp_path: Path)
                 "--hydro-fixture",
                 str(hydro_path),
                 "--temp-fixture",
-                str(_TEMP_FULL_FIXTURE),
+                str(retained_evidence_root / _TEMP_FULL_FIXTURE),
                 "--native-out",
                 str(native_path),
                 "--hydro-retrieved-at",
@@ -999,9 +1013,9 @@ def test_fixture_native_cli_rejects_census_error_without_writing(tmp_path: Path)
     assert not native_path.exists()
 
 
-def test_complete_native_table_is_source_faithful() -> None:
-    hydro = _full_payload(_HYDRO_FULL_FIXTURE)
-    temperature = _full_payload(_TEMP_FULL_FIXTURE)
+def test_complete_native_table_is_source_faithful(retained_evidence_root) -> None:
+    hydro = _full_payload(retained_evidence_root / _HYDRO_FULL_FIXTURE)
+    temperature = _full_payload(retained_evidence_root / _TEMP_FULL_FIXTURE)
     rematerialized = refresh_native_table(
         hydro,
         temperature,
@@ -1076,26 +1090,29 @@ def test_complete_native_table_is_source_faithful() -> None:
     assert transposed["latitude_station"] == transposed["coordonnee_x_station"] == 4.099322
     assert transposed["longitude_station"] == transposed["coordonnee_y_station"] == 49.989435
 
-    committed = read_native_table(NATIVE_PATH)
+    committed = read_native_table(retained_evidence_root / NATIVE_PATH)
     pl_testing.assert_frame_equal(committed.data, frame, check_exact=True)
     assert native_table_content_digest(committed) == _PINNED_NATIVE_DIGEST
     assert native_table_content_digest(rematerialized.value) == _PINNED_NATIVE_DIGEST
 
 
-def test_fixture_wrapper_matches_direct_refresh() -> None:
+def test_fixture_wrapper_matches_direct_refresh(retained_evidence_root) -> None:
     wrapped = refresh_native_table_from_fixtures(
-        _HYDRO_FULL_FIXTURE,
-        _TEMP_FULL_FIXTURE,
+        retained_evidence_root / _HYDRO_FULL_FIXTURE,
+        retained_evidence_root / _TEMP_FULL_FIXTURE,
         hydro_retrieved_at=_HYDRO_RETRIEVED_AT,
         temperature_retrieved_at=_TEMP_RETRIEVED_AT,
     )
-    direct = _refresh(_full_payload(_HYDRO_FULL_FIXTURE), _full_payload(_TEMP_FULL_FIXTURE))
+    direct = _refresh(
+        _full_payload(retained_evidence_root / _HYDRO_FULL_FIXTURE),
+        _full_payload(retained_evidence_root / _TEMP_FULL_FIXTURE),
+    )
     assert wrapped.issues == direct.issues == ()
     pl_testing.assert_frame_equal(wrapped.value.data, direct.value.data, check_exact=True)
 
 
-def test_native_dates_cannot_change_without_new_acquisition() -> None:
-    native = read_native_table(NATIVE_PATH)
+def test_native_dates_cannot_change_without_new_acquisition(retained_evidence_root) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE_PATH)
     hydro_first = native.data.filter(pl.col("source_endpoint") == "hydrometrie/referentiel/stations")["code_station"][0]
     changed = NativeTable(
         native.data.with_columns(
@@ -1112,9 +1129,9 @@ def test_native_dates_cannot_change_without_new_acquisition() -> None:
         build_catalogue(changed, FRANCE_ORIGIN_DECLARATIONS, availability)
 
 
-def test_committed_catalogue_matches_independent_source_projection() -> None:
-    native = read_native_table(CURRENT_NATIVE_PATH).data
-    catalogue_dir = CURRENT_NATIVE_PATH.parent
+def test_committed_catalogue_matches_independent_source_projection(retained_evidence_root) -> None:
+    native = read_native_table(retained_evidence_root / CURRENT_NATIVE_PATH).data
+    catalogue_dir = Path(__file__).parents[1] / CURRENT_NATIVE_PATH.parent
     committed_products = pl.read_parquet(catalogue_dir / "products.parquet")
     committed_stations = pl.read_parquet(catalogue_dir / "stations.parquet")
     committed_station_products = pl.read_parquet(catalogue_dir / "station_products.parquet")
@@ -1190,7 +1207,7 @@ def test_committed_catalogue_matches_independent_source_projection() -> None:
 
 
 def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[str] = []
 
@@ -1201,12 +1218,14 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
     monkeypatch.setattr("socket.create_connection", forbidden)
     monkeypatch.setattr(generator, "refresh_native_table", forbidden)
     monkeypatch.setattr(generator, "refresh_native_table_from_fixtures", forbidden)
-    native_before = CURRENT_NATIVE_PATH.read_bytes()
+    native_before = (retained_evidence_root / CURRENT_NATIVE_PATH).read_bytes()
     assert (
         generator.main(
             [
                 "--native",
-                str(CURRENT_NATIVE_PATH),
+                str(retained_evidence_root / CURRENT_NATIVE_PATH),
+                "--evidence-root",
+                str(retained_evidence_root),
                 "--native-capture",
                 str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"),
                 "--availability-ledger",
@@ -1218,7 +1237,7 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         == 0
     )
     assert calls == []
-    assert CURRENT_NATIVE_PATH.read_bytes() == native_before
+    assert (retained_evidence_root / CURRENT_NATIVE_PATH).read_bytes() == native_before
     assert {path.name for path in tmp_path.iterdir()} == {
         "croissant.json",
         "provider.json",
@@ -1251,4 +1270,6 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         "series_claims.parquet",
         "croissant.json",
     ):
-        assert (tmp_path / artifact).read_bytes() == (CURRENT_NATIVE_PATH.parent / artifact).read_bytes()
+        assert (tmp_path / artifact).read_bytes() == (
+            Path(__file__).parents[1] / CURRENT_NATIVE_PATH.parent / artifact
+        ).read_bytes()
