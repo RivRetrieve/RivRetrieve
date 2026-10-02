@@ -1,3 +1,5 @@
+from importlib.metadata import version as _version
+
 from rivretrieve._internal.discovery import as_frame as as_frame
 from rivretrieve._internal.discovery import cache_status as cache_status
 from rivretrieve._internal.discovery import clear_cache as clear_cache
@@ -17,4 +19,4 @@ from rivretrieve._internal.discovery import series as series
 from rivretrieve._internal.discovery import to_bundle as to_bundle
 from rivretrieve._internal.utc import to_utc as to_utc
 
-__version__ = "0.1.49"
+__version__ = _version("rivretrieve")
