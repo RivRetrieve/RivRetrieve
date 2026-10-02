@@ -7,8 +7,8 @@ import pytest
 from rivretrieve._internal.catalogues import artifact
 
 
-def test_combined_catalogue_refused_before_observation_metadata(monkeypatch):
-    path = Path(__file__).parent / "test_data/french_combined_catalogue"
+def test_combined_catalogue_refused_before_observation_metadata(retained_evidence_root, monkeypatch):
+    path = retained_evidence_root / "tests/test_data/french_combined_catalogue"
     before = {file.name: file.read_bytes() for file in path.iterdir()}
 
     def forbidden(*args, **kwargs):
@@ -26,11 +26,11 @@ def test_other_provider_catalogue_keeps_existing_format():
     assert loaded.provider_info["provider_id"] == "usgs_nwis"
 
 
-def test_combined_catalogue_is_authenticated_baseline():
+def test_combined_catalogue_is_authenticated_baseline(retained_evidence_root):
     import hashlib
     import json
 
-    data = Path(__file__).parent / "test_data"
+    data = retained_evidence_root / "tests/test_data"
     identity = json.loads((data / "french_combined_catalogue.identity.json").read_text())
     assert identity["capture"]["producer_revision"] == "fd55eee9d32a278b895bc61487452d43564eaed4"
     for name, expected in identity["files"].items():

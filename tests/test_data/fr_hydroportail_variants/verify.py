@@ -1,4 +1,4 @@
-"""Verify saved source evidence offline; defaults to this script's directory."""
+"""Verify saved source evidence offline from an explicitly supplied directory."""
 
 import argparse
 import hashlib
@@ -10,7 +10,7 @@ from pathlib import Path
 from rivretrieve._internal.recordings import _recording_from_object
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--evidence-dir", type=Path, default=Path(__file__).resolve().parent)
+parser.add_argument("--evidence-dir", type=Path, required=True)
 OUT = parser.parse_args().evidence_dir.resolve()
 
 

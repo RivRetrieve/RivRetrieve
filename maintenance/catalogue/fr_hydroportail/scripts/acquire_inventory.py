@@ -57,6 +57,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
+    args.out = args.out.resolve()
+    if any((parent / ".git").exists() for parent in (args.out, *args.out.parents)):
+        parser.error("Output must be outside source checkouts")
     args.out.mkdir(parents=True, exist_ok=True)
     client = HttpClient()
     form = acquire(client, args.out, "search-form", "https://hydro.eaufrance.fr/rechercher/entites-hydrometriques")

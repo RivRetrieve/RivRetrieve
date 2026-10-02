@@ -64,15 +64,14 @@ def test_public_discovery_keeps_overlapping_station_identity_separate():
     ],
 )
 def test_public_fetch_receipts_and_exports_preserve_service(
-    monkeypatch, provider, station, predicates, start, end, recording_name, host
+    retained_evidence_root, monkeypatch, provider, station, predicates, start, end, recording_name, host
 ):
-    from pathlib import Path
 
     import rivretrieve as rr
     import rivretrieve._internal.discovery as discovery
     from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
-    recording = read_recording(Path(__file__).parent / "test_data" / recording_name)
+    recording = read_recording(retained_evidence_root / "tests/test_data" / recording_name)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selection = rr.find(provider=provider, station=station, **predicates)
     if provider == "fr_hydroportail":
@@ -89,15 +88,16 @@ def test_public_fetch_receipts_and_exports_preserve_service(
     assert restored.receipts == result.receipts
 
 
-def test_hydroportail_failure_preserves_independent_raw_series(monkeypatch):
-    from pathlib import Path
+def test_hydroportail_failure_preserves_independent_raw_series(retained_evidence_root, monkeypatch):
 
     import rivretrieve as rr
     import rivretrieve._internal.discovery as discovery
     from rivretrieve._internal.recordings import ReplayTransport, read_recording
     from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
 
-    recording = read_recording(Path(__file__).parent / "test_data/fr_hydroportail_station_Q_padded.recording.json")
+    recording = read_recording(
+        retained_evidence_root / "tests/test_data/fr_hydroportail_station_Q_padded.recording.json"
+    )
     replay = ReplayTransport((recording,))
     requests = []
 

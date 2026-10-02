@@ -13,8 +13,8 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
 from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
 
-def test_catalogue_admits_full_evidenced_native_inventory() -> None:
-    native_path = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
+def test_catalogue_admits_full_evidenced_native_inventory(retained_evidence_root) -> None:
+    native_path = retained_evidence_root / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
     native = read_native_table(native_path)
     ledger_path = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
     availability = decode_availability(lzma.decompress(ledger_path.read_bytes()))

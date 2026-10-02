@@ -486,6 +486,10 @@ def main():
     parser.add_argument("--official-index", type=Path)
     parser.add_argument("--bundle", type=Path, action="append", default=[])
     args = parser.parse_args()
+    if args.output:
+        args.output = args.output.resolve()
+        if any((parent / ".git").exists() for parent in (args.output, *args.output.parents)):
+            parser.error("Output must be outside source checkouts")
     for bundle in args.bundle:
         read_bundle(bundle)
     raw = args.ledger.read_bytes()

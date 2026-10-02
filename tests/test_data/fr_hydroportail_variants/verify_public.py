@@ -12,7 +12,7 @@ import rivretrieve as rr
 parser = argparse.ArgumentParser()
 parser.add_argument("--offline", action="store_true")
 parser.add_argument("--out-dir", type=Path, required=True)
-parser.add_argument("--evidence-dir", type=Path, default=Path(__file__).resolve().parent)
+parser.add_argument("--evidence-dir", type=Path, required=True)
 args = parser.parse_args()
 if args.offline:
     import rivretrieve._internal.discovery as discovery
@@ -21,6 +21,10 @@ if args.offline:
     replay = ReplayTransport(args.evidence_dir.glob("Y251002001_*_padded_*.recording.json"))
     discovery.HttpClient = lambda: replay
 OUT = args.out_dir.resolve()
+if any((parent / ".git").exists() for parent in (OUT, *OUT.parents)):
+    parser.error("Output must be outside source checkouts")
+if OUT.is_relative_to(args.evidence_dir.resolve()):
+    parser.error("Output must be separate from retained evidence")
 OUT.mkdir(parents=True, exist_ok=False)
 VARIANTS = {"raw", "validated", "pre_validated_and_validated", "most_valid"}
 summary = []

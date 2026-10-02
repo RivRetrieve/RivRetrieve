@@ -11,7 +11,7 @@ from rivretrieve._internal.providers.fr_hydroportail.parse import parse
 from tests.test_fr_hydroportail_station import _empty_payload
 
 
-def test_unknown_payload_product_is_fatal_contract_error():
-    payload = replace(_empty_payload(), station_products=(("J783301020", ProductId("unknown")),))
+def test_unknown_payload_product_is_fatal_contract_error(retained_evidence_root):
+    payload = replace(_empty_payload(retained_evidence_root), station_products=(("J783301020", ProductId("unknown")),))
     with pytest.raises(FatalContractError):
         parse(payload, config())

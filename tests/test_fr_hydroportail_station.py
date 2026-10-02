@@ -25,7 +25,7 @@ from rivretrieve._internal.providers.fr_hydroportail.parse import parse
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.source_series import SeriesScope
 
-DATA = Path(__file__).parent / "test_data"
+DATA = Path("tests/test_data")
 PRODUCT = ProductId("discharge_instantaneous")
 
 
@@ -36,14 +36,14 @@ def _window(start, stop):
     )
 
 
-def _empty_payload():
+def _empty_payload(retained_evidence_root):
     # Genuine empty source body and original receipt, not an authored capture.
-    receipt = json.loads((DATA / "fr_hydroportail_J783301020_empty.receipt.json").read_text())
+    receipt = json.loads((retained_evidence_root / DATA / "fr_hydroportail_J783301020_empty.receipt.json").read_text())
     return Payload(
         config().products[PRODUCT].coordinates,
         (("J783301020", PRODUCT),),
         _window("2023-06-01", "2023-06-08T23:59:59"),
-        (DATA / "fr_hydroportail_J783301020_empty.body").read_bytes(),
+        (retained_evidence_root / DATA / "fr_hydroportail_J783301020_empty.body").read_bytes(),
         SourceCallOrigin(
             receipt["request"]["url"],
             {},
@@ -57,8 +57,8 @@ def _empty_payload():
     )
 
 
-def test_station_own_discharge_fetch_replays_exact_non_sample_station():
-    recording = read_recording(DATA / "fr_hydroportail_station_Q_padded.recording.json")
+def test_station_own_discharge_fetch_replays_exact_non_sample_station(retained_evidence_root):
+    recording = read_recording(retained_evidence_root / DATA / "fr_hydroportail_station_Q_padded.recording.json")
     fetched = fetch(
         ("1232000101",),
         (PRODUCT,),
@@ -75,8 +75,8 @@ def test_station_own_discharge_fetch_replays_exact_non_sample_station():
     assert frame["station_id"].unique().to_list() == ["1232000101"]
 
 
-def test_station_own_discharge_parser_does_not_require_the_old_sample_site():
-    recording = read_recording(DATA / "fr_hydroportail_station_Q_padded.recording.json")
+def test_station_own_discharge_parser_does_not_require_the_old_sample_site(retained_evidence_root):
+    recording = read_recording(retained_evidence_root / DATA / "fr_hydroportail_station_Q_padded.recording.json")
     assert recording.content_type is not None
     payload = Payload(
         config().products[PRODUCT].coordinates,
@@ -97,8 +97,8 @@ def test_station_own_discharge_parser_does_not_require_the_old_sample_site():
     assert not parse(payload, config()).rows.is_empty()
 
 
-def test_valid_empty_envelope_is_not_a_source_identity_failure():
-    assert parse(_empty_payload(), config()).rows.is_empty()
+def test_valid_empty_envelope_is_not_a_source_identity_failure(retained_evidence_root):
+    assert parse(_empty_payload(retained_evidence_root), config()).rows.is_empty()
 
 
 @pytest.mark.parametrize(
@@ -110,8 +110,8 @@ def test_valid_empty_envelope_is_not_a_source_identity_failure():
         ("statuses", "validated"),
     ],
 )
-def test_empty_envelope_checks_series_contract_before_iteration(field, value):
-    payload = _empty_payload()
+def test_empty_envelope_checks_series_contract_before_iteration(retained_evidence_root, field, value):
+    payload = _empty_payload(retained_evidence_root)
     document = json.loads(payload.content)
     document["series"][field] = value
     unsupported = parse(replace(payload, content=json.dumps(document).encode()), config())
@@ -120,8 +120,8 @@ def test_empty_envelope_checks_series_contract_before_iteration(field, value):
     assert unsupported.outcomes[0].reason
 
 
-def test_empty_envelope_requires_source_utc_before_iteration():
-    payload = _empty_payload()
+def test_empty_envelope_requires_source_utc_before_iteration(retained_evidence_root):
+    payload = _empty_payload(retained_evidence_root)
     document = json.loads(payload.content)
     document["timezone"] = "Europe/Paris"
     unsupported = parse(replace(payload, content=json.dumps(document).encode()), config())
@@ -130,8 +130,8 @@ def test_empty_envelope_requires_source_utc_before_iteration():
     assert unsupported.outcomes[0].reason
 
 
-def test_empty_envelope_requires_identity_metadata_before_iteration():
-    payload = _empty_payload()
+def test_empty_envelope_requires_identity_metadata_before_iteration(retained_evidence_root):
+    payload = _empty_payload(retained_evidence_root)
     document = json.loads(payload.content)
     del document["series"]["code"]
     unsupported = parse(replace(payload, content=json.dumps(document).encode()), config())
@@ -151,14 +151,15 @@ def _run_station_discharge_boundary(replay):
 
 # Three literals supplied by the independent source-only author, not this parser.
 # Exact source material and authorship are recorded in the adjacent provenance document.
-STATION_DISCHARGE_PROBE = BoundaryProbe(
-    ProviderId("fr_hydroportail"),
-    PRODUCT,
-    (read_recording(DATA / "fr_hydroportail_station_Q_padded.recording.json"),),
-    {
-        "reading_count": 282,
-        "first_wall_clock_time": WallClockExpectation("2026-06-01T00:00:00", "+00:00"),
-        "last_wall_clock_time": WallClockExpectation("2026-06-02T18:00:00", "+00:00"),
-    },
-    _run_station_discharge_boundary,
-)
+def station_discharge_probe(retained_evidence_root):
+    return BoundaryProbe(
+        ProviderId("fr_hydroportail"),
+        PRODUCT,
+        (read_recording(retained_evidence_root / DATA / "fr_hydroportail_station_Q_padded.recording.json"),),
+        {
+            "reading_count": 282,
+            "first_wall_clock_time": WallClockExpectation("2026-06-01T00:00:00", "+00:00"),
+            "last_wall_clock_time": WallClockExpectation("2026-06-02T18:00:00", "+00:00"),
+        },
+        _run_station_discharge_boundary,
+    )

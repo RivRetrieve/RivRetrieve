@@ -7,15 +7,14 @@ from pathlib import Path
 import pytest
 
 _TEST_DATA = Path(__file__).parent / "test_data"
-_REPOSITORY = Path(__file__).parents[1]
 _MANIFEST = json.loads((_TEST_DATA / "fr_official_publication_manifest.json").read_text())
 
 
 @pytest.mark.parametrize("entry", _MANIFEST["source_documents"], ids=lambda entry: entry["scope"])
-def test_official_publication_document_is_exact_retained_body(entry: dict) -> None:
+def test_official_publication_document_is_exact_retained_body(retained_evidence_root, entry: dict) -> None:
     acquisition = entry["acquisition"]
     material = acquisition["material"]
-    body = (_REPOSITORY / entry["repository_path"]).read_bytes()
+    body = (retained_evidence_root / entry["repository_path"]).read_bytes()
     assert len(body) == material["byte_count"]
     assert hashlib.sha256(body).hexdigest() == material["sha256"]
     assert entry["retained_source"] == material["filename"]
