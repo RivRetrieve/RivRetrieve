@@ -1,185 +1,175 @@
-# Preserve all retained evidence in the source archive
+# Preserve evidence privately and remove it from the public repository
 
 Related bug: https://github.com/RivRetrieve/RivRetrieve/issues/457
-Blocked work, outside this vision: https://github.com/RivRetrieve/RivRetrieve/issues/429
+Paused work, outside this vision: https://github.com/RivRetrieve/RivRetrieve/issues/429
 
-## Outcome and scope
+## Outcome
 
-Establish verified preservation in the private `RivRetrieve/verification-evidence`
-archive for all retained evidence still held in RivRetrieve. Account for unused
-and historical material as well as inputs used by current tests. Do not limit the
-repair to the first unmatched files reported in #457 or to mandatory regressions.
+Prepare RivRetrieve to become public without exposing retained provider evidence.
+Preserve that evidence in the private `RivRetrieve/verification-evidence` archive,
+verify that its exact bytes can be retrieved, and remove it from the future public
+repository. The requirement covers both the current tree and accessible Git history.
+Archive publication alone does not complete this work.
 
-The owner's final requirement is that no retained source evidence remains in the
-maintained RivRetrieve repository tree. The archive is its sole maintained home.
-Code, test definitions, reviewed executable interpretation, authored declarations
-and approved runtime product artifacts retain their code-repository roles. A file
-being called metadata, a fixture or a cache does not establish its role.
+Provider evidence means material used to build catalogues, check provider parsers,
+or support factual statements in `docs/providers`. Examples include downloaded
+provider files, saved API responses, extracted source tables, and provider reference
+documents. Include unused retained provider evidence found during this work; lack
+of a current consumer is not permission to discard the only copy.
 
-This vision repairs #457 only. #429 remains paused and outside scope. Do not resume
-its consumer refactor, change its preserved drafts or deliver its shared test-input
-interface. The owner will decide when to resume #429 after #457 is closed. This
-repair must provide complete preservation accounting and exact archive references
-that make the subsequent removal safe. It does not authorize deleting active
-inputs before their consumers have verified replacements. Do not claim that archive
-publication alone achieves the final evidence-free repository state.
+Code, test definitions, authored executable interpretation, reviewed declarations,
+and approved runtime product artifacts retain their code-repository roles. A filename
+such as metadata, fixture, cache, or catalogue does not determine a file's role.
+Review mixed files explicitly. Preserve their evidence-bearing original bytes
+privately before changing the maintained representation.
 
-## Why the blocker exists
+This revised vision replaces the previous requirement to complete the failed run's
+all-occurrence accounting system. The preservation goal remains. Its custom audit
+machinery and unfinished proposals are not prerequisites for delivery.
 
-#429 is changing how tests obtain evidence. Its selected 14 archive collections
-were reported to lack exact copies of some retained historical and derived inputs.
-The local originals were preserved. This is a retention and access gap, not evidence
-that provider values or scientific claims are wrong.
+## The problem and completed work
 
-Some tests deliberately consume old outputs. For example, a test opens an obsolete
-observation store and checks that RivRetrieve refuses it without altering its bytes.
-A current download or a regenerated old-looking store cannot replace that historical
-input. Other tests compare extracted source cells with separate retained recordings.
-Derived inputs remain valuable evidence, but they must not be relabelled as untouched
-publisher originals.
+During #429, the selected archive collections lacked exact copies of some local
+inputs used by tests. The originals remained intact. This was a retention/access
+gap, not a finding that provider values or scientific claims were wrong.
 
-The issue's unmatched list is a starting point, not a complete or authoritative
-classification. Its correction identifies five actual metadata fixtures and retracts
-a guessed Polish filename. Do not repeat the guessed filename as an existing input
-or infer that all files in an unmatched directory are scientifically required.
-Absence of a current test consumer is also not permission to discard retained evidence.
+Some reported inputs are provider evidence. Others are historical RivRetrieve-generated
+files used to test behavior such as rejecting obsolete formats. Keep these roles
+separate rather than calling every old file provider evidence.
 
-## Classify and preserve the material
+The final status on #457 records two merged private archive preservation slices,
+fresh retrieval and exact-byte comparisons, 142 passing historical regression tests,
+183 passing governing tests, and 148 passing archive checks for each completed slice.
+These are results at their recorded revisions, not new verification of the eventual
+implementation target. Reuse the exact collections and valid verification records;
+repeat checks when changed code, inputs, or claims require it.
 
-Use the private preservation accounting and the actual repository contents to build
-an artifact-level inventory. Cover retained evidence across test recordings, test
-data, verification documents, maintenance and research inputs, and any other retained
-source locations found during inspection. Inspect the preserved #429 accounting
-without treating its unreviewed implementation as executable or authoritative.
-Do not turn reproducible build output or incidental dependency caches into evidence.
+The later implementation stalled in classification of copies and repeated custom
+accounting, reader, and launcher reviews. Its final accounting proposal was not
+applied. Discovery found later retention candidates without completed preservation
+proof, and other groups with archive references but unresolved descriptions or body
+checks. Those are starting points for a bounded file-to-archive check, not an accepted
+complete inventory. Occurrence counts must not be reported as counts of missing files.
 
-For each candidate, establish its role, exact byte identity, known acquisition or
-derivation identity, current consumers if any, and its archive disposition. Distinguish
-publisher originals, response recordings, extracted subsets, generated historical
-artifacts, acquisition records and authored interpretation. Mixed files need explicit
-review; do not move maintained executable declarations into the archive simply because
-they mention evidence. Preserve original mixed-file bytes where they are evidence;
-do not rewrite historical inputs to make classification easier.
+Keep detailed inventories, local report locations, source identities, receipts, and
+sensitive acquisition context private. The issue comments and the private archive's
+merged intake records provide the starting handoff. Read the existing records; do not
+restart their custom execution workflow or accept draft classifications as proof.
 
-Find an exact existing archive match or retain the existing bytes through the reviewed
-intake workflow. Record the selected collection and member identity privately. Equal
-bytes do not erase distinct acquisition identities. Preserve known lineage and record
-unknowns honestly. Review source-sharing permissions using the existing archive rules.
-If material cannot be classified or safely retained, report a concrete blocker rather
-than dropping it, inventing provenance or declaring the inventory complete.
+## Preserve material with a practical inventory
 
-No new provider acquisition, reconstruction, synthetic substitute, changed source
-claim or weakened regression is part of this repair. Historical derived inputs must
-remain historical derived inputs. Missing publisher originals remain known gaps.
+Build a concrete inventory of retained provider evidence and required historical test
+inputs. Inspect maintained source locations and relevant local retained material, while
+avoiding a new project to classify every dependency, build output, or temporary copy.
+Use existing accounting as a source of candidates rather than as a required schema.
+Cover tests, provider research, catalogue maintenance, and documentation source material.
+Keep active consumers visible so removals cannot silently break them.
 
-## Evidence from discovery
+For each retained artifact or supported group, record privately:
 
-The following findings come from static code inspection at public revision
-`30a34b54cace1e3476f099a409000ca436c50a66`. They identify consumers and purposes;
-they do not prove archive preservation or successful test execution.
+- what it is and why it belongs in the archive;
+- its exact byte identity, known source or derivation context, and any unknowns;
+- its current consumers, if any;
+- its exact archive collection/member selection and retrieval/equality result;
+- whether its repository copy can be removed, or the concrete blocker.
 
-- `tests/test_retired_physical_fact_formats.py:17-104` consumes the historical
-  French retired-facts store and bundle, checks baseline producer identity and
-  exact digests, and verifies non-destructive rejection. These are generated
-  historical artifacts. The attestation has a separate declaration role.
-- `tests/test_french_artifact_boundaries.py:13-192` uses a different historical
-  French archive for store and bundle boundary tests. Related consumers include
-  `tests/test_packaging_carries_catalogues.py:466-480` and
-  `tests/test_catalogue_evidence.py:849-858`. Do not conflate these artifacts with
-  the retired-facts fixtures or assume every member has established lineage.
-- `tests/test_ca_eccc_boundary_probe.py:34-137` compiles the retained derived ZIP
-  through the production HYDAT compiler. It reads an attestation from the committed
-  compact store, but reads observation values from the newly compiled store.
-  Directory-level references therefore do not establish that every stored file is
-  a mandatory test input. Related ZIP consumers are
-  `tests/test_source_series_bulk.py` and `tests/store/test_bulk_public_recovery.py`.
-- `tests/test_ca_eccc_no_days_evidence.py:19-91` inserts retained extracted HYDAT
-  rows into an authored representative database, decodes them and compares cells
-  with publisher CSV recordings. The row excerpt is distinct from a national
-  original database. The same module also consumes publisher documents and an
-  authored audit record; these roles must remain distinct.
-- `tests/test_fr_hydroportail_variants.py:216-275` consumes a historical cache and
-  export bundles to check old-format refusal and missing variant identity. The
-  code establishes their historical generated role, but does not check a producer
-  revision or digest attestation there.
-- Four `tests/test_data/*_metadata.json` files have real content consumers:
-  `ca_eccc_metadata.json` in `tests/test_ca_eccc_catalogue.py:159-188`,
-  `jp_mlit_metadata.json` in `tests/test_jp_mlit_catalogue.py:259-265,640-646`,
-  `cz_chmi_metadata.json` in `tests/test_cz_chmi_generate_catalogue.py:437-500`,
-  and `za_dws_metadata.json` in `tests/test_za_dws_generate_catalogue.py:164-200`.
-  Code supports source/native-subset roles, not a claim that each whole JSON file
-  is an untouched publisher response.
-- For `br_ana_metadata.json`, the inspected Python consumers establish only a
-  file-existence check in
-  `tests/test_catalogue_only_br_ana_jp_mlit_no_nve_th_thaiwater.py:153-161`.
-  Its material role still requires classification. Limited content coverage does
-  not exclude it from this repair's all-evidence inventory.
+Find existing exact archive matches first. Preserve missing bytes using the existing
+reviewed archive intake, publication, inventory, and retrieval tools. Retrieve selected
+material outside source checkouts and compare it with the originals. Do not substitute
+new downloads, reconstructed inputs, or synthetic data for historical originals.
+Missing publisher originals remain explicit gaps.
 
-These are research anchors, not the full inventory. Read the functions at the pinned
-revision if line numbers move. Discovery did not inspect retained payloads, recheck
-the reported manifest comparisons, search every older release or run genuine-input
-verification. Do not present those unperformed checks as evidence of success.
+Equal bytes can share storage, but must not erase known distinct acquisition identities
+or lineage. Preserve useful known context and state unknowns honestly. Do not reconstruct
+every temporary copy's history solely to complete accounting. A genuine uncertainty
+about safe handling or sharing is a concrete blocker; uncertainty about historical
+provenance must not be replaced by an invented claim.
 
-## Reuse the archive already available
+## Review historical tests before retaining their inputs solely for testing
 
-Static inspection of private archive revision
-`1040ea574a778eb112e48fda834f2b85690e9c09` found an existing path for this repair:
+A regression test checks that changes do not break behavior that should continue to
+work. Preserve useful provider parsing, catalogue, and source-claim checks. Do not weaken
+correctness checks to make evidence removal convenient.
 
-- `docs/intake.md` describes classification, sharing review and retention.
-- `archive/catalogue.py` distinguishes derived inputs from publisher originals
-  and defines exact collection selections.
-- `archive/manifest.py` binds member sizes and digests, acquisition links and
-  derivation information. Missing lineage must remain an explicit limitation.
-- `archive/intake.py` packages unchanged bytes and checks extracted equivalence.
-- `archive/publication.py` verifies uploaded assets and leaves acceptance
-  unevaluated. Publication is not scientific verification.
-- `archive/acquisition.py` checks selected assets and manifest-bound members
-  before exposing input roots.
+Review tests of historical RivRetrieve formats against intentional current requirements.
+Keep tests that protect required behavior and preserve their necessary inputs privately.
+Remove demonstrably unnecessary historical tests instead of maintaining obsolete inputs
+solely to keep those tests alive. Existing coverage is not automatically a requirement,
+but neither is an old format automatically irrelevant. Record the reason for each
+removal. Preserve uncertain originals until their disposition is settled.
 
-Revalidate against the explicitly reviewed revision used for implementation.
-No new archive infrastructure is indicated by discovery. Use existing intake,
-publication and the sole current inventory rather than adding a parallel downloader,
-manifest authority or fallback directory. A supplemental retention collection is
-appropriate when existing collections cannot supply the required identities; its
-layout should follow the actual material, not speculative provider uniformity.
+Public code anchors include `tests/test_retired_physical_fact_formats.py`, which checks
+exact baseline-generated files and non-destructive rejection;
+`tests/test_ca_eccc_boundary_probe.py`, which distinguishes a derived HYDAT input from a
+national original; and `tests/test_ca_eccc_no_days_evidence.py`, which compares extracted
+rows with separate publisher recordings. Inspect current code before changing tests.
+Do not conflate generated historical outputs, extracted source evidence, and authored
+attestations.
 
-Use exact collection, release, asset and manifest identities. Do not select mutable
-`latest` references or silently change consumer selections. Pinned identities detect
-changed bytes; they do not make release storage undeletable or provide an independent
-backup. Preserve original receipts and record new acceptance separately.
+## Remove evidence safely, including from public history
+
+Remove evidence from the future public tree only after verified private preservation.
+Do not delete sole originals or remove active inputs while their retained consumers
+still require them. Do not add a local fallback to conceal missing archive access.
+
+#429 remains paused and outside scope. Do not resume its shared test-input refactor,
+execute its unreviewed drafts, or claim its delivery. If necessary removal depends on
+consumer changes belonging to #429, report the exact dependency for owner resolution.
+Do not silently absorb that work, break consumers, or claim #457 complete with evidence
+still present. An unresolved dependency is a blocker, not permission to reduce the outcome.
+
+Deleting current files leaves older copies in Git. Establish a safe publication approach
+that prevents the future public repository's reachable history and retained public
+references from exposing evidence. Assess the relevant branches, tags, PR references,
+and hosted attachments/artifacts rather than treating a clean working tree as sufficient.
+Keep original history privately where needed for preservation and recovery.
+
+Present the proposed history/publication approach, consequences, and recovery protection
+to the owner before destructive history changes or force-pushes. This vision does not
+authorize those operations or changing repository visibility. Do not claim publication
+readiness until the evidence-free tree and history requirements have been verified.
+
+## Remove the failed attempt's bespoke machinery
+
+Remove the custom accounting, audit-reader, launcher, review, and retry scaffolding built
+for this attempt. Do not finish its pending accounting proposals or create another audit
+framework to replace it. Identify task-owned code, copies, and environments concretely;
+do not delete an entire working directory based on its name.
+
+Keep the existing useful archive intake, retrieval, manifest/integrity, publication,
+and controlled-verification infrastructure. Preserve originals, essential lineage,
+accepted preservation records, receipts, and relevant failure/correction records privately
+before removing scaffolding. Retaining a record does not require keeping the program that
+created it operational. Treat copied source and unique uncommitted work carefully; do not
+delete another task's drafts or worktrees, including #429's preserved work.
 
 ## Verification and completion
 
-Follow `docs/maintenance/evidence.md` and the private archive's reviewed instructions.
-Run only explicitly reviewed code with private evidence or credentials. Keep detailed
-inventories, restricted paths, acquisition details, payloads and receipts private.
-Prevent leaks through assertion output, errors, logs, caches, public PRs, artifacts
-and distributions. Existing GitHub access is sufficient; add no developer-vetting
-system. Archive access does not override source-sharing permissions.
+Follow `docs/maintenance/evidence.md` and the reviewed private archive instructions.
+Use existing GitHub access; add no vetting system or parallel archive infrastructure.
+Only reviewed code may run with private evidence or credentials. Keep controlled material
+out of public issues, logs, assertion output, caches, artifacts, and distributions. Review
+source-sharing permissions; private storage alone does not establish permission to share.
+Runtime package users must not require archive credentials.
 
-Before claiming #457 repaired:
+Before reporting #457 complete:
 
-1. Complete the all-evidence accounting. Every candidate has a supported disposition;
-   every retained evidence artifact has verified archive preservation, whether or not
-   it has a current consumer. Non-evidence exclusions have recorded reasons.
-2. Publish missing retained material through reviewed intake and register exact
-   selections in the archive's existing inventory. Do not rebuild or reacquire it.
-3. Retrieve the selected collections into a fresh location outside source checkouts.
-   Verify archive integrity and exact original-to-retrieved byte equality. Packaging
-   success or a local copy alone does not prove retrievability.
-4. Establish that required historical regression inputs can be supplied from those
-   retrieved bytes. Run the affected existing regressions and applicable full genuine
-   checks through reviewed execution, without implementing #429's shared interface,
-   changing assertions or introducing maintained fallback paths. If that verification
-   cannot be completed independently, report the remaining blocker; do not count
-   missing material, skipped tests or synthetic checks as genuine acceptance.
-5. Record exact public/private code revisions, collection selections, commands,
-   outcomes, limitations and unresolved gaps. Provide a privacy-safe completion
-   summary and a precise private handoff for subsequent consumer binding and removal.
+1. Account for the retained provider evidence and historical inputs still required after
+   the test review. Show exact private archive selections, successful retrieval, and
+   original-byte equality. Explain exclusions and remaining limitations plainly.
+2. Verify affected retained tests and applicable full genuine-input checks against the
+   intended code and collections. Do not count missing inputs, skipped mandatory checks,
+   or synthetic substitutes as acceptance. Reuse unchanged valid verification evidence
+   with explicit revision equivalence where appropriate.
+3. Verify that the future public repository contains no retained provider evidence in
+   its tree or accessible history. Required historical test inputs belong in the private
+   archive as well. Document the approved publication boundary and any hosting limits.
+4. Remove unnecessary bespoke task machinery while preserving essential records and
+   useful archive infrastructure. Record any uncertain ownership or unique-work blocker.
+5. Provide a short privacy-safe completion report and a precise private preservation
+   handoff, including revisions, selections, tests, removals, and any unresolved gaps.
 
-Do not retire sole originals or active source-tree copies merely because a release
-exists. Require verified preservation and the applicable owner approval before any
-retirement. Source-copy removal must not break consumers while #429 remains paused.
-This vision does not authorize Git history rewriting, provider research, catalogue
-redesign, execution of unreviewed preserved drafts or resumption of #429. Closing
-#457 records the verified retention repair; the owner separately authorizes #429.
+Stop with concrete affected files and reasons when blocked. Do not expand into provider
+research, source-claim changes, catalogue redesign, complete historical copy reconstruction,
+or resumption of #429. Closure requires the agreed outcome, not completion of the former
+agent's accounting process.
