@@ -105,7 +105,8 @@ inline descriptor occupied 157,487,091 bytes. Schema 3 stores evidence once as f
 typed Parquet relations and a strict header. The descriptor describes those relations
 rather than expanding the national graph. France now occupies **4,028,560 bytes** for header, five relations and descriptor;
 the descriptor alone is **42,905 bytes**. Final exact sizes and hashes are in the
-[machine account](evidenced_coverage.json), including the intermediate baseline.
+machine account retained in the private [source archive](../maintenance/evidence.md),
+including the intermediate baseline.
 Native and four canonical files remain byte-identical across this migration.
 
 This is an explicit metadata migration, not RDF-isomorphic compression. `find` and
@@ -127,7 +128,8 @@ lineage is not the controlled private measurement corpus.
 
 ## Reproduction and accounting
 
-The [JSON account](evidenced_coverage.json) pins every original native inventory,
+The JSON account in the private [source archive](../maintenance/evidence.md)
+pins every original native inventory,
 governing ledger and packaged artifact by path, byte count and SHA-256. Exact pair
 keys locate each ledger record, including its actual source request, acquisition
 instant, material reference and digest. It records per-product availability, reason,
@@ -150,22 +152,27 @@ acquisition's source binding, request, instant, material size and hash matches t
 normalized relations. Fresh offline builds reproduce all eleven generated files
 per provider byte-for-byte. Build outputs and caches are not source evidence.
 
-From a source checkout with its uv environment available, run these offline builds.
-The output directories are disposable and are not the private evidence corpus.
+Retrieve exact inputs outside the checkout as described in the
+[evidence guide](../maintenance/evidence.md). Set `VERIFICATION_OUTPUT` to a
+private external output directory, then run these offline builds from the source
+checkout. Build outputs are disposable and are not the retained source evidence.
 
 ```sh
 uv run python -m rivretrieve._internal.providers.fr_hubeau.generate_catalogue \
-  --native src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet" \
+  --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
   --availability-ledger maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz \
-  --out .worktrees/coverage-build/fr_hubeau
+  --out "$VERIFICATION_OUTPUT/fr_hubeau"
 uv run python -m rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue \
-  --native src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet" \
+  --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
   --workbook-access-ledger maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json \
-  --out .worktrees/coverage-build/ba_fhmzbih
+  --out "$VERIFICATION_OUTPUT/ba_fhmzbih"
 uv run python -m rivretrieve._internal.providers.th_thaiwater.generate_catalogue \
-  --native src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet" \
+  --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
   --availability-evidence maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv \
-  --out .worktrees/coverage-build/th_thaiwater
+  --out "$VERIFICATION_OUTPUT/th_thaiwater"
 ```
 
 Use [profile 3's offline joins and selected-closure recipe](../catalogue-evidence.md#offline-python-and-polars-inspection)

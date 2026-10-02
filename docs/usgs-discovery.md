@@ -104,7 +104,7 @@ complete historical availability are different claims.
   or reinterpreting their identities. Re-fetch or re-export modern selections.
   `clear_cache` remains the explicit destructive action.
 
-The [recordings](../tests/test_data/usgs_modern/README.md) include all six routes,
+The recordings in the private [source archive](maintenance/evidence.md) include all six routes,
 historical daily and continuous samples, an ended empty series, present nulls,
 and an explicit v1 cursor chain. These finite samples do not prove historical
 parity. USGS schedules WaterServices retirement for February 22, 2027, with

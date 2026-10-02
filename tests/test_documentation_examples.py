@@ -17,13 +17,13 @@ import pytest
 from rivretrieve._internal.authentication import ExchangeSpec
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests.test_br_ana_public_daily import _IDENTIFIER, _PASSWORD, _AuthenticatedReplay
-from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
+from tests.usgs_modern_recordings import ModernReplay, body, coordinates, manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 DAILY_RECORDING = "daily-07374000-docs-2023"
 INSTANT_RECORDING = "continuous-07374000-docs-quarter-hour-2023"
 LITHUANIAN_RECORDINGS = [
-    ROOT / f"tests/test_data/lt_lhmt_anyksciu-vms_daily_{month}.recording.json" for month in ("2022-12", "2023-01")
+    Path(f"tests/test_data/lt_lhmt_anyksciu-vms_daily_{month}.recording.json") for month in ("2022-12", "2023-01")
 ]
 
 
@@ -71,12 +71,12 @@ class CountingReplay(ReplayTransport):
 class NewcomerReplay(CountingReplay):
     """Route ANA through its credential protocol and all observations through exact replay."""
 
-    def __init__(self):
+    def __init__(self, retained_evidence_root: Path):
         super().__init__(
-            *(read_recording(path) for path in LITHUANIAN_RECORDINGS),
+            *(read_recording(retained_evidence_root / path) for path in LITHUANIAN_RECORDINGS),
         )
-        self.usgs = ModernReplay(DAILY_RECORDING, INSTANT_RECORDING)
-        self.ana = _AuthenticatedReplay("stage_daily_mean_bruto")
+        self.usgs = ModernReplay(DAILY_RECORDING, INSTANT_RECORDING, evidence_root=retained_evidence_root)
+        self.ana = _AuthenticatedReplay(retained_evidence_root, "stage_daily_mean_bruto")
 
     def send(self, request):
         if request.url.startswith("https://api.waterdata.usgs.gov/"):
@@ -104,10 +104,10 @@ def execute_block(block, scope, label):
     return checked
 
 
-def execute_page(page, monkeypatch, tmp_path):
+def execute_page(page, monkeypatch, tmp_path, retained_evidence_root: Path):
     import rivretrieve._internal.discovery as discovery
 
-    replay = NewcomerReplay()
+    replay = NewcomerReplay(retained_evidence_root=retained_evidence_root)
     monkeypatch.setenv("ANA_IDENTIFICADOR", _IDENTIFIER)
     monkeypatch.setenv("ANA_SENHA", _PASSWORD)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
@@ -124,10 +124,10 @@ def execute_page(page, monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("page", ["README.md", "docs/usage.md"])
-def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path, request):
+def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path, request, retained_evidence_root: Path):
     if page == "README.md":
         request.getfixturevalue("reuse_packaged_catalogues")
-    scope = execute_page(page, monkeypatch, tmp_path)
+    scope = execute_page(page, monkeypatch, tmp_path, retained_evidence_root=retained_evidence_root)
     assert scope["result"].data.height == 1
     assert scope["result"].data["station_id"].to_list() == ["07374000"]
     assert scope["result"].data["source_unit"].to_list() == ["ft^3/s"]
@@ -159,10 +159,10 @@ def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path, request):
         assert set(scope["rr"].series(scope["brazil"])["variant"]) == {"bruto", "consistido"}
         assert scope["rr"].series(scope["consistido"])["variant"].to_list() == ["consistido"]
     else:
-        assert_usage_state(scope, tmp_path)
+        assert_usage_state(scope, tmp_path, retained_evidence_root=retained_evidence_root)
 
 
-def assert_usage_state(scope, tmp_path):
+def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
     from folium import Marker
     from polars.testing import assert_frame_equal
 
@@ -244,7 +244,7 @@ def assert_usage_state(scope, tmp_path):
     assert next(count for block, count in calls if "cached_result =" in block) == 1
     assert next(count for block, count in calls if "receipt_result =" in block) == 1
     fresh = scope["receipt_result"]
-    assert fresh.receipts.entries[0].content == body(DAILY_RECORDING)
+    assert fresh.receipts.entries[0].content == body(DAILY_RECORDING, evidence_root=retained_evidence_root)
     assert fresh.receipts.entries[0].authorship.value == "publisher_payload"
     before = len(scope["_transport"].calls)
     cached = scope["rr"].fetch(
@@ -256,7 +256,9 @@ def assert_usage_state(scope, tmp_path):
     assert cached.receipts.entries[0].format_version == 8
     excerpt = pl.read_parquet(io.BytesIO(cached.receipts.entries[0].content))
     assert excerpt.height >= cached.data.height
-    assert fresh.provenance.retrieved_at == datetime.fromisoformat(MANIFEST[DAILY_RECORDING]["acquired_utc"])
+    assert fresh.provenance.retrieved_at == datetime.fromisoformat(
+        manifest(retained_evidence_root)[DAILY_RECORDING]["acquired_utc"]
+    )
     assert not fresh.provenance.served_intervals
     assert cached.provenance.retrieved_at is None
     assert cached.provenance.calls_made
@@ -275,12 +277,12 @@ def assert_usage_state(scope, tmp_path):
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path):
+def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path, retained_evidence_root: Path):
     from polars.testing import assert_frame_equal
 
     from rivretrieve._internal.issues import FatalContractError
 
-    scope = execute_page("README.md", monkeypatch, tmp_path)
+    scope = execute_page("README.md", monkeypatch, tmp_path, retained_evidence_root=retained_evidence_root)
     rr = scope["rr"]
     assert scope["result"].data["time_zone"].to_list() == ["unknown"]
     with pytest.raises(FatalContractError, match="unknown"):
@@ -313,8 +315,8 @@ def issue_example():
 class ScriptedModernReplay(ModernReplay):
     """Authored response controls over exact modern request coordinates."""
 
-    def __init__(self, outcome):
-        super().__init__(DAILY_RECORDING)
+    def __init__(self, outcome, retained_evidence_root: Path):
+        super().__init__(DAILY_RECORDING, evidence_root=retained_evidence_root)
         self.outcome = outcome
 
     def send(self, request):
@@ -332,11 +334,11 @@ class ScriptedModernReplay(ModernReplay):
         return response
 
 
-def issue_scope(monkeypatch, tmp_path, outcome):
+def issue_scope(monkeypatch, tmp_path, outcome, retained_evidence_root: Path):
     import rivretrieve as rr
     import rivretrieve._internal.discovery as discovery
 
-    replay = ScriptedModernReplay(outcome)
+    replay = ScriptedModernReplay(outcome, retained_evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
@@ -345,8 +347,8 @@ def issue_scope(monkeypatch, tmp_path, outcome):
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_actual_issue_example_success(monkeypatch, tmp_path):
-    scope, replay = issue_scope(monkeypatch, tmp_path, "success")
+def test_actual_issue_example_success(monkeypatch, tmp_path, retained_evidence_root: Path):
+    scope, replay = issue_scope(monkeypatch, tmp_path, "success", retained_evidence_root=retained_evidence_root)
     checked = execute_block(issue_example(), scope, "usage-issues-success")
     assert len(checked) == 1
     assert len(replay.calls) == 1
@@ -356,14 +358,14 @@ def test_actual_issue_example_success(monkeypatch, tmp_path):
 @pytest.mark.parametrize("policy", ["warn", "ignore", "raise"])
 @pytest.mark.parametrize("outcome", ["success", "empty", 404, 503])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, outcome):
+def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, outcome, retained_evidence_root: Path):
     """Run each page-authored fetch expression unchanged under transport scenarios."""
     from polars.testing import assert_frame_equal
 
     from rivretrieve._internal.issues import IssuePolicyError
     from rivretrieve._internal.observations import ObservationDataSchema
 
-    scope, replay = issue_scope(monkeypatch, tmp_path, outcome)
+    scope, replay = issue_scope(monkeypatch, tmp_path, outcome, retained_evidence_root=retained_evidence_root)
     calls = [
         node
         for block in blocks("docs/usage.md")
@@ -417,7 +419,7 @@ def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, o
             assert call["product_id"] == "discharge_daily_mean"
             assert call["status_code"] == outcome
             assert coordinates(call["url"], call["request_parameters"]) == coordinates(
-                MANIFEST[DAILY_RECORDING]["original_url"]
+                manifest(retained_evidence_root)[DAILY_RECORDING]["original_url"]
             )
             assert issue.details["failure_reason"]
             assert result.outcomes

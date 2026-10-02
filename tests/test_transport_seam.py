@@ -59,17 +59,19 @@ def _provenance() -> ObservationProvenance:
     return ObservationProvenance(source="recording", provider_id=ProviderId("usgs_nwis"))
 
 
-def test_stop_convention_flip_misses_exact_recording() -> None:
+def test_stop_convention_flip_misses_exact_recording(retained_evidence_root: Path) -> None:
     import json
 
     request = _request()
-    replay = ModernReplay("daily-07374000-discharge-mean")
+    replay = ModernReplay("daily-07374000-discharge-mean", evidence_root=retained_evidence_root)
     baseline = drive(request, usgs_nwis, provenance=_provenance(), transport=replay)
     assert baseline.canonical_rows.height == 7
     assert set(baseline.canonical_rows["time_zone"]) == {"unknown"}
     expected = [
         float(feature["properties"]["value"]) * 0.028316846592
-        for feature in json.loads(body("daily-07374000-discharge-mean"))["features"]
+        for feature in json.loads(body("daily-07374000-discharge-mean", evidence_root=retained_evidence_root))[
+            "features"
+        ]
         if "2024-01-01" <= feature["properties"]["time"] <= "2024-01-07"
     ]
     assert baseline.canonical_rows["value"].to_list() == expected

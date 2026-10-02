@@ -4,6 +4,7 @@ The second fact segment is an engine-contract control, not claimed agency eviden
 """
 
 from dataclasses import replace
+from pathlib import Path
 
 import polars as pl
 import polars.testing as pt
@@ -17,7 +18,7 @@ from tests.usgs_modern_recordings import ModernReplay
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
-def test_precise_refresh_preserves_same_series_sibling_fact_rows(monkeypatch, tmp_path):
+def test_precise_refresh_preserves_same_series_sibling_fact_rows(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     broad = rr.find(provider="usgs_nwis", station="07374000", quantity="discharge")
     # Select an established daily frequency while leaving statistics unrestricted.
@@ -68,7 +69,7 @@ def test_precise_refresh_preserves_same_series_sibling_fact_rows(monkeypatch, tm
             replace(lookup(provider), _stages=TwoSegments()) if provider == "usgs_nwis" else lookup(provider)
         ),
     )
-    replay = ModernReplay("daily-07374000-docs-2023")
+    replay = ModernReplay("daily-07374000-docs-2023", evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
 
     def fetch(selection, cache):

@@ -1,5 +1,7 @@
 """Public offline selection preserves physical intent and published alternatives."""
 
+from pathlib import Path
+
 import polars as pl
 import polars.testing as pl_testing
 import pytest
@@ -187,11 +189,13 @@ def test_public_product_shorthand_is_refused_instead_of_misclassifying_physical_
         rr.pick(selection, product="discharge_daily_mean")
 
 
-def test_explicit_catalogue_identity_routes_only_its_source_access(monkeypatch, tmp_path) -> None:
+def test_explicit_catalogue_identity_routes_only_its_source_access(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+) -> None:
     from tests.test_br_ana_public_daily import _authenticated_replay
 
     monkeypatch.chdir(tmp_path)
-    transport = _authenticated_replay(monkeypatch, "stage_daily_mean_consistido")
+    transport = _authenticated_replay(retained_evidence_root, monkeypatch, "stage_daily_mean_consistido")
     selected = rr.pick(
         rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean"),
         variant="consistido",

@@ -8,8 +8,6 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
-DATA = Path(__file__).parent / "test_data"
-
 PHYSICAL_FILTERS = {
     "stage_reported": {"quantity": "stage"},
     "water_temperature_reported": {"quantity": "temperature"},
@@ -20,8 +18,10 @@ PHYSICAL_FILTERS = {
 }
 
 
-def _public(monkeypatch, provider, station, product, start, end, recordings):
-    replay = ReplayTransport(tuple(read_recording(DATA / name) for name in recordings))
+def _public(retained_evidence_root: Path, monkeypatch, provider, station, product, start, end, recordings):
+    replay = ReplayTransport(
+        tuple(read_recording(retained_evidence_root / "tests/test_data" / name) for name in recordings)
+    )
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(provider=provider, station=station, **PHYSICAL_FILTERS[product])
     if provider == "fr_hydroportail":
@@ -44,8 +44,9 @@ def _public(monkeypatch, provider, station, product, start, end, recordings):
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_bosnia_public_path_clips_converts_and_keeps_exact_receipts(monkeypatch):
+def test_bosnia_public_path_clips_converts_and_keeps_exact_receipts(retained_evidence_root: Path, monkeypatch):
     result = _public(
+        retained_evidence_root,
         monkeypatch,
         "ba_fhmzbih",
         "4024",
@@ -58,13 +59,19 @@ def test_bosnia_public_path_clips_converts_and_keeps_exact_receipts(monkeypatch)
     assert result.data["value"][0] == pytest.approx(0.405)
     assert len(result.receipts.entries) == 2
     assert (
-        result.receipts.entries[0].content == read_recording(DATA / "ba_fhmzbih_metadata_index.recording.json").content
+        result.receipts.entries[0].content
+        == read_recording(
+            retained_evidence_root / "tests/test_data" / "ba_fhmzbih_metadata_index.recording.json"
+        ).content
     )
-    assert result.receipts.entries[1].content == read_recording(DATA / "ba_fhmzbih_4024_H_1Y.recording.json").content
+    assert (
+        result.receipts.entries[1].content
+        == read_recording(retained_evidence_root / "tests/test_data" / "ba_fhmzbih_4024_H_1Y.recording.json").content
+    )
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(monkeypatch):
+def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(retained_evidence_root: Path, monkeypatch):
     cases = (
         (
             "1011000101",
@@ -101,7 +108,7 @@ def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(monkeyp
     )
     for station, product, start, end, recordings, count in cases:
         provider = "fr_hydroportail" if "instantaneous" in product else "fr_hubeau"
-        result = _public(monkeypatch, provider, station, product, start, end, recordings)
+        result = _public(retained_evidence_root, monkeypatch, provider, station, product, start, end, recordings)
         assert result.data.height == count
         contents = b"".join(entry.content for entry in result.receipts.entries)
         if "instantaneous" in product and station == "Y251002001":
@@ -144,8 +151,9 @@ def test_france_sparse_catalogue_does_not_invent_cross_products():
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_france_station_discharge_uses_series_unit_not_display_preference(monkeypatch):
+def test_france_station_discharge_uses_series_unit_not_display_preference(retained_evidence_root: Path, monkeypatch):
     result = _public(
+        retained_evidence_root,
         monkeypatch,
         "fr_hydroportail",
         "1232000101",
@@ -157,13 +165,16 @@ def test_france_station_discharge_uses_series_unit_not_display_preference(monkey
     # Raw lexical witnesses supplied independently; existing L/s → m³/s conversion retained.
     assert result.data["value"][0] == pytest.approx(1.28)
     assert result.data["value"][-1] == pytest.approx(1.23)
-    recording = read_recording(DATA / "fr_hydroportail_station_Q_padded.recording.json")
+    recording = read_recording(
+        retained_evidence_root / "tests/test_data" / "fr_hydroportail_station_Q_padded.recording.json"
+    )
     assert result.receipts.entries[0].content == recording.content
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_france_valid_station_discharge_capture_can_clip_to_empty(monkeypatch):
+def test_france_valid_station_discharge_capture_can_clip_to_empty(retained_evidence_root: Path, monkeypatch):
     result = _public(
+        retained_evidence_root,
         monkeypatch,
         "fr_hydroportail",
         "1232000101",

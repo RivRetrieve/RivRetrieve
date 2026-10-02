@@ -9,7 +9,6 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
-DATA = Path(__file__).parent / "test_data"
 CASES = (
     (
         "jp_mlit",
@@ -43,9 +42,9 @@ CASES = (
 
 @pytest.mark.parametrize(("provider", "station", "recordings", "start", "end"), CASES)
 def test_public_discovery_retrieval_and_bundle_have_identical_facts(
-    monkeypatch, provider, station, recordings, start, end
+    retained_evidence_root: Path, monkeypatch, provider, station, recordings, start, end
 ):
-    envelopes = tuple(read_recording(DATA / name) for name in recordings)
+    envelopes = tuple(read_recording(retained_evidence_root / "tests/test_data" / name) for name in recordings)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(envelopes))
     selection = rr.find(provider=provider, station=station)
     result = rr.fetch(selection, start=start, end=end, receipts=True, on_issue="ignore")
@@ -86,9 +85,9 @@ def test_daily_means_retain_support_without_inventing_interval_anchor():
 
 @pytest.mark.parametrize(("provider", "station", "recordings", "start", "end"), CASES)
 def test_explicit_series_cache_refresh_preserves_siblings_facts_and_native_values(
-    monkeypatch, tmp_path, provider, station, recordings, start, end
+    retained_evidence_root: Path, monkeypatch, tmp_path, provider, station, recordings, start, end
 ):
-    envelopes = tuple(read_recording(DATA / name) for name in recordings)
+    envelopes = tuple(read_recording(retained_evidence_root / "tests/test_data" / name) for name in recordings)
     calls = []
 
     class CountingReplay(ReplayTransport):
@@ -123,7 +122,7 @@ def test_explicit_series_cache_refresh_preserves_siblings_facts_and_native_value
     assert len(calls) > count
 
 
-def test_all_mapped_builtin_facts_have_publisher_evidence_and_content_identity():
+def test_all_mapped_builtin_facts_have_publisher_evidence_and_content_identity(retained_evidence_root: Path):
     from importlib import import_module
 
     from rivretrieve._internal.source_series import stable_id
@@ -135,14 +134,16 @@ def test_all_mapped_builtin_facts_have_publisher_evidence_and_content_identity()
             assert any("tests/test_data/" in citation for citation in mapping.evidence)
             for citation in mapping.evidence:
                 if citation.startswith("tests/test_data/"):
-                    assert (Path(__file__).parents[1] / citation.split(":", 1)[0]).is_file()
+                    assert (retained_evidence_root / citation.split(":", 1)[0]).is_file()
             facts = mapping.physical_facts()
             assert facts.facts_id == stable_id(facts.model_dump_json(exclude={"facts_id"}))
             assert all("config.py" not in citation for citation in facts.quantity.evidence)
 
 
 @pytest.mark.parametrize("repetition", ("equal", "conflicting", "disjoint"))
-def test_czech_repeated_code_is_identified_unsupported_without_losing_siblings(repetition):
+def test_czech_repeated_code_is_identified_unsupported_without_losing_siblings(
+    retained_evidence_root: Path, repetition
+):
     """Negative derivatives are not claims that these blocks occur in publisher data."""
     import copy
     import json
@@ -157,7 +158,9 @@ def test_czech_repeated_code_is_identified_unsupported_without_losing_siblings(r
     products = tuple(
         ProductId(value) for value in ("discharge_daily_mean", "stage_daily_mean", "water_temperature_daily_mean")
     )
-    recording = read_recording(DATA / "cz_chmi_0-203-1-000400_DQ_2023.recording.json")
+    recording = read_recording(
+        retained_evidence_root / "tests/test_data" / "cz_chmi_0-203-1-000400_DQ_2023.recording.json"
+    )
     window = _make_fetch_window(
         WindowEndpoint.from_datetime(datetime(2023, 1, 1)), WindowEndpoint.from_datetime(datetime(2023, 12, 31))
     )
@@ -207,9 +210,9 @@ def test_product_tables_project_source_facts_without_independent_scientific_clai
 
 @pytest.mark.parametrize(("provider", "station", "recordings", "start", "end"), CASES)
 def test_unestablished_singleton_variant_never_substitutes_known_series(
-    monkeypatch, provider, station, recordings, start, end
+    retained_evidence_root: Path, monkeypatch, provider, station, recordings, start, end
 ):
-    envelopes = tuple(read_recording(DATA / name) for name in recordings)
+    envelopes = tuple(read_recording(retained_evidence_root / "tests/test_data" / name) for name in recordings)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(envelopes))
     selection = rr.find(provider=provider, station=station)
     restricted = rr.pick(selection, variant="unpublished-variant", on_issue="ignore")

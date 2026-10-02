@@ -38,10 +38,12 @@ def test_real_selection_exposes_normalized_metadata_without_legacy_aliases():
     assert set(frame["variant"]) == {"raw", "validated", "pre_validated_and_validated", "most_valid"}
 
 
-def test_recorded_public_fetch_normalized_provenance_serialization(monkeypatch: pytest.MonkeyPatch):
+def test_recorded_public_fetch_normalized_provenance_serialization(
+    monkeypatch: pytest.MonkeyPatch, retained_evidence_root: Path
+):
     from tests.usgs_modern_recordings import ModernReplay
 
-    replay = ModernReplay("continuous-07374000-2010-discharge")
+    replay = ModernReplay("continuous-07374000-2010-discharge", evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "_credentialed_transport", lambda provider_id, values: replay)
     selection = rr.find(
         provider="usgs_nwis", station="07374000", quantity="discharge", temporal_support="instantaneous"

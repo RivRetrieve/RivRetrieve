@@ -195,7 +195,7 @@ def test_evidenced_baseline_record_sets_do_not_report_withheld_rows(provider: st
     assert "rr:absence" not in record
 
 
-def test_reference_loader_reads_empty_tables_and_null_fields(monkeypatch, tmp_path):
+def test_reference_loader_reads_empty_tables_and_null_fields(retained_evidence_root: Path, monkeypatch, tmp_path):
     # Inventory-only projection remains a valid empty-table fixture, even though
     # the shipped Brazil catalogue now includes evidenced adopted telemetry.
     from rivretrieve._internal.catalogues.native import read_native_table
@@ -204,7 +204,7 @@ def test_reference_loader_reads_empty_tables_and_null_fields(monkeypatch, tmp_pa
     from rivretrieve._internal.providers.br_ana.origins import STATION_CATALOGUE_ORIGINS, build_acquisition_provenance
 
     monkeypatch.setattr(socket.socket, "connect", _deny_network)
-    repository = Path(__file__).parents[1]
+    repository = retained_evidence_root
     capture = read_capture_record(repository / "tests/test_data/br_ana_inventory/capture.json")
     inventory = build_catalogue(
         read_native_table(repository / capture.native_table.repository_path),
@@ -309,7 +309,7 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
 
 
 @pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
-def test_native_material_identity_matches_committed_provenance_and_bytes(provider: str):
+def test_native_material_identity_matches_committed_provenance_and_bytes(retained_evidence_root: Path, provider: str):
     descriptor = _descriptor(provider)
     provenance, _, _ = _inputs(provider)
     native = provenance.header.native_table
@@ -318,11 +318,10 @@ def test_native_material_identity_matches_committed_provenance_and_bytes(provide
     if native is None:
         assert "isBasedOn" not in descriptor
         return
+    native_path = retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     material = descriptor["isBasedOn"]
-    assert material["sha256"] == native.sha256 == sha256((_path(provider) / "native.parquet").read_bytes()).hexdigest()
-    assert (
-        material["contentSize"] == f"{native.byte_size} B" == f"{(_path(provider) / 'native.parquet').stat().st_size} B"
-    )
+    assert material["sha256"] == native.sha256 == sha256(native_path.read_bytes()).hexdigest()
+    assert material["contentSize"] == f"{native.byte_size} B" == f"{native_path.stat().st_size} B"
     assert (
         material["contentUrl"]
         == f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}"

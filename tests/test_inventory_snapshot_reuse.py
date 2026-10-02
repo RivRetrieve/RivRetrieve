@@ -61,10 +61,10 @@ def test_newest_complete_inventory_with_uncovered_late_member_prevents_older_sna
 @pytest.mark.parametrize("policy", ["raise", "ignore"])
 @pytest.mark.parametrize("contamination", ["issue", "provenance"])
 def test_public_healthy_subset_reuse_excludes_unrelated_stored_failure_and_source_call(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, policy: str, contamination: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, policy: str, contamination: str, retained_evidence_root: Path
 ) -> None:
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    replay = ModernReplay("daily-07374000-docs-2023")
+    replay = ModernReplay("daily-07374000-docs-2023", evidence_root=retained_evidence_root)
     calls = []
 
     class CountedReplay:

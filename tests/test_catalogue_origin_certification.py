@@ -54,10 +54,10 @@ from rivretrieve._internal.providers.usgs_nwis.origins import DatumToCrsConversi
 from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
 
 ROOT = Path(__file__).parents[1]
-THAI_AVAILABILITY_EVIDENCE_PATH = (
-    ROOT / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
+THAI_AVAILABILITY_EVIDENCE_PATH = Path(
+    "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
 )
-RECEIPTS_PATH = ROOT / "tests/test_data/catalogue_origin_evidence_receipts.json"
+RECEIPTS_PATH = Path("tests/test_data/catalogue_origin_evidence_receipts.json")
 PROVIDER_NOTES = ROOT / "docs/provider_ports"
 SCHEMA_COLUMNS = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
 DEFERRED_PROVIDERS: frozenset[ProviderId] = frozenset()
@@ -94,11 +94,9 @@ def _module(provider: str, leaf: str) -> ModuleType:
     return importlib.import_module(f"rivretrieve._internal.providers.{provider}.{leaf}")
 
 
-def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapter:
+def _adapter(retained_evidence_root: Path, provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapter:
     generator = _module(provider, "generate_catalogue")
-    module_path = generator.__file__
-    assert module_path is not None
-    native_path = Path(module_path).parent / "catalogue/native.parquet"
+    native_path = retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     build = generator.build_catalogue
     if provider == "br_ana":
         from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence, read_capture_record
@@ -108,14 +106,14 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
         )
         from rivretrieve._internal.recordings import read_recording
 
-        capture = read_capture_record(ROOT / "tests/test_data/br_ana_inventory/capture.json")
-        data = ROOT / "tests/recordings/br_ana"
+        capture = read_capture_record(retained_evidence_root / "tests/test_data/br_ana_inventory/capture.json")
+        data = retained_evidence_root / "tests/recordings/br_ana"
         recorded_path = data / "telemetry_15400000_2024-01-04_DIAS_30.recording.json"
         telemetry = parse_adopted_telemetry_evidence(
             (data / "manual-page11-acquisition.json").read_bytes(),
             (data / "manual-page11-derived.txt").read_bytes(),
             read_recording(recorded_path),
-            str(recorded_path.relative_to(ROOT)),
+            str(recorded_path.relative_to(retained_evidence_root)),
         )
         provenance = with_observation_products(
             build_acquisition_provenance(capture),
@@ -140,7 +138,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
             RecordingReference,
         )
 
-        evidence = ROOT / "maintenance/catalogue/fr_hydroportail/evidence"
+        evidence = retained_evidence_root / "maintenance/catalogue/fr_hydroportail/evidence"
         receipt = json.loads((evidence / "national-tests.receipt.json").read_bytes())
         documents = []
         for name, description in (
@@ -155,7 +153,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
                     description=description,
                     recording=RecordingReference(
                         recording_id=name,
-                        repository_path=(evidence / f"{name}.body").relative_to(ROOT).as_posix(),
+                        repository_path=(evidence / f"{name}.body").relative_to(retained_evidence_root).as_posix(),
                         source_url=record["url"],
                         retrieved_at=datetime.fromisoformat(record["retrieved_at"]),
                         media_type=record["content_type"],
@@ -165,7 +163,7 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
             )
         material = native_path.read_bytes()
         identity = NativeTableIdentity(
-            repository_path=native_path.relative_to(ROOT).as_posix(),
+            repository_path=native_path.relative_to(retained_evidence_root).as_posix(),
             revision="eb2b4fcb3a38875329225b7dbe5f949216c01599",
             sha256=hashlib.sha256(material).hexdigest(),
             byte_size=len(material),
@@ -180,7 +178,8 @@ def _adapter(provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapt
         )
     if provider == "th_thaiwater":
         build = partial(
-            build, availability_evidence=GraphAvailabilityEvidence(THAI_AVAILABILITY_EVIDENCE_PATH.read_bytes())
+            build,
+            availability_evidence=GraphAvailabilityEvidence((ROOT / THAI_AVAILABILITY_EVIDENCE_PATH).read_bytes()),
         )
     if provider == "ba_fhmzbih":
         workbook_access = TypeAdapter(generator.WorkbookAccessLedger).validate_json(
@@ -203,8 +202,8 @@ def _stations_case(provider: str) -> tuple[DeclarationCase, ...]:
 
 
 _france_origins = _module("fr_hubeau", "origins")
-ADAPTERS = {
-    ProviderId(provider): _adapter(provider, _stations_case(provider))
+DECLARATIONS = {
+    ProviderId(provider): _stations_case(provider)
     for provider in (
         "ba_fhmzbih",
         "br_ana",
@@ -221,28 +220,26 @@ ADAPTERS = {
         "za_dws",
     )
 }
-ADAPTERS[ProviderId("fr_hubeau")] = _adapter(
-    "fr_hubeau",
-    (
-        DeclarationCase(
-            "hydrometrie/referentiel/stations",
-            _france_origins.HYDROMETRY_STATION_CATALOGUE_ORIGINS,
-            "hydrometrie/referentiel/stations",
-        ),
-        DeclarationCase(
-            "temperature/station",
-            _france_origins.TEMPERATURE_STATION_CATALOGUE_ORIGINS,
-            "temperature/station",
-        ),
+DECLARATIONS[ProviderId("fr_hubeau")] = (
+    DeclarationCase(
+        "hydrometrie/referentiel/stations",
+        _france_origins.HYDROMETRY_STATION_CATALOGUE_ORIGINS,
+        "hydrometrie/referentiel/stations",
+    ),
+    DeclarationCase(
+        "temperature/station",
+        _france_origins.TEMPERATURE_STATION_CATALOGUE_ORIGINS,
+        "temperature/station",
     ),
 )
 
 
-def _all_cases() -> list[tuple[ProviderAdapter, DeclarationCase]]:
-    return [(adapter, case) for adapter in ADAPTERS.values() for case in adapter.cases]
+CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case in cases]
 
 
-CASES = _all_cases()
+@pytest.fixture(scope="module")
+def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> ProviderAdapter:
+    return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param])
 
 
 def _build(adapter: ProviderAdapter, native: NativeTable | None = None, origins: Mapping[str, object] | None = None):
@@ -395,20 +392,19 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
     }
 
 
-def test_adapter_discovery_is_exact_and_deferred_providers_remain_building() -> None:
+def test_adapter_discovery_is_exact_and_deferred_providers_remain_building(retained_evidence_root: Path) -> None:
+    adapters = {provider: _adapter(retained_evidence_root, provider, cases) for provider, cases in DECLARATIONS.items()}
     discovery._ensure_default_providers_registered()
     registered = frozenset(ProviderId(value) for value in discovery._registry.list_provider_ids())
 
-    assert frozenset(ADAPTERS) == ORIGIN_GATE_ENROLLED_PROVIDERS
-    assert registered - frozenset(ADAPTERS) == DEFERRED_PROVIDERS, (
+    assert frozenset(adapters) == ORIGIN_GATE_ENROLLED_PROVIDERS
+    assert registered - frozenset(adapters) == DEFERRED_PROVIDERS, (
         "Every registered provider must declare its certification status explicitly"
     )
     assert not (DEFERRED_PROVIDERS & ORIGIN_GATE_ENROLLED_PROVIDERS)
-    assert all(adapter.native_path.is_file() for adapter in ADAPTERS.values())
-    assert all(callable(adapter.main) and callable(adapter.build) for adapter in ADAPTERS.values())
-    assert {
-        (adapter.provider_id, case.identity): case.declarations for adapter, case in CASES
-    } == _expected_declarations()
+    assert all(adapter.native_path.is_file() for adapter in adapters.values())
+    assert all(callable(adapter.main) and callable(adapter.build) for adapter in adapters.values())
+    assert {(provider, case.identity): case.declarations for provider, case in CASES} == _expected_declarations()
     assert len(CASES) == 15
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
@@ -416,10 +412,11 @@ def test_adapter_discovery_is_exact_and_deferred_providers_remain_building() -> 
 @pytest.mark.parametrize(
     ("adapter", "case"),
     CASES,
-    ids=[f"{adapter.provider_id}-{case.identity}" for adapter, case in CASES],
+    ids=[f"{provider}-{case.identity}" for provider, case in CASES],
+    indirect=["adapter"],
 )
 def test_committed_declaration_case_passes_real_build_and_origin_gate(
-    adapter: ProviderAdapter, case: DeclarationCase
+    retained_evidence_root: Path, adapter: ProviderAdapter, case: DeclarationCase
 ) -> None:
     native = read_native_table(adapter.native_path)
     catalogue = _build(adapter, native)
@@ -429,7 +426,7 @@ def test_committed_declaration_case_passes_real_build_and_origin_gate(
     assert not stations.is_empty()
     assert validate_catalogue_origins(adapter.provider_id, case.declarations, case_native, stations) == []
     enforce_catalogue_origins(adapter.provider_id, case.declarations, case_native, stations)
-    _assert_reviewed_crs(adapter, case, case_native, stations)
+    _assert_reviewed_crs(retained_evidence_root, adapter, case, case_native, stations)
 
 
 REMOVAL_CASES = [(adapter, case, column) for adapter, case in CASES for column in SCHEMA_COLUMNS]
@@ -438,7 +435,8 @@ REMOVAL_CASES = [(adapter, case, column) for adapter, case in CASES for column i
 @pytest.mark.parametrize(
     ("adapter", "case", "column"),
     REMOVAL_CASES,
-    ids=[f"{adapter.provider_id}-{case.identity}-{column}" for adapter, case, column in REMOVAL_CASES],
+    ids=[f"{provider}-{case.identity}-{column}" for provider, case, column in REMOVAL_CASES],
+    indirect=["adapter"],
 )
 def test_real_build_rejects_each_removed_declaration(
     adapter: ProviderAdapter, case: DeclarationCase, column: str
@@ -473,8 +471,8 @@ def test_real_build_rejects_each_removed_declaration(
     assert all(issue.details == {"canonical_column": column} for issue in issues)
 
 
-def _receipts() -> list[dict[str, object]]:
-    value = json.loads(RECEIPTS_PATH.read_text(encoding="utf-8"))
+def _receipts(retained_evidence_root: Path) -> list[dict[str, object]]:
+    value = json.loads((retained_evidence_root / RECEIPTS_PATH).read_text(encoding="utf-8"))
     assert isinstance(value, list)
     return value
 
@@ -498,15 +496,15 @@ RECEIPT_KEYS = {
 
 def _not_published_keys() -> set[tuple[str, str, str, str]]:
     return {
-        (str(adapter.provider_id), case.identity, column, str(origin.evidence))
-        for adapter, case in CASES
+        (str(provider), case.identity, column, str(origin.evidence))
+        for provider, case in CASES
         for column, origin in case.declarations.items()
         if isinstance(origin, NotPublished)
     }
 
 
-def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed() -> None:
-    receipts = _receipts()
+def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed(retained_evidence_root: Path) -> None:
+    receipts = _receipts(retained_evidence_root)
     keys = {
         (row["provider_id"], row["declaration_map"], row["canonical_column"], row["evidence_url"]) for row in receipts
     }
@@ -538,30 +536,35 @@ def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed() -> None:
     assert [row["provider_id"] for row in receipts if row["capture_path"] is None] == ["za_dws"]
 
 
-@pytest.mark.parametrize("receipt", _receipts(), ids=lambda row: str(row["provider_id"]))
-def test_receipt_capture_digest(receipt: dict[str, object]) -> None:
-    capture_path = receipt["capture_path"]
-    if capture_path is None:
-        assert receipt["provider_id"] == "za_dws"
-        return
-    path = ROOT / str(capture_path)
-    assert path.is_relative_to(ROOT / "tests/test_data")
-    assert path.is_file()
-    payload = path.read_bytes()
-    if receipt["digest_method"] == "raw":
-        digest_payload = payload
-    else:
-        assert receipt["digest_method"] == (
-            'json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")'
-        )
-        digest_payload = json.dumps(
-            json.loads(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=False
-        ).encode("utf-8")
-    assert hashlib.sha256(digest_payload).hexdigest() == receipt["sha256"]
+@pytest.mark.parametrize(
+    "provider", ("ba_fhmzbih", "ch_foen", "cz_chmi", "jp_mlit", "no_nve", "pl_imgw", "th_thaiwater", "za_dws")
+)
+def test_receipt_capture_digest(retained_evidence_root: Path, provider: str) -> None:
+    receipts = [row for row in _receipts(retained_evidence_root) if row["provider_id"] == provider]
+    assert receipts
+    for receipt in receipts:
+        capture_path = receipt["capture_path"]
+        if capture_path is None:
+            assert receipt["provider_id"] == "za_dws"
+            continue
+        path = retained_evidence_root / str(capture_path)
+        assert path.is_relative_to(retained_evidence_root / "tests/test_data")
+        assert path.is_file()
+        payload = path.read_bytes()
+        if receipt["digest_method"] == "raw":
+            digest_payload = payload
+        else:
+            assert receipt["digest_method"] == (
+                'json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")'
+            )
+            digest_payload = json.dumps(
+                json.loads(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode("utf-8")
+        assert hashlib.sha256(digest_payload).hexdigest() == receipt["sha256"]
 
 
-def test_receipt_provider_specific_url_bindings_and_attested_exceptions() -> None:
-    rows = {row["provider_id"]: row for row in _receipts()}
+def test_receipt_provider_specific_url_bindings_and_attested_exceptions(retained_evidence_root: Path) -> None:
+    rows = {row["provider_id"]: row for row in _receipts(retained_evidence_root)}
     assert rows["ch_foen"]["requested_url"] == rows["ch_foen"]["final_url"] == "https://api.existenz.ch/"
     assert rows["ch_foen"]["evidence_url"] == "https://api.existenz.ch/#hydro"
     assert rows["cz_chmi"]["evidence_url"] == rows["cz_chmi"]["requested_url"] == rows["cz_chmi"]["final_url"]
@@ -590,8 +593,8 @@ EXPECTED_CRS_COUNTS = {
 }
 
 
-def test_france_provider_owned_converter_refuses_a_swapped_existing_native_column() -> None:
-    adapter = ADAPTERS[ProviderId("fr_hubeau")]
+def test_france_provider_owned_converter_refuses_a_swapped_existing_native_column(retained_evidence_root: Path) -> None:
+    adapter = _adapter(retained_evidence_root, "fr_hubeau", DECLARATIONS[ProviderId("fr_hubeau")])
     native = read_native_table(adapter.native_path)
     contradicted = dict(_france_origins.HYDROMETRY_STATION_CATALOGUE_ORIGINS)
     contradicted["latitude"] = Field(NativeColumn("longitude_station"), HydrometryCoordinateConversion())
@@ -602,6 +605,7 @@ def test_france_provider_owned_converter_refuses_a_swapped_existing_native_colum
 
 
 def _assert_reviewed_crs(
+    retained_evidence_root: Path,
     adapter: ProviderAdapter,
     case: DeclarationCase,
     case_native: NativeTable,
@@ -619,7 +623,7 @@ def _assert_reviewed_crs(
             row["provider_id"] == adapter.provider_id
             and row["declaration_map"] == case.identity
             and row["evidence_url"] == origin.evidence
-            for row in _receipts()
+            for row in _receipts(retained_evidence_root)
         )
     elif isinstance(origin, Documented):
         expected_count, expected_value = EXPECTED_CRS_COUNTS[(adapter.provider_id, case.identity)]
@@ -642,12 +646,12 @@ def test_not_published_and_documented_count_totals_are_pinned() -> None:
     assert 6_454 + 869 == 7_323
 
 
-def test_japan_accepted_receipt_build_and_dws_historical_review_are_honest() -> None:
-    capture = (ROOT / "tests/test_data/jp_mlit_site_info_detail_301011281104010.html").read_bytes()
+def test_japan_accepted_receipt_build_and_dws_historical_review_are_honest(retained_evidence_root: Path) -> None:
+    capture = (retained_evidence_root / "tests/test_data/jp_mlit_site_info_detail_301011281104010.html").read_bytes()
     assert len(capture) == 3_208
     assert hashlib.sha256(capture).hexdigest() == "81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9"
     assert "世界測地系".encode("euc_jp") in capture
-    japan = ADAPTERS[ProviderId("jp_mlit")]
+    japan = _adapter(retained_evidence_root, "jp_mlit", DECLARATIONS[ProviderId("jp_mlit")])
     assert _build(japan).stations["crs"].unique().to_list() == ["unknown"]
 
     dws_origins = _module("za_dws", "origins")
@@ -660,8 +664,8 @@ def test_japan_accepted_receipt_build_and_dws_historical_review_are_honest() -> 
     )
 
 
-def test_usgs_committed_datum_carrier_maps_exactly_to_reviewed_crs() -> None:
-    adapter = ADAPTERS[ProviderId("usgs_nwis")]
+def test_usgs_committed_datum_carrier_maps_exactly_to_reviewed_crs(retained_evidence_root: Path) -> None:
+    adapter = _adapter(retained_evidence_root, "usgs_nwis", DECLARATIONS[ProviderId("usgs_nwis")])
     native = read_native_table(adapter.native_path)
     stations = _build(adapter, native).stations
     datum = native.data.select("site_no", "dec_coord_datum_cd")
@@ -676,8 +680,10 @@ def test_usgs_committed_datum_carrier_maps_exactly_to_reviewed_crs() -> None:
 
 
 @pytest.mark.parametrize(("datum", "expected"), [("", "unknown"), ("ZZZ99", "unknown")])
-def test_usgs_full_native_string_datum_variants_use_explicit_unknown(datum: str, expected: str) -> None:
-    adapter = ADAPTERS[ProviderId("usgs_nwis")]
+def test_usgs_full_native_string_datum_variants_use_explicit_unknown(
+    retained_evidence_root: Path, datum: str, expected: str
+) -> None:
+    adapter = _adapter(retained_evidence_root, "usgs_nwis", DECLARATIONS[ProviderId("usgs_nwis")])
     native = read_native_table(adapter.native_path)
     changed = NativeTable(
         native.data.with_columns(
@@ -692,8 +698,8 @@ def test_usgs_full_native_string_datum_variants_use_explicit_unknown(datum: str,
     assert catalogue.stations.filter(pl.col("station_id") == "01010000").select("crs").item() == expected
 
 
-def test_usgs_full_native_null_datum_variant_fails_closed_with_station_message() -> None:
-    adapter = ADAPTERS[ProviderId("usgs_nwis")]
+def test_usgs_full_native_null_datum_variant_fails_closed_with_station_message(retained_evidence_root: Path) -> None:
+    adapter = _adapter(retained_evidence_root, "usgs_nwis", DECLARATIONS[ProviderId("usgs_nwis")])
     native = read_native_table(adapter.native_path)
     changed = NativeTable(
         native.data.with_columns(
@@ -721,9 +727,9 @@ def _normalized_built_at(payload: bytes) -> bytes:
     return replaced
 
 
-@pytest.mark.parametrize("adapter", ADAPTERS.values(), ids=lambda adapter: str(adapter.provider_id))
+@pytest.mark.parametrize("adapter", tuple(DECLARATIONS), indirect=True)
 def test_native_composition_root_rebuilds_committed_artifacts_without_network(
-    adapter: ProviderAdapter, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    retained_evidence_root: Path, adapter: ProviderAdapter, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     calls: list[str] = []
 
@@ -751,27 +757,49 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     source_inputs_before: dict[Path, bytes] = {}
     output = tmp_path / str(adapter.provider_id)
     arguments = ["--native", str(adapter.native_path), "--out", str(output)]
-    if adapter.provider_id == "ba_fhmzbih":
+    if adapter.provider_id in {
+        "ba_fhmzbih",
+        "ca_eccc",
+        "ch_foen",
+        "cz_chmi",
+        "lt_lhmt",
+        "no_nve",
+        "th_thaiwater",
+        "za_dws",
+    }:
+        arguments.extend(("--evidence-root", str(retained_evidence_root)))
+    if adapter.provider_id == "br_ana":
+        arguments.extend(
+            (
+                "--evidence-root",
+                str(retained_evidence_root),
+                "--capture-record",
+                str(retained_evidence_root / "tests/test_data/br_ana_inventory/capture.json"),
+            )
+        )
+    elif adapter.provider_id == "ba_fhmzbih":
         ledger = ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
-        series_recording = ROOT / "tests/test_data/ba_fhmzbih_metadata_index.recording.json"
+        series_recording = retained_evidence_root / "tests/test_data/ba_fhmzbih_metadata_index.recording.json"
         source_inputs_before = {path: path.read_bytes() for path in (ledger, series_recording)}
         arguments.extend(("--workbook-access-ledger", str(ledger), "--series-recording", str(series_recording)))
     elif adapter.provider_id == "usgs_nwis":
-        metadata = ROOT / "research/usgs-modern-coverage"
+        metadata = retained_evidence_root / "research/usgs-modern-coverage"
         source_inputs_before = {path: path.read_bytes() for path in metadata.glob("metadata-*") if path.is_file()}
-        arguments.extend(("--modern-metadata", str(metadata)))
+        arguments.extend(("--modern-metadata", str(metadata), "--evidence-root", str(retained_evidence_root)))
     elif adapter.provider_id == "jp_mlit":
         arguments.extend(
             (
                 "--license-recording",
-                "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
+                str(retained_evidence_root / "tests/test_data/jp_mlit_terms_licence_euc_jp.html"),
                 "--citation-recording",
-                "tests/test_data/jp_mlit_terms_citation.pdf",
+                str(retained_evidence_root / "tests/test_data/jp_mlit_terms_citation.pdf"),
             )
         )
     elif adapter.provider_id == "fr_hubeau":
         arguments.extend(
             (
+                "--evidence-root",
+                str(retained_evidence_root),
                 "--availability-ledger",
                 str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
                 "--native-capture",
@@ -784,24 +812,28 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 "--native-revision",
                 "eb2b4fcb3a38875329225b7dbe5f949216c01599",
                 "--repository-root",
-                str(ROOT),
+                str(retained_evidence_root),
                 "--evidence",
-                str(ROOT / "maintenance/catalogue/fr_hydroportail/evidence"),
+                str(retained_evidence_root / "maintenance/catalogue/fr_hydroportail/evidence"),
                 "--availability-ledger",
                 str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
             )
         )
     elif adapter.provider_id == "th_thaiwater":
-        arguments.extend(("--availability-evidence", str(THAI_AVAILABILITY_EVIDENCE_PATH)))
+        arguments.extend(("--availability-evidence", str(ROOT / THAI_AVAILABILITY_EVIDENCE_PATH)))
     elif adapter.provider_id == "pl_imgw":
-        committed_provenance = json.loads((adapter.native_path.parent / "provenance.json").read_text())
+        committed_provenance = json.loads(
+            (
+                ROOT / "src/rivretrieve/_internal/providers" / str(adapter.provider_id) / "catalogue/provenance.json"
+            ).read_text()
+        )
         grdc = next(source for source in committed_provenance["source_records"] if source["source_id"] == "sr.pl.grdc")
         redacted_record = tmp_path / "pl_imgw-redacted-private-verification.json"
         redacted_record.write_text(json.dumps(grdc["statements"][0]["private_verification"]))
         arguments.extend(
             (
                 "--terms-recording",
-                "tests/test_data/pl_imgw_terms_regulations.html",
+                str(retained_evidence_root / "tests/test_data/pl_imgw_terms_regulations.html"),
                 "--private-verification-record",
                 str(redacted_record),
             )
@@ -811,7 +843,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     assert adapter.native_path.read_bytes() == native_before
     assert {path: path.read_bytes() for path in source_inputs_before} == source_inputs_before
 
-    catalogue_dir = adapter.native_path.parent
+    catalogue_dir = ROOT / "src/rivretrieve/_internal/providers" / str(adapter.provider_id) / "catalogue"
     committed_names = {
         path.name for path in catalogue_dir.iterdir() if path.is_file() and path.name != "native.parquet"
     }

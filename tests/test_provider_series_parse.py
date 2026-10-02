@@ -13,8 +13,8 @@ from rivretrieve._internal.source_series import ParsedSeries
 from rivretrieve._internal.window_planning import plan_windows
 
 
-def payload():
-    recording = read_recording(Path(__file__).parent / "test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
+def payload(retained_evidence_root: Path):
+    recording = read_recording(retained_evidence_root / "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
     stages = declaration.observations.stages
     products = (ProductId("discharge_daily_mean"), ProductId("stage_daily_mean"))
     window = _make_fetch_window(
@@ -31,8 +31,8 @@ def payload():
     return stages, replace(fetched.value[0], station_products=tuple(("anyksciu-vms", p) for p in products))
 
 
-def test_recorded_singletons_preserve_unspecified_identity():
-    stages, source = payload()
+def test_recorded_singletons_preserve_unspecified_identity(retained_evidence_root: Path):
+    stages, source = payload(retained_evidence_root)
     parsed = stages.parse(source, stages.config)
     assert isinstance(parsed, ParsedSeries)
     assert len(parsed.series) == 2
@@ -41,8 +41,8 @@ def test_recorded_singletons_preserve_unspecified_identity():
     assert all(i.completeness == "incomplete" for i in parsed.inventories)
 
 
-def test_unsupported_field_preserves_recorded_sibling():
-    stages, source = payload()
+def test_unsupported_field_preserves_recorded_sibling(retained_evidence_root: Path):
+    stages, source = payload(retained_evidence_root)
     document = json.loads(source.content)
     document["observations"][0]["waterLevel"] = "unsupported"
     parsed = stages.parse(replace(source, content=json.dumps(document).encode()), stages.config)
@@ -50,8 +50,8 @@ def test_unsupported_field_preserves_recorded_sibling():
     assert {o.status for o in parsed.outcomes} == {"success", "unsupported"}
 
 
-def test_empty_source_answer_has_concrete_outcomes():
-    stages, source = payload()
+def test_empty_source_answer_has_concrete_outcomes(retained_evidence_root: Path):
+    stages, source = payload(retained_evidence_root)
     document = json.loads(source.content)
     document["observations"] = []
     parsed = stages.parse(replace(source, content=json.dumps(document).encode()), stages.config)
@@ -60,17 +60,17 @@ def test_empty_source_answer_has_concrete_outcomes():
     assert all(o.status == "empty" and o.series_id for o in parsed.outcomes)
 
 
-def test_invalid_internal_tags_remain_fatal():
+def test_invalid_internal_tags_remain_fatal(retained_evidence_root: Path):
     import pytest
 
     from rivretrieve._internal.issues import FatalContractError
 
-    stages, source = payload()
+    stages, source = payload(retained_evidence_root)
     with pytest.raises(FatalContractError):
         stages.parse(replace(source, station_products=()), stages.config)
 
 
-def test_other_recorded_provider_parsers_retain_series_context():
+def test_other_recorded_provider_parsers_retain_series_context(retained_evidence_root: Path):
     from importlib import import_module
 
     from rivretrieve._internal.engine import SourceCoordinates
@@ -84,11 +84,11 @@ def test_other_recorded_provider_parsers_retain_series_context():
         ("fr_hubeau", "1011000101", "discharge_daily_mean", "fr_hubeau_1011000101_QmnJ_padded.recording.json"),
         ("th_thaiwater", "1373273", "discharge_reported", "th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json"),
     )
-    _, template = payload()
+    _, template = payload(retained_evidence_root)
     for provider, station, product, filename in cases:
         config = import_module(f"rivretrieve._internal.providers.{provider}.config").config()
         parse = import_module(f"rivretrieve._internal.providers.{provider}.parse").parse
-        recording = read_recording(Path(__file__).parent / "test_data" / filename)
+        recording = read_recording(retained_evidence_root / "tests/test_data" / filename)
         coordinates = config.products[ProductId(product)].coordinates
         if provider == "cz_chmi":
             coordinates = SourceCoordinates(CzChmiRequestCoordinates("DQ", ("QD",)))
@@ -107,7 +107,7 @@ def test_other_recorded_provider_parsers_retain_series_context():
         assert parsed.rows["series_id"].unique().to_list() == [parsed.series[0].series_id]
 
 
-def test_czech_internal_request_coordinates_are_not_rewritten_to_match_tags():
+def test_czech_internal_request_coordinates_are_not_rewritten_to_match_tags(retained_evidence_root: Path):
     import pytest
 
     from rivretrieve._internal.engine import SourceCoordinates
@@ -116,8 +116,8 @@ def test_czech_internal_request_coordinates_are_not_rewritten_to_match_tags():
     from rivretrieve._internal.providers.cz_chmi.fetch import CzChmiRequestCoordinates
     from rivretrieve._internal.providers.cz_chmi.parse import parse
 
-    _, template = payload()
-    recording = read_recording(Path(__file__).parent / "test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
+    _, template = payload(retained_evidence_root)
+    recording = read_recording(retained_evidence_root / "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
     source = replace(
         template,
         station_products=(("0-203-1-000400", ProductId("discharge_daily_mean")),),
@@ -128,10 +128,10 @@ def test_czech_internal_request_coordinates_are_not_rewritten_to_match_tags():
         parse(source, config())
 
 
-def test_response_receipt_identity_changes_with_bytes_and_retrieval_instant():
+def test_response_receipt_identity_changes_with_bytes_and_retrieval_instant(retained_evidence_root: Path):
     from datetime import timedelta
 
-    stages, source = payload()
+    stages, source = payload(retained_evidence_root)
     first = stages.parse(source, stages.config)
     changed_bytes = stages.parse(replace(source, content=source.content + b"\n"), stages.config)
     changed_time = stages.parse(

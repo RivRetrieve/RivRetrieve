@@ -454,7 +454,7 @@ assert set(rivretrieve.products(provider="br_ana")) == {"discharge_daily_mean_br
 """
 
 
-def test_historical_french_closure_oracles_against_immutable_combined_evidence():
+def test_historical_french_closure_oracles_against_immutable_combined_evidence(retained_evidence_root: Path):
     import hashlib
     import tarfile
     from io import BytesIO
@@ -463,7 +463,7 @@ def test_historical_french_closure_oracles_against_immutable_combined_evidence()
     from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
     from rivretrieve._internal.catalogues.evidence_graph import CanonicalPair, FactSelection, resolve_evidence
 
-    archive_path = Path(__file__).parent / "test_data/french_combined_artifacts.tar.xz"
+    archive_path = retained_evidence_root / "tests/test_data/french_combined_artifacts.tar.xz"
     with tarfile.open(archive_path) as archive:
         bundle = archive.extractfile("combined-station-selection.bundle").read()
         attestation = json.load(archive.extractfile("attestation.json"))

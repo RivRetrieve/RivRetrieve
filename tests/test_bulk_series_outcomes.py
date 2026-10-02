@@ -17,19 +17,23 @@ from tests.test_pl_imgw_boundary_probe import _compiled_store
 @pytest.mark.parametrize("provider", ["ca_eccc", "pl_imgw"])
 @pytest.mark.parametrize("scenario", ["success", "empty", "explicit", "mixed"])
 def test_public_compiled_queries_report_success_empty_and_unsettled_explicit_identity(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, provider: str, scenario: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    scenario: str,
+    retained_evidence_root: Path,
 ) -> None:
     if provider == "ca_eccc":
         from rivretrieve._internal.providers.ca_eccc.config import config
         from rivretrieve._internal.providers.ca_eccc.declaration import declaration
 
-        store = _compiled_derived_store(tmp_path)
+        store = _compiled_derived_store(tmp_path, retained_evidence_root / "tests/test_data")
         station, inside, outside = "02GA010", "2020-01-01", "2020-02-01"
     else:
         from rivretrieve._internal.providers.pl_imgw.config import config
         from rivretrieve._internal.providers.pl_imgw.declaration import declaration
 
-        store = _compiled_store(tmp_path)
+        store = _compiled_store(retained_evidence_root, tmp_path)
         station, inside, outside = "154210010", "2021-11-01", "2021-12-01"
     registry = ProviderRegistry()
     registry.register(

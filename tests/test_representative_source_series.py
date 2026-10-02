@@ -1,6 +1,7 @@
 """Source-series regressions over exact publisher captures, not fabricated response blocks."""
 
 from datetime import datetime
+from pathlib import Path
 
 import polars as pl
 import polars.testing as pl_testing
@@ -22,8 +23,8 @@ from rivretrieve._internal.providers.no_nve.parse import parse as nve_parse
 from rivretrieve._internal.recordings import read_recording
 
 
-def payload(path, station, product, config, start, end):
-    recording = read_recording(path)
+def payload(retained_evidence_root: Path, path, station, product, config, start, end):
+    recording = read_recording(retained_evidence_root / path)
     product = ProductId(product)
     unknown = UnknownOriginFact()
     return Payload(
@@ -47,9 +48,10 @@ def payload(path, station, product, config, start, end):
     )
 
 
-def test_ana_one_daily_response_preserves_both_published_consistencies():
+def test_ana_one_daily_response_preserves_both_published_consistencies(retained_evidence_root: Path):
     config = ana_config()
     response = payload(
+        retained_evidence_root,
         "tests/recordings/br_ana/HidroSerieCotas_15400000_2020-01-01_2020-01-31.recording.json",
         "15400000",
         "stage_daily_mean_bruto",
@@ -67,9 +69,10 @@ def test_ana_one_daily_response_preserves_both_published_consistencies():
     assert all(item.facts[0].day_definition.value is None for item in parsed.series)
 
 
-def test_nve_real_hourly_instantaneous_temperature_is_not_a_mean():
+def test_nve_real_hourly_instantaneous_temperature_is_not_a_mean(retained_evidence_root: Path):
     config = nve_config()
     response = payload(
+        retained_evidence_root,
         "tests/test_data/no_nve_103.3.0_1003_60_2025-07-08_2025-07-14.recording.json",
         "103.3.0",
         "water_temperature_hourly_mean",
@@ -87,9 +90,10 @@ def test_nve_real_hourly_instantaneous_temperature_is_not_a_mean():
     assert facts.source_unit.value == "°C"
 
 
-def test_swiss_flow_ls_is_admitted_with_native_litre_unit():
+def test_swiss_flow_ls_is_admitted_with_native_litre_unit(retained_evidence_root: Path):
     config = ch_config()
     response = payload(
+        retained_evidence_root,
         "tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json",
         "2251",
         "discharge_reported",
@@ -108,7 +112,7 @@ def test_swiss_flow_ls_is_admitted_with_native_litre_unit():
     pl_testing.assert_frame_equal(parsed.rows.select("value"), pl.DataFrame({"value": [2.64, 2.64, 2.64, 2.73]}))
 
 
-def test_nve_explicit_version_is_sent_instead_of_upstream_default():
+def test_nve_explicit_version_is_sent_instead_of_upstream_default(retained_evidence_root: Path):
     from dataclasses import replace
 
     from rivretrieve._internal.engine import RenderedWindow, SourceCoordinates
@@ -124,7 +128,8 @@ def test_nve_explicit_version_is_sent_instead_of_upstream_default():
     config = replace(config, products={product: versioned})
     recordings = [
         read_recording(
-            f"tests/test_data/no_nve_109.42.0_1001_1440_version-{version}_2024-01-01_2024-01-03.recording.json"
+            retained_evidence_root
+            / f"tests/test_data/no_nve_109.42.0_1001_1440_version-{version}_2024-01-01_2024-01-03.recording.json"
         )
         for version in (1, "omitted")
     ]
@@ -146,12 +151,13 @@ def test_nve_explicit_version_is_sent_instead_of_upstream_default():
     assert parsed.rows["value"].null_count() == 2
 
 
-def test_ana_unrepresentable_consistency_preserves_its_representable_sibling():
+def test_ana_unrepresentable_consistency_preserves_its_representable_sibling(retained_evidence_root: Path):
     import json
     from dataclasses import replace
 
     config = ana_config()
     original = payload(
+        retained_evidence_root,
         "tests/recordings/br_ana/HidroSerieCotas_15400000_2020-01-01_2020-01-31.recording.json",
         "15400000",
         "stage_daily_mean_bruto",
@@ -171,7 +177,7 @@ def test_ana_unrepresentable_consistency_preserves_its_representable_sibling():
     assert result.issues
 
 
-def test_nve_all_known_versions_are_requested_separately_with_null_series_preserved():
+def test_nve_all_known_versions_are_requested_separately_with_null_series_preserved(retained_evidence_root: Path):
     from rivretrieve._internal.engine import RenderedWindow
     from rivretrieve._internal.providers.no_nve.fetch import fetch
     from rivretrieve._internal.recordings import ReplayTransport
@@ -179,12 +185,16 @@ def test_nve_all_known_versions_are_requested_separately_with_null_series_preser
 
     config = nve_config()
     product = ProductId("discharge_daily_mean")
-    recordings = [read_recording("tests/test_data/no_nve_109.42.0_1001_series.recording.json")]
+    recordings = [read_recording(retained_evidence_root / "tests/test_data/no_nve_109.42.0_1001_series.recording.json")]
     known = []
     for version in (1, 2, 3):
         path = f"tests/test_data/no_nve_109.42.0_1001_1440_version-{version}_2024-01-01_2024-01-03.recording.json"
-        recordings.append(read_recording(path))
-        known.extend(nve_parse(payload(path, "109.42.0", product, config, "2024-01-01", "2024-01-03"), config).series)
+        recordings.append(read_recording(retained_evidence_root / path))
+        known.extend(
+            nve_parse(
+                payload(retained_evidence_root, path, "109.42.0", product, config, "2024-01-01", "2024-01-03"), config
+            ).series
+        )
     scope = SeriesScope(provider_ids=("no_nve",), station_ids=("109.42.0",), product_ids=(product,))
     acquired = fetch(
         ("109.42.0",),
@@ -222,7 +232,7 @@ def test_swiss_stage_reference_is_not_inferred_from_field_name():
     assert above.series_id != unspecified.series_id
 
 
-def test_nve_one_failed_explicit_version_does_not_discard_successful_sibling():
+def test_nve_one_failed_explicit_version_does_not_discard_successful_sibling(retained_evidence_root: Path):
     from rivretrieve._internal.driver import _SourceResponseTransport
     from rivretrieve._internal.engine import RenderedWindow
     from rivretrieve._internal.providers.no_nve.fetch import fetch
@@ -233,7 +243,9 @@ def test_nve_one_failed_explicit_version_does_not_discard_successful_sibling():
     product = ProductId("discharge_daily_mean")
     good_path = "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json"
     failed_path = "tests/test_data/no_nve_109.42.0_1001_1440_version-99999_2024-01-01_2024-01-03.recording.json"
-    known = nve_parse(payload(good_path, "109.42.0", product, config, "2024-01-01", "2024-01-03"), config).series
+    known = nve_parse(
+        payload(retained_evidence_root, good_path, "109.42.0", product, config, "2024-01-01", "2024-01-03"), config
+    ).series
     scope = SeriesScope(
         provider_ids=("no_nve",),
         station_ids=("109.42.0",),
@@ -249,7 +261,14 @@ def test_nve_one_failed_explicit_version_does_not_discard_successful_sibling():
             WindowEndpoint.from_datetime(datetime(2024, 1, 1)), WindowEndpoint.from_datetime(datetime(2024, 1, 3))
         ),
         config,
-        _SourceResponseTransport(ReplayTransport((read_recording(good_path), read_recording(failed_path)))),
+        _SourceResponseTransport(
+            ReplayTransport(
+                (
+                    read_recording(retained_evidence_root / good_path),
+                    read_recording(retained_evidence_root / failed_path),
+                )
+            )
+        ),
         scope=scope,
         known_series=known,
     )
@@ -263,9 +282,10 @@ def test_nve_one_failed_explicit_version_does_not_discard_successful_sibling():
     assert failed.request.params["VersionNumber"] == 99999
 
 
-def test_swiss_missing_sibling_field_has_unresolved_outcome_not_empty_success():
+def test_swiss_missing_sibling_field_has_unresolved_outcome_not_empty_success(retained_evidence_root: Path):
     config = ch_config()
     response = payload(
+        retained_evidence_root,
         "tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json",
         "2251",
         "discharge_reported",
@@ -281,9 +301,10 @@ def test_swiss_missing_sibling_field_has_unresolved_outcome_not_empty_success():
     }
 
 
-def test_ana_unobserved_requested_consistency_remains_unresolved():
+def test_ana_unobserved_requested_consistency_remains_unresolved(retained_evidence_root: Path):
     config = ana_config()
     response = payload(
+        retained_evidence_root,
         "tests/recordings/br_ana/HidroSerieCotas_15400000_2024-01-01_2024-01-31.recording.json",
         "15400000",
         "stage_daily_mean_consistido",
@@ -299,17 +320,19 @@ def test_ana_unobserved_requested_consistency_remains_unresolved():
     assert result.rows["product_id"].unique().to_list() == ["stage_daily_mean_bruto"]
 
 
-def test_nve_blank_unit_is_isolated_before_fact_validation():
+def test_nve_blank_unit_is_isolated_before_fact_validation(retained_evidence_root: Path):
     import json
     from dataclasses import replace
 
     config = nve_config()
     path1 = "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json"
     path2 = "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json"
-    source = payload(path1, "109.42.0", "discharge_daily_mean", config, "2024-01-01", "2024-01-03")
+    source = payload(
+        retained_evidence_root, path1, "109.42.0", "discharge_daily_mean", config, "2024-01-01", "2024-01-03"
+    )
     document = json.loads(source.content)
     document["data"][0]["unit"] = ""
-    document["data"].extend(json.loads(read_recording(path2).content)["data"])
+    document["data"].extend(json.loads(read_recording(retained_evidence_root / path2).content)["data"])
     result = nve_parse(replace(source, content=json.dumps(document).encode()), config)
     identities = {item.series_id: item.identity.published_id for item in result.series}
     assert {identities[outcome.series_id]: outcome.status.value for outcome in result.outcomes} == {

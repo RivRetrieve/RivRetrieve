@@ -12,8 +12,8 @@ _NATIVE = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.par
 _EXPECTED = "ec892e4bc5bee3e8d5435190f4163ecddd80d2d244a71c810b9cf666d06b5aad"
 
 
-def test_japan_native_table_refuses_one_byte_substitution(tmp_path: Path) -> None:
-    content = bytearray(_NATIVE.read_bytes())
+def test_japan_native_table_refuses_one_byte_substitution(tmp_path: Path, retained_evidence_root: Path) -> None:
+    content = bytearray((retained_evidence_root / _NATIVE).read_bytes())
     content[-200] ^= 1
     substituted = tmp_path / "native.parquet"
     substituted.write_bytes(content)
@@ -26,13 +26,15 @@ def test_japan_native_table_refuses_one_byte_substitution(tmp_path: Path) -> Non
         read_native_table(substituted, expected_sha256=_EXPECTED)
 
 
-def test_native_table_refuses_wrong_declared_byte_size() -> None:
+def test_native_table_refuses_wrong_declared_byte_size(retained_evidence_root: Path) -> None:
+    native = retained_evidence_root / _NATIVE
+    byte_size = native.stat().st_size
     with pytest.raises(
         FatalContractError,
-        match=rf"native table byte-size mismatch: expected {_NATIVE.stat().st_size + 1}, observed {_NATIVE.stat().st_size}",
+        match=rf"native table byte-size mismatch: expected {byte_size + 1}, observed {byte_size}",
     ):
         read_native_table(
-            _NATIVE,
+            native,
             expected_sha256=_EXPECTED,
-            expected_byte_size=_NATIVE.stat().st_size + 1,
+            expected_byte_size=byte_size + 1,
         )

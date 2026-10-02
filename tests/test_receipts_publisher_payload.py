@@ -1,20 +1,23 @@
 """publisher receipt : USGSFetch × ReceiptRequest → UntouchedPublisherPayload."""
 
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.observations import ReceiptAuthorship
-from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
+from tests.usgs_modern_recordings import ModernReplay, body, manifest
 
 _RECORDING = "daily-07374000-discharge-mean"
 
 
-def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    recording = MANIFEST[_RECORDING]
-    replay = ModernReplay(_RECORDING)
+def test_usgs_fetch_receipt_is_untouched_publisher_payload(
+    monkeypatch: pytest.MonkeyPatch, retained_evidence_root: Path
+) -> None:
+    recording = manifest(retained_evidence_root)[_RECORDING]
+    replay = ModernReplay(_RECORDING, evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
 
     selection = rr.find(
@@ -45,7 +48,7 @@ def test_usgs_fetch_receipt_is_untouched_publisher_payload(monkeypatch: pytest.M
     receipt = result.receipts.entries[0]
     assert receipt.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
     assert receipt.authorship.value == "publisher_payload"
-    assert receipt.content == body(_RECORDING)
+    assert receipt.content == body(_RECORDING, evidence_root=retained_evidence_root)
     assert receipt.origin.url == "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items"
     assert dict(receipt.origin.request_parameters) == dict(replay.calls[0].params)
     assert receipt.origin.status_code == recording["status"]

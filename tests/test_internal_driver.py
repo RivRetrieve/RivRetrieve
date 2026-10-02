@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import cast
 
 import polars as pl
@@ -1776,7 +1777,9 @@ def test_payload_origin_enrichment_refuses_each_ambiguous_base_field_even_withou
 
 
 @pytest.mark.parametrize("restriction", ["selected", "no-match"])
-def test_compiled_query_keeps_inventory_definitions_and_fact_filtered_receipts(tmp_path, restriction) -> None:
+def test_compiled_query_keeps_inventory_definitions_and_fact_filtered_receipts(
+    tmp_path, restriction, retained_evidence_root: Path
+) -> None:
     from io import BytesIO
 
     import rivretrieve as rr
@@ -1786,7 +1789,7 @@ def test_compiled_query_keeps_inventory_definitions_and_fact_filtered_receipts(t
     from rivretrieve._internal.store import StoreReader
     from tests.test_ca_eccc_boundary_probe import _compiled_derived_store
 
-    store = _compiled_derived_store(tmp_path)
+    store = _compiled_derived_store(tmp_path, retained_evidence_root / "tests/test_data")
     manifest = StoreReader().status(store, ProviderId("ca_eccc")).manifest
     assert manifest is not None
     level = next(item for item in manifest.series if item.product_id == "stage_daily_mean")

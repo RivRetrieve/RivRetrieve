@@ -1,4 +1,4 @@
-"""drainage metadata build : PackagedNativeTables × StationCatalogues → PackagedDrainageMetadata.
+"""drainage metadata build : RetainedNativeTables × StationCatalogues → PackagedDrainageMetadata.
 
 Offline composition root. No catalogue acquisition or canonical-table changes.
 """
@@ -39,15 +39,19 @@ AREA_FIELDS: dict[str, tuple[tuple[str, str | None], ...]] = {
 
 
 def main() -> None:
-    """Read repository inputs and write or check the sole derived projection."""
+    """Read external native inputs and write or check the packaged projection."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--check", action="store_true", help="Fail when the packaged projection differs from native inputs"
     )
+    parser.add_argument(
+        "--evidence-root", type=Path, required=True, help="External retained inputs in repository-relative layout"
+    )
+    parser.add_argument("--out", type=Path, help="Destination for the drainage-area projection")
     args = parser.parse_args()
     repository = Path(__file__).resolve().parents[1]
     provider_root = repository / "src/rivretrieve/_internal/providers"
-    destination = repository / "src/rivretrieve/_internal/catalogues/drainage_areas.parquet"
+    destination = args.out or repository / "src/rivretrieve/_internal/catalogues/drainage_areas.parquet"
     if set(AREA_FIELDS) != set(BUILTIN_PROVIDER_IDS):
         raise ValueError("Every built-in provider needs an explicit drainage-field review")
     rows: list[dict[str, object]] = []
@@ -55,7 +59,9 @@ def main() -> None:
         catalogue = provider_root / provider / "catalogue"
         stations = pl.read_parquet(catalogue / "stations.parquet")["station_id"].to_list()
         fields = AREA_FIELDS[provider]
-        native = pl.read_parquet(catalogue / "native.parquet")
+        native = pl.read_parquet(
+            args.evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
+        )
         origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
         # France has two station partitions, both keyed by code_station.
         if provider == "fr_hubeau":
@@ -101,7 +107,7 @@ def main() -> None:
         print(f"Drainage metadata matches native inputs: {result.height} rows")
     else:
         result.write_parquet(destination)
-        print(f"Wrote {result.height} source metadata rows to {destination.relative_to(repository)}")
+        print(f"Wrote {result.height} source metadata rows to {destination}")
 
 
 if __name__ == "__main__":

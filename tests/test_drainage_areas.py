@@ -94,10 +94,12 @@ def test_empty_and_invalid_selection() -> None:
 
 
 @pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
-def test_projection_preserves_every_native_scalar(provider: str) -> None:
+def test_projection_preserves_every_native_scalar(provider: str, retained_evidence_root: Path) -> None:
     repository = Path(__file__).parents[1]
     catalogue = repository / "src/rivretrieve/_internal/providers" / provider / "catalogue"
-    native = pl.read_parquet(catalogue / "native.parquet")
+    native = pl.read_parquet(
+        retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
+    )
     stations = pl.read_parquet(catalogue / "stations.parquet").select("station_id")
     projection = pl.read_parquet(repository / "src/rivretrieve/_internal/catalogues/drainage_areas.parquet")
     actual = projection.filter(pl.col("provider_id") == provider)
@@ -136,9 +138,17 @@ def test_nonbreaking_space_and_blank_are_values() -> None:
     assert set(blanks["state"]) == {"value"}
 
 
-def test_projection_build_is_current() -> None:
+def test_projection_build_is_current(retained_evidence_root: Path) -> None:
     result = subprocess.run(
-        ["uv", "run", "python", "scripts/build_drainage_areas.py", "--check"],
+        [
+            "uv",
+            "run",
+            "python",
+            "scripts/build_drainage_areas.py",
+            "--check",
+            "--evidence-root",
+            str(retained_evidence_root),
+        ],
         cwd=Path(__file__).parents[1],
         capture_output=True,
         text=True,

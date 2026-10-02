@@ -100,8 +100,8 @@ def test_recorded_requests_refuse_secret_bearing_request_locations(url: str, par
         RecordedRequest(HttpMethod.GET, url, parameters)
 
 
-def test_every_committed_observation_recording_is_secret_safe_and_replayable() -> None:
-    recordings = sorted((Path(__file__).parent / "test_data").rglob("*.recording.json"))
+def test_every_retained_observation_recording_is_secret_safe_and_replayable(retained_evidence_root: Path) -> None:
+    recordings = sorted(retained_evidence_root.rglob("*.recording.json"))
     assert recordings
     for recording in recordings:
         read_recording(recording)
