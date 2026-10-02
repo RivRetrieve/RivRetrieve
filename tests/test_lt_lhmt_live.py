@@ -31,8 +31,7 @@ from rivretrieve._internal.window_planning import plan_windows
 _PROVIDER = ProviderId("lt_lhmt")
 _PRODUCTS = (ProductId("discharge_daily_mean"), ProductId("stage_daily_mean"))
 _DECLARED = load_manifest((_PROVIDER,))
-_RECORDING_PATH = Path(__file__).parent / "test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json"
-_RECORDING = read_recording(_RECORDING_PATH)
+_RECORDING_PATH = Path("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 
 assert isinstance(declaration.observations, LiveStages)
 _STAGES = declaration.observations.stages
@@ -57,11 +56,11 @@ def _run(product: ProductId, replay: ReplayTransport) -> pl.DataFrame:
     return _STAGES.parse(fetched.value[0], _STAGES.config).rows
 
 
-def _probe(product: ProductId) -> LiveBoundaryProbe:
+def _probe(product: ProductId, recording) -> LiveBoundaryProbe:
     return LiveBoundaryProbe(
         provider_id=_PROVIDER,
         product_id=product,
-        recordings=(_RECORDING,),
+        recordings=(recording,),
         assertions={
             READING_COUNT: 30,
             FIRST_WALL_CLOCK_TIME: WallClockExpectation("2023-06-01T00:00:00", "+00:00"),
@@ -71,12 +70,14 @@ def _probe(product: ProductId) -> LiveBoundaryProbe:
     )
 
 
-def test_each_lithuania_product_has_an_exact_live_replay_probe() -> None:
-    run_manifest_boundary_probes(_DECLARED, tuple(_probe(product) for product in _PRODUCTS))
+def test_each_lithuania_product_has_an_exact_live_replay_probe(retained_evidence_root) -> None:
+    recording = read_recording(retained_evidence_root / _RECORDING_PATH)
+    run_manifest_boundary_probes(_DECLARED, tuple(_probe(product, recording) for product in _PRODUCTS))
 
 
-def test_both_product_series_share_one_monthly_response_and_receipt() -> None:
-    replay = ReplayTransport((_RECORDING,))
+def test_both_product_series_share_one_monthly_response_and_receipt(retained_evidence_root) -> None:
+    recording = read_recording(retained_evidence_root / _RECORDING_PATH)
+    replay = ReplayTransport((recording,))
     result = drive(
         ObservationRequest(
             provider_id=_PROVIDER,
@@ -98,4 +99,4 @@ def test_both_product_series_share_one_monthly_response_and_receipt() -> None:
         ("stage_daily_mean", 26),
     ]
     assert len(result.receipts.entries) == 1
-    assert result.receipts.entries[0].content == _RECORDING.content
+    assert result.receipts.entries[0].content == recording.content

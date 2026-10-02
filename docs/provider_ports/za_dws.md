@@ -53,7 +53,7 @@ suffixed codes `A2H090Q` and `B6H018M01`. Native rows preserve source DMS, catch
 drainage regions, exact source PDF identity, and each PDF's retrieval instant. The semantic native-frame
 digest and source bindings are held by `catalogue/provenance.json`.
 
-The canonical catalogue is built only from committed `catalogue/native.parquet` plus origins. DMS is
+The canonical catalogue is built only from externally retained `catalogue/native.parquet` plus origins. DMS is
 converted deterministically to decimal degrees; no live or fixture response directly generates the
 canonical artefacts.
 
@@ -97,7 +97,32 @@ Daily responses encode missing observations as `99999.999` in the `D_AVG_FR` col
 
 Per the project convention (to avoid repeating the `th_thaiwater` mistake where downloads were silently not happening), this port was verified against the live DWS portal:
 
-- The historical live catalogue check is superseded by the 2,905-row archived acquisition described above; canonical artefacts now come only from committed `native.parquet` plus origins.
+- The historical live catalogue check is superseded by the 2,905-row archived acquisition described above; canonical artefacts now come only from externally retained `native.parquet` plus origins.
 - A live `fetch()` for station `X3H001`, `DataType=Daily`, January 2020 returned HTTP 200 and 30 valid rows with values starting at `1.257 m³/s`.
 - A live `fetch()` for the same station, `DataType=Point`, January 2020 returned HTTP 200 and sub-daily rows starting at `COR_LEVEL=0.146 m`, `COR_FLOW=1.230 m³/s`.
 - The SAST→UTC conversion was confirmed: `20200101 000000` SAST → `2019-12-31T22:00:00Z`.
+
+## Retained inputs and offline checks
+
+Retrieve the exact za_dws inputs using the private source archive instructions
+and [verification guide](../maintenance/evidence.md). Keep them outside source
+checkouts in their repository-relative layout. Set
+`RIVRETRIEVE_TEST_EVIDENCE_ROOT` to that external root before running:
+
+```sh
+uv run pytest tests/test_za_dws*.py -q --tb=no -p no:cacheprovider
+```
+
+Build the catalogue from the retained native table and verified source recordings:
+
+```sh
+uv run python -m rivretrieve._internal.providers.za_dws.generate_catalogue \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet" \
+  --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --out "$CATALOGUE_OUTPUT"
+```
+
+Choose `CATALOGUE_OUTPUT` as a separate build output directory. Native tables
+and recordings are external build inputs. Packaged catalogue products remain
+runtime inputs and do not require archive access. Missing retained inputs block
+the corresponding checks. Keep detailed test output private.

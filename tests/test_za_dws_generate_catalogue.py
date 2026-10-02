@@ -14,9 +14,9 @@ from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.za_dws import generate_catalogue as generator
 
-_TEST_DATA_DIR = Path(__file__).parent / "test_data"
+_TEST_DATA_DIR = Path("tests/test_data")
 _METADATA_FIXTURE = _TEST_DATA_DIR / "za_dws_metadata.json"
-_NATIVE_TABLE = Path(generator.__file__).parent / "catalogue" / "native.parquet"
+_NATIVE_TABLE = Path("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 ATTESTED_RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 18, 47, 1, tzinfo=UTC))
 NATIVE_CONTENT_SHA256 = "7949369cf573d675cf8cb2374fa172038e10e492299572df442834d6a08e40fc"
 CATALOGUE_PATH = _NATIVE_TABLE.parent
@@ -161,55 +161,62 @@ def test_refresh_is_deterministic_across_mapping_and_index_order(monkeypatch: py
     pl_testing.assert_frame_equal(first.value.data, second.value.data, check_exact=True)
 
 
-def test_fixture_refresh_has_no_issues() -> None:
+def test_fixture_refresh_has_no_issues(retained_evidence_root: Path) -> None:
     assert (
-        generator.refresh_native_table_from_fixture(_METADATA_FIXTURE, retrieved_at=ATTESTED_RETRIEVED_AT).issues == ()
+        generator.refresh_native_table_from_fixture(
+            (retained_evidence_root / _METADATA_FIXTURE), retrieved_at=ATTESTED_RETRIEVED_AT
+        ).issues
+        == ()
     )
 
 
-def test_fixture_refresh_height() -> None:
+def test_fixture_refresh_height(retained_evidence_root: Path) -> None:
     assert (
         generator.refresh_native_table_from_fixture(
-            _METADATA_FIXTURE, retrieved_at=ATTESTED_RETRIEVED_AT
+            (retained_evidence_root / _METADATA_FIXTURE), retrieved_at=ATTESTED_RETRIEVED_AT
         ).value.data.height
         == 3
     )
 
 
-def test_fixture_refresh_exact_schema() -> None:
-    outcome = generator.refresh_native_table_from_fixture(_METADATA_FIXTURE, retrieved_at=ATTESTED_RETRIEVED_AT)
+def test_fixture_refresh_exact_schema(retained_evidence_root: Path) -> None:
+    outcome = generator.refresh_native_table_from_fixture(
+        (retained_evidence_root / _METADATA_FIXTURE), retrieved_at=ATTESTED_RETRIEVED_AT
+    )
     assert outcome.value.data.schema == generator.NATIVE_SCHEMA
 
 
-def test_fixture_refresh_a1h001_triple() -> None:
-    data = generator.refresh_native_table_from_fixture(_METADATA_FIXTURE, retrieved_at=ATTESTED_RETRIEVED_AT).value.data
+def test_fixture_refresh_a1h001_triple(retained_evidence_root: Path) -> None:
+    data = generator.refresh_native_table_from_fixture(
+        (retained_evidence_root / _METADATA_FIXTURE), retrieved_at=ATTESTED_RETRIEVED_AT
+    ).value.data
     assert data.filter(pl.col("Station") == "A1H001").select(
         "Station", "Latitude (dd:mm:ss)", "Longitude (dd:mm:ss)"
     ).row(0) == ("A1H001", "25:26:44", "25:51:14")
 
 
-def test_fixture_refresh_equals_committed_subset() -> None:
+def test_fixture_refresh_equals_committed_subset(retained_evidence_root: Path) -> None:
     actual = generator.refresh_native_table_from_fixture(
-        _METADATA_FIXTURE, retrieved_at=ATTESTED_RETRIEVED_AT
+        (retained_evidence_root / _METADATA_FIXTURE), retrieved_at=ATTESTED_RETRIEVED_AT
     ).value.data
     expected = (
-        read_native_table(_NATIVE_TABLE)
+        read_native_table(retained_evidence_root / _NATIVE_TABLE)
         .data.filter(pl.col("Station").is_in(["A1H001", "A2H090Q", "A8H017"]))
         .sort("Station")
     )
     pl_testing.assert_frame_equal(actual, expected, check_exact=True)
 
 
-def test_committed_native_table_contract() -> None:
-    data = read_native_table(_NATIVE_TABLE).data
+def test_committed_native_table_contract(retained_evidence_root: Path) -> None:
+    data = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     assert data.schema == generator.NATIVE_SCHEMA
     assert data.height == data["Station"].n_unique() == 2905
     assert data["Station"].to_list() == sorted(data["Station"].to_list())
     assert generator.native_table_content_sha256(NativeTable(data)) == NATIVE_CONTENT_SHA256
 
 
-def test_committed_native_table_pdf_counts_and_instants() -> None:
-    data = read_native_table(_NATIVE_TABLE).data
+def test_committed_native_table_pdf_counts_and_instants(retained_evidence_root: Path) -> None:
+    data = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     assert dict(data.group_by("WMA source-file identity").len().iter_rows()) == dict(
         zip(generator.EXPECTED_PDF_FILENAMES, [544, 210, 417, 702, 406, 567, 19, 40], strict=True)
     )
@@ -220,8 +227,8 @@ def test_committed_native_table_pdf_counts_and_instants() -> None:
     assert dict(data.select("WMA source-file identity", "retrieved_at").unique().iter_rows()) == expected
 
 
-def test_committed_native_table_defect_decomposition() -> None:
-    data = read_native_table(_NATIVE_TABLE).data
+def test_committed_native_table_defect_decomposition(retained_evidence_root: Path) -> None:
+    data = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     suffix = {"A2H090Q", "B6H018M01"}
     assert set(data.filter(pl.col("Station").is_in(suffix))["Station"]) == suffix
     assert data.filter(pl.col("Drainage Region").is_null() & ~pl.col("Station").is_in(suffix)).height == 40
@@ -236,8 +243,10 @@ def test_committed_native_table_defect_decomposition() -> None:
         ("B6H018M01", ("Pipeline from Blyde Dam", "24:32:05", "30:47:47", None, "0")),
     ],
 )
-def test_committed_native_representative_rows(station: str, expected: tuple[object, ...]) -> None:
-    data = read_native_table(_NATIVE_TABLE).data
+def test_committed_native_representative_rows(
+    retained_evidence_root: Path, station: str, expected: tuple[object, ...]
+) -> None:
+    data = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     row = data.filter(pl.col("Station") == station).select(
         "Description", "Latitude (dd:mm:ss)", "Longitude (dd:mm:ss)", "Drainage Region", "Catchment Area km**2"
     )
@@ -247,15 +256,15 @@ def test_committed_native_representative_rows(station: str, expected: tuple[obje
     )
 
 
-def test_committed_native_preserves_dms_sixty_tokens() -> None:
-    data = read_native_table(_NATIVE_TABLE).data
+def test_committed_native_preserves_dms_sixty_tokens(retained_evidence_root: Path) -> None:
+    data = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     assert data.select(pl.col("Latitude (dd:mm:ss)").str.ends_with(":60").sum()).item() == 20
     assert data.select(pl.col("Longitude (dd:mm:ss)").str.ends_with(":60").sum()).item() == 24
     assert data.filter(pl.col("Station") == "B7H000")["Longitude (dd:mm:ss)"][0] == "31:49:60"
 
 
-def test_all_committed_native_dms_values_are_exact_unsigned_source_tokens() -> None:
-    before = read_native_table(_NATIVE_TABLE).data
+def test_all_committed_native_dms_values_are_exact_unsigned_source_tokens(retained_evidence_root: Path) -> None:
+    before = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     pattern = r"^\d{2}:\d{2}:\d{2}$"
     for column in ("Latitude (dd:mm:ss)", "Longitude (dd:mm:ss)"):
         assert before.select(pl.col(column).str.contains(pattern).all()).item()
@@ -263,7 +272,7 @@ def test_all_committed_native_dms_values_are_exact_unsigned_source_tokens() -> N
         assert before.select(~pl.col(column).str.starts_with("-").any()).item()
         assert before.select(~pl.col(column).str.contains("[SE]").any()).item()
 
-    after = read_native_table(_NATIVE_TABLE).data
+    after = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     pl_testing.assert_frame_equal(after, before, check_exact=True)
 
 
@@ -289,20 +298,22 @@ def test_unsigned_dms_conversion_failure_names_station() -> None:
         generator.convert_unsigned_dms_coordinates("not-dms", "25:00:00", station_id="BROKEN")
 
 
-def test_native_build_rejects_empty_or_non_exact_native_table() -> None:
+def test_native_build_rejects_empty_or_non_exact_native_table(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
     with pytest.raises(FatalContractError, match="must not be empty"):
         generator.build_catalogue(NativeTable(pl.DataFrame(schema=generator.NATIVE_SCHEMA)), STATION_CATALOGUE_ORIGINS)
-    malformed = read_native_table(_NATIVE_TABLE).data.drop("Description")
+    malformed = read_native_table(retained_evidence_root / _NATIVE_TABLE).data.drop("Description")
     with pytest.raises(FatalContractError, match="exact required schema"):
         generator.build_catalogue(NativeTable(malformed), STATION_CATALOGUE_ORIGINS)
 
 
-def test_native_build_counts_ids_crs_and_dates() -> None:
+def test_native_build_counts_ids_crs_and_dates(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
-    catalogue = generator.build_catalogue(read_native_table(_NATIVE_TABLE), STATION_CATALOGUE_ORIGINS)
+    catalogue = generator.build_catalogue(
+        read_native_table(retained_evidence_root / _NATIVE_TABLE), STATION_CATALOGUE_ORIGINS
+    )
 
     assert catalogue.stations.height == 2905
     assert catalogue.products.height == 3
@@ -317,10 +328,10 @@ def test_native_build_counts_ids_crs_and_dates() -> None:
     assert "station" in str(catalogue.provider_info["bulk_observations"])
 
 
-def test_catalogue_date_is_only_the_maximum_native_retrieval_date() -> None:
+def test_catalogue_date_is_only_the_maximum_native_retrieval_date(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
-    source = read_native_table(_NATIVE_TABLE).data.head(2)
+    source = read_native_table(retained_evidence_root / _NATIVE_TABLE).data.head(2)
     mixed = source.with_columns(
         pl.when(pl.col("Station") == source["Station"].item(0))
         .then(datetime(2025, 1, 2, 12, tzinfo=UTC))
@@ -387,29 +398,31 @@ def test_cli_error_issues_do_not_write(monkeypatch: pytest.MonkeyPatch, tmp_path
         generator.main(
             [
                 "--fixture",
-                str(_METADATA_FIXTURE),
+                str(tmp_path / "fixture.json"),
                 "--retrieved-at",
                 "2026-08-02T18:47:01+00:00",
                 "--native-out",
                 str(output),
             ]
+            + ["--evidence-root", str(tmp_path)]
         )
     assert caught.value.issues == (issue,)
     assert not output.exists()
 
 
-def test_cli_success_writes_native_table(tmp_path: Path) -> None:
+def test_cli_success_writes_native_table(retained_evidence_root: Path, tmp_path: Path) -> None:
     output = tmp_path / "native.parquet"
     assert (
         generator.main(
             [
                 "--fixture",
-                str(_METADATA_FIXTURE),
+                str(retained_evidence_root / _METADATA_FIXTURE),
                 "--retrieved-at",
                 "2026-08-02T18:47:01+00:00",
                 "--native-out",
                 str(output),
             ]
+            + ["--evidence-root", str(retained_evidence_root)]
         )
         == 0
     )
@@ -423,13 +436,14 @@ def test_cli_cross_mode_conflict_does_not_write(tmp_path: Path) -> None:
         generator.main(
             [
                 "--fixture",
-                str(_METADATA_FIXTURE),
+                str(tmp_path / "fixture.json"),
                 "--live",
                 "--retrieved-at",
                 "2026-08-02T18:47:01+00:00",
                 "--native-out",
                 str(output),
             ]
+            + ["--evidence-root", str(tmp_path)]
         )
     assert exc_info.value.code != 0
     assert not output.exists()
@@ -657,10 +671,10 @@ def _provider_content_sha256(provider_info: dict[str, object]) -> str:
     ).hexdigest()
 
 
-def test_native_build_matches_independent_exact_full_projections() -> None:
+def test_native_build_matches_independent_exact_full_projections(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
-    native = read_native_table(_NATIVE_TABLE)
+    native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     actual = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
 
     pl_testing.assert_frame_equal(actual.stations, _expected_stations(native), check_exact=True)
@@ -669,14 +683,16 @@ def test_native_build_matches_independent_exact_full_projections() -> None:
     assert actual.provider_info == _expected_provider_info(native)
 
 
-def test_committed_canonical_artifacts_have_pinned_complete_content() -> None:
+def test_committed_canonical_artifacts_have_pinned_complete_content(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
     provider_info = json.loads((CATALOGUE_PATH / "provider.json").read_text())
     products = pl.read_parquet(CATALOGUE_PATH / "products.parquet")
     stations = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
     station_products = pl.read_parquet(CATALOGUE_PATH / "station_products.parquet")
-    generated = generator.build_catalogue(read_native_table(_NATIVE_TABLE), STATION_CATALOGUE_ORIGINS)
+    generated = generator.build_catalogue(
+        read_native_table(retained_evidence_root / _NATIVE_TABLE), STATION_CATALOGUE_ORIGINS
+    )
 
     provider_digest = "af62d231a82f2a60fa6355ceb690e15ce565eef0528036f678d4605b7c252f35"
     products_digest = "bbe6633d03088e2e8187ef355919deefd99110f006d047a41fa4181174aec7ad"
@@ -720,8 +736,14 @@ def test_cli_rejects_every_cross_mode_combination(argv: list[str]) -> None:
     assert exc_info.value.code != 0
 
 
-def test_canonical_cli_writes_versioned_native_built_artifacts(tmp_path: Path) -> None:
-    assert generator.main(["--native", str(_NATIVE_TABLE), "--out", str(tmp_path)]) == 0
+def test_canonical_cli_writes_versioned_native_built_artifacts(retained_evidence_root: Path, tmp_path: Path) -> None:
+    assert (
+        generator.main(
+            ["--native", str(retained_evidence_root / _NATIVE_TABLE), "--out", str(tmp_path)]
+            + ["--evidence-root", str(retained_evidence_root)]
+        )
+        == 0
+    )
     assert {path.name for path in tmp_path.iterdir()} == {
         "croissant.json",
         "provider.json",
@@ -740,7 +762,9 @@ def test_canonical_cli_writes_versioned_native_built_artifacts(tmp_path: Path) -
     }
 
 
-def test_native_build_is_network_free_and_byte_deterministic(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_native_build_is_network_free_and_byte_deterministic(
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     attempts: list[str] = []
 
     def fail(*_args: object, **_kwargs: object) -> object:
@@ -751,12 +775,18 @@ def test_native_build_is_network_free_and_byte_deterministic(monkeypatch: pytest
     monkeypatch.setattr(generator, "refresh_native_table_from_supplied_archive", fail)
     monkeypatch.setattr(generator, "_request_bytes", fail)
     monkeypatch.setattr(generator.urllib.request, "urlopen", fail)
-    native_bytes = _NATIVE_TABLE.read_bytes()
+    native_bytes = (retained_evidence_root / _NATIVE_TABLE).read_bytes()
 
-    assert generator.main(["--native", str(_NATIVE_TABLE), "--out", str(tmp_path)]) == 0
+    assert (
+        generator.main(
+            ["--native", str(retained_evidence_root / _NATIVE_TABLE), "--out", str(tmp_path)]
+            + ["--evidence-root", str(retained_evidence_root)]
+        )
+        == 0
+    )
 
     assert attempts == []
-    assert _NATIVE_TABLE.read_bytes() == native_bytes
+    assert (retained_evidence_root / _NATIVE_TABLE).read_bytes() == native_bytes
     assert {path.name for path in tmp_path.iterdir()} == {
         "croissant.json",
         "provider.json",
@@ -775,3 +805,10 @@ def test_native_build_is_network_free_and_byte_deterministic(monkeypatch: pytest
     }
     for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
         assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
+
+
+def test_native_build_requires_explicit_evidence_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as raised:
+        generator.main(["--native", str(tmp_path / "native.parquet"), "--out", str(tmp_path / "out")])
+    assert raised.value.code == 2
+    assert "--evidence-root is required with --out" in capsys.readouterr().err

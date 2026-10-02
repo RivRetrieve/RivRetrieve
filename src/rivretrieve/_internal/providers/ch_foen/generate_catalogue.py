@@ -497,11 +497,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--fixture", type=Path, help="Path to an Existenz.ch hydro locations JSON fixture.")
     source.add_argument("--live", action="store_true", help="Fetch the live Existenz.ch hydro locations endpoint.")
-    source.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
+    source.add_argument("--native", type=Path, help="Path to the retained native Parquet table.")
     destination = parser.add_mutually_exclusive_group(required=True)
     destination.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     destination.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
+    parser.add_argument(
+        "--evidence-root", type=Path, help="External root containing repository-relative retained inputs."
+    )
     args = parser.parse_args(argv)
 
     if args.native_out is not None:
@@ -520,7 +523,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--out requires --native")
     if args.retrieved_at is not None:
         parser.error("--retrieved-at is only valid with refresh mode")
-    verify_provenance_recordings(build_acquisition_provenance(), Path(__file__).resolve().parents[5])
+    if args.evidence_root is None:
+        parser.error("--evidence-root is required with --out")
+    verify_provenance_recordings(build_acquisition_provenance(), args.evidence_root)
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
     catalogue = build_catalogue(

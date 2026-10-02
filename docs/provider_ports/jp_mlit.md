@@ -25,8 +25,41 @@ Values and native flags are parsed as exact pairs. Blank flags and `*` are usabl
 
 ## Catalogue
 
-The committed native table contains 1,023 accepted station-detail responses. It remains unchanged. The four corrected products replace the former unsupported `*_mean` products one-for-one across all 4,092 station-product edges. Availability, reason, bounds, and check dates are preserved. Canonical artefacts rebuild without network access from the committed native table and declared origins.
+The retained native table contains 1,023 accepted station-detail responses. The four corrected products replace the former unsupported `*_mean` products one-for-one across all 4,092 station-product edges. Availability, reason, bounds, and check dates are preserved. Canonical artefacts rebuild without network access from the externally supplied native table and declared origins.
 
 ## Native capture availability
 
-The representative station response was captured successfully during the 2026-08-02 campaign. A later request at `2026-08-03T12:31:42Z` returned HTTP 403 with a 77-byte restriction body. The accepted native evidence is therefore non-refetchable; rebuilds use the committed native table and origins without network access.
+The representative station response was captured successfully during the 2026-08-02 campaign. A later request at `2026-08-03T12:31:42Z` returned HTTP 403 with a 77-byte restriction body. The accepted native evidence is therefore non-refetchable; rebuilds use the externally supplied native table and origins without network access.
+
+
+## Offline verification
+
+Retrieve the exact MLIT inputs from the private source archive, following the
+[maintainer guide](../maintenance/evidence.md). Set
+`RIVRETRIEVE_TEST_EVIDENCE_ROOT` to the external directory with the inputs in
+their repository-relative layout. The tests read retained recordings, station
+responses and terms from `tests/test_data/`, and the native table from
+`src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet` beneath
+that root. Packaged runtime catalogue products remain in the code repository.
+Missing inputs block the corresponding checks; tests do not download replacements.
+
+Run the full Japan checks with failure details kept private:
+
+```sh
+uv run pytest tests/test_jp_mlit*.py -q --tb=no -p no:cacheprovider
+```
+
+The catalogue generator accepts explicit input paths. After selecting and
+retrieving the verified inputs, build to a separate output directory:
+
+```sh
+uv run python -m rivretrieve._internal.providers.jp_mlit.generate_catalogue \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet" \
+  --license-recording "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/tests/test_data/jp_mlit_terms_licence_euc_jp.html" \
+  --citation-recording "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/tests/test_data/jp_mlit_terms_citation.pdf" \
+  --out /path/to/catalogue-output
+```
+
+The supplied-capture mode also requires explicit paths for its station list,
+responses, manifest and native output. Provenance paths identify the retained
+acquisitions; they are not instructions to search a local checkout.

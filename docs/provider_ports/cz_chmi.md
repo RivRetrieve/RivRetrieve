@@ -39,7 +39,7 @@ The complete metadata response was retrieved at `2026-08-02T00:14:31Z` with 831 
 columns. Canonicalizing the parsed JSON with sorted keys, compact separators, `ensure_ascii=False`,
 and UTF-8 produces SHA-256
 `a75f5ae23d8e9108cedb613d320ac3f3daf7be071442a3a91d23b323721cc9e9`. The active three-row fixture
-is a verbatim parser subset, not the source of the committed native table. It replaced a source-incorrect
+is a verbatim parser subset, not the source of the retained native table. It replaced a source-incorrect
 fixture: `0-203-1-016000` and `0-203-1-020000` had wrong coordinates, and `0-204-1-001000` was not
 published by the source. The native-frame digest and source-correct coordinate witnesses are enforced
 by `catalogue/provenance.json` and the generator tests.
@@ -93,3 +93,21 @@ The CHMI metadata catalogue does not expose per-variable availability. All 831 Ã
 | Station IDs contain hyphens | Source identities such as `0-203-1-000400` are preserved exactly. |
 | Three daily and two hourly products share files | Fetch coalesces by station, year, and DQ/HQ family, producing two source calls for all five products. |
 | Hourly label anchoring is unpublished | `Hourly(IntervalDefinition("unknown"))` preserves the explicit unknown fact and shared clipping uses only published labels. |
+
+## Retained verification inputs
+
+Obtain the exact inputs from the private source archive as described in the
+[verification guide](../maintenance/evidence.md). Tests read the external
+repository-relative layout selected by `RIVRETRIEVE_TEST_EVIDENCE_ROOT`. Missing
+inputs block verification. Runtime catalogue products remain packaged.
+
+The catalogue generator requires `--native` to select the retained native table
+and `--evidence-root` to select the external root for provenance checks. Recorded
+paths remain acquisition identities; they are resolved below that root. For example:
+
+```sh
+uv run python -m rivretrieve._internal.providers.cz_chmi.generate_catalogue \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet" \
+  --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --out catalogue-output
+```

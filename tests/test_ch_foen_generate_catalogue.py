@@ -89,9 +89,9 @@ class _TextParser(HTMLParser):
         self.parts.append(data)
 
 
-def test_publisher_crs_evidence_names_hydro_but_no_reference_system() -> None:
+def test_publisher_crs_evidence_names_hydro_but_no_reference_system(retained_evidence_root: Path) -> None:
     # The documentation fixture retains source text except the explicitly redacted archive credential.
-    capture = CRS_EVIDENCE_PATH.read_bytes()
+    capture = (retained_evidence_root / CRS_EVIDENCE_PATH).read_bytes()
     parser = _TextParser()
     parser.feed(capture.decode("utf-8"))
     text = " ".join(" ".join(parser.parts).split()).casefold()
@@ -103,14 +103,14 @@ def test_publisher_crs_evidence_names_hydro_but_no_reference_system() -> None:
     assert all(token.casefold() not in text for token in CRS_ABSENCE_TOKENS)
 
 
-def _fixture_response() -> dict[str, object]:
-    value = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+def _fixture_response(retained_evidence_root: Path) -> dict[str, object]:
+    value = json.loads((retained_evidence_root / FIXTURE_PATH).read_text(encoding="utf-8"))
     assert isinstance(value, dict)
     return cast("dict[str, object]", value)
 
 
-def _expected_native_frame(response: dict[str, object] | None = None) -> pl.DataFrame:
-    source = _fixture_response() if response is None else response
+def _expected_native_frame(retained_evidence_root: Path, response: dict[str, object] | None = None) -> pl.DataFrame:
+    source = _fixture_response(retained_evidence_root) if response is None else response
     payload_value = source["payload"]
     assert isinstance(payload_value, dict)
     payload = cast("dict[str, object]", payload_value)
@@ -165,8 +165,8 @@ def _native_with_rows(rows: list[dict[str, object]]) -> NativeTable:
     return NativeTable(pl.DataFrame(rows, schema=NATIVE_SCHEMA))
 
 
-def _sample_native_rows() -> list[dict[str, object]]:
-    committed = read_native_table(NATIVE_PATH).data
+def _sample_native_rows(retained_evidence_root: Path) -> list[dict[str, object]]:
+    committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
     return [dict(row) for row in committed.head(2).iter_rows(named=True)]
 
 
@@ -180,8 +180,8 @@ class _FixtureResponse(io.BytesIO):
     status = 200
 
 
-def test_swiss_fixture_matches_attested_complete_response() -> None:
-    response = _fixture_response()
+def test_swiss_fixture_matches_attested_complete_response(retained_evidence_root: Path) -> None:
+    response = _fixture_response(retained_evidence_root)
     canonical = json.dumps(response, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     payload = response["payload"]
 
@@ -191,16 +191,18 @@ def test_swiss_fixture_matches_attested_complete_response() -> None:
     assert set(response) == {"source", "apiurl", "opendata", "license", "payload"}
 
 
-def test_refresh_native_table_has_exact_ordered_schema_and_preserves_source() -> None:
-    outcome = generate_catalogue.refresh_native_table(_fixture_response(), retrieved_at=ATTESTED_RETRIEVED_AT)
+def test_refresh_native_table_has_exact_ordered_schema_and_preserves_source(retained_evidence_root: Path) -> None:
+    outcome = generate_catalogue.refresh_native_table(
+        _fixture_response(retained_evidence_root), retrieved_at=ATTESTED_RETRIEVED_AT
+    )
 
     assert outcome.value.data.schema == NATIVE_SCHEMA
     assert outcome.issues == ()
-    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(), check_exact=True)
+    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(retained_evidence_root), check_exact=True)
 
 
-def test_refresh_native_table_normalizes_only_integer_details_id() -> None:
-    response = _fixture_response()
+def test_refresh_native_table_normalizes_only_integer_details_id(retained_evidence_root: Path) -> None:
+    response = _fixture_response(retained_evidence_root)
     payload_value = response["payload"]
     assert isinstance(payload_value, dict)
     payload = cast("dict[str, object]", payload_value)
@@ -228,30 +230,37 @@ def test_refresh_native_table_normalizes_only_integer_details_id() -> None:
     assert table.filter(pl.col("payload_key") == "2071").select("details.id").item() == "2071"
 
 
-def test_refresh_native_table_stamps_all_rows_with_attested_retrieval_instant() -> None:
-    table = generate_catalogue.refresh_native_table(_fixture_response(), retrieved_at=ATTESTED_RETRIEVED_AT).value.data
+def test_refresh_native_table_stamps_all_rows_with_attested_retrieval_instant(retained_evidence_root: Path) -> None:
+    table = generate_catalogue.refresh_native_table(
+        _fixture_response(retained_evidence_root), retrieved_at=ATTESTED_RETRIEVED_AT
+    ).value.data
 
     assert table.height == 246
     assert table["retrieved_at"].n_unique() == 1
     assert table["retrieved_at"].item(0) == ATTESTED_DATETIME
 
 
-def test_refresh_native_table_from_fixture_is_network_free(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_refresh_native_table_from_fixture_is_network_free(
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         generate_catalogue,
         "_read_live_json",
         lambda url: (_ for _ in ()).throw(AssertionError(f"unexpected live request to {url}")),
     )
 
-    outcome = generate_catalogue.refresh_native_table_from_fixture(FIXTURE_PATH, retrieved_at=ATTESTED_RETRIEVED_AT)
+    outcome = generate_catalogue.refresh_native_table_from_fixture(
+        (retained_evidence_root / FIXTURE_PATH), retrieved_at=ATTESTED_RETRIEVED_AT
+    )
 
-    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(), check_exact=True)
+    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(retained_evidence_root), check_exact=True)
 
 
 def test_refresh_native_table_from_live_exercises_transport_seam_offline(
+    retained_evidence_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fixture_bytes = FIXTURE_PATH.read_bytes()
+    fixture_bytes = (retained_evidence_root / FIXTURE_PATH).read_bytes()
     calls: list[tuple[str, int]] = []
 
     def fake_urlopen(url: str, *, timeout: int) -> _FixtureResponse:
@@ -262,11 +271,13 @@ def test_refresh_native_table_from_live_exercises_transport_seam_offline(
     outcome = generate_catalogue.refresh_native_table_from_live(retrieved_at=ATTESTED_RETRIEVED_AT)
 
     assert calls == [(generate_catalogue.SOURCE_URL, 30)]
-    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(), check_exact=True)
+    pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(retained_evidence_root), check_exact=True)
 
 
-def test_live_refresh_rejects_implausibly_small_station_count(monkeypatch: pytest.MonkeyPatch) -> None:
-    response = _fixture_response()
+def test_live_refresh_rejects_implausibly_small_station_count(
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    response = _fixture_response(retained_evidence_root)
     payload = response["payload"]
     assert isinstance(payload, dict)
     response["payload"] = dict(list(payload.items())[:199])
@@ -276,8 +287,8 @@ def test_live_refresh_rejects_implausibly_small_station_count(monkeypatch: pytes
         generate_catalogue.refresh_native_table_from_live(retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
-def test_fixture_refresh_has_no_exact_station_count_invariant(tmp_path: Path) -> None:
-    response = _fixture_response()
+def test_fixture_refresh_has_no_exact_station_count_invariant(retained_evidence_root: Path, tmp_path: Path) -> None:
+    response = _fixture_response(retained_evidence_root)
     payload = response["payload"]
     assert isinstance(payload, dict)
     response["payload"] = dict(list(payload.items())[:1])
@@ -300,8 +311,10 @@ def test_fixture_refresh_has_no_exact_station_count_invariant(tmp_path: Path) ->
         ),
     ],
 )
-def test_refresh_native_table_rejects_each_absent_required_field(scope: str, field: str) -> None:
-    response = copy.deepcopy(_fixture_response())
+def test_refresh_native_table_rejects_each_absent_required_field(
+    retained_evidence_root: Path, scope: str, field: str
+) -> None:
+    response = copy.deepcopy(_fixture_response(retained_evidence_root))
     payload_value = response["payload"]
     assert isinstance(payload_value, dict)
     payload = cast("dict[str, object]", payload_value)
@@ -322,8 +335,10 @@ def test_refresh_native_table_rejects_each_absent_required_field(scope: str, fie
     ("scope", "field"),
     [("station", "id"), ("details", "chx"), ("details", "chy"), ("details", "lat"), ("details", "lon")],
 )
-def test_refresh_native_table_rejects_boolean_numeric_fields(scope: str, field: str) -> None:
-    response = copy.deepcopy(_fixture_response())
+def test_refresh_native_table_rejects_boolean_numeric_fields(
+    retained_evidence_root: Path, scope: str, field: str
+) -> None:
+    response = copy.deepcopy(_fixture_response(retained_evidence_root))
     payload_value = response["payload"]
     assert isinstance(payload_value, dict)
     payload = cast("dict[str, object]", payload_value)
@@ -340,26 +355,36 @@ def test_refresh_native_table_rejects_boolean_numeric_fields(scope: str, field: 
         generate_catalogue.refresh_native_table(response, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
-def test_native_output_cli_writes_expected_table(tmp_path: Path) -> None:
+def test_native_output_cli_writes_expected_table(retained_evidence_root: Path, tmp_path: Path) -> None:
     output_path = tmp_path / "native.parquet"
 
     result = generate_catalogue.main(
-        ["--fixture", str(FIXTURE_PATH), "--native-out", str(output_path), "--retrieved-at", "2026-08-02T00:14:31Z"]
+        [
+            "--fixture",
+            str(retained_evidence_root / FIXTURE_PATH),
+            "--native-out",
+            str(output_path),
+            "--retrieved-at",
+            "2026-08-02T00:14:31Z",
+        ]
+        + ["--evidence-root", str(retained_evidence_root)]
     )
 
     assert result == 0
-    pl_testing.assert_frame_equal(read_native_table(output_path).data, _expected_native_frame(), check_exact=True)
+    pl_testing.assert_frame_equal(
+        read_native_table(output_path).data, _expected_native_frame(retained_evidence_root), check_exact=True
+    )
 
 
-def test_committed_native_table_matches_attested_rematerialization() -> None:
-    committed = read_native_table(NATIVE_PATH).data
+def test_committed_native_table_matches_attested_rematerialization(retained_evidence_root: Path) -> None:
+    committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
 
     assert committed.schema == NATIVE_SCHEMA
-    pl_testing.assert_frame_equal(committed, _expected_native_frame(), check_exact=True)
+    pl_testing.assert_frame_equal(committed, _expected_native_frame(retained_evidence_root), check_exact=True)
 
 
-def test_committed_native_table_has_pinned_full_content() -> None:
-    committed = read_native_table(NATIVE_PATH).data
+def test_committed_native_table_has_pinned_full_content(retained_evidence_root: Path) -> None:
+    committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
 
     assert committed.height == 246
     assert committed.columns == list(NATIVE_SCHEMA)
@@ -379,10 +404,12 @@ def test_swiss_origins_match_canonical_schema_order_and_values() -> None:
     } == STATION_CATALOGUE_ORIGINS
 
 
-def test_native_build_has_exact_projection_counts_dates_and_schemas() -> None:
+def test_native_build_has_exact_projection_counts_dates_and_schemas(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
-    catalogue = generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+    catalogue = generate_catalogue.build_catalogue(
+        read_native_table(retained_evidence_root / NATIVE_PATH), STATION_CATALOGUE_ORIGINS
+    )
 
     retained_product_ids = {
         "discharge_reported",
@@ -436,10 +463,10 @@ def test_native_build_has_exact_projection_counts_dates_and_schemas() -> None:
     )
 
 
-def test_native_build_uses_top_level_name_and_exact_native_coordinates() -> None:
+def test_native_build_uses_top_level_name_and_exact_native_coordinates(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
-    rows = _sample_native_rows()
+    rows = _sample_native_rows(retained_evidence_root)
     rows[0].update(
         {
             "payload_key": "payload-A",
@@ -475,7 +502,7 @@ def test_native_build_uses_top_level_name_and_exact_native_coordinates() -> None
     assert actual["station_id"].to_list() == ["canonical-A", "canonical-B"]
 
 
-def test_native_build_enforces_every_origin_declaration() -> None:
+def test_native_build_enforces_every_origin_declaration(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
     declarations = dict(STATION_CATALOGUE_ORIGINS)
@@ -485,13 +512,13 @@ def test_native_build_enforces_every_origin_declaration() -> None:
         FatalContractError,
         match=r"ch_foen\.longitude: canonical column has no origin declaration",
     ):
-        generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), declarations)
+        generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), declarations)
 
 
-def test_native_build_uses_per_station_retrieval_dates_and_maximum_provider_date() -> None:
+def test_native_build_uses_per_station_retrieval_dates_and_maximum_provider_date(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
-    rows = _sample_native_rows()
+    rows = _sample_native_rows(retained_evidence_root)
     rows[0]["retrieved_at"] = datetime(2026, 7, 31, 23, 59, tzinfo=UTC)
     rows[1]["retrieved_at"] = datetime(2026, 8, 2, 1, 2, tzinfo=UTC)
     native = _native_with_rows(rows)
@@ -516,10 +543,10 @@ def test_native_build_uses_per_station_retrieval_dates_and_maximum_provider_date
         (lambda rows: rows[1].__setitem__("name", rows[0]["name"]), r"duplicate station identity"),
     ],
 )
-def test_native_build_rejects_bad_station_rows(mutation, message: str) -> None:
+def test_native_build_rejects_bad_station_rows(retained_evidence_root: Path, mutation, message: str) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
-    rows = _sample_native_rows()
+    rows = _sample_native_rows(retained_evidence_root)
     bad_payload_key = rows[1]["payload_key"]
     mutation(rows)
     native = object.__new__(NativeTable)
@@ -530,10 +557,10 @@ def test_native_build_rejects_bad_station_rows(mutation, message: str) -> None:
 
 
 @pytest.mark.parametrize("payload_key", [None, ""])
-def test_native_build_rejects_invalid_payload_key(payload_key: object) -> None:
+def test_native_build_rejects_invalid_payload_key(retained_evidence_root: Path, payload_key: object) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
-    rows = _sample_native_rows()
+    rows = _sample_native_rows(retained_evidence_root)
     rows[1]["payload_key"] = payload_key
     native = object.__new__(NativeTable)
     object.__setattr__(native, "data", pl.DataFrame(rows, schema=NATIVE_SCHEMA, strict=False))
@@ -551,10 +578,10 @@ def test_native_build_rejects_empty_table() -> None:
         generate_catalogue.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
 
 
-def test_native_build_rejects_null_retrieved_at_with_row_identity() -> None:
+def test_native_build_rejects_null_retrieved_at_with_row_identity(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
-    rows = _sample_native_rows()
+    rows = _sample_native_rows(retained_evidence_root)
     bad_payload_key = rows[1]["payload_key"]
     rows[1]["retrieved_at"] = None
     native = object.__new__(NativeTable)
@@ -564,10 +591,10 @@ def test_native_build_rejects_null_retrieved_at_with_row_identity() -> None:
         generate_catalogue.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
 
 
-def test_native_build_rejects_inconsistent_document_metadata() -> None:
+def test_native_build_rejects_inconsistent_document_metadata(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
-    rows = _sample_native_rows()
+    rows = _sample_native_rows(retained_evidence_root)
     bad_payload_key = rows[1]["payload_key"]
     rows[1]["source"] = "different source"
 
@@ -604,24 +631,26 @@ def test_cli_source_modes_are_mutually_exclusive(tmp_path: Path) -> None:
         generate_catalogue.main(
             [
                 "--fixture",
-                str(FIXTURE_PATH),
+                str(tmp_path / "fixture.json"),
                 "--live",
                 "--native-out",
                 str(tmp_path / "native.parquet"),
                 "--retrieved-at",
                 "2026-08-02T00:14:31Z",
             ]
+            + ["--evidence-root", str(tmp_path)]
         )
 
     assert exc_info.value.code != 0
 
 
 def test_native_build_matches_committed_catalogue_byte_for_byte(
+    retained_evidence_root: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[str] = []
-    native_before = NATIVE_PATH.read_bytes()
+    native_before = (retained_evidence_root / NATIVE_PATH).read_bytes()
 
     def fail_network(*args, **kwargs):
         calls.append(str(args[0]) if args else "unknown")
@@ -631,8 +660,21 @@ def test_native_build_matches_committed_catalogue_byte_for_byte(
     monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", fail_network)
     output = tmp_path / "catalogue"
 
-    assert generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(output)]) == 0
+    assert (
+        generate_catalogue.main(
+            ["--native", str(retained_evidence_root / NATIVE_PATH), "--out", str(output)]
+            + ["--evidence-root", str(retained_evidence_root)]
+        )
+        == 0
+    )
     assert calls == []
-    assert NATIVE_PATH.read_bytes() == native_before
+    assert (retained_evidence_root / NATIVE_PATH).read_bytes() == native_before
     for artifact in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
         assert (output / artifact).read_bytes() == (CATALOGUE_PATH / artifact).read_bytes()
+
+
+def test_native_build_requires_explicit_evidence_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as raised:
+        generate_catalogue.main(["--native", str(tmp_path / "native.parquet"), "--out", str(tmp_path / "out")])
+    assert raised.value.code == 2
+    assert "--evidence-root is required with --out" in capsys.readouterr().err

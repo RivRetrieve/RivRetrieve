@@ -44,17 +44,31 @@ def test_south_africa_provenance_exposes_unsigned_dms_transformation() -> None:
     )
 
 
-def test_south_africa_cli_rejects_native_byte_substitution(tmp_path: Path) -> None:
+def test_south_africa_cli_rejects_native_byte_substitution(retained_evidence_root: Path, tmp_path: Path) -> None:
     native = tmp_path / "native.parquet"
-    native.write_bytes((declaration.catalogue / "native.parquet").read_bytes() + b"changed")
+    native.write_bytes(
+        (retained_evidence_root / "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet").read_bytes()
+        + b"changed"
+    )
     with pytest.raises(FatalContractError, match="native table digest mismatch: expected .* observed"):
-        generate_catalogue.main(["--native", str(native), "--out", str(tmp_path / "out")])
+        generate_catalogue.main(
+            ["--native", str(native), "--out", str(tmp_path / "out")] + ["--evidence-root", str(retained_evidence_root)]
+        )
 
 
 def test_south_africa_cli_invokes_recording_verification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def reject(*_args: object) -> None:
+    def reject(_provenance: object, evidence_root: Path) -> None:
+        assert evidence_root == tmp_path
         raise FatalContractError("recording verification invoked")
 
     monkeypatch.setattr(generate_catalogue, "verify_provenance_recordings", reject)
     with pytest.raises(FatalContractError, match="recording verification invoked"):
-        generate_catalogue.main(["--native", str(declaration.catalogue / "native.parquet"), "--out", str(tmp_path)])
+        generate_catalogue.main(
+            [
+                "--native",
+                str(tmp_path / "native.parquet"),
+                "--out",
+                str(tmp_path),
+            ]
+            + ["--evidence-root", str(tmp_path)]
+        )

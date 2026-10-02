@@ -12,7 +12,6 @@ working-directory `.env`, then execute all reader snippets in their documented o
 
 ```bash
 uv run python docs/verification/norway-provider/verify_examples.py
-uv run pytest -q tests/test_no_nve_documentation.py tests/test_no_nve_live.py tests/test_no_nve_public_routes.py tests/test_record_observations.py tests/test_documentation.py tests/test_supporting_documentation.py tests/test_reference_contracts.py
 uv run python scripts/generate_reference.py --check
 ```
 
@@ -25,17 +24,47 @@ The padded interval was December 30, 2023 through January 9, 2024. Code summarie
 cover 11 source rows; the returned seven rows cover January 1–7. Quality `2` and
 correction `0` are independent of series version `1`.
 
-The normal recording CLI also succeeded on 2026-09-23:
+The normal recording CLI also succeeded on 2026-09-23. For a fresh acquisition,
+select an external `OUTPUT_ROOT` and run:
 
 ```bash
-uv run python -m rivretrieve._internal.record_observations --provider no_nve --station 2.605.0 --product discharge_daily_mean --start 2024-01-01 --end 2024-01-07 --out-dir docs/verification/norway-provider/recordings --name discharge-week
+uv run python -m rivretrieve._internal.record_observations --provider no_nve --station 2.605.0 --product discharge_daily_mean --start 2024-01-01 --end 2024-01-07 --out-dir "$OUTPUT_ROOT/recordings" --name discharge-week
 ```
 
-The two committed recordings retain exact publisher bytes and credential header
+The two archived recordings retain exact publisher bytes and credential header
 names, never values. The focused documentation test replays those bytes and checks
 all snippet output, source calls and catalogue counts. Replay is not live verification.
 The feedback-revision run passed all **95 tests** with one rdflib deprecation warning.
 Scoped Ruff lint/format, generated-reference and diff-whitespace checks also passed.
+
+## Offline checks
+
+Retrieve the exact Norway inputs with the private archive instructions linked from
+[verification evidence](../../maintenance/evidence.md). Set
+`RIVRETRIEVE_TEST_EVIDENCE_ROOT` to the external directory containing the retained
+repository-relative paths. The tests use this directory for recordings, source
+responses, capture attestations and the native station table. Missing inputs fail
+the checks; no archive credentials or live service access are needed.
+
+```sh
+uv run pytest tests/test_no_nve*.py -q --tb=no -p no:cacheprovider
+```
+
+Keep test temporary files and full output outside source checkouts. Full failure
+output can include source values.
+
+For offline native-table materialization, pass the same directory explicitly:
+
+```sh
+uv run python -m rivretrieve._internal.providers.no_nve.generate_catalogue \
+  --materialize-record "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/tests/test_data/no_nve_station_catalogue_capture.json" \
+  --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --native-out "$OUTPUT_ROOT/native.parquet"
+```
+
+`OUTPUT_ROOT` must name a separate external output directory. The historical
+`--repository-root` spelling remains an alias for `--evidence-root`; either spelling
+requires an explicit value. The recorded relative paths remain acquisition identities.
 
 ## Claims and limits
 
@@ -55,13 +84,6 @@ Scoped Ruff lint/format, generated-reference and diff-whitespace checks also pas
   no exact interval is inferred. No key-issuance timing, numeric service limit,
   national live census, continuous-history or quality-approval claim is made.
 
-Full exploratory logs and source text snapshots were preserved outside the proposed
-Git diff at `.worktrees/norway-provider-evidence-2026-09-23/` in the maintainer checkout.
-They include dated source URLs/status, catalogue counts, execution output and the
-pre-feedback evidence. The committed test, recordings and verifier retain the
-focused regression and live-recheck paths.
-
-The user reviewed the page, requested these repairs and explicitly authorized merging
-without another human gate. Independent review of the repairs remains required;
-the root agent handles landing. The historical vision's earlier human gate is
-superseded by that instruction.
+The private archive retains the historical source snapshots, execution records and
+recordings. The maintained tests and verifier retain the focused regression and
+live-recheck paths.

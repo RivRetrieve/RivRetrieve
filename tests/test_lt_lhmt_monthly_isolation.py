@@ -4,7 +4,6 @@ import calendar
 import json
 import warnings
 from datetime import UTC, datetime
-from pathlib import Path
 
 import polars as pl
 import polars.testing as pt
@@ -16,9 +15,14 @@ from rivretrieve._internal.recordings import read_recording
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason, TransportResponse
 
 
+@pytest.fixture
+def recording(retained_evidence_root):
+    return read_recording(retained_evidence_root / "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
+
+
 class MonthlyTransport:
-    def __init__(self, responses=None):
-        self.recording = read_recording(Path(__file__).parent / "test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
+    def __init__(self, recording, responses=None):
+        self.recording = recording
         self.calls = []
         self.responses = responses or {}
         self.retrieved_at = datetime(2026, 9, 27, tzinfo=UTC)
@@ -47,8 +51,8 @@ class MonthlyTransport:
         ("2023-06-01", "2023-06-30", 30, ["2023-05", "2023-06", "2023-07"]),
     ],
 )
-def test_padding_only_404_preserves_requested_rows(monkeypatch, start, end, rows, months):
-    transport = MonthlyTransport()
+def test_padding_only_404_preserves_requested_rows(recording, monkeypatch, start, end, rows, months):
+    transport = MonthlyTransport(recording)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     selection = rr.find(provider="lt_lhmt", station="anyksciu-vms", quantity="discharge")
     result = rr.fetch(selection, start=start, end=end, cache="bypass", receipts=True, on_issue="ignore")
@@ -101,8 +105,8 @@ def fetch(chosen=None, **kwargs):
 
 
 @pytest.mark.parametrize("failed", [("2023-05",), ("2023-06",), ("2023-07",), ("2023-05", "2023-06", "2023-07")])
-def test_requested_month_failures_have_precise_outcomes(monkeypatch, failed):
-    transport = MonthlyTransport()
+def test_requested_month_failures_have_precise_outcomes(recording, monkeypatch, failed):
+    transport = MonthlyTransport(recording)
     months = ["2023-05", "2023-06", "2023-07"]
     transport.responses = {month: (404 if month in failed else authored_month(transport, month)) for month in months}
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
@@ -130,8 +134,8 @@ def test_requested_month_failures_have_precise_outcomes(monkeypatch, failed):
 
 
 @pytest.mark.parametrize("receipts", [False, True])
-def test_call_evidence_independent_of_receipts(monkeypatch, receipts):
-    transport = MonthlyTransport()
+def test_call_evidence_independent_of_receipts(recording, monkeypatch, receipts):
+    transport = MonthlyTransport(recording)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -159,8 +163,8 @@ def test_call_evidence_independent_of_receipts(monkeypatch, receipts):
 @pytest.mark.parametrize(
     ("quantity", "field", "factor"), [("discharge", "waterDischarge", 1), ("stage", "waterLevel", 0.01)]
 )
-def test_empty_null_and_failed_months_are_distinct(monkeypatch, quantity, field, factor):
-    transport = MonthlyTransport()
+def test_empty_null_and_failed_months_are_distinct(recording, monkeypatch, quantity, field, factor):
+    transport = MonthlyTransport(recording)
     transport.responses = {
         "2023-05": authored_month(transport, "2023-05", empty=True),
         "2023-06": authored_month(transport, "2023-06", null=True),
@@ -181,8 +185,8 @@ def test_empty_null_and_failed_months_are_distinct(monkeypatch, quantity, field,
 
 
 @pytest.mark.parametrize("failure", [401, 403, 500, b"not JSON", TransportFailureReason.RETRY_EXHAUSTED])
-def test_non_absence_failures_keep_diagnostics_and_sibling_rows(monkeypatch, failure):
-    transport = MonthlyTransport({"2023-05": failure})
+def test_non_absence_failures_keep_diagnostics_and_sibling_rows(recording, monkeypatch, failure):
+    transport = MonthlyTransport(recording, {"2023-05": failure})
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     result = fetch(start="2023-06-01", end="2023-06-05")
     assert result.data.height == 5
@@ -196,10 +200,10 @@ def test_non_absence_failures_keep_diagnostics_and_sibling_rows(monkeypatch, fai
         assert "timeout" in result.issues[0].message
 
 
-def test_requested_failure_obeys_warning_and_raise_policy(monkeypatch):
+def test_requested_failure_obeys_warning_and_raise_policy(recording, monkeypatch):
     from rivretrieve._internal.issues import IssuePolicyError
 
-    transport = MonthlyTransport()
+    transport = MonthlyTransport(recording)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     with pytest.warns(RuntimeWarning, match="404"):
         result = fetch(start="2023-05-03", end="2023-06-28", on_issue="warn")
@@ -208,9 +212,9 @@ def test_requested_failure_obeys_warning_and_raise_policy(monkeypatch):
         fetch(start="2023-05-03", end="2023-06-28", on_issue="raise")
 
 
-def test_explicit_series_partial_cache_retries_failed_month(monkeypatch, tmp_path):
+def test_explicit_series_partial_cache_retries_failed_month(recording, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    transport = MonthlyTransport()
+    transport = MonthlyTransport(recording)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     seed = fetch(start="2023-06-03", end="2023-06-28")
     explicit = rr.pick(selection(), series_id=tuple(seed.data["series_id"].unique()), on_issue="ignore")
@@ -235,9 +239,9 @@ def test_explicit_series_partial_cache_retries_failed_month(monkeypatch, tmp_pat
     pt.assert_frame_equal(recovered.data, again.data)
 
 
-def test_failed_refresh_keeps_held_month_and_original_vintage(monkeypatch, tmp_path):
+def test_failed_refresh_keeps_held_month_and_original_vintage(recording, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    transport = MonthlyTransport()
+    transport = MonthlyTransport(recording)
     transport.responses["2023-05"] = authored_month(transport, "2023-05")
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     seed = fetch(start="2023-05-03", end="2023-06-28", cache="reuse")
@@ -270,12 +274,12 @@ def test_failed_refresh_keeps_held_month_and_original_vintage(monkeypatch, tmp_p
 
 
 @pytest.mark.parametrize("policy", ["ignore", "warn", "raise"])
-def test_internal_parse_contract_failure_is_fatal(monkeypatch, policy):
+def test_internal_parse_contract_failure_is_fatal(recording, monkeypatch, policy):
     from dataclasses import replace
 
     from rivretrieve._internal.issues import FatalContractError
 
-    transport = MonthlyTransport()
+    transport = MonthlyTransport(recording)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     from rivretrieve._internal.providers.lt_lhmt.declaration import declaration
 
@@ -298,8 +302,8 @@ def test_internal_parse_contract_failure_is_fatal(monkeypatch, policy):
         fetch(start="2023-06-03", end="2023-06-28", on_issue=policy)
 
 
-def test_malformed_requested_month_preserves_sibling_months(monkeypatch):
-    transport = MonthlyTransport()
+def test_malformed_requested_month_preserves_sibling_months(recording, monkeypatch):
+    transport = MonthlyTransport(recording)
     transport.responses = {
         "2023-05": authored_month(transport, "2023-05"),
         "2023-06": b"not JSON",

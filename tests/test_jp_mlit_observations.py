@@ -29,17 +29,18 @@ from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.window_planning import plan_windows
 
-_DATA = Path(__file__).parent / "test_data"
 _STATION = "301011281104010"
 _PRODUCTS = tuple(map(ProductId, ("stage_hourly", "stage_daily", "discharge_hourly", "discharge_daily")))
-_PATHS = tuple(
-    path
-    for product in _PRODUCTS
-    for path in (
-        _DATA / f"jp_mlit_{product}_2023_html.recording.json",
-        _DATA / f"jp_mlit_{product}_2023_dat.recording.json",
+
+
+def _recording_paths(evidence_root: Path) -> tuple[Path, ...]:
+    return tuple(
+        evidence_root / "tests/test_data" / f"jp_mlit_{product}_2023_{role}.recording.json"
+        for product in _PRODUCTS
+        for role in ("html", "dat")
     )
-)
+
+
 _WINDOWS = MappingProxyType(
     {
         product: plan_windows(
@@ -60,12 +61,14 @@ def _window() -> FetchWindow:
     )
 
 
-def _fetched():
-    return fetch((_STATION,), _PRODUCTS, _WINDOWS, _window(), config(), ReplayTransport(_PATHS)).value
+def _fetched(retained_evidence_root):
+    return fetch(
+        (_STATION,), _PRODUCTS, _WINDOWS, _window(), config(), ReplayTransport(_recording_paths(retained_evidence_root))
+    ).value
 
 
-def test_page_rejects_stage_html_when_exact_recorded_unit_is_mutated() -> None:
-    content = read_recording(_PATHS[0]).content
+def test_page_rejects_stage_html_when_exact_recorded_unit_is_mutated(retained_evidence_root) -> None:
+    content = read_recording(_recording_paths(retained_evidence_root)[0]).content
     mutated = content.replace("単位：m".encode("euc-jp"), "単位：cm".encode("euc-jp"))
 
     with pytest.raises(UnsupportedSourceStructureError, match="unit"):
@@ -92,9 +95,9 @@ def test_page_rejects_stage_html_when_exact_recorded_unit_is_mutated() -> None:
     ),
 )
 def test_page_rejects_wrong_missing_ambiguous_or_unstructured_units(
-    path_index: int, kind: int, original: str, replacement: str
+    retained_evidence_root, path_index: int, kind: int, original: str, replacement: str
 ) -> None:
-    content = read_recording(_PATHS[path_index]).content
+    content = read_recording(_recording_paths(retained_evidence_root)[path_index]).content
     source = original.encode("euc-jp")
     assert content.count(source) == 1
     mutated = content.replace(source, replacement.encode("euc-jp"))
@@ -103,16 +106,16 @@ def test_page_rejects_wrong_missing_ambiguous_or_unstructured_units(
         _page(mutated, kind, _STATION)
 
 
-def test_page_rejects_discharge_unit_when_title_is_mutated_to_stage_product() -> None:
-    content = read_recording(_PATHS[4]).content
+def test_page_rejects_discharge_unit_when_title_is_mutated_to_stage_product(retained_evidence_root) -> None:
+    content = read_recording(_recording_paths(retained_evidence_root)[4]).content
     mutated = content.replace("時刻流量月表検索結果".encode("euc-jp"), "時刻水位月表検索結果".encode("euc-jp"))
 
     with pytest.raises(UnsupportedSourceStructureError, match="exact publisher unit"):
         _page(mutated, 2, _STATION)
 
 
-def test_fetch_returns_all_eight_untouched_payloads_in_caller_order() -> None:
-    payloads = _fetched()
+def test_fetch_returns_all_eight_untouched_payloads_in_caller_order(retained_evidence_root) -> None:
+    payloads = _fetched(retained_evidence_root)
     assert [(p.source_coordinates.value.kind, p.source_coordinates.value.role) for p in payloads] == [
         (2, "html"),
         (2, "dat"),
@@ -123,8 +126,12 @@ def test_fetch_returns_all_eight_untouched_payloads_in_caller_order() -> None:
         (7, "html"),
         (7, "dat"),
     ]
-    assert [p.content for p in payloads] == [read_recording(path).content for path in _PATHS]
-    assert [p.origin.url for p in payloads] == [read_recording(path).request.url for path in _PATHS]
+    assert [p.content for p in payloads] == [
+        read_recording(path).content for path in _recording_paths(retained_evidence_root)
+    ]
+    assert [p.origin.url for p in payloads] == [
+        read_recording(path).request.url for path in _recording_paths(retained_evidence_root)
+    ]
 
 
 @pytest.mark.parametrize(
@@ -137,9 +144,15 @@ def test_fetch_returns_all_eight_untouched_payloads_in_caller_order() -> None:
     ],
 )
 def test_exact_official_boundaries(
-    index: int, count: int, first: datetime, last: datetime, first_value: float, last_value: float
+    retained_evidence_root,
+    index: int,
+    count: int,
+    first: datetime,
+    last: datetime,
+    first_value: float,
+    last_value: float,
 ) -> None:
-    result = parse(_fetched()[index], config())
+    result = parse(_fetched(retained_evidence_root)[index], config())
     rows = result.rows.sort("time")
     assert rows.columns == [
         "station_id",
@@ -162,13 +175,13 @@ def test_exact_official_boundaries(
         assert (issue.code, issue.details["count"]) == ("source_missing", 552)
 
 
-def test_html_parse_validates_and_returns_no_rows() -> None:
-    for payload in _fetched()[::2]:
+def test_html_parse_validates_and_returns_no_rows(retained_evidence_root) -> None:
+    for payload in _fetched(retained_evidence_root)[::2]:
         assert parse(payload, config()).rows.is_empty()
 
 
-def test_flags_control_observation_status_without_numeric_threshold() -> None:
-    payload = _fetched()[1]
+def test_flags_control_observation_status_without_numeric_threshold(retained_evidence_root) -> None:
+    payload = _fetched(retained_evidence_root)[1]
     negative = replace(payload, content=payload.content.replace(b"321.52", b"-9999.00", 1))
     assert parse(negative, config()).rows["value"][0] == -9999.0
     tentative = replace(payload, content=payload.content.replace(b"321.52, ", b"321.52,*", 1))
@@ -185,16 +198,16 @@ def test_flags_control_observation_status_without_numeric_threshold() -> None:
 @pytest.mark.parametrize(
     ("flag", "code"), [("$", "source_missing"), ("#", "source_closed_station"), ("-", "source_unregistered")]
 )
-def test_native_non_observation_flags_are_distinct_and_dropped(flag: str, code: str) -> None:
-    payload = _fetched()[1]
+def test_native_non_observation_flags_are_distinct_and_dropped(retained_evidence_root, flag: str, code: str) -> None:
+    payload = _fetched(retained_evidence_root)[1]
     changed = replace(payload, content=payload.content.replace(b"321.52, ", f"321.52,{flag}".encode(), 1))
     result = parse(changed, config())
     assert result.rows.height == 743
     assert result.issues[0].code == code
 
 
-def test_nonnumeric_usable_cell_fails_loud() -> None:
-    payload = _fetched()[1]
+def test_nonnumeric_usable_cell_fails_loud(retained_evidence_root) -> None:
+    payload = _fetched(retained_evidence_root)[1]
     changed = replace(payload, content=payload.content.replace(b"321.52, ", b"unknown, ", 1))
     unsupported = parse(changed, config())
     assert unsupported.rows.is_empty()
@@ -213,14 +226,14 @@ def _request() -> ObservationRequest:
     )
 
 
-def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts() -> None:
+def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts(retained_evidence_root) -> None:
     assert isinstance(declaration.observations, LiveStages)
     result = drive(
         _request(),
         declaration.observations.stages,
         provenance=ObservationProvenance(source="recording", provider_id=ProviderId("jp_mlit")),
         receipts=ReceiptMode.INCLUDE,
-        transport=ReplayTransport(_PATHS),
+        transport=ReplayTransport(_recording_paths(retained_evidence_root)),
     )
     assert result.canonical_rows.group_by("product_id").len().sort("product_id")["len"].to_list() == [27, 143, 27, 648]
     assert result.canonical_rows.columns == [
@@ -236,7 +249,9 @@ def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts() ->
         "value",
     ]
     assert len(result.receipts.entries) == 8
-    assert [entry.content for entry in result.receipts.entries] == [read_recording(path).content for path in _PATHS]
+    assert [entry.content for entry in result.receipts.entries] == [
+        read_recording(path).content for path in _recording_paths(retained_evidence_root)
+    ]
     request_parameters = [entry.origin.request_parameters for entry in result.receipts.entries]
     assert all(isinstance(parameters, Mapping) for parameters in request_parameters)
     assert (
@@ -257,14 +272,16 @@ def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts() ->
         declaration.observations.stages,
         provenance=ObservationProvenance(source="recording", provider_id=ProviderId("jp_mlit")),
         receipts=ReceiptMode.OMIT,
-        transport=ReplayTransport(_PATHS),
+        transport=ReplayTransport(_recording_paths(retained_evidence_root)),
     )
     assert omitted.receipts.entries == ()
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_public_selection_uses_corrected_ids_and_exact_eight_call_replay(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(_PATHS))
+def test_public_selection_uses_corrected_ids_and_exact_eight_call_replay(
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(_recording_paths(retained_evidence_root)))
     selection = rr.find(provider="jp_mlit", station=_STATION)
     assert set(rr.as_frame(selection)["product_id"]) == set(_PRODUCTS)
     assert not any(product.endswith("_mean") for product in rr.as_frame(selection)["product_id"])
