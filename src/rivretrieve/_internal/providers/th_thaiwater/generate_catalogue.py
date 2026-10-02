@@ -632,10 +632,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--availability-evidence", type=Path, help="Required reviewed graph availability ledger for build mode."
     )
-    parser.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
+    parser.add_argument("--native", type=Path, help="Path to the retained native Parquet table.")
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--retrieved-at")
+    parser.add_argument("--evidence-root", type=Path, help="External retained inputs in repository-relative layout.")
     args = parser.parse_args(argv)
 
     if args.out is not None and args.native_out is not None:
@@ -652,6 +653,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--retrieved-at is only valid with refresh mode")
         if args.availability_evidence is None:
             parser.error("--out requires --availability-evidence")
+        if args.evidence_root is None:
+            parser.error("--out requires --evidence-root")
         from rivretrieve._internal.providers.th_thaiwater.origins import (
             NATIVE_TABLE_BYTE_SIZE,
             NATIVE_TABLE_SHA256,
@@ -665,7 +668,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         availability_evidence = GraphAvailabilityEvidence(args.availability_evidence.read_bytes())
         catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS, availability_evidence)
-        verify_provenance_recordings(catalogue.acquisition_provenance, Path(__file__).resolve().parents[5])
+        verify_provenance_recordings(catalogue.acquisition_provenance, args.evidence_root)
         write_catalogue(catalogue, args.out)
         return 0
 

@@ -21,7 +21,6 @@ from rivretrieve._internal.providers.jp_mlit.fetch import fetch
 from rivretrieve._internal.providers.jp_mlit.parse import parse
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
-_DATA = Path(__file__).parent / "test_data"
 _PROVIDER = ProviderId("jp_mlit")
 _STATION = "301011281104010"
 _CASES = (
@@ -32,10 +31,10 @@ _CASES = (
 )
 
 
-def _recordings(product: ProductId):
+def _recordings(product: ProductId, evidence_root: Path):
     return (
-        read_recording(_DATA / f"jp_mlit_{product}_2023_html.recording.json"),
-        read_recording(_DATA / f"jp_mlit_{product}_2023_dat.recording.json"),
+        read_recording(evidence_root / "tests/test_data" / f"jp_mlit_{product}_2023_html.recording.json"),
+        read_recording(evidence_root / "tests/test_data" / f"jp_mlit_{product}_2023_dat.recording.json"),
     )
 
 
@@ -60,12 +59,12 @@ def _runner(product: ProductId):
     return run
 
 
-def test_every_product_has_exact_two_call_source_boundary_probe() -> None:
+def test_every_product_has_exact_two_call_source_boundary_probe(retained_evidence_root) -> None:
     probes = tuple(
         BoundaryProbe(
             provider_id=_PROVIDER,
             product_id=product,
-            recordings=_recordings(product),
+            recordings=_recordings(product, retained_evidence_root),
             assertions={
                 READING_COUNT: count,
                 FIRST_WALL_CLOCK_TIME: WallClockExpectation(first, "unknown"),

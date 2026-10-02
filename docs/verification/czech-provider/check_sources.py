@@ -1,3 +1,4 @@
+import argparse
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -5,8 +6,13 @@ from pathlib import Path
 import requests  # noqa: TID251 - independent publisher research, not provider transport
 from pypdf import PdfReader
 
-out = Path("docs/verification/czech-provider/source-checks")
-out.mkdir(exist_ok=True)
+parser = argparse.ArgumentParser(description="Check CHMI source pages and retain fresh responses externally.")
+parser.add_argument("--out", type=Path, required=True, help="External directory for new source responses.")
+args = parser.parse_args()
+out = args.out.expanduser().resolve()
+if any((parent / ".git").exists() for parent in (out, *out.parents)):
+    parser.error("--out must be outside source checkouts")
+out.mkdir(parents=True, exist_ok=True)
 urls = {
     "institution": "https://www.chmi.cz/o-chmu",
     "open-data": "https://www.chmi.cz/o-chmu/produkty-a-sluzby/data-a-vyhodnoceni",

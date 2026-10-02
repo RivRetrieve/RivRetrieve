@@ -1240,7 +1240,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to a Hubeau temperature/station JSON fixture (used with --hydro-fixture).",
     )
     parser.add_argument("--native-capture", type=Path, help="Acquisition manifest for the supplied native snapshot.")
-    parser.add_argument("--native", type=Path, help="Committed native Parquet input for canonical build.")
+    parser.add_argument("--native", type=Path, help="Retained native Parquet input for canonical build.")
+    parser.add_argument(
+        "--evidence-root",
+        type=Path,
+        help="External retained inputs in their repository-relative layout, required for canonical build.",
+    )
     parser.add_argument(
         "--availability-ledger", type=Path, help="Reviewed compressed France station-product availability ledger."
     )
@@ -1267,6 +1272,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--out is required for canonical build")
         if args.availability_ledger is None:
             parser.error("--availability-ledger is required for canonical build")
+        if args.evidence_root is None:
+            parser.error("--evidence-root is required for canonical build")
         availability = decode_availability(lzma.decompress(args.availability_ledger.read_bytes()))
         from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
@@ -1285,7 +1292,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             availability,
             native_capture=capture,
         )
-        verify_provenance_recordings(catalogue.acquisition_provenance, Path(__file__).resolve().parents[5])
+        verify_provenance_recordings(catalogue.acquisition_provenance, args.evidence_root)
         write_catalogue(catalogue, args.out)
         return 0
 

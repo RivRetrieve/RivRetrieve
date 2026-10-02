@@ -620,7 +620,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Generate the packaged ba_fhmzbih catalogue artifacts.",
         allow_abbrev=False,
     )
-    parser.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
+    parser.add_argument("--native", type=Path, help="Path to the retained native Parquet table.")
     parser.add_argument("--native-payload", type=Path, help="Path to an attested layers/20 JSON payload.")
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
@@ -628,6 +628,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--workbook-access-ledger", type=Path, help="Reviewed workbook access JSON ledger.")
     parser.add_argument("--series-recording", type=Path, help="Exact layer-20 recording with L1 source identities.")
+    parser.add_argument("--evidence-root", type=Path, help="External inputs in repository-relative layout.")
     args = parser.parse_args(argv)
 
     if args.native_payload is not None and (args.native is not None or args.out is not None):
@@ -675,6 +676,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.series_recording is None:
         parser.error("--native requires --series-recording")
+    if args.evidence_root is None:
+        parser.error("--native requires --evidence-root")
     from rivretrieve._internal.recordings import read_recording
 
     if hashlib.sha256(args.series_recording.read_bytes()).hexdigest() != SERIES_RECORDING_SHA256:
@@ -683,7 +686,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if series_recording.request.url != METADATA_URL:
         raise FatalContractError("Bosnia series recording must identify the layer-20 source")
     workbook_access = TypeAdapter(WorkbookAccessLedger).validate_json(args.workbook_access_ledger.read_bytes())
-    verify_provenance_recordings(build_acquisition_provenance(workbook_access), Path(__file__).resolve().parents[5])
+    verify_provenance_recordings(build_acquisition_provenance(workbook_access), args.evidence_root.resolve())
     from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
 
     catalogue = build_catalogue(

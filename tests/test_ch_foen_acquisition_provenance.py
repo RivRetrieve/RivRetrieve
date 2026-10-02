@@ -31,8 +31,8 @@ def test_swiss_provenance_separates_bafu_from_existenz() -> None:
     }
 
 
-def test_swiss_terms_recordings_and_native_bytes_are_verified(tmp_path: Path) -> None:
-    verify_provenance_recordings(build_acquisition_provenance(), Path.cwd())
+def test_swiss_terms_recordings_and_native_bytes_are_verified(retained_evidence_root: Path, tmp_path: Path) -> None:
+    verify_provenance_recordings(build_acquisition_provenance(), retained_evidence_root)
     for name in (
         "ch_foen_terms_bafu.html",
         "ch_foen_terms_existenz.html",
@@ -45,16 +45,20 @@ def test_swiss_terms_recordings_and_native_bytes_are_verified(tmp_path: Path) ->
         source = Path("tests/test_data") / name
         target = tmp_path / source
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(source.read_bytes())
+        target.write_bytes((retained_evidence_root / source).read_bytes())
     target = tmp_path / "tests/test_data/ch_foen_terms_existenz.html"
     target.write_bytes(target.read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="ch_foen_terms_existenz digest mismatch"):
         verify_provenance_recordings(build_acquisition_provenance(), tmp_path)
     native = tmp_path / "native.parquet"
-    shutil.copy2("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet", native)
+    shutil.copy2(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet", native
+    )
     native.write_bytes(native.read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
-        main(["--native", str(native), "--out", str(tmp_path / "out")])
+        main(
+            ["--native", str(native), "--out", str(tmp_path / "out")] + ["--evidence-root", str(retained_evidence_root)]
+        )
 
 
 def test_swiss_real_loader_rejects_runtime_capture_for_catalogue_facts(tmp_path: Path) -> None:

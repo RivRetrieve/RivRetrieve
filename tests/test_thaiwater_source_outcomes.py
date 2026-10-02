@@ -27,10 +27,10 @@ from rivretrieve._internal.providers.th_thaiwater.fetch import ThThaiWaterGraphR
 from rivretrieve._internal.providers.th_thaiwater.issue_codes import ThThaiWaterObservationIssueCodes
 
 
-def _recorded_database_failure() -> Payload:
+def _recorded_database_failure(retained_evidence_root: Path) -> Payload:
     # This is the complete historical source answer plus its actual acquisition receipt.
     # It has no executed-header evidence, so is not relabelled as a current runtime-v2 interaction.
-    root = Path(__file__).resolve().parents[1] / "maintenance/catalogue/th_thaiwater"
+    root = retained_evidence_root / "maintenance/catalogue/th_thaiwater"
     request_id = "1109499_2026-06-08_2026-09-06_a1"
     with (root / "evidence/graph_receipts.csv").open(newline="") as handle:
         receipt = next(row for row in csv.DictReader(handle) if row["request_id"] == request_id)
@@ -59,10 +59,10 @@ def _recorded_database_failure() -> Payload:
     )
 
 
-def test_recorded_http200_database_failure_returns_source_issue() -> None:
+def test_recorded_http200_database_failure_returns_source_issue(retained_evidence_root: Path) -> None:
     assert isinstance(declaration.observations, LiveStages)
     stages = declaration.observations.stages
-    result = stages.parse(_recorded_database_failure(), stages.config)
+    result = stages.parse(_recorded_database_failure(retained_evidence_root), stages.config)
     assert_frame_equal(result.rows, pl.DataFrame(schema=RowsSchema.polars_schema))
     assert len(result.outcomes) == 1
     outcome = result.outcomes[0]
@@ -80,13 +80,15 @@ def test_recorded_http200_database_failure_returns_source_issue() -> None:
     assert issue.details["source_message"] == "500:  Internal Database Error ...pq: out of shared memory"
 
 
-def test_malformed_failure_message_and_broken_json_remain_identified_unsupported_outcomes() -> None:
+def test_malformed_failure_message_and_broken_json_remain_identified_unsupported_outcomes(
+    retained_evidence_root: Path,
+) -> None:
     import json
     from dataclasses import replace
 
     assert isinstance(declaration.observations, LiveStages)
     stages = declaration.observations.stages
-    payload = _recorded_database_failure()
+    payload = _recorded_database_failure(retained_evidence_root)
     document = json.loads(payload.content)
     del document["data"]
     for content, reason in (
@@ -102,13 +104,13 @@ def test_malformed_failure_message_and_broken_json_remain_identified_unsupported
         assert result.issues[0].code == "unsupported_source_structure"
 
 
-def test_unknown_result_state_is_unsupported_not_an_asserted_source_failure() -> None:
+def test_unknown_result_state_is_unsupported_not_an_asserted_source_failure(retained_evidence_root: Path) -> None:
     import json
     from dataclasses import replace
 
     assert isinstance(declaration.observations, LiveStages)
     stages = declaration.observations.stages
-    payload = _recorded_database_failure()
+    payload = _recorded_database_failure(retained_evidence_root)
     document = json.loads(payload.content)
     document["result"] = "BROKEN-CONTRACT"
     result = stages.parse(replace(payload, content=json.dumps(document).encode()), stages.config)

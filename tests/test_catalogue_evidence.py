@@ -277,11 +277,11 @@ def test_v3_parse_never_constructs_old_national_models(monkeypatch):
 # Brazil has new adopted-product acquisitions after this migration oracle.
 # Its current evidence still passes the all-provider lossless roundtrip above;
 # source-material and per-pair assertions live in test_br_ana_catalogue_telemetry.
-def _assert_usgs_modern_extension_and_restore_legacy(provenance):
+def _assert_usgs_modern_extension_and_restore_legacy(retained_evidence_root: Path, provenance):
     """Check the complete modern delta before applying the immutable legacy oracle."""
     import gzip
 
-    directory = Path(__file__).parents[1] / "research/usgs-modern-coverage"
+    directory = retained_evidence_root / "research/usgs-modern-coverage"
     legacy = _legacy("usgs_nwis", directory / "legacy-catalogue")
     previous = legacy.model_dump(mode="json")
     source = previous["source_records"][0]
@@ -402,7 +402,7 @@ def _assert_usgs_modern_extension_and_restore_legacy(provenance):
     return legacy
 
 
-def _assert_usgs_definition_extension_and_restore_original(provenance):
+def _assert_usgs_definition_extension_and_restore_original(retained_evidence_root: Path, provenance):
     """Prove the exact new publisher evidence, then compare every original assertion."""
     model = provenance.model_dump(mode="json")
     fact = "source.usgs.instantaneous_value_definition"
@@ -412,7 +412,7 @@ def _assert_usgs_definition_extension_and_restore_original(provenance):
     retrieved_at = "2026-09-19T20:58:46.743636Z"
     digest = "1cec37f8cec8173f635d4afaba2d08814347d9cff672b25c29d427b004d0b3a2"
     repository_path = "tests/test_data/usgs_nwis_instantaneous_values_definition.html"
-    source_bytes = (Path(__file__).parents[1] / repository_path).read_bytes()
+    source_bytes = (retained_evidence_root / repository_path).read_bytes()
     assert sha256(source_bytes).hexdigest() == digest
     assert b"most recent instantaneous value" in source_bytes
     expected_acquisition = {
@@ -559,7 +559,7 @@ def _assert_semantic_lineage_repair_and_restore_original(provenance):
     return AcquisitionProvenance.model_validate(model)
 
 
-def _assert_field_source_lineage_repair_and_restore_original(provenance):
+def _assert_field_source_lineage_repair_and_restore_original(retained_evidence_root: Path, provenance):
     """Check exact source-field repairs, then retain the original full ordered oracle.
 
     See source-field-conformance.md and test_source_field_boundaries.py for
@@ -643,7 +643,7 @@ def _assert_field_source_lineage_repair_and_restore_original(provenance):
         for index, (recording_id, route, instant, digest) in enumerate(recordings):
             filename = recording_id if index < 3 else "ba_fhmzbih_metadata_index"
             repository_path = f"tests/test_data/{filename}.recording.json"
-            assert sha256((Path(__file__).parents[1] / repository_path).read_bytes()).hexdigest() == digest
+            assert sha256((retained_evidence_root / repository_path).read_bytes()).hexdigest() == digest
             expected_evidence.append(
                 {
                     "evidence_id": recording_id if index < 3 else "layer20_discharge_series",
@@ -690,7 +690,7 @@ def _assert_field_source_lineage_repair_and_restore_original(provenance):
     return AcquisitionProvenance.model_validate(model)
 
 
-def _assert_swiss_credential_redaction_and_restore_original(provenance):
+def _assert_swiss_credential_redaction_and_restore_original(retained_evidence_root: Path, provenance):
     """Verify the redacted fixture before applying the immutable historical oracle.
 
     Only this comparison projection restores the old description and digest.
@@ -700,7 +700,7 @@ def _assert_swiss_credential_redaction_and_restore_original(provenance):
     source = next(item for item in model["source_records"] if item["source_id"] == "ch_existenz")
     repository_path = "tests/test_data/ch_foen_terms_existenz.html"
     digest = "b353852a474516acf404c1d8b775cc77c5cf3c97bd3055380fc4534bcba9111c"
-    source_bytes = (Path(__file__).parents[1] / repository_path).read_bytes()
+    source_bytes = (retained_evidence_root / repository_path).read_bytes()
     assert sha256(source_bytes).hexdigest() == digest
     assert source_bytes.count(b"REDACTED-PUBLISHED-READ-ONLY-TOKEN") == 1
     assert source["evidence"] == [
@@ -732,9 +732,9 @@ def _assert_swiss_credential_redaction_and_restore_original(provenance):
     return AcquisitionProvenance.model_validate(model)
 
 
-def _assert_bulk_source_history_preserved(provider, provenance):
+def _assert_bulk_source_history_preserved(retained_evidence_root: Path, provider, provenance):
     """Compare retained source inputs, not superseded output/authority assertions."""
-    path = Path(__file__).parent / "test_data/catalogue_provenance_original_v2" / f"{provider}.json"
+    path = retained_evidence_root / "tests/test_data/catalogue_provenance_original_v2" / f"{provider}.json"
     original = AcquisitionProvenance.model_validate_json(path.read_bytes())
     before = original.model_dump(mode="json")
     after = provenance.model_dump(mode="json")
@@ -846,7 +846,7 @@ def _assert_bulk_source_history_preserved(provider, provenance):
 @pytest.mark.parametrize(
     "provider", tuple(provider for provider in BUILTIN_PROVIDER_IDS if provider not in {"br_ana", "fr_hydroportail"})
 )
-def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
+def test_all_ordered_source_assertions_match_pinned_original_revision(retained_evidence_root: Path, provider):
     oracle = json.loads((Path(__file__).parent / "test_data/catalogue_provenance_ordered_v2.json").read_text())
     assert oracle["revision"] == "6f0edf6a455735cb1f8c858a1a9f35d4245cf209"
     # This expected digest comes from original v2 Git bytes, not a v3 self-roundtrip.
@@ -854,17 +854,17 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(provider):
     # authenticated evidence remains readable for research, never as a current catalogue.
     restored = _legacy(
         provider,
-        Path(__file__).parent / "test_data/french_combined_catalogue" if provider == "fr_hubeau" else None,
+        retained_evidence_root / "tests/test_data/french_combined_catalogue" if provider == "fr_hubeau" else None,
     )
     if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
-        restored = _assert_field_source_lineage_repair_and_restore_original(restored)
+        restored = _assert_field_source_lineage_repair_and_restore_original(retained_evidence_root, restored)
     if provider == "ch_foen":
-        restored = _assert_swiss_credential_redaction_and_restore_original(restored)
+        restored = _assert_swiss_credential_redaction_and_restore_original(retained_evidence_root, restored)
     if provider in {"ca_eccc", "pl_imgw", "za_dws"}:
-        restored = _assert_bulk_source_history_preserved(provider, restored)
+        restored = _assert_bulk_source_history_preserved(retained_evidence_root, provider, restored)
     if provider == "usgs_nwis":
-        restored = _assert_usgs_modern_extension_and_restore_legacy(restored)
-        restored = _assert_usgs_definition_extension_and_restore_original(restored)
+        restored = _assert_usgs_modern_extension_and_restore_legacy(retained_evidence_root, restored)
+        restored = _assert_usgs_definition_extension_and_restore_original(retained_evidence_root, restored)
         assert oracle["providers"][provider]["ordered_model_sha256"] == (
             "28e9cc34f71f4fd3712c69cc205c30b8c70d55270cfc04f90e991a55121450a0"
         )

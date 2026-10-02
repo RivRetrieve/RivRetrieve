@@ -13,15 +13,15 @@ from rivretrieve._internal.providers.jp_mlit.parse import parse
 from rivretrieve._internal.recordings import ReplayTransport
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
 from rivretrieve._internal.window_planning import plan_windows
-from tests.test_jp_mlit_observations import _PATHS, _STATION
+from tests.test_jp_mlit_observations import _STATION, _recording_paths
 
 
 class _Chunks:
-    def __init__(self, failed, role):
+    def __init__(self, failed, role, recording_paths):
         self.failed = failed
         self.role = role
         self.calls = []
-        self.replay = ReplayTransport(_PATHS)
+        self.replay = ReplayTransport(recording_paths)
         self.chunk = None
 
     def send(self, request):
@@ -69,10 +69,10 @@ def _windows(product):
 @pytest.mark.parametrize("product", ["stage_hourly", "stage_daily", "discharge_hourly", "discharge_daily"])
 @pytest.mark.parametrize("role", ["html", "dat"])
 @pytest.mark.parametrize("failed", [(2021,), (2022,), (2023,), (2021, 2022, 2023)])
-def test_independent_chunks_retain_bounds_failures_and_prerequisites(product, role, failed):
+def test_independent_chunks_retain_bounds_failures_and_prerequisites(retained_evidence_root, product, role, failed):
     product = ProductId(product)
     windows = _windows(product)
-    transport = _Chunks(failed, role)
+    transport = _Chunks(failed, role, _recording_paths(retained_evidence_root))
     result = fetch((_STATION,), (product,), {product: windows}, windows[0].bounds, config(), transport)
     assert [year for year, kind in transport.calls if kind == "html"] == [2021, 2022, 2023]
     assert len(result.failed_requests) == len(failed)
@@ -102,14 +102,14 @@ def test_independent_chunks_retain_bounds_failures_and_prerequisites(product, ro
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_public_dat_failure_retains_html_and_cache_coverage(monkeypatch, tmp_path):
+def test_public_dat_failure_retains_html_and_cache_coverage(retained_evidence_root, monkeypatch, tmp_path):
     # One public composition covers receipts, partial persistence, and retry. The
     # cheap stage matrix above exercises all independent positions and products.
     import rivretrieve as rr
     import rivretrieve._internal.discovery as discovery
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    transport = _Chunks((2022,), "dat")
+    transport = _Chunks((2022,), "dat", _recording_paths(retained_evidence_root))
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     selection = rr.find(provider="jp_mlit", station=_STATION, quantity="stage", frequency="daily")
     selection = rr.pick(selection, series_id=tuple(series.series_id for series in selection.series))
@@ -131,7 +131,7 @@ def test_public_dat_failure_retains_html_and_cache_coverage(monkeypatch, tmp_pat
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_hour_24_month_end_survives_failed_or_empty_neighbor_and_reuse(monkeypatch, tmp_path):
+def test_hour_24_month_end_survives_failed_or_empty_neighbor_and_reuse(retained_evidence_root, monkeypatch, tmp_path):
     import polars as pl
     from polars.testing import assert_frame_equal
 
@@ -141,7 +141,7 @@ def test_hour_24_month_end_survives_failed_or_empty_neighbor_and_reuse(monkeypat
 
     class Months:
         def __init__(self):
-            self.replay = ReplayTransport(_PATHS)
+            self.replay = ReplayTransport(_recording_paths(retained_evidence_root))
             self.calls = []
             self.january_failed = False
             self.february_empty = False

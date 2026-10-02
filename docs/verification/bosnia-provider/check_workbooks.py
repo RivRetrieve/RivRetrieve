@@ -1,5 +1,6 @@
 """Inspect fresh publisher workbook bytes independently of RivRetrieve parsing."""
 
+import argparse
 import json
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -9,8 +10,11 @@ from urllib.request import urlopen  # noqa: TID251 - independent source inspecti
 
 import openpyxl
 
-root = Path(__file__).parent / "source-checks"
-root.mkdir(exist_ok=True)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--out", type=Path, required=True, help="Output directory outside the checkout")
+args = parser.parse_args()
+root = args.out
+root.mkdir(parents=True, exist_ok=True)
 
 
 def acquire(url, name):

@@ -1,4 +1,4 @@
-"""Lithuania documentation checks over committed recorded responses, not live verification."""
+"""Lithuania documentation checks over retained recorded responses, not live verification."""
 
 import io
 import re
@@ -10,14 +10,14 @@ import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "docs/verification/lithuania-provider"
+EVIDENCE = Path("docs/verification/lithuania-provider")
 
 
-def test_lithuania_page_examples_match_recorded_responses(monkeypatch, tmp_path):
+def test_lithuania_page_examples_match_recorded_responses(retained_evidence_root, monkeypatch, tmp_path):
     page = (ROOT / "docs/providers/lt_lhmt.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.S)
     assert len(blocks) == page.count("```python") == 1
-    replay = ReplayTransport(sorted((EVIDENCE / "recordings").glob("*.recording.json")))
+    replay = ReplayTransport(sorted((retained_evidence_root / EVIDENCE / "recordings").glob("*.recording.json")))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     namespace = {}

@@ -41,7 +41,7 @@ def test_france_public_evidence_and_descriptor_fit_normalized_budget() -> None:
 
 
 def test_real_france_generator_does_not_render_national_acquisition_graph(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import main
 
@@ -65,8 +65,10 @@ def test_real_france_generator_does_not_render_national_acquisition_graph(
     try:
         result = main(
             [
+                "--evidence-root",
+                str(retained_evidence_root),
                 "--native",
-                str(CATALOGUE / "native.parquet"),
+                str(retained_evidence_root / CATALOGUE.relative_to(ROOT) / "native.parquet"),
                 "--native-capture",
                 str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"),
                 "--availability-ledger",

@@ -6,11 +6,9 @@ import lzma
 from collections import Counter
 from pathlib import Path
 
-root = Path(__file__).resolve().parents[4]
-evidence = Path(__file__).resolve().parents[1] / "evidence"
 
-
-def load(n):
+def load(root: Path, n: str):
+    evidence = root / "maintenance/catalogue/fr_hydroportail/evidence"
     if n in {"hubeau-stations-valid", "hubeau-temperature"}:
         filename = (
             "hydrometry-stations-2026-09-21.json.xz"
@@ -21,8 +19,8 @@ def load(n):
     return json.loads((evidence / (n + ".body")).read_bytes())
 
 
-def stations(n):
-    sites = load(n)
+def stations(root: Path, n: str):
+    sites = load(root, n)
     rows = [dict(s, site_code=site["bookmarkCode"]) for site in sites for s in site["stations"]]
     assert len(rows) == len({s["bookmarkCode"] for s in rows})
     assert all(s["entityType"] == "station" for s in rows)
@@ -31,19 +29,30 @@ def stations(n):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument(
+        "--availability-ledger",
+        type=Path,
+        default=Path(__file__).resolve().parents[2] / "fr_hubeau/inventory/governing_evidence.json.xz",
+    )
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
+    args.out = args.out.resolve()
+    if any((parent / ".git").exists() for parent in (args.out, *args.out.parents)):
+        parser.error("Output must be outside source checkouts")
+    root = args.evidence_root.resolve()
+    evidence = root / "maintenance/catalogue/fr_hydroportail/evidence"
     out = args.out.resolve()
-    if out == evidence.resolve():
+    if out.is_relative_to(root):
         raise ValueError("Use a separate output directory; retained evidence is immutable")
     out.mkdir(parents=True, exist_ok=True)
-    hb = {s["code_station"]: s for s in load("hubeau-stations-valid")["data"]}
+    hb = {s["code_station"]: s for s in load(root, "hubeau-stations-valid")["data"]}
     old = {
         s["code_station"]: s
         for s in json.loads((root / "tests/test_data/fr_hubeau_referentiel_stations_full.json").read_text())["data"]
     }
-    base = stations("national-alltypes")
-    native = stations("national-tests")
+    base = stations(root, "national-alltypes")
+    native = stations(root, "national-tests")
     missing = sorted(hb.keys() - native.keys())
     metadata = []
     for code, s in native.items():
@@ -84,7 +93,7 @@ def main():
         "hubeau_old": len(old),
         "hubeau_added": sorted(hb.keys() - old.keys()),
         "hubeau_removed": sorted(old.keys() - hb.keys()),
-        "hydroportail_sites": len(load("national-tests")),
+        "hydroportail_sites": len(load(root, "national-tests")),
         "hydroportail_stations": len(native),
         "hydroportail_status": dict(Counter(s["entityStatus"] for s in native.values())),
         "test_filter_additions": sorted(native.keys() - base.keys()),
@@ -100,23 +109,11 @@ def main():
         "site_differences": sum(not m["site_equal"] for m in metadata),
         "maximum_coordinate_difference": max(m["maximum_coordinate_difference"] for m in metadata),
         "coordinate_differences_over_1e_6": [m for m in metadata if m["maximum_coordinate_difference"] > 1e-6],
-        "hubeau_temperature": load("hubeau-temperature")["count"],
+        "hubeau_temperature": load(root, "hubeau-temperature")["count"],
     }
     (out / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2))
-    print(
-        json.dumps(
-            {
-                k: v
-                for k, v in summary.items()
-                if k not in ["coordinate_differences_over_1e_6", "test_filter_additions", "hubeau_added"]
-            },
-            indent=2,
-        )
-    )
 
-    ledger = json.loads(
-        lzma.decompress((root / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz").read_bytes())
-    )
+    ledger = json.loads(lzma.decompress(args.availability_ledger.read_bytes()))
     old_availability = [
         pair
         for pair in ledger["pairs"]

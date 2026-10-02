@@ -6,7 +6,7 @@ These notes capture evidence and handoff context from the `th_thaiwater` provide
 
 | Endpoint | Role | Credential | Notes |
 | --- | --- | --- | --- |
-| `https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load` | Maintainer-side native-table refresh input; returns all telemetered stations in one response. | None. Public ThaiWater Open API. | Canonical artefacts are built offline from committed `native.parquet` plus origins. |
+| `https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load` | Maintainer-side native-table refresh input; returns all telemetered stations in one response. | None. Public ThaiWater Open API. | Canonical artefacts are built offline from externally retained `native.parquet` plus origins. |
 | `https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_graph` | Runtime observation retrieval. Query params: `station_type=tele_waterlevel`, `station_id`, `start_date` (YYYY-MM-DD), `end_date` (YYYY-MM-DD). | None. | Returns a `data.graph_data` list with `datetime`, `value` (stage in m), and `discharge` (m³/s) fields per row. |
 
 ## Observation Time and Zone
@@ -26,7 +26,7 @@ compact separators, `ensure_ascii=False`, and UTF-8 produces SHA-256
 verbatim parser subset, not a native-table source. The native table preserves 61 lexicographically
 ordered dotted source columns and widens only values needed for a lossless scalar dtype. The source
 population has changed relative to the legacy catalogue: 87 new IDs are present and 16 legacy IDs are
-absent, so the 825-row result is source churn rather than a missing filter. The committed native-frame
+absent, so the 825-row result is source churn rather than a missing filter. The retained native-frame
 digest and semantic comparison are held by `catalogue/provenance.json`, origins, and generator tests.
 
 The publisher coordinate-standard page was captured at `2026-08-02T13:51:44Z` as
@@ -37,7 +37,7 @@ the origin-evidence receipt; it documents coordinate semantics and contributes n
 
 | Legacy / source field | Canonical target | Provider metadata | Decision |
 | --- | --- | --- | --- |
-| `station.id` | `station_id` | Native table | Exact identity copy of the committed String value; `station.tele_station_oldcode` is not identity. `provider_id` is authored by RivRetrieve. |
+| `station.id` | `station_id` | Native table | Exact identity copy of the retained String value; `station.tele_station_oldcode` is not identity. `provider_id` is authored by RivRetrieve. |
 | `station.tele_station_name.*` | No canonical column | Native table | Multilingual source values remain readable in `native.parquet`. |
 | `station.tele_station_lat`, `station.tele_station_long` | `latitude`, `longitude` | Native table | Exact decimal values, cast only to canonical schema dtypes. Null values fail the build. |
 | `river_name`, `geocode.*`, `basin.*`, `agency.*` | No canonical columns | Native table | Source vocabulary remains readable in `native.parquet`; RivRetrieve does not adjudicate these labels. |
@@ -78,7 +78,7 @@ No unit conversion is required.
 
 ## Station Count
 
-825 stations at catalogue version `2026-08-02`, built offline from committed `native.parquet` plus the five station origins. Every native row is required to have `station_type == "tele_waterlevel"`, non-null latitude and longitude, and a unique String `station.id`; violations fail the build rather than being filtered, dropped, or deduplicated.
+825 stations at catalogue version `2026-08-02`, built offline from externally retained `native.parquet` plus the five station origins. Every native row is required to have `station_type == "tele_waterlevel"`, non-null latitude and longitude, and a unique String `station.id`; violations fail the build rather than being filtered, dropped, or deduplicated.
 
 The packaged station-product carrier now contains all **1,650 source-evidenced pairs**
 over the original 825 station IDs. Positive availability is 813 stage and 283 discharge;
@@ -96,9 +96,10 @@ acquisition date, not the native metadata capture date or a fabricated common in
 | Selectable unknown pairs | 0 | 554 |
 
 The 25 original IDs absent from the later 1,405-row snapshot remain. The 605 newly
-observed IDs are not added. The machine-readable source account is
-`maintenance/catalogue/th_thaiwater/inventory/governing_summary.json`; the exact
-per-pair acquisition/material ledger sits beside it. The capture corpus remains private,
+observed IDs are not added. The archive retains the historical source account as
+`maintenance/catalogue/th_thaiwater/inventory/governing_summary.json`. The reviewed
+per-pair acquisition/material ledger remains in
+`maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv`. The capture corpus remains private,
 not an observation archive published with these catalogues. A current caller can ask
 windows beyond the recorded research dates; the source may return measurements,
 timestamped nulls, an empty answer or an explicit issue.
@@ -136,3 +137,8 @@ null capture establishes honoured source dates, not historical observations.
 | Response publishes two products together | Provider fetch supports a two-product payload; public calls remain product-wise. | Preserve each actual call and receipt. |
 | Elevation and drainage area | Not canonical station columns under the identity/geometry contract. | Preserve source facts in the native table; do not infer values. |
 | Multilingual station names | Preserved in flattened native columns. | Keep source language values unchanged. |
+
+Retained source recordings and native inputs are retrieved from the private archive.
+See the [catalogue maintenance instructions](../../maintenance/catalogue/th_thaiwater/README.md)
+for explicit local input roots. Repository-relative evidence paths identify archive members,
+not in-tree source files.

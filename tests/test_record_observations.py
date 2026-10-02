@@ -45,9 +45,9 @@ def _client(sender):
     return HttpClient(sender=sender, clock=clock, sleeper=clock.sleep)
 
 
-def _nve_source_response(request, observation_body=_EMPTY_SERIES):
+def _nve_source_response(request, retained_evidence_root: Path, observation_body=_EMPTY_SERIES):
     """Match metadata to exact publisher bytes and observations to an authored empty control."""
-    metadata = read_recording(Path(__file__).parent / "test_data/no_nve_series_1.200.0_1000.recording.json")
+    metadata = read_recording(retained_evidence_root / "tests/test_data/no_nve_series_1.200.0_1000.recording.json")
     if request.url == metadata.request.url:
         assert dict(request.params) == dict(metadata.request.parameters)
         return metadata.content, metadata.status_code, metadata.content_type
@@ -82,12 +82,14 @@ def test_recording_transport_reports_the_wrapped_credential_scope() -> None:
     assert RecordingTransport(HttpClient()).can_authenticate(f"{_ORIGIN}/api/v1/Observations") is False
 
 
-def test_credentialed_recording_keeps_the_header_name_and_never_the_value(tmp_path: Path) -> None:
+def test_credentialed_recording_keeps_the_header_name_and_never_the_value(
+    tmp_path: Path, retained_evidence_root: Path
+) -> None:
     seen_headers: list[dict[str, str]] = []
 
     def sender(request, timeout_seconds):
         seen_headers.append(dict(request.headers))
-        return _nve_source_response(request)
+        return _nve_source_response(request, retained_evidence_root)
 
     written = record_observations(
         "no_nve",
@@ -113,14 +115,14 @@ def test_credentialed_recording_keeps_the_header_name_and_never_the_value(tmp_pa
     assert metadata.request.url == f"{_ORIGIN}/api/v1/Series"
     assert (
         metadata.content
-        == read_recording(Path(__file__).parent / "test_data/no_nve_series_1.200.0_1000.recording.json").content
+        == read_recording(retained_evidence_root / "tests/test_data/no_nve_series_1.200.0_1000.recording.json").content
     )
     assert observation.content == _EMPTY_SERIES
     assert observation.request.parameters["VersionNumber"] == 1
     assert observation.request.parameters["ReferenceTime"] == "1900-01-01T00:00:00Z/1900-01-07T23:59:59.999999Z"
 
 
-def test_recording_main_resolves_declared_exchange_below_recorder(tmp_path, monkeypatch):
+def test_recording_main_resolves_declared_exchange_below_recorder(tmp_path, monkeypatch, retained_evidence_root: Path):
     from dataclasses import replace
 
     from rivretrieve._internal import record_observations as recorder
@@ -158,7 +160,7 @@ def test_recording_main_resolves_declared_exchange_below_recorder(tmp_path, monk
     token = "TEST-TOKEN-SENTINEL"
     seen = []
     payload = read_recording(
-        Path(__file__).parent / "test_data/no_nve_1.200.0_1000_1440_1900-01-01_1900-01-07.recording.json"
+        retained_evidence_root / "tests/test_data/no_nve_1.200.0_1000_1440_1900-01-01_1900-01-07.recording.json"
     ).content
 
     def sender(request, timeout_seconds):
@@ -168,7 +170,7 @@ def test_recording_main_resolves_declared_exchange_below_recorder(tmp_path, monk
             assert dict(request.headers)["password"] == "TEST-PASSWORD-SENTINEL"
             return json.dumps({"token": token}).encode(), 200, "application/json"
         assert dict(request.headers)["Authorization"] == f"Bearer {token}"
-        return _nve_source_response(request, payload)
+        return _nve_source_response(request, retained_evidence_root, payload)
 
     monkeypatch.setattr(recorder, "HttpClient", lambda: _client(sender))
     assert (
@@ -258,6 +260,7 @@ def test_recording_main_preflights_declared_credentials(tmp_path, monkeypatch, m
 
 @pytest.mark.parametrize("stations", [("1.200.0",), ("0.protocol", "1.200.0")])
 def test_recording_main_reports_rejected_exchange_and_preserves_safe_partial_recordings(
+    retained_evidence_root: Path,
     tmp_path,
     monkeypatch,
     capsys,
@@ -287,7 +290,7 @@ def test_recording_main_reports_rejected_exchange_and_preserves_safe_partial_rec
     monkeypatch.setenv("TEST_PASSWORD", "REJECTED-PASSWORD-SENTINEL")
     calls = []
     payload = read_recording(
-        Path(__file__).parent / "test_data/no_nve_1.200.0_1000_1440_1900-01-01_1900-01-07.recording.json"
+        retained_evidence_root / "tests/test_data/no_nve_1.200.0_1000_1440_1900-01-01_1900-01-07.recording.json"
     ).content
 
     def sender(request, timeout_seconds):
@@ -332,12 +335,14 @@ def test_recording_main_reports_rejected_exchange_and_preserves_safe_partial_rec
     assert "no source exchange was issued" not in captured.out
 
 
-def test_recording_main_retains_not_found_response_without_error_exit(tmp_path, monkeypatch):
+def test_recording_main_retains_not_found_response_without_error_exit(
+    tmp_path, monkeypatch, retained_evidence_root: Path
+):
     from rivretrieve._internal import record_observations as recorder
 
     monkeypatch.setenv("NVE_API_KEY", _SECRET)
     recording = read_recording(
-        Path(__file__).parent / "test_data/no_nve_12.210.0_1003_1440_2025-07-08_2025-07-14.recording.json"
+        retained_evidence_root / "tests/test_data/no_nve_12.210.0_1003_1440_2025-07-08_2025-07-14.recording.json"
     )
 
     def sender(request, timeout_seconds):
@@ -375,13 +380,15 @@ def test_recording_main_retains_not_found_response_without_error_exit(tmp_path, 
 
 
 @pytest.mark.parametrize("current_inventory", ["published", "empty"])
-def test_recorder_routes_catalogue_owned_versions_through_real_provider_fetch(tmp_path, current_inventory):
+def test_recorder_routes_catalogue_owned_versions_through_real_provider_fetch(
+    tmp_path, current_inventory, retained_evidence_root: Path
+):
     """The recorder must compose source inventory before the versioned fetch stage."""
     sent = []
 
     def sender(request, timeout_seconds):
         sent.append(request)
-        response = _nve_source_response(request)
+        response = _nve_source_response(request, retained_evidence_root)
         if request.url.endswith("/Series") and current_inventory == "empty":
             # Authored current absence cannot erase an acquired historical version.
             return b'{"itemCount":0,"data":[]}', 200, "application/json"

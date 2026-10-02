@@ -305,7 +305,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--native", type=Path, required=True)
     parser.add_argument("--native-revision", required=True)
-    parser.add_argument("--repository-root", type=Path, required=True)
+    parser.add_argument(
+        "--evidence-root",
+        "--repository-root",
+        dest="evidence_root",
+        type=Path,
+        required=True,
+        help="External retained inputs in their repository-relative layout (--repository-root is an alias).",
+    )
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--availability-ledger", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
@@ -315,10 +322,10 @@ def main(argv: list[str] | None = None) -> int:
         args.evidence / "national-tests.body", args.evidence / "national-tests.receipt.json"
     )
     if not native.data.equals(captured.data):
-        raise ValueError("committed native table differs from captured publisher inventory")
+        raise ValueError("retained native table differs from captured publisher inventory")
     material = args.native.read_bytes()
     identity = NativeTableIdentity(
-        repository_path=args.native.resolve().relative_to(args.repository_root.resolve()).as_posix(),
+        repository_path=args.native.resolve().relative_to(args.evidence_root.resolve()).as_posix(),
         revision=args.native_revision,
         sha256=hashlib.sha256(material).hexdigest(),
         byte_size=len(material),
@@ -339,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
                     recording_id=name,
                     repository_path=(args.evidence / f"{name}.body")
                     .resolve()
-                    .relative_to(args.repository_root.resolve())
+                    .relative_to(args.evidence_root.resolve())
                     .as_posix(),
                     source_url=record["url"],
                     retrieved_at=datetime.fromisoformat(record["retrieved_at"]),
@@ -349,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, historical, receipt, tuple(documents), identity)
-    verify_provenance_recordings(catalogue.acquisition_provenance, args.repository_root)
+    verify_provenance_recordings(catalogue.acquisition_provenance, args.evidence_root)
     write_catalogue(catalogue, args.out)
     return 0
 

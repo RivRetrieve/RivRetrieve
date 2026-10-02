@@ -25,7 +25,7 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
-DATA = Path(__file__).parent / "test_data"
+DATA = Path("tests/test_data")
 
 
 @pytest.mark.parametrize(
@@ -64,10 +64,10 @@ DATA = Path(__file__).parent / "test_data"
     ],
 )
 def test_recorded_public_boundaries_keep_exact_identity_and_blank_rows(
-    monkeypatch, station, product, code, start, end, count, first, last
+    retained_evidence_root, monkeypatch, station, product, code, start, end, count, first, last
 ):
-    metadata = read_recording(DATA / "ba_fhmzbih_metadata_index.recording.json")
-    workbook = read_recording(DATA / f"ba_fhmzbih_{station}_{code}_1Y.recording.json")
+    metadata = read_recording(retained_evidence_root / DATA / "ba_fhmzbih_metadata_index.recording.json")
+    workbook = read_recording(retained_evidence_root / DATA / f"ba_fhmzbih_{station}_{code}_1Y.recording.json")
     results = []
 
     def run(replay):
@@ -102,9 +102,9 @@ def test_recorded_public_boundaries_keep_exact_identity_and_blank_rows(
         assert result.data["value"][-1] == pytest.approx(expected)
 
 
-def test_recorded_empty_temperature_remains_selectable_and_keeps_receipts(monkeypatch):
+def test_recorded_empty_temperature_remains_selectable_and_keeps_receipts(retained_evidence_root, monkeypatch):
     recordings = tuple(
-        read_recording(DATA / name)
+        read_recording(retained_evidence_root / DATA / name)
         for name in ("ba_fhmzbih_metadata_index.recording.json", "ba_fhmzbih_2101-B_WT_1Y.recording.json")
     )
     replay = ReplayTransport(recordings)

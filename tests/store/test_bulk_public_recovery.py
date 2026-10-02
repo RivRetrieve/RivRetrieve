@@ -43,17 +43,18 @@ def test_public_failed_bulk_compile_requires_explicit_clear_then_retries(
     monkeypatch: pytest.MonkeyPatch,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
     provider_id: str,
+    retained_evidence_root: Path,
 ) -> None:
     if provider_id == "ca_eccc":
         operations = ca_declaration.observations
-        valid = (Path(__file__).parents[1] / "test_data" / "ca_eccc_02GA010_2020_01_derived_input.zip").read_bytes()
+        valid = (retained_evidence_root / "tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip").read_bytes()
         expected_pending_name = "publisher-artifact.download"
         failure_type: type[Exception] = sqlite3.DatabaseError
     else:
         declared = pl_declaration.observations
         assert isinstance(declared, BulkStore)
         operations = BulkStore(declared.config, _poland_one_month, declared.compile)
-        valid = read_recording(Path(__file__).parents[1] / "test_data" / "pl_imgw_codz_2022_01.recording.json").content
+        valid = read_recording(retained_evidence_root / "tests/test_data/pl_imgw_codz_2022_01.recording.json").content
         expected_pending_name = "publisher-artifact.download-codz_2022_01.zip"
         failure_type = ValueError
     assert isinstance(operations, BulkStore)

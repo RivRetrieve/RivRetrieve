@@ -38,8 +38,8 @@ def selection():
 
 
 @pytest.fixture(scope="module")
-def recording():
-    return body("daily-07374000-docs-2023")
+def recording(retained_evidence_root):
+    return body("daily-07374000-docs-2023", evidence_root=retained_evidence_root)
 
 
 def _content(recording, value, *, numeric_token=None, sibling=True):
@@ -70,13 +70,13 @@ def _content(recording, value, *, numeric_token=None, sibling=True):
     return content
 
 
-def _install(monkeypatch, tmp_path, recording, value, *, numeric_token=None, sibling=True):
+def _install(monkeypatch, tmp_path, recording, value, *, numeric_token=None, sibling=True, retained_evidence_root):
     content = _content(recording, value, numeric_token=numeric_token, sibling=sibling)
     calls = []
 
     class AuthoredTransport(ModernReplay):
         def __init__(self):
-            super().__init__("daily-07374000-docs-2023")
+            super().__init__("daily-07374000-docs-2023", evidence_root=retained_evidence_root)
 
         def send(self, request):
             response = super().send(request)
@@ -172,9 +172,16 @@ def test_invalid_measurement_parser_preserves_identified_sibling(recording, valu
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_unrepresentable_measurement_is_isolated_and_cannot_authorize_coverage(
-    monkeypatch, tmp_path, recording, selection, value, numeric_token, policy
+    monkeypatch, tmp_path, recording, selection, value, numeric_token, policy, retained_evidence_root
 ):
-    content, calls = _install(monkeypatch, tmp_path, recording, value, numeric_token=numeric_token)
+    content, calls = _install(
+        monkeypatch,
+        tmp_path,
+        recording,
+        value,
+        numeric_token=numeric_token,
+        retained_evidence_root=retained_evidence_root,
+    )
     if numeric_token:
         assert numeric_token.encode() in content
     context = (
@@ -223,9 +230,11 @@ def test_unrepresentable_measurement_is_isolated_and_cannot_authorize_coverage(
 )
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_representable_measurement_retains_numeric_or_null_state_and_successful_coverage(
-    monkeypatch, tmp_path, recording, selection, value, expected
+    monkeypatch, tmp_path, recording, selection, value, expected, retained_evidence_root
 ):
-    content, calls = _install(monkeypatch, tmp_path, recording, value, sibling=False)
+    content, calls = _install(
+        monkeypatch, tmp_path, recording, value, sibling=False, retained_evidence_root=retained_evidence_root
+    )
     result = _fetch(selection, "raise")
     assert result.data.height == 1
     if expected is None:

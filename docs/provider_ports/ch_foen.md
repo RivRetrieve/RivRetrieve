@@ -4,7 +4,7 @@
 
 ## Runtime sources
 
-Recent observations use anonymous `GET https://api.existenz.ch/apiv1/hydro/daterange`. The publisher describes this surface as historical values up to 32 days in the past. Older observations use `POST https://influx.konzept.space/api/v2/query?org=api.existenz.ch` with the `existenzApi` bucket and `hydro` measurement when the engine supplies an exact-origin-scoped Influx credential. Public credential loading is not part of this port. Without that composition input, the engine has only the anonymous REST surface and its publisher-stated 32-day horizon; unavailable or empty source results are not replaced with guessed values. Flux `range` has an exclusive stop. Exact REST and Flux interactions are committed as secret-safe `RecordingEnvelope`s under `tests/test_data/ch_foen_*.recording.json`.
+Recent observations use anonymous `GET https://api.existenz.ch/apiv1/hydro/daterange`. The publisher describes this surface as historical values up to 32 days in the past. Older observations use `POST https://influx.konzept.space/api/v2/query?org=api.existenz.ch` with the `existenzApi` bucket and `hydro` measurement when the engine supplies an exact-origin-scoped Influx credential. Public credential loading is not part of this port. Without that composition input, the engine has only the anonymous REST surface and its publisher-stated 32-day horizon; unavailable or empty source results are not replaced with guessed values. Flux `range` has an exclusive stop. Exact REST and Flux interactions are retained in the private source archive as `RecordingEnvelope`s with identities under `tests/test_data/ch_foen_*.recording.json`.
 
 The source publishes explicit UTC. Neither exact observation response publishes quality data, so the adapter does not infer quality. Raw publisher bytes remain available only through opt-in receipts.
 
@@ -33,3 +33,28 @@ The catalogue evidence URL uses the `#hydro` fragment. The fragment was not sent
 ## Catalogue
 
 The packaged catalogue remains unchanged: 246 stations, three products, and 738 station-product rows with unknown source-published availability. Catalogue generation remains maintainer-only. The retired implementation under `reference/legacy_observations/ch_foen` was deleted only after exact REST and Flux fetch-and-parse proofs passed.
+
+## Retained inputs and offline checks
+
+Retrieve the exact ch_foen inputs using the private source archive instructions
+and [verification guide](../maintenance/evidence.md). Keep them outside source
+checkouts in their repository-relative layout. Set
+`RIVRETRIEVE_TEST_EVIDENCE_ROOT` to that external root before running:
+
+```sh
+uv run pytest tests/test_ch_foen*.py -q --tb=no -p no:cacheprovider
+```
+
+Build the catalogue from the retained native table and verified source recordings:
+
+```sh
+uv run python -m rivretrieve._internal.providers.ch_foen.generate_catalogue \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet" \
+  --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --out "$CATALOGUE_OUTPUT"
+```
+
+Choose `CATALOGUE_OUTPUT` as a separate build output directory. Native tables
+and recordings are external build inputs. Packaged catalogue products remain
+runtime inputs and do not require archive access. Missing retained inputs block
+the corresponding checks. Keep detailed test output private.

@@ -13,8 +13,6 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
-DATA = Path(__file__).parent / "test_data"
-
 
 class AlteredResponseTransport:
     def __init__(self, recordings, alter):
@@ -44,10 +42,10 @@ def invalid_workbook_time(content):
     return output.getvalue()
 
 
-def test_bosnia_invalid_row_cannot_become_successful_coverage(monkeypatch, tmp_path):
+def test_bosnia_invalid_row_cannot_become_successful_coverage(retained_evidence_root: Path, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     recordings = tuple(
-        read_recording(DATA / name)
+        read_recording(retained_evidence_root / "tests/test_data" / name)
         for name in ("ba_fhmzbih_metadata_index.recording.json", "ba_fhmzbih_2101-B_Q_1Y.recording.json")
     )
     transport = AlteredResponseTransport(
@@ -61,10 +59,10 @@ def test_bosnia_invalid_row_cannot_become_successful_coverage(monkeypatch, tmp_p
     assert not any(outcome.status in ("success", "empty") for outcome in result.outcomes)
 
 
-def test_bosnia_does_not_silently_accept_first_of_multiple_sheets(monkeypatch, tmp_path):
+def test_bosnia_does_not_silently_accept_first_of_multiple_sheets(retained_evidence_root: Path, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     recordings = tuple(
-        read_recording(DATA / name)
+        read_recording(retained_evidence_root / "tests/test_data" / name)
         for name in ("ba_fhmzbih_metadata_index.recording.json", "ba_fhmzbih_2101-B_Q_1Y.recording.json")
     )
     transport = AlteredResponseTransport(
@@ -82,8 +80,8 @@ def test_bosnia_does_not_silently_accept_first_of_multiple_sheets(monkeypatch, t
 
 
 @pytest.mark.parametrize("bad_index", [b"{", b"{}", b"[]"])
-def test_bosnia_external_index_failure_is_retained_not_fatal(monkeypatch, bad_index):
-    recording = read_recording(DATA / "ba_fhmzbih_metadata_index.recording.json")
+def test_bosnia_external_index_failure_is_retained_not_fatal(retained_evidence_root: Path, monkeypatch, bad_index):
+    recording = read_recording(retained_evidence_root / "tests/test_data" / "ba_fhmzbih_metadata_index.recording.json")
     transport = AlteredResponseTransport((recording,), lambda request, body: bad_index)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     result = rr.fetch(
@@ -100,10 +98,12 @@ def test_bosnia_external_index_failure_is_retained_not_fatal(monkeypatch, bad_in
 
 
 @pytest.mark.parametrize("next_value", [123, "https://example.org/untrusted"])
-def test_france_invalid_pagination_preserves_independent_series(monkeypatch, tmp_path, next_value):
+def test_france_invalid_pagination_preserves_independent_series(
+    retained_evidence_root: Path, monkeypatch, tmp_path, next_value
+):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     recordings = tuple(
-        read_recording(DATA / name)
+        read_recording(retained_evidence_root / "tests/test_data" / name)
         for name in (
             "fr_hubeau_1011000101_QmnJ_padded.recording.json",
             "fr_hubeau_1011000101_QIXnJ_padded.recording.json",
@@ -177,21 +177,24 @@ def test_hydroportail_title_establishes_statistic_not_frequency(quantity):
     assert all(item.facts[0].frequency.value is None for item in selected.series)
 
 
-def test_hydroportail_contradictory_temporal_title_is_unsupported():
+def test_hydroportail_contradictory_temporal_title_is_unsupported(retained_evidence_root: Path):
     from rivretrieve._internal.providers.fr_hydroportail.config import config
     from rivretrieve._internal.providers.fr_hydroportail.parse import parse
     from tests.test_fr_hydroportail_station import _empty_payload
 
-    payload = _empty_payload()
+    payload = _empty_payload(retained_evidence_root)
     document = json.loads(payload.content)
     document["series"]["title"] = "Débit moyen"
     parsed = parse(replace(payload, content=json.dumps(document).encode()), config())
     assert parsed.outcomes[0].status == "unsupported"
 
 
-def test_temperature_published_unit_spelling_survives_public_result(monkeypatch):
+def test_temperature_published_unit_spelling_survives_public_result(retained_evidence_root: Path, monkeypatch):
     recordings = tuple(
-        read_recording(DATA / f"fr_hubeau_01001336_temp_padded_p{i}.recording.json") for i in range(1, 6)
+        read_recording(
+            retained_evidence_root / "tests/test_data" / f"fr_hubeau_01001336_temp_padded_p{i}.recording.json"
+        )
+        for i in range(1, 6)
     )
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(recordings))
     result = rr.fetch(
@@ -202,9 +205,12 @@ def test_temperature_published_unit_spelling_survives_public_result(monkeypatch)
     assert result.data["source_unit"].unique().to_list() == ["°C"]
 
 
-def test_temperature_contradictory_response_unit_is_not_admitted(monkeypatch):
+def test_temperature_contradictory_response_unit_is_not_admitted(retained_evidence_root: Path, monkeypatch):
     recordings = tuple(
-        read_recording(DATA / f"fr_hubeau_01001336_temp_padded_p{i}.recording.json") for i in range(1, 6)
+        read_recording(
+            retained_evidence_root / "tests/test_data" / f"fr_hubeau_01001336_temp_padded_p{i}.recording.json"
+        )
+        for i in range(1, 6)
     )
 
     def alter(request, body):
@@ -224,10 +230,15 @@ def test_temperature_contradictory_response_unit_is_not_admitted(monkeypatch):
     assert any(outcome.status == "unsupported" for outcome in result.outcomes)
 
 
-def test_france_late_bad_continuation_cannot_certify_partial_interval(monkeypatch, tmp_path):
+def test_france_late_bad_continuation_cannot_certify_partial_interval(
+    retained_evidence_root: Path, monkeypatch, tmp_path
+):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     recordings = tuple(
-        read_recording(DATA / f"fr_hubeau_01001336_temp_padded_p{i}.recording.json") for i in range(1, 6)
+        read_recording(
+            retained_evidence_root / "tests/test_data" / f"fr_hubeau_01001336_temp_padded_p{i}.recording.json"
+        )
+        for i in range(1, 6)
     )
     last = recordings[-1].content
 
@@ -263,10 +274,10 @@ def test_france_late_bad_continuation_cannot_certify_partial_interval(monkeypatc
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
-def test_bosnia_index_issue_policy_cannot_admit_numbers(monkeypatch, policy):
+def test_bosnia_index_issue_policy_cannot_admit_numbers(retained_evidence_root: Path, monkeypatch, policy):
     from rivretrieve._internal.issues import IssuePolicyError
 
-    recording = read_recording(DATA / "ba_fhmzbih_metadata_index.recording.json")
+    recording = read_recording(retained_evidence_root / "tests/test_data" / "ba_fhmzbih_metadata_index.recording.json")
     monkeypatch.setattr(
         discovery, "HttpClient", lambda: AlteredResponseTransport((recording,), lambda request, body: b"{}")
     )
@@ -283,9 +294,9 @@ def test_bosnia_index_issue_policy_cannot_admit_numbers(monkeypatch, policy):
         assert result.data.is_empty() and result.issues
 
 
-def test_bosnia_missing_source_route_preserves_independent_station(monkeypatch):
+def test_bosnia_missing_source_route_preserves_independent_station(retained_evidence_root: Path, monkeypatch):
     recordings = tuple(
-        read_recording(DATA / name)
+        read_recording(retained_evidence_root / "tests/test_data" / name)
         for name in ("ba_fhmzbih_metadata_index.recording.json", "ba_fhmzbih_4024_Q_1Y.recording.json")
     )
 
@@ -328,7 +339,9 @@ def test_bosnia_physics_lineage_uses_all_three_published_workbook_headers():
     from rivretrieve._internal.providers.ba_fhmzbih.origins import WorkbookAccessLedger, build_acquisition_provenance
 
     ledger = TypeAdapter(WorkbookAccessLedger).validate_json(
-        Path("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json").read_bytes()
+        (
+            Path(__file__).parents[1] / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
+        ).read_bytes()
     )
     provenance = build_acquisition_provenance(ledger)
     binding = next(item for item in provenance.fact_bindings if "source.product.native_physics" in item.facts)

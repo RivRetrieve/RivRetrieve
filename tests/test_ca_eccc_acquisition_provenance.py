@@ -33,21 +33,23 @@ def test_canada_provenance_separates_geomet_from_hydat() -> None:
     }
 
 
-def test_canada_terms_recordings_and_native_bytes_are_verified(tmp_path: Path) -> None:
-    verify_provenance_recordings(build_acquisition_provenance(), Path.cwd())
+def test_canada_terms_recordings_and_native_bytes_are_verified(retained_evidence_root: Path, tmp_path: Path) -> None:
+    verify_provenance_recordings(build_acquisition_provenance(), retained_evidence_root)
     evidence = Path("tests/test_data/ca_eccc_terms_licence.html")
     target = tmp_path / evidence
     target.parent.mkdir(parents=True)
-    target.write_bytes(evidence.read_bytes().replace(b"worldwide", b"worldwidX", 1))
+    target.write_bytes((retained_evidence_root / evidence).read_bytes().replace(b"worldwide", b"worldwidX", 1))
     citation = Path("tests/test_data/ca_eccc_terms_citation.html")
-    (tmp_path / citation).write_bytes(citation.read_bytes())
+    (tmp_path / citation).write_bytes((retained_evidence_root / citation).read_bytes())
     with pytest.raises(FatalContractError, match="ca_eccc_terms_licence digest mismatch"):
         verify_provenance_recordings(build_acquisition_provenance(), tmp_path)
     native = tmp_path / "native.parquet"
-    shutil.copy2("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet", native)
+    shutil.copy2(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet", native
+    )
     native.write_bytes(native.read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
-        main(["--native", str(native), "--out", str(tmp_path / "out")])
+        main(["--native", str(native), "--out", str(tmp_path / "out"), "--evidence-root", str(retained_evidence_root)])
 
 
 def test_canada_canonical_carriers_are_rivretrieve_transformations() -> None:
@@ -167,7 +169,7 @@ def test_canada_real_loader_rejects_runtime_lineage_for_a_packaged_product(tmp_p
         load_packaged_catalogue_artifact(mutated, on_issue="raise")
 
 
-def test_canada_real_recording_rejects_an_empty_quotation(tmp_path: Path) -> None:
+def test_canada_real_recording_rejects_an_empty_quotation(retained_evidence_root: Path, tmp_path: Path) -> None:
     del tmp_path
     provenance = build_acquisition_provenance()
     document = provenance.model_dump(mode="python")
@@ -176,7 +178,7 @@ def test_canada_real_recording_rejects_an_empty_quotation(tmp_path: Path) -> Non
         AcquisitionProvenance.model_validate(document)
 
     recording = provenance.source_records[0].evidence[0].recording
-    body = Path(recording.repository_path).read_bytes()
+    body = (retained_evidence_root / recording.repository_path).read_bytes()
     with pytest.raises(FatalContractError, match="quotation must be non-empty"):
         verify_recorded_statement(
             recording_name="ca_eccc.empty",

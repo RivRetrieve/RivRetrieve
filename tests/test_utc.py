@@ -231,9 +231,10 @@ def test_to_utc_unknown_zones_refuse_atomically_with_provider_and_count(
 
 
 def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
+    retained_evidence_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    recording = read_recording(RECORDING_PATH)
+    recording = read_recording(retained_evidence_root / RECORDING_PATH)
     fixture_bytes = recording.content
     origin = SourceCallOrigin(
         url=recording.request.url,

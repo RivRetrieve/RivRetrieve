@@ -8,7 +8,7 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
-from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
+from tests.usgs_modern_recordings import ModernReplay, body, coordinates, manifest
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
@@ -42,9 +42,11 @@ def test_offline_mixed_explicit_members_preserve_each_unresolved_selector():
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
-def test_public_mixed_nve_member_is_not_silently_omitted(monkeypatch, tmp_path, policy):
+def test_public_mixed_nve_member_is_not_silently_omitted(monkeypatch, tmp_path, policy, retained_evidence_root: Path):
     recording = read_recording(
-        Path(__file__).parent / "test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
+        retained_evidence_root
+        / "tests"
+        / "test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
@@ -80,14 +82,17 @@ def test_public_mixed_nve_member_is_not_silently_omitted(monkeypatch, tmp_path, 
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
-def test_narrowed_result_policy_ignores_excluded_failure_but_preserves_history(monkeypatch, tmp_path, policy):
+def test_narrowed_result_policy_ignores_excluded_failure_but_preserves_history(
+    monkeypatch, tmp_path, policy, retained_evidence_root: Path
+):
     import warnings
 
     import polars.testing as pl_testing
 
     recordings = tuple(
         read_recording(
-            Path(__file__).parent
+            retained_evidence_root
+            / "tests"
             / f"test_data/no_nve_109.42.0_1001_1440_version-{version}_engine_2024-01-02.recording.json"
         )
         for version in (1, 99999)
@@ -133,12 +138,16 @@ def test_narrowed_result_policy_ignores_excluded_failure_but_preserves_history(m
     assert [item.code for item in empty_error.value.issues] == ["selection.no_match"]
 
 
-def test_public_mixed_missing_member_survives_inspection_bundle_and_narrowing(monkeypatch, tmp_path):
+def test_public_mixed_missing_member_survives_inspection_bundle_and_narrowing(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     import polars as pl
     import polars.testing as pl_testing
 
     recording = read_recording(
-        Path(__file__).parent / "test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
+        retained_evidence_root
+        / "tests"
+        / "test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
@@ -167,7 +176,9 @@ def test_public_mixed_missing_member_survives_inspection_bundle_and_narrowing(mo
     assert narrowed.issues[: len(result.issues)] == result.issues
 
 
-def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(monkeypatch, tmp_path):
+def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     """Exact known-series replay plus an authored unknown-selector empty response."""
     from datetime import datetime
 
@@ -175,13 +186,13 @@ def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(m
 
     name = "daily-02196000-2000-current"
     current = "0df18b246e8f48ec8e6547a92070e94a"
-    replay = ModernReplay(name)
+    replay = ModernReplay(name, evidence_root=retained_evidence_root)
 
     class UnknownSelectorControl:
         def send(self, request):
             if request.params.get("time_series_id") == current:
                 return replay.send(request)
-            expected_url, expected_params = coordinates(MANIFEST[name]["original_url"])
+            expected_url, expected_params = coordinates(manifest(retained_evidence_root)[name]["original_url"])
             expected_params = tuple(
                 sorted((key, "not-published" if key == "time_series_id" else value) for key, value in expected_params)
             )
@@ -189,7 +200,7 @@ def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(m
             return TransportResponse(
                 b'{"type":"FeatureCollection","features":[],"links":[]}',
                 200,
-                datetime.fromisoformat(MANIFEST[name]["acquired_utc"]),
+                datetime.fromisoformat(manifest(retained_evidence_root)[name]["acquired_utc"]),
                 "application/json",
                 request.url,
                 request.params,
@@ -226,8 +237,12 @@ def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(m
     assert any(item.code == "selection.unresolved_inventory" for item in missing_view.issues)
 
 
-def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(monkeypatch, tmp_path):
-    recording = read_recording(Path(__file__).parent / "test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
+def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
+    recording = read_recording(
+        retained_evidence_root / "tests" / "test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json"
+    )
     monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
     monkeypatch.chdir(tmp_path)
     calls = _counted_replay(monkeypatch, (recording,))
@@ -242,7 +257,9 @@ def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(mon
     assert not any(item.status.value in ("no_match", "unresolved") for item in result.outcomes)
 
 
-def test_response_discovered_global_ids_are_settled_across_station_results(monkeypatch, tmp_path):
+def test_response_discovered_global_ids_are_settled_across_station_results(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     """Controlled protocol bodies exercise real USGS parsing and public result composition.
 
     The second station response is authored test input, not publisher evidence.
@@ -253,7 +270,7 @@ def test_response_discovered_global_ids_are_settled_across_station_results(monke
     from rivretrieve._internal.engine import Payload, SourceCallOrigin, SourceCoordinates, UnknownOriginFact, WithIssues
     from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 
-    content = body("daily-07374000-docs-2023")
+    content = body("daily-07374000-docs-2023", evidence_root=retained_evidence_root)
     calls = []
 
     def acquire(stations, products, rendered_windows, fetch_window, config, transport, *, scope=None, known_series=()):
@@ -313,20 +330,23 @@ def test_response_discovered_global_ids_are_settled_across_station_results(monke
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
-def test_finite_view_does_not_report_original_all_inventory_uncertainty(monkeypatch, tmp_path, policy):
+def test_finite_view_does_not_report_original_all_inventory_uncertainty(
+    monkeypatch, tmp_path, policy, retained_evidence_root: Path
+):
     import warnings
     from dataclasses import replace
 
     recordings = tuple(
         read_recording(
-            Path(__file__).parent
+            retained_evidence_root
+            / "tests"
             / f"test_data/no_nve_109.42.0_1001_1440_version-{version}_engine_2024-01-02.recording.json"
         )
         for version in (1, 2, 3)
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
-    metadata = read_recording(Path(__file__).parent / "test_data/no_nve_109.42.0_1001_series.recording.json")
+    metadata = read_recording(retained_evidence_root / "tests" / "test_data/no_nve_109.42.0_1001_series.recording.json")
     # Authored service-failure control over an exact matched request. A successful
     # current Series response now settles inventory, so it cannot test uncertainty.
     metadata = replace(metadata, status_code=503, content=b"Service unavailable", content_type="text/plain")
@@ -377,7 +397,9 @@ def test_finite_view_does_not_report_original_all_inventory_uncertainty(monkeypa
     assert not positive_warnings
 
 
-def test_global_id_view_excludes_other_inventory_search_coordinates(monkeypatch, tmp_path):
+def test_global_id_view_excludes_other_inventory_search_coordinates(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     """Use real Swiss acquisition/parsing with authored ALL-inventory diagnostics."""
     import warnings
 
@@ -386,7 +408,9 @@ def test_global_id_view_excludes_other_inventory_search_coordinates(monkeypatch,
     from rivretrieve._internal.providers.ch_foen.declaration import declaration
     from rivretrieve._internal.source_series import SeriesScope
 
-    recording = read_recording(Path(__file__).parent / "test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
+    recording = read_recording(
+        retained_evidence_root / "tests" / "test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json"
+    )
     monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
     calls = _counted_replay(monkeypatch, (recording,))
     original = declaration.observations.stages.fetch
@@ -447,9 +471,13 @@ def test_global_id_view_excludes_other_inventory_search_coordinates(monkeypatch,
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 @pytest.mark.parametrize("restriction", ["disjoint", "empty-list"])
-def test_current_empty_result_view_diagnostics_follow_policy(monkeypatch, tmp_path, policy, restriction):
+def test_current_empty_result_view_diagnostics_follow_policy(
+    monkeypatch, tmp_path, policy, restriction, retained_evidence_root: Path
+):
     recording = read_recording(
-        Path(__file__).parent / "test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
+        retained_evidence_root
+        / "tests"
+        / "test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")

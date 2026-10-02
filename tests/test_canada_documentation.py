@@ -12,7 +12,7 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs/providers/ca_eccc.md"
-EVIDENCE = ROOT / "docs/verification/canada-provider"
+EVIDENCE = Path("docs/verification/canada-provider")
 
 
 def test_canada_documentation_snippets_are_valid_current_python():
@@ -36,8 +36,10 @@ def test_canada_documentation_selection_matches_packaged_catalogue():
     ]
 
 
-def test_canada_source_references_and_index_link():
-    index = json.loads((EVIDENCE / "sources/INDEX.json").read_text())
+def test_canada_source_references_and_index_link(
+    retained_evidence_root: Path,
+):
+    index = json.loads((retained_evidence_root / EVIDENCE / "sources/INDEX.json").read_text())
     assert index
     for metadata in index.values():
         assert metadata["status"] == 200

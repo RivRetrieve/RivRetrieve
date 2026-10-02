@@ -93,8 +93,8 @@ series discovered in the observation response.
    historical inventory.
 
 This is a publisher-computed daily mean, not a mean calculated by RivRetrieve.
-The [recording and acquisition manifest](../tests/test_data/usgs_modern/README.md)
-retain the September 22, 2026 source evidence. Modern continuous observations
+The private [source archive](maintenance/evidence.md) retains the recordings and
+acquisition manifest from September 22, 2026. Modern continuous observations
 retain their published UTC offsets. No station time zone is inferred.
 See [USGS discovery](usgs-discovery.md) for variants, unknown statistics and limits.
 
@@ -230,7 +230,7 @@ Users do not supply this credential. Publisher credential rotation requires a li
 
 Catalogue builds check canonical columns against declared origins and acquisition evidence.
 Canonical station columns describe identity and geometry, not harmonised names, river labels, or quality judgements.
-Native tables remain repository build inputs rather than a public wheel API.
+Native tables are verified archive inputs supplied to catalogue builds. They are not a public wheel API.
 `drainage_areas` reads a small packaged projection of established drainage-area
 fields at provider-station grain. It preserves source vocabulary and values,
 including explicit null and no-metadata states, without changing canonical facts.
@@ -238,7 +238,8 @@ See [drainage-area metadata](drainage-areas.md) for the output and offline build
 `describe` reads the packaged Croissant descriptor offline.
 The current evidence representation uses a typed header and five normalized relations, with explicit resolution of individual fact lineage.
 
-Observation tests replay saved real interactions through the transport seam.
+Observation tests read explicitly supplied archive inputs outside the checkout and
+replay saved real interactions through the transport seam.
 Replay refuses a request that has no matching recording, so changed request bounds cannot receive an unrelated answer.
 Boundary probes assert source-checkable counts and first and last native labels.
 These checks establish behavior against recorded interactions, not current service availability.

@@ -54,8 +54,7 @@ def test_independent_chunks_keep_precise_bounds(product, failed):
 
 
 @pytest.mark.parametrize("failed_month", ["2024-01", "2024-02"])
-def test_daily_driver_retains_healthy_month_and_failed_call(failed_month):
-    from pathlib import Path
+def test_daily_driver_retains_healthy_month_and_failed_call(retained_evidence_root, failed_month):
 
     from rivretrieve._internal.driver import drive
     from rivretrieve._internal.engine import ObservationRequest, RequestedWindow
@@ -74,7 +73,7 @@ def test_daily_driver_retains_healthy_month_and_failed_call(failed_month):
         def __init__(self):
             super().__init__(
                 list(
-                    (Path(__file__).parent / "recordings/br_ana").glob(
+                    (retained_evidence_root / "tests/recordings/br_ana").glob(
                         "HidroSerieVazao_15400000_2024-0[12]-01_*.recording.json"
                     )
                 )
@@ -139,7 +138,7 @@ def test_unbounded_rendering_is_a_fatal_contract_error():
 
 
 @pytest.mark.parametrize("malformed", [False, True])
-def test_equal_ana_responses_keep_acquisition_identity_and_call_linkage(malformed):
+def test_equal_ana_responses_keep_acquisition_identity_and_call_linkage(retained_evidence_root, malformed):
     from dataclasses import replace
 
     from rivretrieve._internal.providers.br_ana.parse import parse
@@ -157,7 +156,7 @@ def test_equal_ana_responses_keep_acquisition_identity_and_call_linkage(malforme
         {product: windows},
         window,
         config(),
-        ReplayTransport([_recording(product, "2024-01")]),
+        ReplayTransport([_recording(retained_evidence_root, product, "2024-01")]),
     ).value[0]
     first = replace(original, content=b"{}") if malformed else original
     second = replace(first, acquisition_id="another-ana-call")

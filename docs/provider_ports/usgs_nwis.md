@@ -1,5 +1,10 @@
 # usgs_nwis Provider Port Notes
 
+This is a historical WaterServices implementation record. Current provider behavior
+is described in the USGS provider documentation. Original recordings are retained
+in the private source archive; their paths below identify historical inputs.
+
+
 The USGS provider reads NWIS Water Services directly, without credentials.
 See [Architecture](../architecture.md) for the shared retrieval stages.
 
@@ -35,11 +40,11 @@ Source-call failures become shared issues for the affected series; HTTP 404 uses
 ## Time and rows
 
 Instantaneous values carry an offset. Parse keeps the source wall-clock timestamp
-and puts its offset in `time_zone`. The [instantaneous recording](../../tests/test_data/usgs_nwis_07374000_iv_00060_2023-01-01.recording.json)
-contains `2023-01-01T00:00:00.000-06:00`. The [DST recording](../../tests/test_data/usgs_nwis_07374000_iv_00060_2023-03-12.recording.json)
+and puts its offset in `time_zone`. The [instantaneous recording](https://github.com/RivRetrieve/verification-evidence)
+contains `2023-01-01T00:00:00.000-06:00`. The [DST recording](https://github.com/RivRetrieve/verification-evidence)
 changes from `01:45-06:00` to `03:00-05:00` on 2023-03-12.
 
-Daily values are local-date labels with no stated zone. The [daily recording](../../tests/test_data/usgs_nwis_07374000_dv_00060_00003_2023-01-01_2023-01-03.recording.json)
+Daily values are local-date labels with no stated zone. The [daily recording](https://github.com/RivRetrieve/verification-evidence)
 contains `2023-01-01T00:00:00.000`; parse retains midnight and reports `unknown`.
 The payload's `sourceInfo.timeZoneInfo` describes the station. It is not applied
 to daily values. A midnight label does not establish the daily interval's zone.
@@ -59,7 +64,7 @@ and [instantaneous values](https://waterservices.usgs.gov/docs/instantaneous-val
 
 ## Catalogue
 
-The committed native table contains 26,258 stations and 2,036,546 aligned
+The retained historical native table contains 26,258 stations and 2,036,546 aligned
 source-series rows from the 50 states plus DC. Catalogue refresh requests RDB
 from `https://waterservices.usgs.gov/nwis/site/`, using `siteType=ST`,
 `hasDataTypeCd=dv`, `parameterCd=00060,00065`, and each `stateCd`.

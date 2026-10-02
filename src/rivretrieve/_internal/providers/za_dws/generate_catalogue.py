@@ -739,12 +739,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     source.add_argument("--fixture", type=Path, help="Path to a stations JSON fixture.")
     source.add_argument("--live", action="store_true", help="Scrape the live DWS station PDFs.")
     source.add_argument("--archive-dir", type=Path, help="Directory containing supplied capture payloads.")
-    source.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
+    source.add_argument("--native", type=Path, help="Path to the retained native Parquet table.")
     parser.add_argument("--manifest", type=Path, help="Manifest for supplied capture payloads.")
     destination = parser.add_mutually_exclusive_group(required=True)
     destination.add_argument("--native-out", type=Path, help="Output path for a refreshed native table.")
     destination.add_argument("--out", type=Path, help="Output directory for canonical artifacts.")
     parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
+    parser.add_argument(
+        "--evidence-root", type=Path, help="External root containing repository-relative retained inputs."
+    )
     args = parser.parse_args(argv)
 
     if args.archive_dir is None and args.manifest is not None:
@@ -782,7 +785,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         build_acquisition_provenance,
     )
 
-    verify_provenance_recordings(build_acquisition_provenance(), Path(__file__).resolve().parents[5])
+    if args.evidence_root is None:
+        parser.error("--evidence-root is required with --out")
+    verify_provenance_recordings(build_acquisition_provenance(), args.evidence_root)
     native_table = read_native_table(
         args.native,
         expected_sha256=NATIVE_TABLE_SHA256,

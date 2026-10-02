@@ -708,8 +708,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     destination.add_argument("--native-out", type=Path)
     destination.add_argument("--out", type=Path)
     parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
+    parser.add_argument("--evidence-root", type=Path, help="External archive inputs in repository-relative layout.")
     args = parser.parse_args(argv)
     if args.native_out is not None:
+        if args.evidence_root is not None:
+            parser.error("--evidence-root is only valid with canonical generation")
         if args.native is not None:
             parser.error("--native cannot be used with --native-out")
         if args.retrieved_at is None:
@@ -727,7 +730,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--out requires --native")
     if args.retrieved_at is not None:
         parser.error("--retrieved-at is only valid with refresh mode")
-    verify_provenance_recordings(build_acquisition_provenance(), Path(__file__).resolve().parents[5])
+    if args.evidence_root is None:
+        parser.error("--evidence-root is required with --out")
+    verify_provenance_recordings(build_acquisition_provenance(), args.evidence_root.resolve())
     from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
 
     write_catalogue(

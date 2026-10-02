@@ -75,9 +75,11 @@ def test_accumulation_rejects_copied_internal_normalization_contradiction(tmp_pa
     assert not store.exists()
 
 
-def test_public_recorded_bundle_import_refuses_scale_changed_facts(monkeypatch, tmp_path):
+def test_public_recorded_bundle_import_refuses_scale_changed_facts(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay("daily-07374000-docs-2023"))
+    monkeypatch.setattr(
+        discovery, "HttpClient", lambda: ModernReplay("daily-07374000-docs-2023", evidence_root=retained_evidence_root)
+    )
     selection = rr.find(
         provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
     )
@@ -101,7 +103,7 @@ def test_public_recorded_bundle_import_refuses_scale_changed_facts(monkeypatch, 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 @pytest.mark.parametrize("answer_rows", ["nonempty", "empty", "unsupported_empty"])
 def test_public_recorded_conversion_rejects_internal_scale_change_under_every_policy(
-    monkeypatch, tmp_path, policy, answer_rows
+    monkeypatch, tmp_path, policy, answer_rows, retained_evidence_root: Path
 ):
     from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
     from tests.usgs_modern_recordings import ModernReplay
@@ -109,7 +111,9 @@ def test_public_recorded_conversion_rejects_internal_scale_change_under_every_po
     stages = declaration.observations.stages
     original = stages.parse
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay("daily-07374000-docs-2023"))
+    monkeypatch.setattr(
+        discovery, "HttpClient", lambda: ModernReplay("daily-07374000-docs-2023", evidence_root=retained_evidence_root)
+    )
 
     def corrupt_parse(payload, config):
         parsed = original(payload, config)

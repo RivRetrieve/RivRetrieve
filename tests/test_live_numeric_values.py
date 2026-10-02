@@ -25,7 +25,6 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.recordings import read_recording
 
-DATA = Path(__file__).parent / "test_data"
 BAD = ("huge_integer", "large_exponent", "nan", "infinity", "negative_infinity")
 TOKENS = {
     "huge_integer": "9" * 401,
@@ -40,7 +39,7 @@ TOKENS = {
 
 
 @lru_cache
-def _source(provider):
+def _source(retained_evidence_root: Path, provider):
     config = import_module(f"rivretrieve._internal.providers.{provider}.config").config()
     parse = import_module(f"rivretrieve._internal.providers.{provider}.parse").parse
     cases = {
@@ -58,7 +57,7 @@ def _source(provider):
         "jp_mlit": ("jp_mlit_stage_hourly_2023_dat.recording.json", "301011281104010", "stage_hourly"),
     }
     filename, station, product = cases[provider]
-    recording = read_recording(DATA / filename)
+    recording = read_recording(retained_evidence_root / "tests/test_data" / filename)
     source = Payload(
         config.products[ProductId(product)].coordinates,
         ((station, ProductId(product)),),
@@ -95,7 +94,11 @@ def _source(provider):
         source = replace(source, source_coordinates=SourceCoordinates(JpMlitPayloadCoordinates(2, "dat")))
     if provider == "no_nve":
         document = json.loads(source.content)
-        sibling = read_recording(DATA / "no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json")
+        sibling = read_recording(
+            retained_evidence_root
+            / "tests/test_data"
+            / "no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json"
+        )
         document["data"].extend(json.loads(sibling.content)["data"])
         source = replace(source, content=json.dumps(document).encode())
     baseline = parse(source, config)
@@ -177,8 +180,8 @@ def _mutated(provider, source, mutation):
         if (provider, mutation) != ("jp_mlit", "null")
     ],
 )
-def test_actual_live_parser_isolates_unrepresentable_numeric_cells(provider, mutation):
-    config, parse, source, baseline, target = _source(provider)
+def test_actual_live_parser_isolates_unrepresentable_numeric_cells(retained_evidence_root: Path, provider, mutation):
+    config, parse, source, baseline, target = _source(retained_evidence_root, provider)
     changed = parse(replace(source, content=_mutated(provider, source, mutation)), config)
     outcome = next(item for item in changed.outcomes if item.series_id == target)
     if mutation in BAD:
@@ -196,19 +199,20 @@ def test_actual_live_parser_isolates_unrepresentable_numeric_cells(provider, mut
     )
 
 
-def test_workbook_boolean_is_not_a_numeric_observation():
-    config, parse, source, _, target = _source("ba_fhmzbih")
+def test_workbook_boolean_is_not_a_numeric_observation(retained_evidence_root: Path):
+    config, parse, source, _, target = _source(retained_evidence_root, "ba_fhmzbih")
     changed = parse(replace(source, content=_mutated("ba_fhmzbih", source, "boolean")), config)
     assert next(item for item in changed.outcomes if item.series_id == target).status == "unsupported"
 
 
 @pytest.mark.parametrize("mutation", [*BAD, "zero", "finite", "null"])
-def test_ana_decimal_string_guard_preserves_consistency_sibling(mutation):
+def test_ana_decimal_string_guard_preserves_consistency_sibling(retained_evidence_root: Path, mutation):
     from rivretrieve._internal.providers.br_ana.config import config
     from rivretrieve._internal.providers.br_ana.parse import parse
     from tests.test_representative_source_series import payload
 
     source = payload(
+        retained_evidence_root,
         "tests/recordings/br_ana/HidroSerieCotas_15400000_2020-01-01_2020-01-31.recording.json",
         "15400000",
         "stage_daily_mean_bruto",
@@ -232,8 +236,8 @@ def test_ana_decimal_string_guard_preserves_consistency_sibling(mutation):
     )
 
 
-def test_japan_published_missing_flag_remains_absent_not_invalid_numeric():
-    config, parse, source, baseline, _ = _source("jp_mlit")
+def test_japan_published_missing_flag_remains_absent_not_invalid_numeric(retained_evidence_root: Path):
+    config, parse, source, baseline, _ = _source(retained_evidence_root, "jp_mlit")
     content = source.content.replace(b"321.52, ", b"321.52,$", 1)
     result = parse(replace(source, content=content), config)
     assert result.rows.height == baseline.rows.height - 1

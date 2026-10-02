@@ -12,8 +12,10 @@ from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 
 
 @pytest.mark.parametrize("provider", ["ca_eccc", "pl_imgw"])
-def test_certified_native_bulk_retains_concrete_identity_and_physical_units(tmp_path: Path, provider: str) -> None:
-    data = Path(__file__).parent / "test_data"
+def test_certified_native_bulk_retains_concrete_identity_and_physical_units(
+    tmp_path: Path, provider: str, retained_evidence_root: Path
+) -> None:
+    data = retained_evidence_root / "tests/test_data"
     store = StoreRoot(tmp_path / "store")
     if provider == "ca_eccc":
         from rivretrieve._internal.providers.ca_eccc.bulk import HydatCompileRequest, compile_hydat

@@ -15,12 +15,17 @@ from tests.test_cz_chmi_observations import _DQ, _HQ, _STATION
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
+@pytest.fixture
+def recording(retained_evidence_root):
+    return read_recording(retained_evidence_root / _DQ)
+
+
 class AnnualTransport:
-    def __init__(self, responses=None, value=1):
+    def __init__(self, recording, responses=None, value=1):
         self.responses = responses or {}
         self.value = value
         self.calls = []
-        self.document = json.loads(read_recording(_DQ).content)
+        self.document = json.loads(recording.content)
 
     def send(self, request):
         year = int(request.url.rsplit("_", 1)[-1].split(".")[0])
@@ -51,8 +56,8 @@ def fetch(**kwargs):
 
 
 @pytest.mark.parametrize("failed", [(2021,), (2022,), (2023,), (2021, 2022, 2023)])
-def test_independent_annual_failure_positions(monkeypatch, failed):
-    transport = AnnualTransport(dict.fromkeys(failed, 404))
+def test_independent_annual_failure_positions(recording, monkeypatch, failed):
+    transport = AnnualTransport(recording, dict.fromkeys(failed, 404))
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     result = fetch(cache="bypass", receipts=True)
     assert transport.calls == [2021, 2022, 2023]
@@ -66,9 +71,9 @@ def test_independent_annual_failure_positions(monkeypatch, failed):
 
 
 @pytest.mark.parametrize("failed", [2021, 2023])
-def test_partial_refresh_persists_healthy_year_and_preserves_held_year(monkeypatch, tmp_path, failed):
+def test_partial_refresh_persists_healthy_year_and_preserves_held_year(recording, monkeypatch, tmp_path, failed):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    transport = AnnualTransport()
+    transport = AnnualTransport(recording)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     fetch(cache="refresh")
     transport.value = 2
@@ -83,9 +88,9 @@ def test_partial_refresh_persists_healthy_year_and_preserves_held_year(monkeypat
     pt.assert_frame_equal(result.data.sort("time"), reused.data.sort("time"))
 
 
-def test_uncached_partial_success_persists_and_failed_interval_retries(monkeypatch, tmp_path):
+def test_uncached_partial_success_persists_and_failed_interval_retries(recording, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    transport = AnnualTransport({2022: 503})
+    transport = AnnualTransport(recording, {2022: 503})
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     result = fetch(cache="refresh")
     assert result.data.height == 2
@@ -96,8 +101,8 @@ def test_uncached_partial_success_persists_and_failed_interval_retries(monkeypat
     assert transport.calls == [2021, 2022, 2023]
 
 
-def test_padding_only_missing_year_remains_diagnostic(monkeypatch):
-    transport = AnnualTransport({2022: 404})
+def test_padding_only_missing_year_remains_diagnostic(recording, monkeypatch):
+    transport = AnnualTransport(recording, {2022: 404})
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     result = rr.fetch(selection(), start="2023-01-01", end="2023-06-02", cache="bypass", on_issue="ignore")
     assert result.data.height == 1
@@ -133,9 +138,9 @@ def test_shared_annual_failure_has_one_call_and_distinct_series_events():
     assert len({item.series.series_id for item in result.failed_requests}) == 3
 
 
-def test_valid_empty_annual_refresh_replaces_only_its_year(monkeypatch, tmp_path):
+def test_valid_empty_annual_refresh_replaces_only_its_year(recording, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    transport = AnnualTransport()
+    transport = AnnualTransport(recording)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     fetch(cache="refresh")
     empty = json.loads(json.dumps(transport.document))
@@ -147,9 +152,11 @@ def test_valid_empty_annual_refresh_replaces_only_its_year(monkeypatch, tmp_path
     assert any(item.status == "empty" and item.window.start.year == 2022 for item in result.outcomes)
 
 
-def test_hourly_shared_annual_file_preserves_siblings_around_failed_year(monkeypatch):
-    transport = AnnualTransport({2022: 503})
-    transport.document = json.loads(read_recording(_HQ).content)
+def test_hourly_shared_annual_file_preserves_siblings_around_failed_year(
+    retained_evidence_root, recording, monkeypatch
+):
+    transport = AnnualTransport(recording, {2022: 503})
+    transport.document = json.loads(read_recording(retained_evidence_root / _HQ).content)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     selected = rr.find(provider="cz_chmi", station=_STATION, frequency="hourly")
     result = rr.fetch(selected, start="2021-03-01", end="2023-09-01", cache="bypass", receipts=True, on_issue="ignore")

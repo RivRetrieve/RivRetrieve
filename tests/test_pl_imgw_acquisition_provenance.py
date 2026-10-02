@@ -208,8 +208,8 @@ def test_packaged_poland_rejects_external_direct_canonical_station_ownership(tmp
         load_packaged_catalogue_artifact(mutated, on_issue="raise")
 
 
-def test_poland_withheld_crs_origin_rejects_an_asserted_crs() -> None:
-    native = read_native_table(NATIVE)
+def test_poland_withheld_crs_origin_rejects_an_asserted_crs(retained_evidence_root: Path) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE)
     claimed = generate_catalogue.build_stations(native).with_columns(pl.lit("EPSG:4326").alias("crs"))
 
     issues = validate_catalogue_origins(ProviderId("pl_imgw"), STATION_CATALOGUE_ORIGINS, native, claimed)
@@ -235,11 +235,15 @@ def test_poland_recovery_and_corroboration_are_distinct_acquisitions() -> None:
     assert workbook.material.sha256 == WORKBOOK_SHA256
 
 
-def test_poland_native_identity_and_raw_substitution_refusal(tmp_path: Path) -> None:
+def test_poland_native_identity_and_raw_substitution_refusal(retained_evidence_root: Path, tmp_path: Path) -> None:
     provenance = build_acquisition_provenance()
     assert provenance.native_table.repository_path == str(NATIVE)
     assert provenance.native_table.revision == "c9c81934bb1773b0286c968f4fd7323f724c71ac"
-    assert provenance.native_table.sha256 == NATIVE_TABLE_SHA256 == hashlib.sha256(NATIVE.read_bytes()).hexdigest()
+    assert (
+        provenance.native_table.sha256
+        == NATIVE_TABLE_SHA256
+        == hashlib.sha256((retained_evidence_root / NATIVE).read_bytes()).hexdigest()
+    )
     assert provenance.native_table.semantic_digest is not None
     assert (
         provenance.native_table.semantic_digest.sha256
@@ -247,7 +251,7 @@ def test_poland_native_identity_and_raw_substitution_refusal(tmp_path: Path) -> 
     )
 
     substituted = tmp_path / "native.parquet"
-    payload = bytearray(NATIVE.read_bytes())
+    payload = bytearray((retained_evidence_root / NATIVE).read_bytes())
     payload[-1] ^= 1
     substituted.write_bytes(payload)
     with pytest.raises(FatalContractError, match=f"expected {NATIVE_TABLE_SHA256}.*observed"):
@@ -258,14 +262,24 @@ def test_poland_native_identity_and_raw_substitution_refusal(tmp_path: Path) -> 
                 "--out",
                 str(tmp_path / "substituted"),
                 "--terms-recording",
-                str(TERMS),
+                str(retained_evidence_root / TERMS),
             ]
         )
 
 
-def test_poland_terms_are_verified_in_real_generation_path(tmp_path: Path) -> None:
+def test_poland_terms_are_verified_in_real_generation_path(retained_evidence_root: Path, tmp_path: Path) -> None:
     assert (
-        generate_catalogue.main(["--native", str(NATIVE), "--out", str(tmp_path), "--terms-recording", str(TERMS)]) == 0
+        generate_catalogue.main(
+            [
+                "--native",
+                str(retained_evidence_root / NATIVE),
+                "--out",
+                str(tmp_path),
+                "--terms-recording",
+                str(retained_evidence_root / TERMS),
+            ]
+        )
+        == 0
     )
     provenance = legacy_document(tmp_path / "provenance.json")
     imgw = next(source for source in provenance["source_records"] if source["source_id"] == "sr.pl.imgw")
@@ -276,10 +290,17 @@ def test_poland_terms_are_verified_in_real_generation_path(tmp_path: Path) -> No
     assert statement["private_verification"]["evidence_sha256"] == FORWARDED_EMAIL_SHA256
 
     changed = tmp_path / "changed.html"
-    changed.write_bytes(TERMS.read_bytes() + b"x")
+    changed.write_bytes((retained_evidence_root / TERMS).read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="digest mismatch"):
         generate_catalogue.main(
-            ["--native", str(NATIVE), "--out", str(tmp_path / "changed"), "--terms-recording", str(changed)]
+            [
+                "--native",
+                str(retained_evidence_root / NATIVE),
+                "--out",
+                str(tmp_path / "changed"),
+                "--terms-recording",
+                str(changed),
+            ]
         )
 
 
@@ -380,7 +401,9 @@ def test_private_verification_record_is_redacted_and_not_packaged() -> None:
     assert not list(CATALOGUE.glob("*.eml"))
 
 
-def test_canonical_build_accepts_only_the_exact_committed_reverification_record(tmp_path: Path) -> None:
+def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
+    retained_evidence_root: Path, tmp_path: Path
+) -> None:
     record = PrivateEmailVerificationRecord(
         schema_version=2,
         statement_id="pl_imgw.grdc.inclusion",
@@ -406,11 +429,11 @@ def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
         generate_catalogue.main(
             [
                 "--native",
-                str(NATIVE),
+                str(retained_evidence_root / NATIVE),
                 "--out",
                 str(tmp_path / "substituted"),
                 "--terms-recording",
-                str(TERMS),
+                str(retained_evidence_root / TERMS),
                 "--private-verification-record",
                 str(substituted_path),
             ]
@@ -420,11 +443,11 @@ def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
     generate_catalogue.main(
         [
             "--native",
-            str(NATIVE),
+            str(retained_evidence_root / NATIVE),
             "--out",
             str(output),
             "--terms-recording",
-            str(TERMS),
+            str(retained_evidence_root / TERMS),
             "--private-verification-record",
             str(record_path),
         ]
@@ -525,7 +548,7 @@ def test_packaged_poland_rejects_exposed_withheld_provider_scalar(tmp_path: Path
         load_packaged_catalogue_artifact(mutated, on_issue="raise")
 
 
-def test_generator_rejects_original_private_identity_claim(tmp_path: Path) -> None:
+def test_generator_rejects_original_private_identity_claim(retained_evidence_root: Path, tmp_path: Path) -> None:
     claim = {
         "schema_version": 2,
         "statement_id": "pl_imgw.grdc.inclusion",
@@ -544,11 +567,11 @@ def test_generator_rejects_original_private_identity_claim(tmp_path: Path) -> No
         generate_catalogue.main(
             [
                 "--native",
-                str(NATIVE),
+                str(retained_evidence_root / NATIVE),
                 "--out",
                 str(tmp_path / "out"),
                 "--terms-recording",
-                str(TERMS),
+                str(retained_evidence_root / TERMS),
                 "--private-verification-record",
                 str(record),
             ]

@@ -16,14 +16,15 @@ from rivretrieve._internal.recordings import ReplayTransport
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "docs/verification/thailand-provider"
 
 
-def test_thailand_page_examples_match_recorded_response(monkeypatch, tmp_path):
+def test_thailand_page_examples_match_recorded_response(retained_evidence_root: Path, monkeypatch, tmp_path):
     page = (ROOT / "docs/providers/th_thaiwater.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.S)
     assert len(blocks) == page.count("```python") == 2
-    replay = ReplayTransport(sorted((EVIDENCE / "recordings").glob("*.recording.json")))
+    replay = ReplayTransport(
+        sorted((retained_evidence_root / "docs/verification/thailand-provider/recordings").glob("*.recording.json"))
+    )
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     namespace = {}
@@ -48,7 +49,9 @@ def test_thailand_page_examples_match_recorded_response(monkeypatch, tmp_path):
         rr.to_utc(result)
 
 
-def test_thailand_page_catalogue_counts_and_index():
+def test_thailand_page_catalogue_counts_and_index(
+    retained_evidence_root: Path,
+):
     selection = rr.find(provider="th_thaiwater")
     assert len(selection.locations) == 825
     station_products = pl.read_parquet(
@@ -61,7 +64,9 @@ def test_thailand_page_catalogue_counts_and_index():
     ]
     for quantity in ("stage", "discharge"):
         assert rr.series(rr.find(provider="th_thaiwater", quantity=quantity))["station_id"].n_unique() == 825
-    native = pl.read_parquet(ROOT / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
+    native = pl.read_parquet(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
+    )
     assert native.group_by("agency.agency_shortname.en").len().sort("len", descending=True).rows() == [
         ("HII", 329),
         ("RID", 328),

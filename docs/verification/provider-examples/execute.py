@@ -1,7 +1,8 @@
 """Execute each Python fence on one provider page, in its documented order.
 
 Run from the repository root. Supply credentials through the environment.
-The output directory retains exact executed code, stdout/stderr and metadata.
+Use an output directory outside source checkouts. It retains exact executed code,
+stdout/stderr and metadata; keep this material private.
 """
 
 import argparse
@@ -22,6 +23,9 @@ parser.add_argument("page", type=Path)
 parser.add_argument("output", type=Path)
 parser.add_argument("--revision", required=True)
 args = parser.parse_args()
+args.output = args.output.expanduser().resolve()
+if any((parent / ".git").exists() for parent in (args.output, *args.output.parents)):
+    parser.error("output must be outside source checkouts")
 args.output.mkdir(parents=True, exist_ok=True)
 text = args.page.read_text()
 fences = list(re.finditer(r"^```([^\n]*)\n(.*?)^```", text, re.M | re.S))

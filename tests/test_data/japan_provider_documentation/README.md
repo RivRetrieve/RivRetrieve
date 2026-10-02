@@ -1,14 +1,21 @@
-# Japan provider documentation recordings
+# Japan documentation replay inputs
 
-Captured on 2026-09-21 through the public `jp_mlit` provider using native
-`RecordingTransport`, after the recording-encoding fix in PR #326.
+The private source archive retains the original documentation verification report
+and the paired recordings used by `tests/test_jp_mlit_documentation.py`.
+Follow [verification evidence](../../../docs/maintenance/evidence.md) to retrieve
+exact inputs. Set `RIVRETRIEVE_TEST_EVIDENCE_ROOT` to the external directory with
+repository-relative paths, including the two recordings under
+`tests/test_data/japan_provider_documentation/`.
 
-These are the HTML prerequisite and its publisher-linked DAT response for station
-`305071285512040`, daily discharge (KIND 7), annual source window 2020. The guide
-requests only 2020-01-10 through 2020-01-11. The source file also reports 17 missing
-slots outside that interval.
+```sh
+uv run pytest tests/test_jp_mlit_documentation.py -q --tb=no -p no:cacheprovider
+```
 
-`tests/test_jp_mlit_documentation.py` executes the page's exact snippets and compares
-the displayed outputs. It replays this pair for the bypass and initial cache calls,
-then checks that the repeated explicit-series request makes no further source calls.
-Replay tests establish saved-source behavior, not current reachability or permission.
+Keep test temporary files and full output outside source checkouts. Missing
+recordings fail the check; the test does not download replacement responses.
+
+The replay checks the provider page's example against the retained response pair.
+Its absent-slot expectation protects the distinction between an unpopulated
+source slot and a published numeric value. RivRetrieve must not fill those slots
+with invented observations. Replay verifies behavior against the selected
+recordings, not current service availability.

@@ -23,7 +23,7 @@ from rivretrieve._internal.providers.th_thaiwater.config import config
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
 
-FIXTURE_PATH = Path(__file__).parent / "test_data" / "th_thaiwater_metadata.json"
+FIXTURE_PATH = Path("tests/test_data/th_thaiwater_metadata.json")
 CATALOGUE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue"
 LEDGER_PATH = (
     Path(__file__).parents[1] / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
@@ -34,7 +34,7 @@ def _availability_evidence() -> GraphAvailabilityEvidence:
     return GraphAvailabilityEvidence(LEDGER_PATH.read_bytes())
 
 
-NATIVE_PATH = CATALOGUE_PATH / "native.parquet"
+NATIVE_PATH = Path("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 ATTESTED_DATETIME = datetime(2026, 8, 2, 12, 42, 3, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
 FIXTURE_DIGEST = "afb6481ab844d39fb08874b0eaec310401f1a601afe0155a5311b52193cad827"
@@ -151,17 +151,17 @@ REMOVALS = {
 }
 
 
-def _fixture_payload() -> dict[str, object]:
-    return cast("dict[str, object]", json.loads(FIXTURE_PATH.read_text(encoding="utf-8")))
+def _fixture_payload(retained_evidence_root: Path) -> dict[str, object]:
+    return cast("dict[str, object]", json.loads((retained_evidence_root / FIXTURE_PATH).read_text(encoding="utf-8")))
 
 
-def _fixture_rows() -> list[dict[str, Any]]:
-    payload = cast("dict[str, Any]", _fixture_payload())
+def _fixture_rows(retained_evidence_root: Path) -> list[dict[str, Any]]:
+    payload = cast("dict[str, Any]", _fixture_payload(retained_evidence_root))
     return cast("list[dict[str, Any]]", payload["waterlevel_data"]["data"])
 
 
-def _two_row_payload() -> dict[str, object]:
-    payload = copy.deepcopy(_fixture_payload())
+def _two_row_payload(retained_evidence_root: Path) -> dict[str, object]:
+    payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
     waterlevel = cast("dict[str, Any]", payload["waterlevel_data"])
     waterlevel["data"] = cast("list[dict[str, Any]]", waterlevel["data"])[:2]
     return payload
@@ -190,9 +190,9 @@ def _delete_nested(row: dict[str, Any], path: str) -> None:
     del target[components[-1]]
 
 
-def _expected_fixture_native_frame() -> pl.DataFrame:
+def _expected_fixture_native_frame(retained_evidence_root: Path) -> pl.DataFrame:
     records: list[dict[str, object]] = []
-    for source in _fixture_rows():
+    for source in _fixture_rows(retained_evidence_root):
         flattened: dict[str, object] = {}
         for path, dtype in generate_catalogue.NATIVE_SOURCE_SCHEMA.items():
             try:
@@ -209,13 +209,15 @@ def _expected_fixture_native_frame() -> pl.DataFrame:
     return stamp_native_table(source, ATTESTED_RETRIEVED_AT).data
 
 
-def _committed_native_table() -> NativeTable:
-    return read_native_table(NATIVE_PATH)
+def _committed_native_table(retained_evidence_root: Path) -> NativeTable:
+    return read_native_table(retained_evidence_root / NATIVE_PATH)
 
 
-def _build(table: NativeTable | None = None) -> generate_catalogue.GeneratedThThaiWaterCatalogue:
+def _build(
+    retained_evidence_root: Path, table: NativeTable | None = None
+) -> generate_catalogue.GeneratedThThaiWaterCatalogue:
     return generate_catalogue.build_catalogue(
-        table or _committed_native_table(), STATION_CATALOGUE_ORIGINS, _availability_evidence()
+        table or _committed_native_table(retained_evidence_root), STATION_CATALOGUE_ORIGINS, _availability_evidence()
     )
 
 
@@ -251,10 +253,10 @@ class _FixtureResponse:
         return self._content
 
 
-def test_fixture_digest_and_independent_contract() -> None:
-    payload = _fixture_payload()
+def test_fixture_digest_and_independent_contract(retained_evidence_root: Path) -> None:
+    payload = _fixture_payload(retained_evidence_root)
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-    rows = _fixture_rows()
+    rows = _fixture_rows(retained_evidence_root)
 
     assert hashlib.sha256(canonical).hexdigest() == FIXTURE_DIGEST
     assert [row["station"]["id"] for row in rows] == [575568, 1117894, 2583, 1121258]
@@ -270,24 +272,34 @@ def test_fixture_digest_and_independent_contract() -> None:
     assert rows[2]["station"]["tele_station_name"]["jp"] == " "
 
 
-def test_refresh_fixture_is_network_free_and_exact(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_refresh_fixture_is_network_free_and_exact(
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(
         generate_catalogue,
         "_read_live_json",
         lambda url: (_ for _ in ()).throw(AssertionError(f"unexpected live request to {url}")),
     )
-    outcome = generate_catalogue.refresh_native_table_from_fixture(FIXTURE_PATH, retrieved_at=ATTESTED_RETRIEVED_AT)
+    outcome = generate_catalogue.refresh_native_table_from_fixture(
+        (retained_evidence_root / FIXTURE_PATH), retrieved_at=ATTESTED_RETRIEVED_AT
+    )
 
     assert outcome.issues == ()
     assert outcome.value.data.schema == generate_catalogue.NATIVE_SCHEMA
     assert outcome.value.data.columns == list(generate_catalogue.NATIVE_SCHEMA)
-    assert outcome.value.data["station.id"].to_list() == sorted([str(row["station"]["id"]) for row in _fixture_rows()])
-    pl_testing.assert_frame_equal(outcome.value.data, _expected_fixture_native_frame(), check_exact=True)
+    assert outcome.value.data["station.id"].to_list() == sorted(
+        [str(row["station"]["id"]) for row in _fixture_rows(retained_evidence_root)]
+    )
+    pl_testing.assert_frame_equal(
+        outcome.value.data, _expected_fixture_native_frame(retained_evidence_root), check_exact=True
+    )
 
 
-def test_native_identity_and_colliding_fields_remain_distinct() -> None:
-    source_rows = _fixture_rows()
-    table = generate_catalogue.refresh_native_table(_fixture_payload(), retrieved_at=ATTESTED_RETRIEVED_AT).value.data
+def test_native_identity_and_colliding_fields_remain_distinct(retained_evidence_root: Path) -> None:
+    source_rows = _fixture_rows(retained_evidence_root)
+    table = generate_catalogue.refresh_native_table(
+        _fixture_payload(retained_evidence_root), retrieved_at=ATTESTED_RETRIEVED_AT
+    ).value.data
 
     assert table.schema["station.id"] == pl.String
     assert table.schema["id"] == pl.Int64
@@ -300,8 +312,10 @@ def test_native_identity_and_colliding_fields_remain_distinct() -> None:
         assert stored["station.tele_station_oldcode"] == row["station"]["tele_station_oldcode"]
 
 
-def test_language_maps_flatten_without_stringification() -> None:
-    table = generate_catalogue.refresh_native_table(_fixture_payload(), retrieved_at=ATTESTED_RETRIEVED_AT).value.data
+def test_language_maps_flatten_without_stringification(retained_evidence_root: Path) -> None:
+    table = generate_catalogue.refresh_native_table(
+        _fixture_payload(retained_evidence_root), retrieved_at=ATTESTED_RETRIEVED_AT
+    ).value.data
     language_columns = [
         "station.tele_station_name.en",
         "station.tele_station_name.jp",
@@ -314,7 +328,7 @@ def test_language_maps_flatten_without_stringification() -> None:
         "agency.agency_shortname.th",
     ]
     assert all(table.schema[column] == pl.String for column in language_columns)
-    for source in _fixture_rows():
+    for source in _fixture_rows(retained_evidence_root):
         stored = table.filter(pl.col("station.id") == str(source["station"]["id"])).row(0, named=True)
         for column in language_columns:
             try:
@@ -324,8 +338,8 @@ def test_language_maps_flatten_without_stringification() -> None:
             assert stored[column] == expected
 
 
-def test_unexpected_language_key_names_map_and_key() -> None:
-    payload = _two_row_payload()
+def test_unexpected_language_key_names_map_and_key(retained_evidence_root: Path) -> None:
+    payload = _two_row_payload(retained_evidence_root)
     rows = cast("list[dict[str, Any]]", cast("dict[str, Any]", payload["waterlevel_data"])["data"])
     rows[1]["agency"]["agency_name"]["fr"] = "interdit"
     expected = "ThaiWater row 1 language map 'agency.agency_name' contains unexpected key 'fr'"
@@ -342,8 +356,8 @@ def test_unexpected_language_key_names_map_and_key() -> None:
         ("invalid_data", "ThaiWater payload field 'waterlevel_data.data' must be a list"),
     ],
 )
-def test_envelope_guards(mutation: str, expected: str) -> None:
-    payload = _two_row_payload()
+def test_envelope_guards(retained_evidence_root: Path, mutation: str, expected: str) -> None:
+    payload = _two_row_payload(retained_evidence_root)
     if mutation == "missing_envelope":
         del payload["waterlevel_data"]
     elif mutation == "invalid_envelope":
@@ -356,16 +370,16 @@ def test_envelope_guards(mutation: str, expected: str) -> None:
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
-def test_non_object_row_guard() -> None:
-    payload = _two_row_payload()
+def test_non_object_row_guard(retained_evidence_root: Path) -> None:
+    payload = _two_row_payload(retained_evidence_root)
     cast("dict[str, Any]", payload["waterlevel_data"])["data"][1] = []
     with pytest.raises(FatalContractError, match=re.escape("ThaiWater row 1 must be an object")):
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
 @pytest.mark.parametrize("kind", ["missing", "invalid"])
-def test_nested_object_guards(kind: str) -> None:
-    payload = _two_row_payload()
+def test_nested_object_guards(retained_evidence_root: Path, kind: str) -> None:
+    payload = _two_row_payload(retained_evidence_root)
     row = cast("dict[str, Any]", payload["waterlevel_data"])["data"][1]
     if kind == "missing":
         del row["station"]["tele_station_name"]
@@ -377,8 +391,8 @@ def test_nested_object_guards(kind: str) -> None:
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
-def test_required_leaf_guard() -> None:
-    payload = _two_row_payload()
+def test_required_leaf_guard(retained_evidence_root: Path) -> None:
+    payload = _two_row_payload(retained_evidence_root)
     row = cast("dict[str, Any]", payload["waterlevel_data"])["data"][1]
     del row["station"]["tele_station_lat"]
     expected = "ThaiWater row 1 missing required leaf 'station.tele_station_lat'"
@@ -387,8 +401,8 @@ def test_required_leaf_guard() -> None:
 
 
 @pytest.mark.parametrize("invalid", ["123", True])
-def test_station_id_requires_exact_integer(invalid: object) -> None:
-    payload = _two_row_payload()
+def test_station_id_requires_exact_integer(retained_evidence_root: Path, invalid: object) -> None:
+    payload = _two_row_payload(retained_evidence_root)
     row = cast("dict[str, Any]", payload["waterlevel_data"])["data"][1]
     row["station"]["id"] = invalid
     expected = "ThaiWater row 1 station.id must be a JSON integer; Boolean is invalid"
@@ -396,8 +410,8 @@ def test_station_id_requires_exact_integer(invalid: object) -> None:
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
-def test_duplicate_station_id_guard() -> None:
-    payload = _two_row_payload()
+def test_duplicate_station_id_guard(retained_evidence_root: Path) -> None:
+    payload = _two_row_payload(retained_evidence_root)
     rows = cast("list[dict[str, Any]]", cast("dict[str, Any]", payload["waterlevel_data"])["data"])
     duplicate = rows[0]["station"]["id"]
     rows[1]["station"]["id"] = duplicate
@@ -406,8 +420,8 @@ def test_duplicate_station_id_guard() -> None:
 
 
 @pytest.mark.parametrize("invalid", ["not numeric", True])
-def test_numeric_family_rejects_nonnumeric_and_boolean(invalid: object) -> None:
-    payload = _two_row_payload()
+def test_numeric_family_rejects_nonnumeric_and_boolean(retained_evidence_root: Path, invalid: object) -> None:
+    payload = _two_row_payload(retained_evidence_root)
     row = cast("dict[str, Any]", payload["waterlevel_data"])["data"][1]
     row["station"]["tele_station_lat"] = invalid
     expected = (
@@ -430,8 +444,8 @@ def test_numeric_family_rejects_nonnumeric_and_boolean(invalid: object) -> None:
         ("station.tele_station_name.jp", 2),
     ],
 )
-def test_permitted_absence_projects_to_null(path: str, source_index: int) -> None:
-    payload = copy.deepcopy(_fixture_payload())
+def test_permitted_absence_projects_to_null(retained_evidence_root: Path, path: str, source_index: int) -> None:
+    payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
     all_rows = cast("list[dict[str, Any]]", cast("dict[str, Any]", payload["waterlevel_data"])["data"])
     selected = [all_rows[source_index], all_rows[1 if source_index != 1 else 0]]
     cast("dict[str, Any]", payload["waterlevel_data"])["data"] = selected
@@ -441,8 +455,8 @@ def test_permitted_absence_projects_to_null(path: str, source_index: int) -> Non
     assert table.filter(pl.col("station.id") == station_id)[path].item() is None
 
 
-def test_complete_native_table_shape_census_and_membership() -> None:
-    committed = read_native_table(NATIVE_PATH).data
+def test_complete_native_table_shape_census_and_membership(retained_evidence_root: Path) -> None:
+    committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
     native_ids = set(committed["station.id"].to_list())
     former_canonical_ids = (native_ids - ADDITIONS) | REMOVALS
 
@@ -496,23 +510,28 @@ def test_complete_native_table_shape_census_and_membership() -> None:
     assert 825 - 754 == 71
 
 
-def test_complete_native_table_station_type_census() -> None:
-    committed = read_native_table(NATIVE_PATH).data
+def test_complete_native_table_station_type_census(retained_evidence_root: Path) -> None:
+    committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
 
     assert committed.height == 825
     assert committed.group_by("station_type").len().to_dicts() == [{"station_type": "tele_waterlevel", "len": 825}]
 
 
-def test_complete_native_table_has_pinned_full_content() -> None:
-    assert generate_catalogue.native_table_content_sha256(read_native_table(NATIVE_PATH)) == NATIVE_FRAME_DIGEST
+def test_complete_native_table_has_pinned_full_content(retained_evidence_root: Path) -> None:
+    assert (
+        generate_catalogue.native_table_content_sha256(read_native_table(retained_evidence_root / NATIVE_PATH))
+        == NATIVE_FRAME_DIGEST
+    )
 
 
-def test_live_native_cli_uses_exact_transport_seam(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_live_native_cli_uses_exact_transport_seam(
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     calls: list[tuple[str, int]] = []
 
     def fake_urlopen(url: str, *, timeout: int) -> _FixtureResponse:
         calls.append((url, timeout))
-        return _FixtureResponse(FIXTURE_PATH.read_bytes())
+        return _FixtureResponse((retained_evidence_root / FIXTURE_PATH).read_bytes())
 
     monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", fake_urlopen)
     output_path = tmp_path / "native.parquet"
@@ -529,7 +548,7 @@ def test_live_native_cli_uses_exact_transport_seam(monkeypatch: pytest.MonkeyPat
     assert calls == [(generate_catalogue.METADATA_URL, 60)]
     pl_testing.assert_frame_equal(
         read_native_table(output_path).data,
-        _expected_fixture_native_frame(),
+        _expected_fixture_native_frame(retained_evidence_root),
         check_exact=True,
     )
 
@@ -538,6 +557,10 @@ def test_live_native_cli_uses_exact_transport_seam(monkeypatch: pytest.MonkeyPat
     ("argv", "message"),
     [
         (["--out", "catalogue"], "--out requires --native"),
+        (
+            ["--native", "native.parquet", "--availability-evidence", "ledger.csv", "--out", "catalogue"],
+            "--out requires --evidence-root",
+        ),
         (
             ["--fixture", str(FIXTURE_PATH), "--live", "--out", "catalogue"],
             "--fixture/--live cannot be used with --out",
@@ -582,7 +605,9 @@ def test_cli_contract_errors_precede_io(
     assert message in capsys.readouterr().err
 
 
-def test_native_cli_writes_only_native_and_preserves_canonical_sentinel(tmp_path: Path) -> None:
+def test_native_cli_writes_only_native_and_preserves_canonical_sentinel(
+    retained_evidence_root: Path, tmp_path: Path
+) -> None:
     native_path = tmp_path / "native.parquet"
     canonical_dir = tmp_path / "catalogue"
     canonical_dir.mkdir()
@@ -591,7 +616,7 @@ def test_native_cli_writes_only_native_and_preserves_canonical_sentinel(tmp_path
     result = generate_catalogue.main(
         [
             "--fixture",
-            str(FIXTURE_PATH),
+            str(retained_evidence_root / FIXTURE_PATH),
             "--native-out",
             str(native_path),
             "--retrieved-at",
@@ -604,9 +629,11 @@ def test_native_cli_writes_only_native_and_preserves_canonical_sentinel(tmp_path
 
 
 def test_native_cli_refuses_error_issues(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    outcome = generate_catalogue.refresh_native_table(_fixture_payload(), retrieved_at=ATTESTED_RETRIEVED_AT)
+    outcome = generate_catalogue.refresh_native_table(
+        _fixture_payload(retained_evidence_root), retrieved_at=ATTESTED_RETRIEVED_AT
+    )
     error = Issue(severity="error", code="broken", message="broken")
     monkeypatch.setattr(
         generate_catalogue,
@@ -623,7 +650,7 @@ def test_native_cli_refuses_error_issues(
     _assert_cli_error(
         [
             "--fixture",
-            str(FIXTURE_PATH),
+            str(retained_evidence_root / FIXTURE_PATH),
             "--native-out",
             str(tmp_path / "native.parquet"),
             "--retrieved-at",
@@ -635,10 +662,10 @@ def test_native_cli_refuses_error_issues(
     assert called is False
 
 
-def test_native_build_counts_and_identity_station_fields() -> None:
-    catalogue = _build()
+def test_native_build_counts_and_identity_station_fields(retained_evidence_root: Path) -> None:
+    catalogue = _build(retained_evidence_root)
     assert all(isinstance(product.semantics, UnknownTemporalSupport) for product in config().products.values())
-    committed = _committed_native_table().data
+    committed = _committed_native_table(retained_evidence_root).data
     source_id = committed["station.id"].item(0)
     station = catalogue.stations.filter(pl.col("station_id") == source_id)
 
@@ -678,8 +705,12 @@ def test_native_build_counts_and_identity_station_fields() -> None:
         ("duplicate", "ThaiWater native table contains duplicate station.id 100"),
     ],
 )
-def test_native_build_contracts_fail_loud(mutation: str, message: str) -> None:
-    base = _committed_native_table().data.head(2).with_columns(pl.Series("station.id", ["100", "200"], dtype=pl.String))
+def test_native_build_contracts_fail_loud(retained_evidence_root: Path, mutation: str, message: str) -> None:
+    base = (
+        _committed_native_table(retained_evidence_root)
+        .data.head(2)
+        .with_columns(pl.Series("station.id", ["100", "200"], dtype=pl.String))
+    )
     if mutation == "empty":
         data = base.clear()
     elif mutation == "station_type":
@@ -707,26 +738,28 @@ def test_native_build_contracts_fail_loud(mutation: str, message: str) -> None:
         data = base.with_columns(pl.lit("100").alias("station.id"))
 
     with pytest.raises(FatalContractError, match=re.escape(message)):
-        _build(NativeTable(data))
+        _build(retained_evidence_root, NativeTable(data))
 
 
-def test_native_build_rejects_non_string_station_id() -> None:
-    data = _committed_native_table().data.head(2).with_columns(pl.col("station.id").cast(pl.Int64))
+def test_native_build_rejects_non_string_station_id(retained_evidence_root: Path) -> None:
+    data = (
+        _committed_native_table(retained_evidence_root).data.head(2).with_columns(pl.col("station.id").cast(pl.Int64))
+    )
 
     with pytest.raises(FatalContractError, match="ThaiWater native station.id must have String dtype"):
-        _build(NativeTable(data))
+        _build(retained_evidence_root, NativeTable(data))
 
 
-def test_generated_station_projection_matches_native_exactly() -> None:
-    native = _committed_native_table()
-    generated = _build(native)
+def test_generated_station_projection_matches_native_exactly(retained_evidence_root: Path) -> None:
+    native = _committed_native_table(retained_evidence_root)
+    generated = _build(retained_evidence_root, native)
 
     assert native.data.schema["station.id"] == generated.stations.schema["station_id"] == pl.String
     pl_testing.assert_frame_equal(generated.stations, _expected_station_projection(native), check_exact=True)
 
 
-def test_native_preserves_displaced_source_fields() -> None:
-    native = _committed_native_table().data
+def test_native_preserves_displaced_source_fields(retained_evidence_root: Path) -> None:
+    native = _committed_native_table(retained_evidence_root).data
     displaced = native.select(
         "station.tele_station_name.en",
         "station.tele_station_name.th",
@@ -745,16 +778,20 @@ def test_native_preserves_displaced_source_fields() -> None:
     assert displaced["station.tele_station_oldcode"].null_count() == 0
 
 
-def test_origin_enforcement_is_part_of_native_build() -> None:
+def test_origin_enforcement_is_part_of_native_build(retained_evidence_root: Path) -> None:
     declarations = dict(STATION_CATALOGUE_ORIGINS)
     del declarations["longitude"]
 
     with pytest.raises(FatalContractError, match="th_thaiwater.longitude: canonical column has no origin declaration"):
-        generate_catalogue.build_catalogue(_committed_native_table(), declarations, _availability_evidence())
+        generate_catalogue.build_catalogue(
+            _committed_native_table(retained_evidence_root), declarations, _availability_evidence()
+        )
 
 
-def test_station_product_check_uses_own_acquisition_date_and_provider_uses_native_date() -> None:
-    catalogue = _build()
+def test_station_product_check_uses_own_acquisition_date_and_provider_uses_native_date(
+    retained_evidence_root: Path,
+) -> None:
+    catalogue = _build(retained_evidence_root)
     expected = {
         (pair.station_id, pair.product_id): pair.acquisition.retrieved_at_start.date()
         for pair in _availability_evidence().pairs
@@ -770,9 +807,9 @@ def test_station_product_check_uses_own_acquisition_date_and_provider_uses_nativ
 
 
 def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    before = NATIVE_PATH.read_bytes()
+    before = (retained_evidence_root / NATIVE_PATH).read_bytes()
     monkeypatch.setattr(
         generate_catalogue,
         "_read_live_json",
@@ -782,11 +819,20 @@ def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
 
     assert (
         generate_catalogue.main(
-            ["--native", str(NATIVE_PATH), "--availability-evidence", str(LEDGER_PATH), "--out", str(tmp_path)]
+            [
+                "--evidence-root",
+                str(retained_evidence_root),
+                "--native",
+                str(retained_evidence_root / NATIVE_PATH),
+                "--availability-evidence",
+                str(LEDGER_PATH),
+                "--out",
+                str(tmp_path),
+            ]
         )
         == 0
     )
-    assert NATIVE_PATH.read_bytes() == before
+    assert (retained_evidence_root / NATIVE_PATH).read_bytes() == before
     assert {path.name for path in tmp_path.iterdir()} == {
         "croissant.json",
         "provider.json",
@@ -805,23 +851,23 @@ def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
     }
 
 
-def test_committed_catalogue_station_projection_matches_native() -> None:
-    native = _committed_native_table()
+def test_committed_catalogue_station_projection_matches_native(retained_evidence_root: Path) -> None:
+    native = _committed_native_table(retained_evidence_root)
     committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
 
     pl_testing.assert_frame_equal(committed, _expected_station_projection(native), check_exact=True)
 
 
-def test_committed_catalogue_ids_match_native_ids() -> None:
-    native = _committed_native_table().data
+def test_committed_catalogue_ids_match_native_ids(retained_evidence_root: Path) -> None:
+    native = _committed_native_table(retained_evidence_root).data
     committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
 
     assert native.schema["station.id"] == committed.schema["station_id"] == pl.String
     assert set(committed["station_id"]) == set(native["station.id"])
 
 
-def test_fresh_build_matches_all_committed_artefact_bytes(tmp_path: Path) -> None:
-    generate_catalogue.write_catalogue(_build(), tmp_path)
+def test_fresh_build_matches_all_committed_artefact_bytes(retained_evidence_root: Path, tmp_path: Path) -> None:
+    generate_catalogue.write_catalogue(_build(retained_evidence_root), tmp_path)
 
     for artifact_name in (
         "provider.json",
@@ -842,8 +888,8 @@ def test_fresh_build_matches_all_committed_artefact_bytes(tmp_path: Path) -> Non
         assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
 
 
-def test_governing_acquisitions_expose_all_baseline_pairs() -> None:
-    catalogue = _build()
+def test_governing_acquisitions_expose_all_baseline_pairs(retained_evidence_root: Path) -> None:
+    catalogue = _build(retained_evidence_root)
     pairs = catalogue.station_products
     assert pairs.height == 1650
     assert Counter(pairs.select("product_id", "availability").iter_rows()) == {
@@ -852,27 +898,29 @@ def test_governing_acquisitions_expose_all_baseline_pairs() -> None:
         ("discharge_reported", "available"): 283,
         ("discharge_reported", "unknown"): 542,
     }
-    assert set(pairs["station_id"]) == set(_committed_native_table().data["station.id"])
+    assert set(pairs["station_id"]) == set(_committed_native_table(retained_evidence_root).data["station.id"])
     assert catalogue.acquisition_provenance.withheld_facts == ()
 
 
 def test_build_cli_requires_explicit_reviewed_availability_evidence(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    retained_evidence_root: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     with pytest.raises(SystemExit):
-        generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)])
+        generate_catalogue.main(["--native", str(retained_evidence_root / NATIVE_PATH), "--out", str(tmp_path)])
     assert "--out requires --availability-evidence" in capsys.readouterr().err
 
 
-def test_each_governing_product_uses_the_official_graph_field() -> None:
-    catalogue = _build()
+def test_each_governing_product_uses_the_official_graph_field(retained_evidence_root: Path) -> None:
+    catalogue = _build(retained_evidence_root)
     fields = dict(catalogue.products.select("product_id", "native_id").iter_rows())
     assert fields == {"stage_reported": "value", "discharge_reported": "discharge"}
     assert all(fields[pair.product_id] == pair.native_field for pair in _availability_evidence().pairs)
 
 
-def test_provider_request_description_distinguishes_source_fields_from_public_calls() -> None:
-    assert _build().provider_info["bulk_observations"] == (
+def test_provider_request_description_distinguishes_source_fields_from_public_calls(
+    retained_evidence_root: Path,
+) -> None:
+    assert _build(retained_evidence_root).provider_info["bulk_observations"] == (
         "true: graph responses co-publish stage and discharge fields; "
         "public retrieval requests each product and source sub-window separately, "
         "with at most 365 inclusive calendar dates per source request"

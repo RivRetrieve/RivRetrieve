@@ -2,6 +2,7 @@
 
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -167,7 +168,7 @@ def test_authentication_status_does_not_establish_source_absence():
 @pytest.mark.parametrize("failure_carrier", ["outcomes", "failed_requests", "both", "parsed_outcomes"])
 @pytest.mark.parametrize("failure_status", ["failed", "unsupported", "unresolved"])
 def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_empty(
-    tmp_path, failure_carrier, failure_status
+    tmp_path, failure_carrier, failure_status, retained_evidence_root: Path
 ):
     """Authored partitions of recorded rows exercise shared cache restoration."""
     from dataclasses import replace
@@ -188,7 +189,7 @@ def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_
         for index, start in enumerate(boundaries)
     )
     store = tmp_path / "store"
-    held = _drive(store, CountedReplay(_INSTANT), cache="refresh")
+    held = _drive(store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root), cache="refresh")
     old_at = held.provenance.retrieved_at
     new_at = old_at + timedelta(days=1)
 
@@ -275,7 +276,12 @@ def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_
                 ).with_columns(pl.col("value") * 2),
             )
 
-    refreshed = _drive(store, LaterReplay(_INSTANT), cache="refresh", control=PartitionedStages())
+    refreshed = _drive(
+        store,
+        LaterReplay(_INSTANT, retained_evidence_root=retained_evidence_root),
+        cache="refresh",
+        control=PartitionedStages(),
+    )
     expected = held.canonical_rows.filter(pl.col("time") < boundaries[3]).with_columns(
         pl.when(pl.col("time").is_between(intervals[1].start, intervals[1].end, closed="both"))
         .then(pl.col("value") * 2)
@@ -301,5 +307,5 @@ def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_
         (intervals[3].start, intervals[3].end, new_at),
         (_END + tick, _END + timedelta(days=2), old_at),
     }
-    reused = _drive(store, CountedReplay(_INSTANT))
+    reused = _drive(store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root))
     assert_frame_equal(reused.canonical_rows.sort("time"), expected.sort("time"))

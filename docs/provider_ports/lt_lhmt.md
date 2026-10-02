@@ -57,7 +57,7 @@ Sorting by `code` and serializing with sorted object keys, compact separators, d
 `ensure_ascii=True`, and UTF-8 produces SHA-256
 `02d16a6e872939b43ee7ae6d1c54e00b6b924f3d9a3f9a7553fc13680edc12d8` for both inputs.
 
-Canonical artefacts are built only from committed `catalogue/native.parquet` plus origins. They contain
+Canonical artefacts are built only from the externally retained `catalogue/native.parquet` plus origins. They contain
 97 stations, two products, and 194 station-product rows with `availability=unknown` because the station
 endpoint does not publish variable availability. The digest and pure build are checked by
 `tests/test_lt_lhmt_generate_catalogue.py`.
@@ -70,3 +70,21 @@ endpoint does not publish variable availability. The digest and pure build are c
 | Stage unit is cm | Declared in provider config. | Shared conversion changes cm to m. |
 | No per-variable station availability | Existing packaged Lithuania edges remain `unknown`. | Do not broaden catalogue claims. |
 | Source request failures | 404 and retry exhaustion are recoverable source issues. | Generic retry policy remains in `HttpClient`. |
+
+## Retained verification inputs
+
+Obtain the exact inputs from the private source archive as described in the
+[verification guide](../maintenance/evidence.md). Tests read the external
+repository-relative layout selected by `RIVRETRIEVE_TEST_EVIDENCE_ROOT`. Missing
+inputs block verification. Runtime catalogue products remain packaged.
+
+The catalogue generator requires `--native` to select the retained native table
+and `--evidence-root` to select the external root for provenance checks. Recorded
+paths remain acquisition identities; they are resolved below that root. For example:
+
+```sh
+uv run python -m rivretrieve._internal.providers.lt_lhmt.generate_catalogue \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet" \
+  --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --out catalogue-output
+```

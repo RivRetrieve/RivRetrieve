@@ -35,7 +35,7 @@ from rivretrieve._internal.transport import TransportRequest
 
 _PROVIDER = ProviderId("no_nve")
 _STATION = "1.200.0"
-_DATA = Path(__file__).parent / "test_data"
+_DATA = Path("tests/test_data")
 _DECLARED = load_manifest((_PROVIDER,))
 _WINDOW = RenderedWindow("2025-07-08T00:00:00Z", "2025-07-14T00:00:00Z")
 
@@ -54,21 +54,25 @@ _EXPECTED = {
 _ZONE = "+00:00"
 
 
-def recording_path(product_id: ProductId) -> Path:
+def recording_path(retained_evidence_root, product_id: ProductId) -> Path:
     coordinates = config().products[product_id].coordinates.value
     assert isinstance(coordinates, NoNveSourceCoordinates)
-    return _DATA / (
-        f"no_nve_{_STATION}_{coordinates.parameter}_{coordinates.resolution_time}_2025-07-08_2025-07-14.recording.json"
+    return (
+        retained_evidence_root
+        / _DATA
+        / (
+            f"no_nve_{_STATION}_{coordinates.parameter}_{coordinates.resolution_time}_2025-07-08_2025-07-14.recording.json"
+        )
     )
 
 
-def _run(product_id: ProductId, replay: ReplayTransport) -> pl.DataFrame:
+def _run(retained_evidence_root, product_id: ProductId, replay: ReplayTransport) -> pl.DataFrame:
     window = _make_fetch_window(
         WindowEndpoint.from_datetime(datetime(2025, 7, 8)),
         WindowEndpoint.from_datetime(datetime(2025, 7, 14)),
     )
     # Replay the exact historical omitted-version request, without claiming it is an all-version call.
-    recording = read_recording(recording_path(product_id))
+    recording = read_recording(recording_path(retained_evidence_root, product_id))
     request = recording.request
     response = replay.send(
         TransportRequest(
@@ -99,21 +103,23 @@ def _run(product_id: ProductId, replay: ReplayTransport) -> pl.DataFrame:
     return parse(payload, config()).rows
 
 
-def _probe(product_id: ProductId) -> LiveBoundaryProbe:
+def _probe(retained_evidence_root, product_id: ProductId) -> LiveBoundaryProbe:
     count, first, last = _EXPECTED[product_id]
     return LiveBoundaryProbe(
         provider_id=_PROVIDER,
         product_id=product_id,
-        recordings=(read_recording(recording_path(product_id)),),
+        recordings=(read_recording(recording_path(retained_evidence_root, product_id)),),
         assertions={
             READING_COUNT: count,
             FIRST_WALL_CLOCK_TIME: WallClockExpectation(first, _ZONE),
             LAST_WALL_CLOCK_TIME: WallClockExpectation(last, _ZONE),
         },
-        run=lambda replay: _run(product_id, replay),
+        run=lambda replay: _run(retained_evidence_root, product_id, replay),
     )
 
 
-def test_every_norwegian_product_has_an_exact_live_replay_probe() -> None:
-    results = run_manifest_boundary_probes(_DECLARED, tuple(_probe(product) for product in _EXPECTED))
+def test_every_norwegian_product_has_an_exact_live_replay_probe(retained_evidence_root) -> None:
+    results = run_manifest_boundary_probes(
+        _DECLARED, tuple(_probe(retained_evidence_root, product) for product in _EXPECTED)
+    )
     assert len(results) == len(config().products)

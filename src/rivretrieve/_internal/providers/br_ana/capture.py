@@ -210,16 +210,16 @@ def verify_native_identity(capture: InventoryCapture, native_bytes: bytes, table
         raise FatalContractError("ANA inventory native semantic identity mismatch")
 
 
-def materialize_captured_native_table(capture: InventoryCapture, repository_root: Path) -> NativeTable:
+def materialize_captured_native_table(capture: InventoryCapture, evidence_root: Path) -> NativeTable:
     """Verify compressed recording file identities, then reconstruct the attested native frame."""
     for identity in capture.supporting_evidence:
-        body = (repository_root / identity.repository_path).read_bytes()
+        body = (evidence_root / identity.repository_path).read_bytes()
         if len(body) != identity.byte_size or hashlib.sha256(body).hexdigest() != identity.sha256:
             raise FatalContractError("ANA inventory supporting acquisition evidence identity mismatch")
     recordings = []
     with tempfile.TemporaryDirectory(prefix="ana-inventory-") as directory:
         for index, identity in enumerate(capture.responses):
-            encoded = (repository_root / identity.repository_path).read_bytes()
+            encoded = (evidence_root / identity.repository_path).read_bytes()
             if (
                 len(encoded) != identity.recording_byte_size
                 or hashlib.sha256(encoded).hexdigest() != identity.recording_sha256

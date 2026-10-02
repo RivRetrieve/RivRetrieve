@@ -34,14 +34,15 @@ def inventory() -> NativeTable:
 
 
 @pytest.mark.parametrize("mode", [["--fixture", "absent.json"], ["--live"], ["--withhold-uncertified"]])
-def test_removed_cli_is_unrecognized_and_preserves_files(mode: list[str], tmp_path: Path) -> None:
+def test_removed_cli_is_unrecognized_and_preserves_files(mode: list[str], tmp_path: Path, capsys) -> None:
     output = tmp_path / "existing"
     output.mkdir()
     marker = output / "unrelated.bin"
     marker.write_bytes(b"preserve existing material")
     with pytest.raises(SystemExit) as caught:
-        main([*mode, "--out", str(output)])
+        main(["--native", "absent.parquet", "--evidence-root", str(tmp_path), *mode, "--out", str(output)])
     assert caught.value.code == 2
+    assert "unrecognized arguments:" in capsys.readouterr().err
     assert marker.read_bytes() == b"preserve existing material"
     assert list(output.iterdir()) == [marker]
 
@@ -89,13 +90,13 @@ def test_bad_coordinate_is_not_silently_discarded() -> None:
         build_stations(native)
 
 
-def test_attested_inventory_build_has_only_evidenced_station_facts(tmp_path: Path) -> None:
+def test_attested_inventory_build_has_only_evidenced_station_facts(retained_evidence_root, tmp_path: Path) -> None:
     from rivretrieve._internal.catalogues.native import read_native_table
     from rivretrieve._internal.providers.br_ana.capture import read_capture_record, verify_native_identity
     from rivretrieve._internal.providers.br_ana.generate_catalogue import build_catalogue, write_catalogue
     from rivretrieve._internal.providers.br_ana.origins import STATION_CATALOGUE_ORIGINS, build_acquisition_provenance
 
-    repository = Path(__file__).parents[1]
+    repository = retained_evidence_root
     capture = read_capture_record(repository / "tests/test_data/br_ana_inventory/capture.json")
     native_path = repository / capture.native_table.repository_path
     native = read_native_table(native_path)
@@ -132,6 +133,25 @@ def test_catalogue_date_cannot_override_attested_acquisition(tmp_path: Path) -> 
     # The attested native retrieval instant owns catalogue_version. An obsolete
     # caller date must not be silently accepted or cause input-file I/O.
     with pytest.raises(SystemExit) as caught:
-        main(["--native", "absent.parquet", "--out", str(tmp_path), "--catalogue-date", "2000-01-01"])
+        main(
+            [
+                "--native",
+                "absent.parquet",
+                "--out",
+                str(tmp_path),
+                "--evidence-root",
+                str(tmp_path),
+                "--catalogue-date",
+                "2000-01-01",
+            ]
+        )
+    assert caught.value.code == 2
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("source", [["--native", "absent.parquet"], ["--materialize-record", "absent.json"]])
+def test_cli_requires_explicit_evidence_root(source, tmp_path):
+    with pytest.raises(SystemExit) as caught:
+        main([*source, "--out", str(tmp_path / "catalogue")])
     assert caught.value.code == 2
     assert list(tmp_path.iterdir()) == []

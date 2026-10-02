@@ -13,7 +13,7 @@ import pytest
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
-from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
+from tests.usgs_modern_recordings import ModernReplay, body, coordinates, manifest
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
@@ -21,19 +21,21 @@ _RECORDING = "daily-07374000-docs-2023"
 _KNOWN = "c9d823a2491f4b639656a11b35a7625d"
 
 
-def _result(monkeypatch, tmp_path):
-    replay = ModernReplay(_RECORDING)
+def _result(monkeypatch, tmp_path, retained_evidence_root: Path):
+    replay = ModernReplay(_RECORDING, evidence_root=retained_evidence_root)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(
         provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
     )
     result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", receipts=True, on_issue="ignore")
-    return result, body(_RECORDING)
+    return result, body(_RECORDING, evidence_root=retained_evidence_root)
 
 
-def test_recorded_result_round_trip_keeps_response_identity_facts_outcomes_and_receipts(monkeypatch, tmp_path):
-    result, content = _result(monkeypatch, tmp_path)
+def test_recorded_result_round_trip_keeps_response_identity_facts_outcomes_and_receipts(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
+    result, content = _result(monkeypatch, tmp_path, retained_evidence_root=retained_evidence_root)
     assert result.data.height == 1
     assert result.source_series
     assert all(item.identity.namespace == "USGS.WaterData.time_series_id" for item in result.source_series)
@@ -49,8 +51,10 @@ def test_recorded_result_round_trip_keeps_response_identity_facts_outcomes_and_r
     assert restored.receipts.entries[0].content == content
 
 
-def test_post_fetch_pick_preserves_original_request_and_publisher_receipt(monkeypatch, tmp_path):
-    result, content = _result(monkeypatch, tmp_path)
+def test_post_fetch_pick_preserves_original_request_and_publisher_receipt(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
+    result, content = _result(monkeypatch, tmp_path, retained_evidence_root=retained_evidence_root)
     concrete = result.data["series_id"][0]
     narrowed = rr.pick(result, series_id=concrete, on_issue="ignore")
     assert narrowed.scope == result.scope
@@ -62,8 +66,8 @@ def test_post_fetch_pick_preserves_original_request_and_publisher_receipt(monkey
     pl_testing.assert_frame_equal(restored.data, narrowed.data)
 
 
-def test_bundle_refuses_unknown_format_before_scientific_decode(monkeypatch, tmp_path):
-    result, _ = _result(monkeypatch, tmp_path)
+def test_bundle_refuses_unknown_format_before_scientific_decode(monkeypatch, tmp_path, retained_evidence_root: Path):
+    result, _ = _result(monkeypatch, tmp_path, retained_evidence_root=retained_evidence_root)
     original = rr.to_bundle(result)
     output = BytesIO()
     with ZipFile(BytesIO(original)) as source, ZipFile(output, "w", compression=ZIP_DEFLATED) as destination:
@@ -78,9 +82,11 @@ def test_bundle_refuses_unknown_format_before_scientific_decode(monkeypatch, tmp
         rr.from_bundle(output.getvalue())
 
 
-def test_catalogue_known_explicit_restriction_reuses_without_stale_policy_failure(monkeypatch, tmp_path):
+def test_catalogue_known_explicit_restriction_reuses_without_stale_policy_failure(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    replay = ModernReplay(_RECORDING)
+    replay = ModernReplay(_RECORDING, evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(
         provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
@@ -96,20 +102,22 @@ def test_catalogue_known_explicit_restriction_reuses_without_stale_policy_failur
 
 
 @pytest.mark.parametrize("variant", ["0df18b246e8f48ec8e6547a92070e94a", "authored-unknown"])
-def test_before_fetch_restriction_bundle_retains_acquired_scoped_inventory(monkeypatch, tmp_path, variant):
+def test_before_fetch_restriction_bundle_retains_acquired_scoped_inventory(
+    monkeypatch, tmp_path, variant, retained_evidence_root: Path
+):
     """Exact selected-series response; unknown-ID empty response is an authored control."""
     from rivretrieve._internal.transport import TransportResponse
 
     name = "daily-02196000-2000-current"
     current = "0df18b246e8f48ec8e6547a92070e94a"
-    replay = ModernReplay(name)
+    replay = ModernReplay(name, evidence_root=retained_evidence_root)
     empty = b'{"type":"FeatureCollection","features":[],"links":[]}'
 
     class UnknownSelectorControl:
         def send(self, request):
             if variant == current:
                 return replay.send(request)
-            expected_url, expected_params = coordinates(MANIFEST[name]["original_url"])
+            expected_url, expected_params = coordinates(manifest(retained_evidence_root)[name]["original_url"])
             expected_params = tuple(
                 sorted((key, variant if key == "time_series_id" else value) for key, value in expected_params)
             )
@@ -117,7 +125,7 @@ def test_before_fetch_restriction_bundle_retains_acquired_scoped_inventory(monke
             return TransportResponse(
                 empty,
                 200,
-                datetime.fromisoformat(MANIFEST[name]["acquired_utc"]),
+                datetime.fromisoformat(manifest(retained_evidence_root)[name]["acquired_utc"]),
                 "application/json",
                 request.url,
                 request.params,
@@ -130,7 +138,9 @@ def test_before_fetch_restriction_bundle_retains_acquired_scoped_inventory(monke
     restricted = rr.from_bundle(rr.to_bundle(rr.pick(selection, variant=variant, on_issue="ignore")))
     result = rr.fetch(restricted, start="2000-01-01", end="2000-01-07", receipts=True, on_issue="ignore")
     assert result.data.height == (7 if variant == current else 0)
-    assert result.receipts.entries[0].content == (body(name) if variant == current else empty)
+    assert result.receipts.entries[0].content == (
+        body(name, evidence_root=retained_evidence_root) if variant == current else empty
+    )
     restored = rr.from_bundle(rr.to_bundle(result))
     pl_testing.assert_frame_equal(restored.data, result.data)
     assert restored.inventories == result.inventories
@@ -143,11 +153,13 @@ def test_before_fetch_restriction_bundle_retains_acquired_scoped_inventory(monke
         assert {item.status.value for item in restored.outcomes} == {"unresolved"}
 
 
-def test_recorded_ended_empty_result_bundle_retains_inventory_definition(monkeypatch, tmp_path):
+def test_recorded_ended_empty_result_bundle_retains_inventory_definition(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     name = "daily-02196000-ended-empty"
     ended = "4d186669708e4dc18f84d271efb953a1"
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(name))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(name, evidence_root=retained_evidence_root))
     selection = rr.find(
         provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"
     )
@@ -161,8 +173,10 @@ def test_recorded_ended_empty_result_bundle_retains_inventory_definition(monkeyp
     assert {item.identity.published_id for item in restored.source_series} == {ended}
 
 
-def test_bundle_container_is_deterministic_without_rewriting_source_timestamps(monkeypatch, tmp_path):
-    result, content = _result(monkeypatch, tmp_path)
+def test_bundle_container_is_deterministic_without_rewriting_source_timestamps(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
+    result, content = _result(monkeypatch, tmp_path, retained_evidence_root=retained_evidence_root)
     monkeypatch.setattr("zipfile.time.localtime", lambda *args: (2020, 1, 2, 3, 4, 6, 3, 2, -1))
     first = rr.to_bundle(result)
     monkeypatch.setattr("zipfile.time.localtime", lambda *args: (2026, 9, 19, 12, 30, 22, 5, 262, -1))
@@ -170,13 +184,15 @@ def test_bundle_container_is_deterministic_without_rewriting_source_timestamps(m
     assert first == second
     restored = rr.from_bundle(first)
     assert restored.receipts.entries[0].origin.retrieved_at == datetime.fromisoformat(
-        MANIFEST[_RECORDING]["acquired_utc"]
+        manifest(retained_evidence_root)[_RECORDING]["acquired_utc"]
     )
     assert restored.provenance.calls_made == result.provenance.calls_made
 
 
-def test_bundle_rejects_inventory_fact_membership_missing_from_its_source_definition(monkeypatch, tmp_path):
-    result, _ = _result(monkeypatch, tmp_path)
+def test_bundle_rejects_inventory_fact_membership_missing_from_its_source_definition(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
+    result, _ = _result(monkeypatch, tmp_path, retained_evidence_root=retained_evidence_root)
     output = BytesIO()
     with (
         ZipFile(BytesIO(rr.to_bundle(result))) as source,
@@ -196,8 +212,10 @@ def test_bundle_rejects_inventory_fact_membership_missing_from_its_source_defini
         rr.from_bundle(output.getvalue())
 
 
-def test_failed_explicit_identity_remains_inspectable_without_claiming_unknown_physical_facts(monkeypatch, tmp_path):
-    data = Path(__file__).parent / "test_data"
+def test_failed_explicit_identity_remains_inspectable_without_claiming_unknown_physical_facts(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
+    data = retained_evidence_root / "tests" / "test_data"
     recordings = tuple(
         read_recording(data / f"no_nve_109.42.0_1001_1440_version-{version}_engine_2024-01-02.recording.json")
         for version in (1, 99999)

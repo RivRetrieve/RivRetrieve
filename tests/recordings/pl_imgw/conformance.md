@@ -8,7 +8,7 @@ The catalogue station inventory is a recorded snapshot. Neither it nor the compi
 
 ## Exact source evidence
 
-`tests/test_data/pl_imgw_annual/` retains untouched HTTP response bytes and adjacent URL, retrieval instant, status and SHA-256 records for:
+The private source archive retains untouched HTTP response bytes and adjacent URL, retrieval instant, status and SHA-256 records under `tests/test_data/pl_imgw_annual/` in the external evidence directory for:
 
 - Official `2024/codz_2024.zip`, SHA-256 `c40ebcda7a6b7ee30c936531fd0f391ba34d5bdf1545b535c3347c39319651fa` (1,753,371 bytes).
 - `CODZ_publiczne_format.txt`, SHA-256 `d8e7cbbc7680663d99813dd5f9abd793384b2f560600229625bb808ea71ef362`. This defines COSTAN [cm], COPRZP [m^3/s], COPTMP [st. C], hydrological year/month and calendar month. Missing codes are 9999, 99999.999 and 99.9 respectively. 999 is not a missing-flow code.

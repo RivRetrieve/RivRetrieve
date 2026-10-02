@@ -26,19 +26,24 @@ from rivretrieve._internal.transport import TransportRequest, TransportResponse
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
-_DATA = Path(__file__).parent / "test_data"
-_RECORDINGS = (
-    read_recording(_DATA / "th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json"),
-    read_recording(_DATA / "th_thaiwater_1373273_2026-09-09_2026-09-12.recording.json"),
-)
+
+@pytest.fixture
+def recordings(retained_evidence_root: Path):
+    data = retained_evidence_root / "tests/test_data"
+    return (
+        read_recording(data / "th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json"),
+        read_recording(data / "th_thaiwater_1373273_2026-09-09_2026-09-12.recording.json"),
+    )
+
+
 _PROVIDER = ProviderId("th_thaiwater")
 _PRODUCTS = (ProductId("stage_reported"), ProductId("discharge_reported"))
 _START, _END = "2025-09-11", "2026-09-10"
 
 
 class CountedReplay(ReplayTransport):
-    def __init__(self) -> None:
-        super().__init__(_RECORDINGS)
+    def __init__(self, recordings) -> None:
+        super().__init__(recordings)
         self.calls: list[TransportRequest] = []
 
     def send(self, request: TransportRequest) -> TransportResponse:
@@ -48,9 +53,9 @@ class CountedReplay(ReplayTransport):
 
 @pytest.mark.parametrize("cache", ["bypass", "reuse", "refresh"])
 def test_public_365_date_request_splits_the_padded_source_window(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cache: CacheMode
+    recordings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cache: CacheMode
 ) -> None:
-    replay = CountedReplay()
+    replay = CountedReplay(recordings)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(provider="th_thaiwater", station="1373273", quantity="stage")
@@ -59,11 +64,12 @@ def test_public_365_date_request_splits_the_padded_source_window(
     assert bounds == [("2025-09-09", "2026-09-08"), ("2026-09-09", "2026-09-12")]
     assert all((date.fromisoformat(end) - date.fromisoformat(start)).days + 1 <= 365 for start, end in bounds)
     assert len(result.receipts.entries) == 2
-    assert tuple(entry.content for entry in result.receipts.entries) == tuple(record.content for record in _RECORDINGS)
+    assert tuple(entry.content for entry in result.receipts.entries) == tuple(record.content for record in recordings)
     assert not any(issue.severity == "error" for issue in result.issues)
 
 
 def test_each_product_has_an_independently_authored_public_multi_window_boundary_probe(
+    recordings,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Independent source-only author: thai-source-boundary/RUNTIME-V2-REPORT.md,
@@ -82,7 +88,7 @@ def test_each_product_has_an_independently_authored_public_multi_window_boundary
         LiveBoundaryProbe(
             provider_id=_PROVIDER,
             product_id=product,
-            recordings=_RECORDINGS,
+            recordings=recordings,
             assertions={
                 READING_COUNT: 52560,
                 FIRST_WALL_CLOCK_TIME: WallClockExpectation("2025-09-11T00:00:00", "unknown"),
@@ -96,10 +102,11 @@ def test_each_product_has_an_independently_authored_public_multi_window_boundary
 
 
 def test_public_multi_window_reuse_and_refresh_preserve_complete_requested_coverage(
+    recordings,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    replay = CountedReplay()
+    replay = CountedReplay(recordings)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     discovered = rr.find(provider="th_thaiwater", station="1373273")
@@ -132,7 +139,7 @@ def test_public_multi_window_reuse_and_refresh_preserve_complete_requested_cover
     assert all(entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD for entry in refreshed.receipts.entries)
     # A refresh replays actual source responses; the test does not claim a later source vintage.
     assert {item.retrieved_at for item in rr.cache_status("th_thaiwater").coverage} == {
-        record.retrieved_at for record in _RECORDINGS
+        record.retrieved_at for record in recordings
     }
 
 
@@ -152,17 +159,17 @@ def test_declared_source_cap_splits_engine_padding_across_the_leap_date() -> Non
     # No response or measurements are invented for the second source window.
 
 
-def test_committed_source_recordings_match_their_capture_manifest() -> None:
+def test_retained_source_recordings_match_their_capture_manifest(retained_evidence_root: Path) -> None:
     import hashlib
     import json
 
-    manifest = json.loads((_DATA / "th_thaiwater_source_window_manifest.json").read_text())
+    manifest = json.loads((Path(__file__).parent / "test_data/th_thaiwater_source_window_manifest.json").read_text())
     for capture in manifest["captures"]:
-        path = _DATA / capture["recording"]
+        path = retained_evidence_root / "tests/test_data" / capture["recording"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == capture["recording_sha256"]
         recording = read_recording(path)
         assert recording.sha256 == capture["response_sha256"]
         assert recording.retrieved_at == datetime.fromisoformat(capture["retrieved_at"])
     historical = next(capture for capture in manifest["captures"] if capture["name"] == "historical_null")
-    raw = (_DATA / historical["recording"]).read_bytes()
+    raw = (retained_evidence_root / "tests/test_data" / historical["recording"]).read_bytes()
     assert hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest() == historical["original_git_blob"]

@@ -9,7 +9,7 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from tests.test_documentation_examples import blocks, execute_block
-from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
+from tests.usgs_modern_recordings import ModernReplay, body, manifest
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
@@ -19,10 +19,10 @@ STATIONS = ["01013500", "01022500", "01030500"]
 RECORDINGS = [f"daily-camels-{station}-2025" for station in STATIONS]
 
 
-def test_complete_camels_page(monkeypatch, tmp_path):
+def test_complete_camels_page(monkeypatch, tmp_path, retained_evidence_root: Path):
     import rivretrieve._internal.discovery as discovery
 
-    replay = ModernReplay(*RECORDINGS)
+    replay = ModernReplay(*RECORDINGS, evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
@@ -57,10 +57,10 @@ def test_complete_camels_page(monkeypatch, tmp_path):
     native_rows = []
     identities = []
     for name in RECORDINGS:
-        receipt = MANIFEST[name]
+        receipt = manifest(retained_evidence_root)[name]
         assert receipt["status"] == 200
         assert "2024-12-30%2F2026-01-02" in receipt["original_url"]
-        document = json.loads(body(name))
+        document = json.loads(body(name, evidence_root=retained_evidence_root))
         coordinates = set()
         for feature in document["features"]:
             item = feature["properties"]

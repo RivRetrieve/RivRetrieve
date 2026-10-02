@@ -16,6 +16,8 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--out-dir", type=Path, required=True)
 args = parser.parse_args()
 OUT = args.out_dir.resolve()
+if any((parent / ".git").exists() for parent in (OUT, *OUT.parents)):
+    parser.error("Output must be outside source checkouts")
 OUT.mkdir(parents=True, exist_ok=False)
 ROOT = "https://hydro.eaufrance.fr"
 current = None

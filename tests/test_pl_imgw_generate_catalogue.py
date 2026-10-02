@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-import tempfile
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -28,7 +27,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.pl_imgw import generate_catalogue
 
-_TEST_DATA_DIR = Path(__file__).parent / "test_data"
+_TEST_DATA_DIR = Path("tests/test_data")
 _METADATA_FIXTURE = _TEST_DATA_DIR / "pl_imgw_metadata.csv"
 _RECOVERED_FIXTURE = _TEST_DATA_DIR / "pl_imgw_stations.csv"
 _KODY_STACJI_CAPTURE = _TEST_DATA_DIR / "pl_imgw_kody_stacji.csv"
@@ -48,13 +47,13 @@ _EVIDENCE = {
 }
 
 
-def _recovered_records() -> list[dict[str, str]]:
-    with _RECOVERED_FIXTURE.open(encoding="utf-8", newline="") as file:
+def _recovered_records(retained_evidence_root: Path) -> list[dict[str, str]]:
+    with (retained_evidence_root / _RECOVERED_FIXTURE).open(encoding="utf-8", newline="") as file:
         return list(csv.DictReader(file))
 
 
-def _recovered_ids() -> list[str]:
-    return [row["gauge_id"] for row in _recovered_records()]
+def _recovered_ids(retained_evidence_root: Path) -> list[str]:
+    return [row["gauge_id"] for row in _recovered_records(retained_evidence_root)]
 
 
 def _write_roster(path: Path, ids: list[str], *, columns: int = 4) -> None:
@@ -65,23 +64,20 @@ def _write_roster(path: Path, ids: list[str], *, columns: int = 4) -> None:
             writer.writerow(row[:columns])
 
 
-def _refresh(tmp_path: Path):
+def _refresh(retained_evidence_root: Path, tmp_path: Path):
     roster = tmp_path / "lista_stacji_hydro.csv"
-    _write_roster(roster, _recovered_ids())
+    _write_roster(roster, _recovered_ids(retained_evidence_root))
     return generate_catalogue.refresh_native_table_from_files(
-        _RECOVERED_FIXTURE,
+        (retained_evidence_root / _RECOVERED_FIXTURE),
         roster,
         roster_retrieved_at=generate_catalogue.parse_roster_retrieved_at(_ROSTER_INSTANT),
         retrieved_at=generate_catalogue.parse_recovered_retrieved_at(_RECOVERED_INSTANT),
     )
 
 
-def _synthetic_catalogue(tmp_path: Path | None = None):
-    if tmp_path is None:
-        with tempfile.TemporaryDirectory() as directory:
-            return _synthetic_catalogue(Path(directory))
+def _subset_catalogue(retained_evidence_root: Path, tmp_path: Path):
     tmp_path.mkdir(parents=True, exist_ok=True)
-    rows = pl.read_csv(_METADATA_FIXTURE, schema=generate_catalogue.NATIVE_SOURCE_SCHEMA)
+    rows = pl.read_csv((retained_evidence_root / _METADATA_FIXTURE), schema=generate_catalogue.NATIVE_SOURCE_SCHEMA)
     native = stamp_native_table(rows, RetrievedAt(datetime(2025, 10, 10, 18, 46, 34, tzinfo=UTC)))
     native_path = tmp_path / "native.parquet"
     write_native_table(native, native_path)
@@ -90,7 +86,7 @@ def _synthetic_catalogue(tmp_path: Path | None = None):
     return generate_catalogue.build_catalogue(read_native_table(native_path), STATION_CATALOGUE_ORIGINS)
 
 
-def _expected_native_frame() -> pl.DataFrame:
+def _expected_native_frame(retained_evidence_root: Path) -> pl.DataFrame:
     rows = [
         {
             "gauge_id": row["gauge_id"],
@@ -101,7 +97,7 @@ def _expected_native_frame() -> pl.DataFrame:
             "latitude": float(row["latitude"]),
             "longitude": float(row["longitude"]),
         }
-        for row in _recovered_records()
+        for row in _recovered_records(retained_evidence_root)
     ]
     instant = datetime(2025, 10, 10, 18, 46, 34, tzinfo=UTC)
     return (
@@ -111,16 +107,18 @@ def _expected_native_frame() -> pl.DataFrame:
     )
 
 
-def _assert_capture(path: Path) -> bytes:
+def _assert_capture(retained_evidence_root: Path, path: Path) -> bytes:
     expected_size, expected_digest = _EVIDENCE[path]
-    raw = path.read_bytes()
+    raw = (retained_evidence_root / path).read_bytes()
     assert len(raw) == expected_size
     assert hashlib.sha256(raw).hexdigest() == expected_digest
     return raw
 
 
-def _publisher_coordinate_sets() -> tuple[set[str], dict[str, tuple[float, float]], set[str], set[str]]:
-    csv_text = _assert_capture(_KODY_STACJI_CAPTURE).decode("utf-8", errors="strict")
+def _publisher_coordinate_sets(
+    retained_evidence_root: Path,
+) -> tuple[set[str], dict[str, tuple[float, float]], set[str], set[str]]:
+    csv_text = _assert_capture(retained_evidence_root, _KODY_STACJI_CAPTURE).decode("utf-8", errors="strict")
     csv_rows = list(csv.DictReader(csv_text.splitlines(), delimiter=";"))
     csv_coordinates: dict[str, tuple[float, float]] = {}
     for row in csv_rows:
@@ -128,7 +126,7 @@ def _publisher_coordinate_sets() -> tuple[set[str], dict[str, tuple[float, float
         longitude = _dms_to_degrees(row["Długość geograficzna"])
         csv_coordinates[row["Kod 9-znakowy"]] = (latitude, longitude)
 
-    api_rows = json.loads(_assert_capture(_HYDRO_API_CAPTURE).decode("utf-8"))
+    api_rows = json.loads(_assert_capture(retained_evidence_root, _HYDRO_API_CAPTURE).decode("utf-8"))
     api_ids = {row["id_stacji"] for row in api_rows}
     usable_api_ids = {
         row["id_stacji"]
@@ -238,24 +236,24 @@ def _weak_native(*, second_id: object = "151140030", latitude: object = 51.0, lo
     )
 
 
-def test_generate_catalogue_station_count_fixture() -> None:
+def test_generate_catalogue_station_count_fixture(retained_evidence_root: Path, tmp_path: Path) -> None:
     """Fixture has 3 stations with valid coordinates."""
-    cat = _synthetic_catalogue()
+    cat = _subset_catalogue(retained_evidence_root, tmp_path)
     assert cat.stations.height == 3
 
 
-def test_generate_catalogue_product_count() -> None:
-    cat = _synthetic_catalogue()
+def test_generate_catalogue_product_count(retained_evidence_root: Path, tmp_path: Path) -> None:
+    cat = _subset_catalogue(retained_evidence_root, tmp_path)
     assert cat.products.height == 3
 
 
-def test_generate_catalogue_station_products_cross() -> None:
-    cat = _synthetic_catalogue()
+def test_generate_catalogue_station_products_cross(retained_evidence_root: Path, tmp_path: Path) -> None:
+    cat = _subset_catalogue(retained_evidence_root, tmp_path)
     assert cat.station_products.height == 3 * 3
 
 
-def test_generate_catalogue_station_fields() -> None:
-    cat = _synthetic_catalogue()
+def test_generate_catalogue_station_fields(retained_evidence_root: Path, tmp_path: Path) -> None:
+    cat = _subset_catalogue(retained_evidence_root, tmp_path)
     row = cat.stations.filter(pl.col("station_id") == _STATION_ID)
     assert row.height == 1
     assert row["crs"][0] == "unknown"
@@ -263,39 +261,39 @@ def test_generate_catalogue_station_fields() -> None:
     assert row["longitude"][0] == pytest.approx(14.8218, abs=1e-3)
 
 
-def test_generate_catalogue_product_ids() -> None:
-    cat = _synthetic_catalogue()
+def test_generate_catalogue_product_ids(retained_evidence_root: Path, tmp_path: Path) -> None:
+    cat = _subset_catalogue(retained_evidence_root, tmp_path)
     ids = set(cat.products["product_id"].to_list())
     assert ids == {"discharge_daily", "stage_daily", "water_temperature_daily"}
 
 
-def test_generate_catalogue_all_availability_unknown() -> None:
-    cat = _synthetic_catalogue()
+def test_generate_catalogue_all_availability_unknown(retained_evidence_root: Path, tmp_path: Path) -> None:
+    cat = _subset_catalogue(retained_evidence_root, tmp_path)
     assert cat.station_products["availability"].cast(pl.Utf8).to_list() == ["unknown"] * 9
 
 
-def test_metadata_fixture_is_exact_recovered_subset() -> None:
-    raw = _METADATA_FIXTURE.read_bytes()
+def test_metadata_fixture_is_exact_recovered_subset(retained_evidence_root: Path) -> None:
+    raw = (retained_evidence_root / _METADATA_FIXTURE).read_bytes()
     assert len(raw) == 321
     assert hashlib.sha256(raw).hexdigest() == "cdfafb36adaf894335f9d659f22b48ea32134921fffd3b575dca9a9c19a9f108"
 
-    with _METADATA_FIXTURE.open(encoding="utf-8", newline="") as file:
+    with (retained_evidence_root / _METADATA_FIXTURE).open(encoding="utf-8", newline="") as file:
         subset_records = list(csv.reader(file))
-    with _RECOVERED_FIXTURE.open(encoding="utf-8", newline="") as file:
+    with (retained_evidence_root / _RECOVERED_FIXTURE).open(encoding="utf-8", newline="") as file:
         recovered_records = list(csv.reader(file))
     selected_ids = {"149180020", "151140030", "153190040"}
     expected = [recovered_records[0], *[row for row in recovered_records[1:] if row[0] in selected_ids]]
     assert subset_records == expected
 
 
-def test_committed_publisher_evidence_raw_bytes_are_attested() -> None:
+def test_committed_publisher_evidence_raw_bytes_are_attested(retained_evidence_root: Path) -> None:
     for path in _EVIDENCE:
-        _assert_capture(path)
+        _assert_capture(retained_evidence_root, path)
 
 
-def test_publisher_crs_evidence_decoding_and_tokens_are_pinned() -> None:
-    api_raw = _assert_capture(_APIINFO_CAPTURE)
-    csv_raw = _assert_capture(_KODY_STACJI_CAPTURE)
+def test_publisher_crs_evidence_decoding_and_tokens_are_pinned(retained_evidence_root: Path) -> None:
+    api_raw = _assert_capture(retained_evidence_root, _APIINFO_CAPTURE)
+    csv_raw = _assert_capture(retained_evidence_root, _KODY_STACJI_CAPTURE)
     api_text = api_raw.decode("utf-8", errors="strict").lower()
     csv_text = csv_raw.decode("utf-8", errors="strict").lower()
     with pytest.raises(UnicodeDecodeError) as api_error:
@@ -320,10 +318,12 @@ def test_publisher_crs_evidence_decoding_and_tokens_are_pinned() -> None:
     assert b"/api/data/hydro" in api_raw
 
 
-def test_native_build_is_network_free_and_repeatable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_native_build_is_network_free_and_repeatable(
+    retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: pytest.fail("network touched"))
-    first = _synthetic_catalogue(tmp_path / "one")
-    second = _synthetic_catalogue(tmp_path / "two")
+    first = _subset_catalogue(retained_evidence_root, tmp_path / "one")
+    second = _subset_catalogue(retained_evidence_root, tmp_path / "two")
     assert first.provider_info == second.provider_info
     pl_testing.assert_frame_equal(first.products, second.products, check_exact=True)
     pl_testing.assert_frame_equal(first.stations, second.stations, check_exact=True)
@@ -369,7 +369,7 @@ def test_duplicate_native_identifier_fails_loudly() -> None:
     )
 
 
-def test_build_catalogue_is_gated_on_origins() -> None:
+def test_build_catalogue_is_gated_on_origins(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
 
     broken = dict(STATION_CATALOGUE_ORIGINS)
@@ -379,7 +379,7 @@ def test_build_catalogue_is_gated_on_origins() -> None:
         FatalContractError,
         match=r"pl_imgw\.longitude: canonical column has no origin declaration",
     ):
-        generate_catalogue.build_catalogue(read_native_table(_NATIVE_PATH), broken)
+        generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / _NATIVE_PATH), broken)
 
 
 def test_mixed_retrieval_dates_use_maximum_for_catalogue_date() -> None:
@@ -416,8 +416,8 @@ def test_invalid_native_coordinate_fails_loudly(field: str, value: object, rende
     )
 
 
-def test_full_recovered_refresh_preserves_exact_source_data(tmp_path: Path) -> None:
-    outcome = _refresh(tmp_path)
+def test_full_recovered_refresh_preserves_exact_source_data(retained_evidence_root: Path, tmp_path: Path) -> None:
+    outcome = _refresh(retained_evidence_root, tmp_path)
     frame = outcome.value.data
 
     assert outcome.issues == ()
@@ -433,13 +433,13 @@ def test_full_recovered_refresh_preserves_exact_source_data(tmp_path: Path) -> N
     assert frame["retrieved_at"].unique().to_list() == [datetime(2025, 10, 10, 18, 46, 34, tzinfo=UTC)]
     canonical_ids = json.dumps(sorted(frame["gauge_id"].to_list()), separators=(",", ":")).encode()
     assert hashlib.sha256(canonical_ids).hexdigest() == _ID_DIGEST
-    pl_testing.assert_frame_equal(frame, _expected_native_frame(), check_exact=True)
+    pl_testing.assert_frame_equal(frame, _expected_native_frame(retained_evidence_root), check_exact=True)
 
 
-def test_absent_recovered_input_fails_loudly(tmp_path: Path) -> None:
+def test_absent_recovered_input_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     missing = tmp_path / "missing.csv"
     roster = tmp_path / "roster.csv"
-    _write_roster(roster, _recovered_ids())
+    _write_roster(roster, _recovered_ids(retained_evidence_root))
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.refresh_native_table_from_files(
             missing,
@@ -450,11 +450,11 @@ def test_absent_recovered_input_fails_loudly(tmp_path: Path) -> None:
     assert str(exc_info.value) == f"pl_imgw recovered input not found: {missing}"
 
 
-def test_malformed_recovered_header_fails_loudly(tmp_path: Path) -> None:
+def test_malformed_recovered_header_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     recovered = tmp_path / "recovered.csv"
     recovered.write_text("wrong,header\n1,2\n", encoding="utf-8")
     roster = tmp_path / "roster.csv"
-    _write_roster(roster, _recovered_ids())
+    _write_roster(roster, _recovered_ids(retained_evidence_root))
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.refresh_native_table_from_files(
             recovered,
@@ -468,9 +468,9 @@ def test_malformed_recovered_header_fails_loudly(tmp_path: Path) -> None:
     )
 
 
-def test_malformed_recovered_value_fails_loudly(tmp_path: Path) -> None:
+def test_malformed_recovered_value_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     recovered = tmp_path / "recovered.csv"
-    rows = _RECOVERED_FIXTURE.read_text(encoding="utf-8").splitlines()
+    rows = (retained_evidence_root / _RECOVERED_FIXTURE).read_text(encoding="utf-8").splitlines()
     fields = next(csv.reader([rows[1]]))
     fields[3] = "invalid"
     recovered.write_text(f"{rows[0]}\n{','.join(fields)}\n", encoding="utf-8")
@@ -486,11 +486,11 @@ def test_malformed_recovered_value_fails_loudly(tmp_path: Path) -> None:
     assert str(exc_info.value) == "pl_imgw recovered value invalid: row=2; field=area; value='invalid'"
 
 
-def test_absent_roster_input_fails_loudly(tmp_path: Path) -> None:
+def test_absent_roster_input_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     missing = tmp_path / "missing.csv"
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.refresh_native_table_from_files(
-            _RECOVERED_FIXTURE,
+            (retained_evidence_root / _RECOVERED_FIXTURE),
             missing,
             roster_retrieved_at=generate_catalogue.parse_roster_retrieved_at(_ROSTER_INSTANT),
             retrieved_at=generate_catalogue.parse_recovered_retrieved_at(_RECOVERED_INSTANT),
@@ -498,12 +498,12 @@ def test_absent_roster_input_fails_loudly(tmp_path: Path) -> None:
     assert str(exc_info.value) == f"pl_imgw roster input not found: {missing}"
 
 
-def test_invalid_cp1250_roster_fails_loudly(tmp_path: Path) -> None:
+def test_invalid_cp1250_roster_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
     roster.write_bytes(b"\x81")
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.refresh_native_table_from_files(
-            _RECOVERED_FIXTURE,
+            (retained_evidence_root / _RECOVERED_FIXTURE),
             roster,
             roster_retrieved_at=generate_catalogue.parse_roster_retrieved_at(_ROSTER_INSTANT),
             retrieved_at=generate_catalogue.parse_recovered_retrieved_at(_RECOVERED_INSTANT),
@@ -511,12 +511,12 @@ def test_invalid_cp1250_roster_fails_loudly(tmp_path: Path) -> None:
     assert str(exc_info.value) == f"pl_imgw roster encoding invalid: expected=cp1250; path={roster}"
 
 
-def test_invalid_roster_shape_fails_loudly(tmp_path: Path) -> None:
+def test_invalid_roster_shape_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
-    _write_roster(roster, _recovered_ids(), columns=3)
+    _write_roster(roster, _recovered_ids(retained_evidence_root), columns=3)
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.refresh_native_table_from_files(
-            _RECOVERED_FIXTURE,
+            (retained_evidence_root / _RECOVERED_FIXTURE),
             roster,
             roster_retrieved_at=generate_catalogue.parse_roster_retrieved_at(_ROSTER_INSTANT),
             retrieved_at=generate_catalogue.parse_recovered_retrieved_at(_RECOVERED_INSTANT),
@@ -524,12 +524,12 @@ def test_invalid_roster_shape_fails_loudly(tmp_path: Path) -> None:
     assert str(exc_info.value) == "pl_imgw roster row invalid: row=1; expected_columns=4; actual_columns=3"
 
 
-def test_incomplete_roster_fails_loudly(tmp_path: Path) -> None:
+def test_incomplete_roster_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
-    _write_roster(roster, _recovered_ids()[:1300])
+    _write_roster(roster, _recovered_ids(retained_evidence_root)[:1300])
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.refresh_native_table_from_files(
-            _RECOVERED_FIXTURE,
+            (retained_evidence_root / _RECOVERED_FIXTURE),
             roster,
             roster_retrieved_at=generate_catalogue.parse_roster_retrieved_at(_ROSTER_INSTANT),
             retrieved_at=generate_catalogue.parse_recovered_retrieved_at(_RECOVERED_INSTANT),
@@ -537,14 +537,14 @@ def test_incomplete_roster_fails_loudly(tmp_path: Path) -> None:
     assert str(exc_info.value) == "pl_imgw roster row count invalid: expected=1301; actual=1300"
 
 
-def test_duplicate_roster_identifiers_fail_loudly(tmp_path: Path) -> None:
+def test_duplicate_roster_identifiers_fail_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
-    ids = _recovered_ids()
+    ids = _recovered_ids(retained_evidence_root)
     ids[-1] = ids[0]
     _write_roster(roster, ids)
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.refresh_native_table_from_files(
-            _RECOVERED_FIXTURE,
+            (retained_evidence_root / _RECOVERED_FIXTURE),
             roster,
             roster_retrieved_at=generate_catalogue.parse_roster_retrieved_at(_ROSTER_INSTANT),
             retrieved_at=generate_catalogue.parse_recovered_retrieved_at(_RECOVERED_INSTANT),
@@ -553,16 +553,17 @@ def test_duplicate_roster_identifiers_fail_loudly(tmp_path: Path) -> None:
 
 
 def test_complete_roster_identifier_mismatch_is_fatal_and_silent(
+    retained_evidence_root: Path,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     roster = tmp_path / "roster.csv"
-    ids = _recovered_ids()
+    ids = _recovered_ids(retained_evidence_root)
     ids[ids.index("149180010")] = "999999999"
     _write_roster(roster, ids)
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.refresh_native_table_from_files(
-            _RECOVERED_FIXTURE,
+            (retained_evidence_root / _RECOVERED_FIXTURE),
             roster,
             roster_retrieved_at=generate_catalogue.parse_roster_retrieved_at(_ROSTER_INSTANT),
             retrieved_at=generate_catalogue.parse_recovered_retrieved_at(_RECOVERED_INSTANT),
@@ -573,14 +574,14 @@ def test_complete_roster_identifier_mismatch_is_fatal_and_silent(
     assert capsys.readouterr() == ("", "")
 
 
-def test_missing_roster_retrieved_at_fails_loudly(tmp_path: Path) -> None:
+def test_missing_roster_retrieved_at_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
-    _write_roster(roster, _recovered_ids())
+    _write_roster(roster, _recovered_ids(retained_evidence_root))
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.main(
             [
                 "--fixture",
-                str(_RECOVERED_FIXTURE),
+                str(retained_evidence_root / _RECOVERED_FIXTURE),
                 "--roster",
                 str(roster),
                 "--retrieved-at",
@@ -592,14 +593,14 @@ def test_missing_roster_retrieved_at_fails_loudly(tmp_path: Path) -> None:
     assert str(exc_info.value) == "pl_imgw --roster-retrieved-at is required for native refresh"
 
 
-def test_malformed_roster_retrieved_at_fails_loudly(tmp_path: Path) -> None:
+def test_malformed_roster_retrieved_at_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
-    _write_roster(roster, _recovered_ids())
+    _write_roster(roster, _recovered_ids(retained_evidence_root))
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.main(
             [
                 "--fixture",
-                str(_RECOVERED_FIXTURE),
+                str(retained_evidence_root / _RECOVERED_FIXTURE),
                 "--roster",
                 str(roster),
                 "--roster-retrieved-at",
@@ -615,14 +616,14 @@ def test_malformed_roster_retrieved_at_fails_loudly(tmp_path: Path) -> None:
     )
 
 
-def test_malformed_recovered_retrieved_at_fails_loudly(tmp_path: Path) -> None:
+def test_malformed_recovered_retrieved_at_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
-    _write_roster(roster, _recovered_ids())
+    _write_roster(roster, _recovered_ids(retained_evidence_root))
     with pytest.raises(FatalContractError) as exc_info:
         generate_catalogue.main(
             [
                 "--fixture",
-                str(_RECOVERED_FIXTURE),
+                str(retained_evidence_root / _RECOVERED_FIXTURE),
                 "--roster",
                 str(roster),
                 "--roster-retrieved-at",
@@ -652,8 +653,8 @@ def test_incomplete_native_cli_combination_fails_loudly(tmp_path: Path) -> None:
     )
 
 
-def test_committed_native_frame_is_exact_recovered_projection() -> None:
-    native = read_native_table(_NATIVE_PATH).data
+def test_committed_native_frame_is_exact_recovered_projection(retained_evidence_root: Path) -> None:
+    native = read_native_table(retained_evidence_root / _NATIVE_PATH).data
     assert native.schema == pl.Schema(
         {
             "gauge_id": pl.String,
@@ -668,12 +669,15 @@ def test_committed_native_frame_is_exact_recovered_projection() -> None:
     )
     assert native.height == 1301
     assert native["gauge_id"].n_unique() == 1301
-    pl_testing.assert_frame_equal(native, _expected_native_frame(), check_exact=True)
-    assert generate_catalogue.native_table_content_sha256(read_native_table(_NATIVE_PATH)) == _NATIVE_DIGEST
+    pl_testing.assert_frame_equal(native, _expected_native_frame(retained_evidence_root), check_exact=True)
+    assert (
+        generate_catalogue.native_table_content_sha256(read_native_table(retained_evidence_root / _NATIVE_PATH))
+        == _NATIVE_DIGEST
+    )
 
 
-def test_recovered_coordinate_audit() -> None:
-    frame = _expected_native_frame()
+def test_recovered_coordinate_audit(retained_evidence_root: Path) -> None:
+    frame = _expected_native_frame(retained_evidence_root)
     assert frame["latitude"].null_count() == 0
     assert frame["longitude"].null_count() == 0
     assert frame.filter((pl.col("latitude") == 0) | (pl.col("longitude") == 0)).height == 0
@@ -689,9 +693,9 @@ def test_recovered_coordinate_audit() -> None:
     assert frame.select(["latitude", "longitude"]).is_duplicated().sum() == 0
 
 
-def test_publisher_route_partition_and_coordinate_agreement() -> None:
-    csv_ids, csv_coordinates, api_ids, usable_api_ids = _publisher_coordinate_sets()
-    recovered = {row["gauge_id"]: row for row in _recovered_records()}
+def test_publisher_route_partition_and_coordinate_agreement(retained_evidence_root: Path) -> None:
+    csv_ids, csv_coordinates, api_ids, usable_api_ids = _publisher_coordinate_sets(retained_evidence_root)
+    recovered = {row["gauge_id"]: row for row in _recovered_records(retained_evidence_root)}
     recovered_ids = set(recovered)
 
     assert len(recovered_ids) == 1301
@@ -741,10 +745,10 @@ def test_publisher_route_partition_and_coordinate_agreement() -> None:
     assert differences[worst_station] == pytest.approx(0.0054, abs=5e-5)
 
 
-def test_native_build_matches_independent_exact_full_projections() -> None:
+def test_native_build_matches_independent_exact_full_projections(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
 
-    native = read_native_table(_NATIVE_PATH)
+    native = read_native_table(retained_evidence_root / _NATIVE_PATH)
     actual = generate_catalogue.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
     pl_testing.assert_frame_equal(actual.stations, _expected_stations(native), check_exact=True)
     pl_testing.assert_frame_equal(actual.products, _expected_products(), check_exact=True)
@@ -765,15 +769,17 @@ def test_native_build_matches_independent_exact_full_projections() -> None:
     }
 
 
-def test_native_build_without_reverification_input_is_byte_identical_to_committed_artifacts(tmp_path: Path) -> None:
+def test_native_build_without_reverification_input_is_byte_identical_to_committed_artifacts(
+    retained_evidence_root: Path, tmp_path: Path
+) -> None:
     result = generate_catalogue.main(
         [
             "--native",
-            str(_NATIVE_PATH),
+            str(retained_evidence_root / _NATIVE_PATH),
             "--out",
             str(tmp_path),
             "--terms-recording",
-            "tests/test_data/pl_imgw_terms_regulations.html",
+            str(retained_evidence_root / "tests/test_data/pl_imgw_terms_regulations.html"),
         ]
     )
 

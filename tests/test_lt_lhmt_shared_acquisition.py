@@ -9,7 +9,6 @@ import json
 from collections import Counter
 from dataclasses import replace
 from datetime import UTC, datetime
-from pathlib import Path
 
 import polars as pl
 import polars.testing as pt
@@ -26,9 +25,14 @@ OTHER = "nemajunu-vms"
 PRODUCTS = {"discharge_daily_mean", "stage_daily_mean"}
 
 
+@pytest.fixture
+def recording(retained_evidence_root):
+    return read_recording(retained_evidence_root / "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
+
+
 class SharedTransport:
-    def __init__(self):
-        self.recording = read_recording(Path(__file__).parent / "test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
+    def __init__(self, recording):
+        self.recording = recording
         self.responses = {(STATION, "2023-06"): self.recording.content}
         self.calls = []
         self.retrieved_at = datetime(2026, 9, 27, tzinfo=UTC)
@@ -65,8 +69,8 @@ class SharedTransport:
 
 
 @pytest.fixture
-def transport(monkeypatch, tmp_path):
-    transport = SharedTransport()
+def transport(recording, monkeypatch, tmp_path):
+    transport = SharedTransport(recording)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     return transport

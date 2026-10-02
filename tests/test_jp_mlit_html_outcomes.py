@@ -2,7 +2,6 @@
 
 import re
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -10,13 +9,11 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
+from tests.test_jp_mlit_observations import _recording_paths
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
-_DATA = Path(__file__).parent / "test_data"
 _STATION = "301011281104010"
-_PRODUCTS = ("stage_hourly", "stage_daily", "discharge_hourly", "discharge_daily")
-_PATHS = tuple(_DATA / f"jp_mlit_{p}_2023_{role}.recording.json" for p in _PRODUCTS for role in ("html", "dat"))
 
 
 def _negative_derivative(content: bytes, defect: str) -> bytes:
@@ -51,8 +48,8 @@ def _negative_derivative(content: bytes, defect: str) -> bytes:
 
 
 class _DerivativeTransport:
-    def __init__(self, defect):
-        self.replay = ReplayTransport(_PATHS)
+    def __init__(self, defect, recording_paths):
+        self.replay = ReplayTransport(recording_paths)
         self.defect = defect
         self.responses = []
 
@@ -80,8 +77,8 @@ class _DerivativeTransport:
         "no-data-without-unit",
     ],
 )
-def test_public_html_derivative_retains_identified_outcome_and_siblings(monkeypatch, defect):
-    transport = _DerivativeTransport(defect)
+def test_public_html_derivative_retains_identified_outcome_and_siblings(retained_evidence_root, monkeypatch, defect):
+    transport = _DerivativeTransport(defect, _recording_paths(retained_evidence_root))
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     result = rr.fetch(
         rr.find(provider="jp_mlit", station=_STATION),
@@ -113,8 +110,10 @@ def test_public_html_derivative_retains_identified_outcome_and_siblings(monkeypa
 
 
 @pytest.mark.parametrize("policy", ["warn", "raise"])
-def test_public_html_unsupported_obeys_issue_policy(monkeypatch, policy):
-    monkeypatch.setattr(discovery, "HttpClient", lambda: _DerivativeTransport("wrong-unit"))
+def test_public_html_unsupported_obeys_issue_policy(retained_evidence_root, monkeypatch, policy):
+    monkeypatch.setattr(
+        discovery, "HttpClient", lambda: _DerivativeTransport("wrong-unit", _recording_paths(retained_evidence_root))
+    )
     context = pytest.warns(RuntimeWarning) if policy == "warn" else pytest.raises(IssuePolicyError)
     with context:
         rr.fetch(
@@ -125,8 +124,8 @@ def test_public_html_unsupported_obeys_issue_policy(monkeypatch, policy):
         )
 
 
-def test_exact_html_and_dat_have_only_dat_outcomes(monkeypatch):
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(_PATHS))
+def test_exact_html_and_dat_have_only_dat_outcomes(retained_evidence_root, monkeypatch):
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(_recording_paths(retained_evidence_root)))
     result = rr.fetch(
         rr.find(provider="jp_mlit", station=_STATION),
         start="2023-01-03",
@@ -137,11 +136,13 @@ def test_exact_html_and_dat_have_only_dat_outcomes(monkeypatch):
     assert result.data.height == 845
     assert len(result.outcomes) == 4
     assert all(o.status == "success" for o in result.outcomes)
-    assert [e.content for e in result.receipts.entries] == [read_recording(p).content for p in _PATHS]
+    assert [e.content for e in result.receipts.entries] == [
+        read_recording(p).content for p in _recording_paths(retained_evidence_root)
+    ]
 
 
 @pytest.mark.parametrize("defect", ["coordinates", "tags", "kind"])
-def test_internal_payload_defects_remain_fatal(defect):
+def test_internal_payload_defects_remain_fatal(retained_evidence_root, defect):
     from rivretrieve._internal.engine import SourceCoordinates
     from rivretrieve._internal.issues import FatalContractError
     from rivretrieve._internal.providers.jp_mlit.config import config
@@ -149,7 +150,7 @@ def test_internal_payload_defects_remain_fatal(defect):
     from rivretrieve._internal.providers.jp_mlit.parse import parse
     from tests.test_jp_mlit_observations import _fetched
 
-    payload = _fetched()[0]
+    payload = _fetched(retained_evidence_root)[0]
     if defect == "coordinates":
         payload = replace(payload, source_coordinates=SourceCoordinates("invalid"))
     elif defect == "tags":
@@ -161,8 +162,8 @@ def test_internal_payload_defects_remain_fatal(defect):
 
 
 @pytest.mark.parametrize("defect", ["wrong-unit", "no-data-marker"])
-def test_html_boundary_provenance_survives_without_receipts(monkeypatch, defect):
-    transport = _DerivativeTransport(defect)
+def test_html_boundary_provenance_survives_without_receipts(retained_evidence_root, monkeypatch, defect):
+    transport = _DerivativeTransport(defect, _recording_paths(retained_evidence_root))
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     result = rr.fetch(
         rr.find(provider="jp_mlit", station=_STATION),
@@ -180,9 +181,9 @@ def test_html_boundary_provenance_survives_without_receipts(monkeypatch, defect)
 
 
 @pytest.mark.parametrize("defect", ["wrong-unit", "no-data-marker"])
-def test_html_outcome_controls_explicit_series_cache_coverage(monkeypatch, tmp_path, defect):
+def test_html_outcome_controls_explicit_series_cache_coverage(retained_evidence_root, monkeypatch, tmp_path, defect):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    transport = _DerivativeTransport(defect)
+    transport = _DerivativeTransport(defect, _recording_paths(retained_evidence_root))
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     broad = rr.find(provider="jp_mlit", station=_STATION)
     selection = rr.pick(broad, series_id=tuple(s.series_id for s in broad.series))

@@ -10,8 +10,6 @@ import pytest
 from rivretrieve._internal.providers.cz_chmi.origins import build_acquisition_provenance as chmi_provenance
 from rivretrieve._internal.providers.lt_lhmt.origins import build_acquisition_provenance as lhmt_provenance
 
-ROOT = Path(__file__).parents[1]
-
 
 class _DocumentText(HTMLParser):
     def __init__(self):
@@ -23,7 +21,7 @@ class _DocumentText(HTMLParser):
             self.parts.append(data.strip())
 
 
-def _recording_for_fact(provenance, fact, acquisition_id):
+def _recording_for_fact(provenance, fact, acquisition_id, retained_evidence_root: Path):
     (binding,) = (binding for binding in provenance.fact_bindings if fact in binding.facts)
     assert binding.acquisition_id == acquisition_id
     (canonical,) = (item for item in provenance.fact_bindings if "canonical.product_period" in item.facts)
@@ -34,7 +32,7 @@ def _recording_for_fact(provenance, fact, acquisition_id):
     (recording,) = (
         item.recording for item in source.evidence if item.recording.recording_id in acquisition.recording_ids
     )
-    content = (ROOT / recording.repository_path).read_bytes()
+    content = (retained_evidence_root / recording.repository_path).read_bytes()
     assert sha256(content).hexdigest() == recording.sha256
     assert acquisition.requested_from == (recording.source_url,)
     assert acquisition.retrieved_at_start == recording.retrieved_at
@@ -45,9 +43,11 @@ def _recording_for_fact(provenance, fact, acquisition_id):
     "fact",
     ["source.product.native_identity", "source.product.daily_mean_semantics", "source.product.hourly_mean_semantics"],
 )
-def test_chmi_product_facts_resolve_to_publisher_dictionary(fact):
+def test_chmi_product_facts_resolve_to_publisher_dictionary(fact, retained_evidence_root: Path):
     provenance = chmi_provenance()
-    recording, content = _recording_for_fact(provenance, fact, "product_semantics_capture_2026_09_02")
+    recording, content = _recording_for_fact(
+        provenance, fact, "product_semantics_capture_2026_09_02", retained_evidence_root
+    )
     assert recording.source_url == "https://opendata.chmi.cz/hydrology/historical/metadata/meta2.json"
     assert recording.repository_path == "tests/test_data/cz_meta2.json"
     table = json.loads(content)["data"]["data"]
@@ -71,9 +71,9 @@ def test_chmi_product_facts_resolve_to_publisher_dictionary(fact):
         "source.product.historical_time_zone",
     ],
 )
-def test_lhmt_product_and_crs_facts_resolve_to_api_documentation(fact):
+def test_lhmt_product_and_crs_facts_resolve_to_api_documentation(fact, retained_evidence_root: Path):
     provenance = lhmt_provenance()
-    recording, content = _recording_for_fact(provenance, fact, "terms_capture_2026_08_21")
+    recording, content = _recording_for_fact(provenance, fact, "terms_capture_2026_08_21", retained_evidence_root)
     assert recording.source_url == "https://api.meteo.lt/"
     assert recording.repository_path == "tests/test_data/lt_lhmt_terms_licence.html"
     parser = _DocumentText()

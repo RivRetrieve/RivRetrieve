@@ -21,7 +21,6 @@ from rivretrieve._internal.recordings import read_recording
 
 _PROVIDER = ProviderId("ch_foen")
 _PRODUCTS = tuple(config().products)
-_RECORDING = read_recording(Path(__file__).parent / "test_data" / "ch_foen_2135_rest_2026-09-01.recording.json")
 
 
 def _run(replay):
@@ -35,21 +34,20 @@ def _run(replay):
     return parse(payload, config()).rows
 
 
-_PROBES = tuple(
-    BoundaryProbe(
-        _PROVIDER,
-        product,
-        (_RECORDING,),
-        {
-            READING_COUNT: 145,
-            FIRST_WALL_CLOCK_TIME: WallClockExpectation("2026-09-01T00:00:00", "+00:00"),
-            LAST_WALL_CLOCK_TIME: WallClockExpectation("2026-09-02T00:00:00", "+00:00"),
-        },
-        _run,
+def test_every_swiss_product_has_exact_rest_boundary_proof(retained_evidence_root: Path):
+    recording = read_recording(retained_evidence_root / "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json")
+    probes = tuple(
+        BoundaryProbe(
+            _PROVIDER,
+            product,
+            (recording,),
+            {
+                READING_COUNT: 145,
+                FIRST_WALL_CLOCK_TIME: WallClockExpectation("2026-09-01T00:00:00", "+00:00"),
+                LAST_WALL_CLOCK_TIME: WallClockExpectation("2026-09-02T00:00:00", "+00:00"),
+            },
+            _run,
+        )
+        for product in _PRODUCTS
     )
-    for product in _PRODUCTS
-)
-
-
-def test_every_swiss_product_has_exact_rest_boundary_proof():
-    assert len(run_boundary_probes(tuple((_PROVIDER, p) for p in _PRODUCTS), _PROBES)) == 3
+    assert len(run_boundary_probes(tuple((_PROVIDER, p) for p in _PRODUCTS), probes)) == 3

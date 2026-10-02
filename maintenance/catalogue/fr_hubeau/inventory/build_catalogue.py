@@ -30,9 +30,13 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
 from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
 
-def rebuild(root: Path, revision: str) -> None:
-    inventory = root / "maintenance/catalogue/fr_hubeau/inventory"
-    output = root / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue"
+def rebuild(evidence_root: Path, availability_ledger: Path, output: Path, capture_output: Path, revision: str) -> None:
+    for destination in (output, capture_output):
+        if any((parent / ".git").exists() for parent in (destination, *destination.parents)):
+            raise ValueError("Outputs must be outside source checkouts")
+        if destination.is_relative_to(evidence_root):
+            raise ValueError("Outputs must be separate from retained evidence")
+    inventory = evidence_root / "maintenance/catalogue/fr_hubeau/inventory"
     payloads, instants, acquisitions, evidence = [], [], [], []
     for endpoint in ("hydrometry", "temperature"):
         stem = f"{endpoint}-stations-2026-09-21"
@@ -52,7 +56,7 @@ def rebuild(root: Path, revision: str) -> None:
         url = receipt["url"] + "?" + urlencode(receipt["params"])
         recording = RecordingReference(
             recording_id=identifier,
-            repository_path=path.relative_to(root).as_posix(),
+            repository_path=path.relative_to(evidence_root).as_posix(),
             source_url=url,
             retrieved_at=instant,
             media_type="application/x-xz",
@@ -82,12 +86,14 @@ def rebuild(root: Path, revision: str) -> None:
     if outcome.issues:
         raise ValueError(outcome.issues)
     native = outcome.value
+    output.mkdir(parents=True, exist_ok=True)
+    capture_output.parent.mkdir(parents=True, exist_ok=True)
     native_path = output / "native.parquet"
     write_native_table(native, native_path)
     raw_native = native_path.read_bytes()
     capture = NativeInventoryCapture(
         native_table=NativeTableIdentity(
-            repository_path=native_path.relative_to(root).as_posix(),
+            repository_path="src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
             revision=revision,
             sha256=hashlib.sha256(raw_native).hexdigest(),
             byte_size=len(raw_native),
@@ -99,16 +105,29 @@ def rebuild(root: Path, revision: str) -> None:
         temperature=acquisitions[1],
         evidence=tuple(evidence),
     )
-    (inventory / "native_capture.json").write_text(capture.model_dump_json(indent=2) + "\n")
-    availability = decode_availability(lzma.decompress((inventory / "governing_evidence.json.xz").read_bytes()))
+    capture_output.write_text(capture.model_dump_json(indent=2) + "\n")
+    availability = decode_availability(lzma.decompress(availability_ledger.read_bytes()))
     catalogue = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, availability, native_capture=capture)
-    verify_provenance_recordings(catalogue.acquisition_provenance, root)
+    verify_provenance_recordings(catalogue.acquisition_provenance, evidence_root)
     write_catalogue(catalogue, output)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument(
+        "--availability-ledger",
+        type=Path,
+        default=Path(__file__).resolve().parent / "governing_evidence.json.xz",
+    )
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--capture-output", type=Path, required=True)
     parser.add_argument("--revision", required=True, help="Repository revision containing the retained native input")
     args = parser.parse_args()
-    rebuild(args.root.resolve(), args.revision)
+    rebuild(
+        args.evidence_root.resolve(),
+        args.availability_ledger.resolve(),
+        args.out.resolve(),
+        args.capture_output.resolve(),
+        args.revision,
+    )

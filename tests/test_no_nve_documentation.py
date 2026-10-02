@@ -14,14 +14,16 @@ from rivretrieve._internal.recordings import ReplayTransport
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "docs/verification/norway-provider"
+EVIDENCE = Path("docs/verification/norway-provider")
 
 
-def test_norway_page_examples_match_recorded_responses(monkeypatch, tmp_path):
+def test_norway_page_examples_match_recorded_responses(retained_evidence_root, monkeypatch, tmp_path):
     page = (ROOT / "docs/providers/no_nve.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.S)
     assert len(blocks) == page.count("```python") == 2
-    replay = ReplayTransport(sorted((EVIDENCE / "recordings").glob("*.recording.json")))
+    replay = ReplayTransport(
+        [retained_evidence_root / EVIDENCE / "recordings" / f"discharge-week_p{page}.recording.json" for page in (1, 2)]
+    )
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-documentation-test")
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))

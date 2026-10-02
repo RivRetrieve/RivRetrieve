@@ -24,19 +24,23 @@ from rivretrieve._internal.providers.no_nve.parse import parse
 from rivretrieve._internal.recordings import read_recording
 from rivretrieve._internal.source_series import admission
 
-_DATA = Path(__file__).parent / "test_data"
+_DATA = Path("tests/test_data")
 _PRODUCTS = tuple(config().products)
 _STATION = "1.200.0"
 
 
-def _recording_path(station, product, window):
+def _recording_path(retained_evidence_root, station, product, window):
     coordinates = config().products[product].coordinates.value
     assert isinstance(coordinates, NoNveSourceCoordinates)
-    return _DATA / f"no_nve_{station}_{coordinates.parameter}_{coordinates.resolution_time}_{window}.recording.json"
+    return (
+        retained_evidence_root
+        / _DATA
+        / f"no_nve_{station}_{coordinates.parameter}_{coordinates.resolution_time}_{window}.recording.json"
+    )
 
 
-def _payload(product, station=_STATION, window="2025-07-08_2025-07-14"):
-    recording = read_recording(_recording_path(station, product, window))
+def _payload(retained_evidence_root, product, station=_STATION, window="2025-07-08_2025-07-14"):
+    recording = read_recording(_recording_path(retained_evidence_root, station, product, window))
     unknown = UnknownOriginFact()
     return Payload(
         config().products[product].coordinates,
@@ -59,8 +63,8 @@ def _payload(product, station=_STATION, window="2025-07-08_2025-07-14"):
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
-def test_each_real_native_product_preserves_every_source_cell_and_identity(product):
-    payload = _payload(product)
+def test_each_real_native_product_preserves_every_source_cell_and_identity(retained_evidence_root, product):
+    payload = _payload(retained_evidence_root, product)
     source = json.loads(payload.content)["data"][0]
     parsed = parse(payload, config())
     assert parsed.rows.height == source["observationCount"]
@@ -76,18 +80,18 @@ def test_each_real_native_product_preserves_every_source_cell_and_identity(produ
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
-def test_legacy_capture_keeps_exact_omitted_version_request_and_safe_credentials(product):
-    path = _recording_path(_STATION, product, "2025-07-08_2025-07-14")
+def test_legacy_capture_keeps_exact_omitted_version_request_and_safe_credentials(retained_evidence_root, product):
+    path = _recording_path(retained_evidence_root, _STATION, product, "2025-07-08_2025-07-14")
     recording = read_recording(path)
     assert "VersionNumber" not in recording.request.parameters
     document = json.loads(path.read_text())
     assert document["request"]["credential_header_names"] == ["X-API-Key"]
     assert "X-API-Key" not in document["request"]["ordinary_headers"]
-    assert _payload(product).content == recording.content
+    assert _payload(retained_evidence_root, product).content == recording.content
 
 
-def test_source_quality_and_correction_codes_remain_uninterpreted_diagnostics():
-    parsed = parse(_payload(ProductId("water_temperature_daily_mean")), config())
+def test_source_quality_and_correction_codes_remain_uninterpreted_diagnostics(retained_evidence_root):
+    parsed = parse(_payload(retained_evidence_root, ProductId("water_temperature_daily_mean")), config())
     assert {issue.code for issue in parsed.issues} == {"source_quality_code", "source_correction_code"}
     assert {issue.severity for issue in parsed.issues} == {"info"}
     assert "quality" not in parsed.rows.columns
@@ -96,17 +100,19 @@ def test_source_quality_and_correction_codes_remain_uninterpreted_diagnostics():
     assert quality.details["count"] == 6
 
 
-def test_a_published_empty_identified_series_establishes_empty_outcome():
-    parsed = parse(_payload(ProductId("stage_daily_mean"), window="1900-01-01_1900-01-07"), config())
+def test_a_published_empty_identified_series_establishes_empty_outcome(retained_evidence_root):
+    parsed = parse(
+        _payload(retained_evidence_root, ProductId("stage_daily_mean"), window="1900-01-01_1900-01-07"), config()
+    )
     assert parsed.rows.is_empty()
     assert parsed.outcomes[0].status.value == "empty"
     assert parsed.outcomes[0].series_id == parsed.series[0].series_id
 
 
-def test_recorded_inclusive_instant_stop_and_null_values_are_preserved():
+def test_recorded_inclusive_instant_stop_and_null_values_are_preserved(retained_evidence_root):
     product = ProductId("stage_daily_mean")
-    midnight = parse(_payload(product, window="2023-03-23_2023-03-27"), config())
-    day_end = parse(_payload(product, window="2023-03-23_2023-03-27-eod"), config())
+    midnight = parse(_payload(retained_evidence_root, product, window="2023-03-23_2023-03-27"), config())
+    day_end = parse(_payload(retained_evidence_root, product, window="2023-03-23_2023-03-27-eod"), config())
     assert midnight.rows.height == 4
     assert midnight.rows["time"].to_list()[-1] == datetime(2023, 3, 26, 11)
     assert midnight.rows["value"].null_count() == 4
@@ -116,8 +122,10 @@ def test_recorded_inclusive_instant_stop_and_null_values_are_preserved():
     assert quality.details["source_quality_code"] == 2
 
 
-def test_response_aggregation_is_not_overridden_by_hourly_product_label():
-    parsed = parse(_payload(ProductId("water_temperature_hourly_mean"), station="103.3.0"), config())
+def test_response_aggregation_is_not_overridden_by_hourly_product_label(retained_evidence_root):
+    parsed = parse(
+        _payload(retained_evidence_root, ProductId("water_temperature_hourly_mean"), station="103.3.0"), config()
+    )
     assert parsed.rows.height > 0
     facts = parsed.series[0].facts[0]
     assert facts.statistic.value == "instantaneous"
@@ -125,8 +133,8 @@ def test_response_aggregation_is_not_overridden_by_hourly_product_label():
     assert facts.temporal_support.value is None
 
 
-def test_unestablished_source_unit_cannot_reuse_configured_conversion():
-    original = _payload(ProductId("stage_daily_mean"))
+def test_unestablished_source_unit_cannot_reuse_configured_conversion(retained_evidence_root):
+    original = _payload(retained_evidence_root, ProductId("stage_daily_mean"))
     assert b'"unit":"m"' in original.content
     # Clearly marked structural mutation, not a publisher recording.
     result = parse(

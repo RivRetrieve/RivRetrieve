@@ -18,11 +18,13 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_swiss_page_examples_and_displayed_outputs(monkeypatch, tmp_path):
+def test_swiss_page_examples_and_displayed_outputs(retained_evidence_root: Path, monkeypatch, tmp_path):
     page = (ROOT / "docs/providers/ch_foen.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.DOTALL)
     assert len(blocks) == page.count("```python") == 3
-    replay = ReplayTransport([ROOT / "tests/test_data/ch_foen_2018_flux_january2024_full.recording.json"])
+    replay = ReplayTransport(
+        [retained_evidence_root / "tests/test_data/ch_foen_2018_flux_january2024_full.recording.json"]
+    )
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.chdir(tmp_path)
     namespace = {}

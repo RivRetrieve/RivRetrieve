@@ -20,14 +20,16 @@ from tests.test_cz_chmi_observations import _DQ, _HQ, _PRODUCTS, _STATION, _wind
 from tests.test_source_field_boundaries import AlteredResponseTransport
 
 
-def _payload():
+def _payload(
+    retained_evidence_root,
+):
     return fetch(
         (_STATION,),
         _PRODUCTS[:3],
         {p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[:3]},
         _window(),
         config(),
-        ReplayTransport([_DQ]),
+        ReplayTransport([retained_evidence_root / _DQ]),
     ).value[0]
 
 
@@ -47,8 +49,10 @@ def _payload():
         {"tsConID": False},
     ],
 )
-def test_unassignable_member_retains_named_daily_siblings(member):
-    payload = _payload()
+def test_unassignable_member_retains_named_daily_siblings(retained_evidence_root, member):
+    payload = _payload(
+        retained_evidence_root,
+    )
     expected = parse(payload, config())
     document = json.loads(payload.content)
     document["tsList"][0] = member
@@ -76,8 +80,10 @@ def test_unassignable_member_retains_named_daily_siblings(member):
         1,
     ],
 )
-def test_invalid_daily_label_retains_named_siblings(label):
-    payload = _payload()
+def test_invalid_daily_label_retains_named_siblings(retained_evidence_root, label):
+    payload = _payload(
+        retained_evidence_root,
+    )
     expected = parse(payload, config())
     document = json.loads(payload.content)
     document["tsList"][0]["tsData"]["data"]["values"][0][0] = label
@@ -91,10 +97,12 @@ def test_invalid_daily_label_retains_named_siblings(label):
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 @pytest.mark.parametrize("defect", ["member", "noon"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_public_malformed_daily_source_keeps_siblings_and_no_failed_coverage(monkeypatch, tmp_path, policy, defect):
+def test_public_malformed_daily_source_keeps_siblings_and_no_failed_coverage(
+    retained_evidence_root, monkeypatch, tmp_path, policy, defect
+):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     selection = rr.find(provider="cz_chmi", station=_STATION, frequency="daily")
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport([_DQ]))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport([retained_evidence_root / _DQ]))
     expected = rr.fetch(selection, start="2023-06-01", end="2023-06-02", cache="bypass", on_issue="ignore")
     mutated = []
 
@@ -108,7 +116,9 @@ def test_public_malformed_daily_source_keeps_siblings_and_no_failed_coverage(mon
         mutated.append(content)
         return content
 
-    monkeypatch.setattr(discovery, "HttpClient", lambda: AlteredResponseTransport([_DQ], alter))
+    monkeypatch.setattr(
+        discovery, "HttpClient", lambda: AlteredResponseTransport([retained_evidence_root / _DQ], alter)
+    )
     context = (
         pytest.raises(IssuePolicyError)
         if policy == "raise"
@@ -131,7 +141,9 @@ def test_public_malformed_daily_source_keeps_siblings_and_no_failed_coverage(mon
     assert all(item["series_id"] != failed[0].series_id for item in manifest["coverage"])
 
 
-def test_recorded_hourly_nonmidnight_labels_remain_valid():
+def test_recorded_hourly_nonmidnight_labels_remain_valid(
+    retained_evidence_root,
+):
     products = _PRODUCTS[3:]
     payload = fetch(
         (_STATION,),
@@ -139,7 +151,7 @@ def test_recorded_hourly_nonmidnight_labels_remain_valid():
         {p: (RenderedWindow("2023", None, _window()),) for p in products},
         _window(),
         config(),
-        ReplayTransport([_HQ]),
+        ReplayTransport([retained_evidence_root / _HQ]),
     ).value[0]
     result = parse(payload, config())
     assert result.rows.height == 17520

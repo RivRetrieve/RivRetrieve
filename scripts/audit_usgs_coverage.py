@@ -15,7 +15,6 @@ from urllib.request import urlopen  # noqa: TID251 -- standalone evidence acquis
 import polars as pl
 
 BASE = "https://api.waterdata.usgs.gov/ogcapi/v1/collections/time-series-metadata/items"
-CATALOGUE = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue")
 REVISION = "9c05cf933bd1ad04e2e77ae7733cd0caf757e487"
 
 
@@ -23,25 +22,27 @@ def dump(path, value):
     path.write_text(json.dumps(value, indent=2, default=str) + "\n")
 
 
-def freeze(out):
+def freeze(out, catalogue, native_path):
     out.mkdir(parents=True, exist_ok=True)
     if (out / "baseline.json").exists():
         baseline = json.loads((out / "baseline.json").read_text())
         expected = baseline["artifacts"]["native.parquet"]["sha256"]
-        if hashlib.sha256((CATALOGUE / "native.parquet").read_bytes()).hexdigest() != expected:
+        if hashlib.sha256((native_path).read_bytes()).hexdigest() != expected:
             raise ValueError("Frozen native baseline changed")
         if not (out / "baseline_stations.parquet").exists():
-            pl.read_parquet(CATALOGUE / "native.parquet").select("agency_cd", "site_no").write_parquet(
-                out / "baseline_stations.parquet"
-            )
+            pl.read_parquet(native_path).select("agency_cd", "site_no").write_parquet(out / "baseline_stations.parquet")
         return
-    native = pl.read_parquet(CATALOGUE / "native.parquet")
+    native = pl.read_parquet(native_path)
     native.select("agency_cd", "site_no").write_parquet(out / "baseline_stations.parquet")
-    products = pl.read_parquet(CATALOGUE / "station_products.parquet")
+    products = pl.read_parquet(catalogue / "station_products.parquet")
     artifacts = {
         p.name: {"sha256": hashlib.sha256(p.read_bytes()).hexdigest(), "bytes": p.stat().st_size}
-        for p in sorted(CATALOGUE.iterdir())
+        for p in sorted(catalogue.iterdir())
         if p.is_file()
+    }
+    artifacts["native.parquet"] = {
+        "sha256": hashlib.sha256(native_path.read_bytes()).hexdigest(),
+        "bytes": native_path.stat().st_size,
     }
     dump(
         out / "baseline.json",
@@ -53,7 +54,7 @@ def freeze(out):
             "vintage": native["retrieved_at"].unique().to_list(),
             "station_products": products.height,
             "availability_counts": products.group_by("availability").len().to_dicts(),
-            "source_acquisitions": pl.read_parquet(CATALOGUE / "provenance_acquisitions.parquet").to_dicts(),
+            "source_acquisitions": pl.read_parquet(catalogue / "provenance_acquisitions.parquet").to_dicts(),
         },
     )
     products.write_parquet(out / "baseline_station_products.parquet")
@@ -595,11 +596,11 @@ def report(out):
             "## Reproduce offline",
             "",
             "```sh",
-            "uv run python scripts/audit_usgs_coverage.py --compare-only",
+            "uv run python scripts/audit_usgs_coverage.py --output EXTERNAL_DIRECTORY --compare-only",
             "uv run pytest -q tests/test_usgs_coverage_audit.py",
             "```",
             "",
-            "Existing receipts are reused and hash checked. Online acquisition in a new output directory: `uv run python scripts/audit_usgs_coverage.py --output PATH --max-pages 40`. Bounded checks: `--probe-gaps` and `--probe-agencies`. Do not overwrite retained evidence to refresh a vintage; use a new directory. Authored test controls are explicitly synthetic, not publisher recordings.",
+            "Existing receipts are reused and hash checked. Online acquisition in a new output directory: `uv run python scripts/audit_usgs_coverage.py --output PATH --baseline-catalogue CATALOGUE --native NATIVE --max-pages 40`. Bounded checks: `--probe-gaps` and `--probe-agencies`. Do not overwrite retained evidence to refresh a vintage; use a new directory. Authored test controls are explicitly synthetic, not publisher recordings.",
             "",
             "## Decision and limits",
             "",
@@ -614,7 +615,9 @@ def report(out):
 
 def main():
     parser = argparse.ArgumentParser(__doc__)
-    parser.add_argument("--output", type=Path, default=Path("research/usgs-modern-coverage"))
+    parser.add_argument("--output", type=Path, required=True, help="External evidence and report directory.")
+    parser.add_argument("--baseline-catalogue", type=Path, help="Retained historical catalogue directory.")
+    parser.add_argument("--native", type=Path, help="Retained native table for the historical baseline.")
     parser.add_argument("--max-pages", type=int, default=1)
     parser.add_argument("--compare-only", action="store_true")
     parser.add_argument("--probe-gaps", action="store_true")
@@ -627,7 +630,9 @@ def main():
         probe_gaps(args.output)
         return
     if not args.compare_only:
-        freeze(args.output)
+        if args.baseline_catalogue is None or args.native is None:
+            parser.error("acquisition requires --baseline-catalogue and --native")
+        freeze(args.output, args.baseline_catalogue, args.native)
         acquire(args.output, args.max_pages)
     compare(args.output)
     report(args.output)

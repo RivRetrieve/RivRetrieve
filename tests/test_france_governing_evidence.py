@@ -24,8 +24,10 @@ def verifier():
 
 
 @pytest.fixture(params=["hubeau_counts", "hydroportail_history"])
-def source(request):
-    with tarfile.open(ROOT / f"maintenance/catalogue/fr_hubeau/evidence/{request.param}.tar.xz") as archive:
+def source(retained_evidence_root, request):
+    with tarfile.open(
+        retained_evidence_root / f"maintenance/catalogue/fr_hubeau/evidence/{request.param}.tar.xz"
+    ) as archive:
         receipt_file = archive.extractfile("receipts.csv")
         assert receipt_file is not None
         receipts = list(csv.DictReader(io.StringIO(receipt_file.read().decode())))
@@ -71,10 +73,12 @@ def document():
 
 
 @pytest.fixture(scope="module")
-def native():
+def native(retained_evidence_root):
     import pandas as pd
 
-    return pd.read_parquet(ROOT / "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
+    return pd.read_parquet(
+        retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet"
+    )
 
 
 def test_public_consistency_is_not_body_certification(verifier, document, native):
@@ -120,17 +124,19 @@ def test_public_mutations_fail(verifier, document, native, mutation):
 
 
 @pytest.fixture(scope="module")
-def retained_bundles(verifier):
+def retained_bundles(retained_evidence_root, verifier):
     return {
         f"reused-pr231-head46b2fde/evidence/{name}.tar.xz": verifier.read_bundle(
-            ROOT / f"maintenance/catalogue/fr_hubeau/evidence/{name}.tar.xz"
+            retained_evidence_root / f"maintenance/catalogue/fr_hubeau/evidence/{name}.tar.xz"
         )
         for name in ("hubeau_counts", "hydroportail_history")
     }
 
 
 @pytest.mark.parametrize("mutation", [None, "count", "hash", "bytes", "date", "url", "status", "reference"])
-def test_private_primary_uses_actual_bytes_and_receipt(verifier, document, retained_bundles, mutation):
+def test_private_primary_uses_actual_bytes_and_receipt(
+    retained_evidence_root, verifier, document, retained_bundles, mutation
+):
     from copy import deepcopy
 
     row = deepcopy(document["pairs"][0])
@@ -150,13 +156,13 @@ def test_private_primary_uses_actual_bytes_and_receipt(verifier, document, retai
     elif mutation == "reference":
         acquisition["reference"] = document["pairs"][1]["acquisitions"][0]["reference"]
     if mutation is None:
-        assert verifier.verify_private([row], ROOT, retained_bundles)["available"] == 1
+        assert verifier.verify_private([row], retained_evidence_root, retained_bundles)["available"] == 1
     else:
         with pytest.raises(ValueError):
-            verifier.verify_private([row], ROOT, retained_bundles)
+            verifier.verify_private([row], retained_evidence_root, retained_bundles)
 
 
-def test_history_empty_envelope_is_not_a_positive_witness(verifier, document, retained_bundles):
+def test_history_empty_envelope_is_not_a_positive_witness(retained_evidence_root, verifier, document, retained_bundles):
     from copy import deepcopy
 
     row = deepcopy(
@@ -166,7 +172,7 @@ def test_history_empty_envelope_is_not_a_positive_witness(verifier, document, re
             if r["basis"] == "two_exact_windows_empty" and all("!" in a["reference"] for a in r["acquisitions"])
         )
     )
-    assert verifier.verify_private([row], ROOT, retained_bundles)["unknown"] == 1
+    assert verifier.verify_private([row], retained_evidence_root, retained_bundles)["unknown"] == 1
     row.update(
         status="available",
         availability="available",
@@ -174,17 +180,17 @@ def test_history_empty_envelope_is_not_a_positive_witness(verifier, document, re
         published_count_or_new_witness_points=1,
     )
     with pytest.raises(ValueError, match="source classification mismatch"):
-        verifier.verify_private([row], ROOT, retained_bundles)
+        verifier.verify_private([row], retained_evidence_root, retained_bundles)
 
 
-def test_history_failure_cannot_be_restored_as_empty(verifier, document, retained_bundles):
+def test_history_failure_cannot_be_restored_as_empty(retained_evidence_root, verifier, document, retained_bundles):
     from copy import deepcopy
 
     row = deepcopy(next(r for r in document["pairs"] if r["basis"] == "preserved_history_failure"))
-    assert verifier.verify_private([row], ROOT, retained_bundles)["unknown"] == 1
+    assert verifier.verify_private([row], retained_evidence_root, retained_bundles)["unknown"] == 1
     row.update(status="empty_in_both_history_windows", basis="two_exact_windows_empty")
     with pytest.raises(ValueError, match="source classification mismatch"):
-        verifier.verify_private([row], ROOT, retained_bundles)
+        verifier.verify_private([row], retained_evidence_root, retained_bundles)
 
 
 @pytest.mark.parametrize("mutation", [None, "digest", "date", "quote", "status"])
