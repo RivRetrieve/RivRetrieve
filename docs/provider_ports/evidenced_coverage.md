@@ -167,6 +167,7 @@ uv run python -m rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue \
   --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet" \
   --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
   --workbook-access-ledger maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json \
+  --series-recording "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/tests/test_data/ba_fhmzbih_metadata_index.recording.json" \
   --out "$VERIFICATION_OUTPUT/ba_fhmzbih"
 uv run python -m rivretrieve._internal.providers.th_thaiwater.generate_catalogue \
   --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet" \
