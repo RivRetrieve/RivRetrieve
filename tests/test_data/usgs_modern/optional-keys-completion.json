@@ -1,9 +1,0 @@
-{
-  "name": "optional-keys",
-  "initial_url": "https://api.waterdata.usgs.gov/docs/ogcapi/keys/",
-  "pages": [
-    "optional-keys"
-  ],
-  "exhausted": true,
-  "total_features": 0
-}

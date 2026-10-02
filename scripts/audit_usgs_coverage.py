@@ -600,7 +600,7 @@ def report(out):
             "uv run pytest -q tests/test_usgs_coverage_audit.py",
             "```",
             "",
-            "Existing receipts are reused and hash checked. Online acquisition in a new output directory: `uv run python scripts/audit_usgs_coverage.py --output PATH --max-pages 40`. Bounded checks: `--probe-gaps` and `--probe-agencies`. Do not overwrite retained evidence to refresh a vintage; use a new directory. Authored test controls are explicitly synthetic, not publisher recordings.",
+            "Existing receipts are reused and hash checked. Online acquisition in a new output directory: `uv run python scripts/audit_usgs_coverage.py --output PATH --baseline-catalogue CATALOGUE --native NATIVE --max-pages 40`. Bounded checks: `--probe-gaps` and `--probe-agencies`. Do not overwrite retained evidence to refresh a vintage; use a new directory. Authored test controls are explicitly synthetic, not publisher recordings.",
             "",
             "## Decision and limits",
             "",

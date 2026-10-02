@@ -1,5 +1,0 @@
-{
-  "ogcapi-keys": "https://api.waterdata.usgs.gov/docs/ogcapi/keys/",
-  "ogcapi-versioning": "https://api.waterdata.usgs.gov/docs/ogcapi/versioning/",
-  "v1-daily-collection": "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily?f=json"
-}

@@ -12,7 +12,8 @@ Set `RIVRETRIEVE_TEST_EVIDENCE_ROOT` to that input directory. Run the provider t
 with a private external temporary directory and save output privately:
 
 ```sh
-uv run pytest -q tests/test_usgs_*.py --basetemp "$PRIVATE_TEST_OUTPUT"
+uv run pytest -q tests/test_usgs_*.py --basetemp "$PRIVATE_TEST_OUTPUT" \
+  --tb=no -p no:cacheprovider > "$PRIVATE_TEST_LOG" 2>&1
 ```
 
 These checks cover exact-coordinate replay, documentation examples, source-body
