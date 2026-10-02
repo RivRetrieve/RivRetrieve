@@ -918,6 +918,10 @@ def test_cli_rejects_cross_mode_combinations(
     [
         (["--native", "native.parquet"], "--native requires --out"),
         (
+            ["--native", "native.parquet", "--out", "catalogue"],
+            "--native publication requires --modern-metadata",
+        ),
+        (
             ["--native", "native.parquet", "--out", "catalogue", "--modern-metadata", "metadata"],
             "--native publication requires --evidence-root",
         ),
@@ -937,7 +941,7 @@ def test_cli_rejects_cross_mode_combinations(
             "--native cannot be combined with --native-out or --retrieved-at",
         ),
     ],
-    ids=["requires-out", "requires-evidence", "rejects-native-out", "rejects-retrieved-at"],
+    ids=["requires-out", "requires-modern-metadata", "requires-evidence", "rejects-native-out", "rejects-retrieved-at"],
 )
 def test_cli_rejects_invalid_native_mode_options(
     argv: list[str],
