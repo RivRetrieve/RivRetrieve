@@ -1,5 +1,9 @@
 # IMGW daily date fields
 
+The private source archive retains the inputs under `tests/test_data/pl_imgw_date_fields/`
+in the external evidence directory. Set `RIVRETRIEVE_TEST_EVIDENCE_ROOT` to that
+directory to run the tests.
+
 `codz_1992_07.zip` contains exact publisher bytes acquired on September 25, 2026.
 Its metadata records the URL, transfer time, checksum, member and logical row count.
 Row 16248 has an empty tenth cell. Its published hydrological year `1992`,

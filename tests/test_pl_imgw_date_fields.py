@@ -14,19 +14,21 @@ from polars.testing import assert_frame_equal
 
 from rivretrieve._internal.providers.pl_imgw import bulk
 
-DATA = Path(__file__).parent / "test_data" / "pl_imgw_date_fields"
+DATA = Path("tests/test_data") / "pl_imgw_date_fields"
 SOURCE = (" 149220010", "NOWOSIELCE", "Pielnica (22618)", "1992", "07", "16", "137", ".170", "99.9", "")
 
 
-def test_date_evidence_retains_exact_publisher_bytes():
+def test_date_evidence_retains_exact_publisher_bytes(retained_evidence_root: Path):
     for name in ("codz_1992_07.zip", "hydrologia_info_ogolne.txt", "CODZ_publiczne_format.txt"):
-        metadata = json.loads((DATA / (name + ".metadata.json")).read_text())
-        assert hashlib.sha256((DATA / name).read_bytes()).hexdigest() == metadata["sha256"].removeprefix("sha256:")
+        metadata = json.loads(((retained_evidence_root / DATA) / (name + ".metadata.json")).read_text())
+        assert hashlib.sha256(((retained_evidence_root / DATA) / name).read_bytes()).hexdigest() == metadata[
+            "sha256"
+        ].removeprefix("sha256:")
         assert metadata["status"] == 200
-    with zipfile.ZipFile(DATA / "codz_1992_07.zip") as archive:
-        metadata = json.loads((DATA / "codz_1992_07.zip.metadata.json").read_text())
+    with zipfile.ZipFile((retained_evidence_root / DATA) / "codz_1992_07.zip") as archive:
+        metadata = json.loads(((retained_evidence_root / DATA) / "codz_1992_07.zip.metadata.json").read_text())
         assert hashlib.sha256(archive.read(metadata["member"])).hexdigest() == metadata["member_sha256"]
-    records = list(bulk._iter_imgw_raw_records(DATA / "codz_1992_07.zip"))
+    records = list(bulk._iter_imgw_raw_records((retained_evidence_root / DATA) / "codz_1992_07.zip"))
     assert len(records) == 25408
     assert records[16247] == SOURCE
     assert sum(not record[9].strip() for record in records) == 1

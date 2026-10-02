@@ -1,6 +1,6 @@
 """Offline checks for the Poland documentation; not live acquisition evidence.
 
-The retrieval snippets are replayed against a store compiled from the committed
+The retrieval snippets are replayed against a store compiled from the retained
 publisher archive for hydrological year 2024, not from a fresh national download.
 """
 
@@ -20,7 +20,7 @@ from rivretrieve._internal.store import StoreRoot
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs/providers/pl_imgw.md"
-ARCHIVE = ROOT / "tests/test_data/pl_imgw_annual/codz_2024.zip"
+ARCHIVE = Path("tests/test_data/pl_imgw_annual/codz_2024.zip")
 URL = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/2024/codz_2024.zip"
 BLOCK = re.compile(r"```(python|text)\n(.*?)```", re.DOTALL)
 
@@ -55,9 +55,9 @@ def test_poland_documentation_selection_matches_packaged_catalogue():
     assert "providers/pl_imgw.md" in (ROOT / "docs/README.md").read_text()
 
 
-def test_poland_retrieval_snippets_replay_committed_archive(tmp_path, monkeypatch):
-    artifact = tmp_path / ARCHIVE.name
-    shutil.copyfile(ARCHIVE, artifact)
+def test_poland_retrieval_snippets_replay_committed_archive(retained_evidence_root: Path, tmp_path, monkeypatch):
+    artifact = tmp_path / (retained_evidence_root / ARCHIVE).name
+    shutil.copyfile((retained_evidence_root / ARCHIVE), artifact)
     (tmp_path / "pl_imgw").mkdir()
     compile_imgw(
         ImgwCompileRequest(

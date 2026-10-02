@@ -16,7 +16,7 @@ Catalogue acquisition remains independent of observation compilation. Runtime qu
 
 ## Native Catalogue and Origins
 
-The committed `native.parquet` contains all 8,057 features supplied by the orchestrator's attested
+The privately retained `native.parquet` contains all 8,057 features supplied by the orchestrator's attested
 live fetch at `2026-08-02T01:09:10Z`. It has 17 source columns: feature `id`, all 13 property fields,
 geometry type, and both coordinate scalars, plus the stamped UTC `retrieved_at`. Rows sort by feature
 `id`. Source strings, integers, floats, and nulls are preserved without defaults or trimming.
@@ -73,7 +73,10 @@ The `--live` refresh operation fetches `hydrometric-stations/items` with `limit=
 page to agree on `numberMatched`, and stops only at exact accumulated equality. It rejects malformed,
 missing, repeated, short intermediate, underflowing, and overflowing pages and repeated feature ids.
 The usable-station floor is 8,055, calibrated to the prior successful catalogue. Canonical build is a
-separate network-free operation over committed `native.parquet` plus origin declarations.
+separate network-free operation over explicitly supplied `native.parquet`, retained source recordings and origin declarations.
+Use `--native <path> --evidence-root <external-root> --out <output-directory>`.
+The evidence root preserves the archive's repository-relative input layout; the
+generator does not discover or download archive inputs.
 
 ## Pagination
 

@@ -74,7 +74,32 @@ was interrupted; it is not evidence of a completed full-suite pass.
 
 ## Recorded tests
 
-`tests/test_poland_documentation.py` compiles a store from the committed
+Obtain the exact Poland inputs from the private [source archive](https://github.com/RivRetrieve/verification-evidence),
+following the [evidence guide](../../maintenance/evidence.md). Set
+`RIVRETRIEVE_TEST_EVIDENCE_ROOT` to their external directory, preserving repository-relative
+paths. Tests do not download inputs or use archive credentials. Missing inputs block
+the recorded checks. Set `PRIVATE_TEST_OUTPUT` and `PRIVATE_CATALOGUE_OUTPUT` to
+fresh directories outside the checkout. Keep temporary stores and logs there:
+
+```bash
+uv run pytest tests/test_pl_imgw_*.py tests/test_poland_documentation.py tests/store/test_pl_imgw_publication_public.py -q --tb=no -p no:cacheprovider --basetemp "$PRIVATE_TEST_OUTPUT"
+```
+
+The catalogue generator accepts explicit local input paths. Supply the retained
+native table and regulations recording; write the generated catalogue outside the
+checkout for comparison with the packaged products:
+
+```bash
+uv run python -m rivretrieve._internal.providers.pl_imgw.generate_catalogue \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet" \
+  --terms-recording "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/tests/test_data/pl_imgw_terms_regulations.html" \
+  --out "$PRIVATE_CATALOGUE_OUTPUT"
+```
+
+The native-table refresh also requires explicit `--fixture` and `--roster` paths,
+plus their recorded provenance instants. It does not discover archive inputs.
+
+`tests/test_poland_documentation.py` compiles a store from the externally retained
 `tests/test_data/pl_imgw_annual/codz_2024.zip` (retrieved 2026-09-20) and replays the
 retrieval snippets with network access disabled. It checks their printed output, the
 publisher URL in the provenance, the `to_utc` refusal, the catalogue counts, the
@@ -107,7 +132,7 @@ rather than duplicating the compiler's detailed edge-case tests.
 - **Sources.** The regulations, field description, notice (`UWAGA.txt`), station list
   and change list fetched on 2026-09-27 were identical to the 2026-09-25 copies apart
   from whitespace in the regulations. The station list has 1,301 rows and no
-  coordinates. The 2025 yearbook (identical to the committed copy) gives 952 operating
+  coordinates. The 2025 yearbook (identical to the retained copy) gives 952 operating
   stations, 916/714/93 stations with daily stage, discharge and temperature in the
   Central Historical Database, 10-minute means at automatic stations and 06:00 UTC
   readings elsewhere. `imgw.pl` could not be reached on 2026-09-27; its "O Instytucie"
@@ -122,5 +147,6 @@ The shorter-archive replacement safeguard remains unchanged. Human review raised
 whether intentional publisher withdrawals should allow an explicit replacement;
 that design question is recorded on [#392](https://github.com/RivRetrieve/RivRetrieve/issues/392#issuecomment-5866204605).
 
-Exploratory logs, the full download log and source snapshots are preserved outside the
-Git diff at `.worktrees/poland-provider-evidence-2026-09-24/` in the maintainer checkout.
+Consult the private source archive for retained verification records, source snapshots,
+exact collections and known limitations. Historical execution locations are not input
+paths for the maintained checks.

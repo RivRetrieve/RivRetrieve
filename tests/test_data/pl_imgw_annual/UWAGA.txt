@@ -1,9 +1,0 @@
-Ze wzglêdów technicznych nast¹pi³y zmiany w sposobie przygotwania danych historycznych, publikowanych w katalogu "dane hydrologiczne". W zwi¹zku z tym:
-
-- dane codzienne z roku hydrologicznego 2023 i 2024 opublikowane s¹ w jednym pliku, bez podzia³u na miesi¹ce,
-- uk³ad pól w poszczególnych plikach z danymi zosta³ zachowany wzglêdem plików z danymi z poprzednich lat,
-- mog¹ wyst¹piæ zmiany formatu poszczególnych pól, ze wzglêdu na inny sposób przetwarzania plików do publikowanej struktury (np. pola tekstowe nie s¹ w cudzys³owie).
-
-Po ust¹pieniu problemów technicznych pliki zostan¹ wygenerowane ponownie, dotychczasow¹ metod¹, w celu achowania ich spójnoœci z publikowanymi wczeœniej.
-Informacja o tym pojawi siê w pliku lista_zmian_hydro.txt, a niniejszy plik UWAGA.txt zostanie usuniêty z poszczególnych katalogów  danymi.
-

@@ -334,7 +334,9 @@ def test_public_download_propagates_unexpected_previous_store_validation_failure
     assert not tuple(Path(root).parent.glob("publisher-artifact.download*"))
 
 
-def test_public_exact_archive_compiles_blank_calendar_cell_without_losing_source(public_imgw, monkeypatch):
+def test_public_exact_archive_compiles_blank_calendar_cell_without_losing_source(
+    retained_evidence_root: Path, public_imgw, monkeypatch
+):
     from polars.testing import assert_frame_equal
 
     from rivretrieve._internal.primitives import ProductId
@@ -346,7 +348,7 @@ def test_public_exact_archive_compiles_blank_calendar_cell_without_losing_source
     responses.update(publication({1992: names}))
     # Only July's hydrological archive is recorded source data. The preceding
     # six tiny publications are synthetic continuity fixtures.
-    source = Path(__file__).parents[1] / "test_data/pl_imgw_date_fields/codz_1992_07.zip"
+    source = retained_evidence_root / "tests/test_data/pl_imgw_date_fields/codz_1992_07.zip"
     responses[f"{ROOT}1992/{names[-1]}"] = source.read_bytes()
     result = rr.download("pl_imgw")
     assert_provenance(root, result, responses, names, date(1992, 5, 31))

@@ -22,13 +22,13 @@ from rivretrieve._internal.store import StoreQuery, StoreRoot, validate_store
 from rivretrieve._internal.store.validation import StoreManifest
 from rivretrieve._internal.transport import HttpMethod, TransportRequest
 
-_RECORDING = Path(__file__).parent / "test_data" / "pl_imgw_codz_2022_01.recording.json"
+_RECORDING = Path("tests/test_data") / "pl_imgw_codz_2022_01.recording.json"
 _URL = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/2022/codz_2022_01.zip"
 _PRODUCTS = tuple(ProductId(value) for value in ("discharge_daily", "stage_daily", "water_temperature_daily"))
 
 
-def _compiled_store(tmp_path: Path) -> StoreRoot:
-    recording = read_recording(_RECORDING)
+def _compiled_store(retained_evidence_root: Path, tmp_path: Path) -> StoreRoot:
+    recording = read_recording(retained_evidence_root / _RECORDING)
     response = ReplayTransport((recording,)).send(TransportRequest(HttpMethod.GET, _URL))
     artifact = tmp_path / "codz_2022_01.zip"
     artifact.write_bytes(response.content)
@@ -39,14 +39,16 @@ def _compiled_store(tmp_path: Path) -> StoreRoot:
     return root
 
 
-def test_exact_monthly_recording_replays_through_compiler_and_three_store_probes(tmp_path: Path) -> None:
-    recording = read_recording(_RECORDING)
+def test_exact_monthly_recording_replays_through_compiler_and_three_store_probes(
+    retained_evidence_root: Path, tmp_path: Path
+) -> None:
+    recording = read_recording(retained_evidence_root / _RECORDING)
     inventory_artifact = tmp_path / "inventory-codz_2022_01.zip"
     inventory_artifact.write_bytes(recording.content)
     stream = decode_imgw_batches(inventory_artifact)
     assert stream.expected_publisher_records == 24_897
     assert stream.expected_emitted_rows == 74_691
-    root = _compiled_store(tmp_path)
+    root = _compiled_store(retained_evidence_root, tmp_path)
     probes = tuple(
         StoreBoundaryProbe(
             ProviderId("pl_imgw"),
@@ -69,8 +71,10 @@ def test_exact_monthly_recording_replays_through_compiler_and_three_store_probes
     assert compiled_manifest.source_vintage == date(2021, 11, 30)
 
 
-def test_monthly_hydrological_mapping_and_source_values_are_not_inferred(tmp_path: Path) -> None:
-    root = _compiled_store(tmp_path)
+def test_monthly_hydrological_mapping_and_source_values_are_not_inferred(
+    retained_evidence_root: Path, tmp_path: Path
+) -> None:
+    root = _compiled_store(retained_evidence_root, tmp_path)
     from rivretrieve._internal.store import read_store
 
     result = read_store(
@@ -89,10 +93,12 @@ def test_monthly_hydrological_mapping_and_source_values_are_not_inferred(tmp_pat
     ]
 
 
-def test_warsaw_source_sentinel_remains_null_state_without_losing_stage_or_discharge(tmp_path: Path) -> None:
+def test_warsaw_source_sentinel_remains_null_state_without_losing_stage_or_discharge(
+    retained_evidence_root: Path, tmp_path: Path
+) -> None:
     from rivretrieve._internal.store import read_store
 
-    root = _compiled_store(tmp_path)
+    root = _compiled_store(retained_evidence_root, tmp_path)
     result = read_store(
         StoreQuery(
             root,
@@ -115,14 +121,16 @@ def test_warsaw_source_sentinel_remains_null_state_without_losing_stage_or_disch
     assert temperature["IMGW_DAILY.temperature_c"].to_list() == ["99.9"] * 3
 
 
-def test_public_bulk_engine_reads_validated_store_and_authors_exact_receipt(tmp_path: Path) -> None:
+def test_public_bulk_engine_reads_validated_store_and_authors_exact_receipt(
+    retained_evidence_root: Path, tmp_path: Path
+) -> None:
     from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
     from rivretrieve._internal.observations import ReceiptAuthorship, ReceiptMode, StoreExcerptReceipt
     from rivretrieve._internal.providers.pl_imgw.config import config
     from rivretrieve._internal.providers.pl_imgw.declaration import declaration
     from rivretrieve._internal.registry import ProviderRegistry
 
-    root = _compiled_store(tmp_path)
+    root = _compiled_store(retained_evidence_root, tmp_path)
     registry = ProviderRegistry()
     registry.register(
         "pl_imgw",
