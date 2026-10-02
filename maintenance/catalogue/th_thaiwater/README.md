@@ -4,8 +4,9 @@ See [shared verification evidence](../../../docs/maintenance/evidence.md) for
 archive access, exact input selection and verification prerequisites.
 
 `inventory/governing_station_product_evidence.csv` records the 825-station,
-1,650-pair catalogue population. `inventory/governing_summary.json` records its
-counts and source limitations. The supplying agencies and source requests remain
+1,650-pair catalogue population. The archive retains the historical count and
+source-limitations summary under
+`maintenance/catalogue/th_thaiwater/inventory/governing_summary.json`. The supplying agencies and source requests remain
 part of the evidence identity.
 
 The external retained-input directory holds `recordings/` with two unchanged source bodies: a null graph and an HTTP-200
