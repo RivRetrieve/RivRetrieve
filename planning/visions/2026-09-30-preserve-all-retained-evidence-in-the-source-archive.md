@@ -1,15 +1,18 @@
-# Preserve evidence privately and remove it from the public repository
+# Keep provider evidence outside the code repository
 
 Related bug: https://github.com/RivRetrieve/RivRetrieve/issues/457
 Paused work, outside this vision: https://github.com/RivRetrieve/RivRetrieve/issues/429
 
 ## Outcome
 
-Prepare RivRetrieve to become public without exposing retained provider evidence.
-Preserve that evidence in the private `RivRetrieve/verification-evidence` archive,
-verify that its exact bytes can be retrieved, and remove it from the future public
-repository. The requirement covers both the current tree and accessible Git history.
-Archive publication alone does not complete this work.
+Keep RivRetrieve's current code tree free of retained provider evidence. Preserve that
+evidence in the private `RivRetrieve/verification-evidence` archive, verify that its
+exact bytes can be retrieved, and make evidence-dependent tests and tools read inputs
+outside the code repository. Archive publication alone does not complete this work.
+
+This is a code-design and evidence-storage change. Git history and old pull requests
+are out of scope and must remain untouched. Older evidence may remain accessible
+through them; removing those copies is not a completion requirement.
 
 Provider evidence means material used to build catalogues, check provider parsers,
 or support factual statements in `docs/providers`. Examples include downloaded
@@ -106,9 +109,9 @@ rows with separate publisher recordings. Inspect current code before changing te
 Do not conflate generated historical outputs, extracted source evidence, and authored
 attestations.
 
-## Remove evidence safely, including from public history
+## Remove evidence from the current code tree
 
-Remove evidence from the future public tree only after verified private preservation.
+Remove evidence from the current code tree only after verified private preservation.
 Do not delete sole originals or remove active inputs while their retained consumers
 still require them. Do not add a local fallback to conceal missing archive access.
 
@@ -117,18 +120,16 @@ scope when necessary for evidence removal and continued correctness. Use the exi
 archive infrastructure. Do not resume or integrate #429's unfinished drafts, execute
 its unreviewed code, or claim its delivery. Leave #429 paused; its implementation will
 adapt to the completed #457 changes. Do not break consumers or claim #457 complete
-with evidence still present.
+with retained provider evidence still present in the current code tree.
 
-Deleting current files leaves older copies in Git. Establish a safe publication approach
-that prevents the future public repository's reachable history and retained public
-references from exposing evidence. Assess the relevant branches, tags, PR references,
-and hosted attachments/artifacts rather than treating a clean working tree as sufficient.
-Keep original history privately where needed for preservation and recovery.
+Keep evidence outside the repository while allowing tests, catalogue maintenance, and
+documentation verification to use explicitly supplied local archive inputs. Keep runtime
+package users independent of archive access. Preserve code, test definitions, authored
+interpretation, reviewed declarations, and approved runtime catalogue products here.
 
-Present the proposed history/publication approach, consequences, and recovery protection
-to the owner before destructive history changes or force-pushes. This vision does not
-authorize those operations or changing repository visibility. Do not claim publication
-readiness until the evidence-free tree and history requirements have been verified.
+Do not rewrite history, clean old branches or PR references, migrate to a new repository,
+or audit historical hosted artifacts as part of this work. No history or publication
+strategy decision is needed to proceed. Changing repository visibility is outside scope.
 
 ## Remove the failed attempt's bespoke machinery
 
@@ -162,9 +163,10 @@ Before reporting #457 complete:
    intended code and collections. Do not count missing inputs, skipped mandatory checks,
    or synthetic substitutes as acceptance. Reuse unchanged valid verification evidence
    with explicit revision equivalence where appropriate.
-3. Verify that the future public repository contains no retained provider evidence in
-   its tree or accessible history. Required historical test inputs belong in the private
-   archive as well. Document the approved publication boundary and any hosting limits.
+3. Verify that the intended target branch's current tree contains no retained provider
+   evidence and that retained consumers use external archive inputs. Required historical
+   test inputs belong in the private archive as well. Leave Git history and old PRs
+   unchanged; historical copies do not block completion.
 4. Remove unnecessary bespoke task machinery while preserving essential records and
    useful archive infrastructure. Record any uncertain ownership or unique-work blocker.
 5. Provide a short privacy-safe completion report and a precise private preservation
