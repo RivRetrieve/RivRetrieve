@@ -4,9 +4,10 @@ See [shared verification evidence](../../../docs/maintenance/evidence.md) for
 archive access, exact input selection and verification prerequisites.
 
 The catalogue represents the anonymously published native station inventory.
-It is not an unrestricted PHyC census. See [COVERAGE.md](COVERAGE.md) for the dated
-population reconciliation and the 65 formerly selectable station IDs not published
-by the native search. HTTP404 is not evidence of historical observation absence.
+It is not an unrestricted PHyC census. See [catalogue scope](COVERAGE.md) for
+station identity and availability rules. Dated population reconciliations and
+validation reports remain in the private source archive. HTTP404 is not evidence
+of historical observation absence.
 
 ## Offline rebuild
 
@@ -60,6 +61,25 @@ remain in native.parquet, together with full source station/site JSON.
 HydroPortail legal/about material establishes the publication service, not a
 blanket reuse licence or every historical measurement author. Provider licence
 and citation remain unknown. Hub’Eau's Etalab statement is not transferred.
+
+## Recorded selector checks
+
+The retained selector recordings and historical verification reports are in the
+private archive. From the code repository, verify those exact inputs offline:
+
+```sh
+uv run python tests/test_data/fr_hydroportail_variants/verify.py \
+  --evidence-dir "$EVIDENCE_ROOT/tests/test_data/fr_hydroportail_variants"
+uv run python tests/test_data/fr_hydroportail_variants/verify_public.py \
+  --offline \
+  --evidence-dir "$EVIDENCE_ROOT/tests/test_data/fr_hydroportail_variants" \
+  --out-dir /path/to/private-output/selector-verification
+```
+
+Use a new output directory and keep outputs and logs private. These checks replay
+retained acquisitions; they do not establish current service availability.
+Historical source references in declarations retain their original paths as
+archive identities.
 
 ## New acquisition
 
