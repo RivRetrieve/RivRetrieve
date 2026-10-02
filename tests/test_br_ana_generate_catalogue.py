@@ -34,14 +34,15 @@ def inventory() -> NativeTable:
 
 
 @pytest.mark.parametrize("mode", [["--fixture", "absent.json"], ["--live"], ["--withhold-uncertified"]])
-def test_removed_cli_is_unrecognized_and_preserves_files(mode: list[str], tmp_path: Path) -> None:
+def test_removed_cli_is_unrecognized_and_preserves_files(mode: list[str], tmp_path: Path, capsys) -> None:
     output = tmp_path / "existing"
     output.mkdir()
     marker = output / "unrelated.bin"
     marker.write_bytes(b"preserve existing material")
     with pytest.raises(SystemExit) as caught:
-        main([*mode, "--out", str(output)])
+        main(["--native", "absent.parquet", "--evidence-root", str(tmp_path), *mode, "--out", str(output)])
     assert caught.value.code == 2
+    assert "unrecognized arguments:" in capsys.readouterr().err
     assert marker.read_bytes() == b"preserve existing material"
     assert list(output.iterdir()) == [marker]
 
