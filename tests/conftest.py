@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
@@ -20,6 +21,14 @@ from rivretrieve._internal.catalogues.schemas import AvailabilityDtype
 from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _registry
 
 pytest_plugins = ("tests._distribution",)
+
+
+@pytest.fixture(scope="session")
+def retained_evidence_root() -> Path:
+    """Locate explicitly supplied archive inputs in their repository-relative layout."""
+    from tests._evidence import resolve_retained_evidence_root
+
+    return resolve_retained_evidence_root(os.environ.get("RIVRETRIEVE_TEST_EVIDENCE_ROOT"))
 
 
 def _packaged_provenance(provider_id: str) -> CatalogueEvidence | None:
