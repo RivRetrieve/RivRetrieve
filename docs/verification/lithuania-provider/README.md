@@ -9,6 +9,12 @@ No production code or catalogue was changed by this documentation work.
 
 ## Reproduce
 
+For recorded checks, obtain the exact inputs from the private source archive
+following the [verification guide](../../maintenance/evidence.md). Set
+`RIVRETRIEVE_TEST_EVIDENCE_ROOT` to the external repository-relative input root.
+Missing retained inputs block replay verification. The live verifier contacts the
+publisher and does not use that root.
+
 From the checkout root, execute all reader snippets in their documented order,
 then the behaviour checks:
 
@@ -43,15 +49,20 @@ request per month, and each call record lists both series. Catalogue inspection 
 the same run found 97 stations, and daily mean discharge (m³/s to m³/s) and stage
 (cm to m) at `nemajunu-vms`, labelled `+00:00` with no established day definition.
 
-The two committed recordings were made with the normal recording CLI on
-2026-09-27:
+The two retained recordings were made with the normal recording CLI on
+2026-09-27. To collect a new interaction, set `RECORDING_OUTPUT_DIRECTORY` to a
+new directory outside source checkouts:
 
 ```bash
-uv run python -m rivretrieve._internal.record_observations --provider lt_lhmt --station nemajunu-vms --product discharge_daily_mean --start 2020-01-01 --end 2020-01-07 --out-dir docs/verification/lithuania-provider/recordings --name nemajunu-week
+uv run python -m rivretrieve._internal.record_observations --provider lt_lhmt --station nemajunu-vms --product discharge_daily_mean --start 2020-01-01 --end 2020-01-07 --out-dir "$RECORDING_OUTPUT_DIRECTORY" --name nemajunu-week
 ```
 
 The API publishes both fields in one monthly document, so these two monthly
-responses serve both quantities. `tests/test_lt_lhmt_documentation.py` replays them
+responses serve both quantities. The recordings are retained in the private source
+archive and resolved under the external input root at
+`docs/verification/lithuania-provider/recordings/`. New recordings must use a separate
+output directory; do not overwrite selected historical inputs.
+`tests/test_lt_lhmt_documentation.py` replays them
 through the page example and the stage-unit check, and checks their output, source
 calls, catalogue count, units and index link. Replay is not live verification.
 
@@ -89,7 +100,7 @@ Publisher pages fetched with HTTP 200 on 2026-09-27:
   and water temperature; null for an unmeasured parameter and 404 for a date
   without stored data; 180 requests per minute and 20,000 per day per IP; the five
   data-use conditions, quoted verbatim on the page. Its extracted text differs from
-  the committed recording `tests/test_data/lt_lhmt_terms_licence.html` (2026-08-21)
+  the retained recording `tests/test_data/lt_lhmt_terms_licence.html` (2026-08-21)
   only in two example URL dates, so that recording retains every quoted statement.
 - [LHMT hydrology](https://www.meteo.lt/klimatas/hidrologija/) (SHA-256
   `7e79b8251ef267aceaea141e8484feb1fa464cbcc1e13e2bbb731a842894c084`): "Hidrologinius stebėjimus Lietuvoje vykdo vandens matavimo
@@ -99,14 +110,18 @@ Publisher pages fetched with HTTP 200 on 2026-09-27:
 - [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/): share-alike.
 
 Direct API checks on 2026-09-27 found 97 stations in `/v1/hydro-stations`.
-`source-checks/historical-ranges-2026-09-27.json` keeps the per-station
+The archived
+`docs/verification/lithuania-provider/source-checks/historical-ranges-2026-09-27.json`
+keeps the per-station
 `/observations/historical` ranges for all 97. End dates were 2024-12-31 (66
 stations), 2023-12-31 (18), 2017-12-31 (6), 2013-12-31 (1) and 2024-08-10 (1).
 Five stations reported no range: `juodkrantes-vms` (Curonian Lagoon),
 `klaipedos-juru-uosto-vms`, `lazdenu-vms`, `palangos-vms` and `sventosios-vms`.
 Fifty stations start in 2000.
 
-`source-checks/null-discharge-scan-2024-06.json` covers the 66 stations whose
+The archived
+`docs/verification/lithuania-provider/source-checks/null-discharge-scan-2024-06.json`
+covers the 66 stations whose
 historical range ended on 2024-12-31, so that June 2024 lay inside every scanned
 range. It was retrieved directly from
 `https://api.meteo.lt/v1/hydro-stations/{code}/observations/historical/2024-06`
@@ -139,4 +154,4 @@ published dates.
 - The source does not state the averaging day, stage datum or quality status;
   none is inferred.
 - Raw publisher HTML snapshots are not retained in the repository beyond the
-  existing API recording; the URLs, dates and hashes above identify them.
+  retained API recording; the URLs, dates and hashes above identify them.

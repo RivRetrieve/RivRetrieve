@@ -16,7 +16,7 @@ from rivretrieve._internal.providers.no_nve.parse import parse
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests.test_no_nve_series_discovery import _ObservedTransport, _recorded_fetch, _recordings, config
 
-_DATA = Path(__file__).parent / "test_data"
+_DATA = Path("tests/test_data")
 
 
 def _repeated(content, kind, reverse=False):
@@ -37,8 +37,8 @@ def _repeated(content, kind, reverse=False):
 
 
 @pytest.mark.parametrize("kind", ["equal", "conflicting", "disjoint", "different-facts"])
-def test_repeated_identity_refuses_every_block_independently_of_order(kind):
-    acquired = _recorded_fetch(_ObservedTransport(_recordings()))
+def test_repeated_identity_refuses_every_block_independently_of_order(retained_evidence_root, kind):
+    acquired = _recorded_fetch(_ObservedTransport(_recordings(retained_evidence_root)))
     original = acquired.value[1]
     sibling = json.loads(acquired.value[2].content)["data"][0]
     expected = parse(acquired.value[2], config())
@@ -72,12 +72,16 @@ def test_repeated_identity_refuses_every_block_independently_of_order(kind):
 
 @pytest.mark.parametrize("kind", ["equal", "conflicting", "disjoint", "different-facts"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_public_repeated_identity_never_certifies_cache_and_preserves_receipts(kind, monkeypatch, tmp_path):
+def test_public_repeated_identity_never_certifies_cache_and_preserves_receipts(
+    retained_evidence_root, kind, monkeypatch, tmp_path
+):
     recordings = tuple(
-        read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
+        read_recording(
+            retained_evidence_root / _DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json"
+        )
         for v in (1, 2, 3)
     )
-    metadata = read_recording(_DATA / "no_nve_109.42.0_1001_series.recording.json")
+    metadata = read_recording(retained_evidence_root / _DATA / "no_nve_109.42.0_1001_series.recording.json")
     replay = ReplayTransport((*recordings, metadata))
     calls = []
     contents = []
@@ -134,12 +138,14 @@ def test_public_repeated_identity_never_certifies_cache_and_preserves_receipts(k
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_public_supported_nonmatching_facts_are_not_retained_as_failures(monkeypatch):
+def test_public_supported_nonmatching_facts_are_not_retained_as_failures(retained_evidence_root, monkeypatch):
     recordings = tuple(
-        read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
+        read_recording(
+            retained_evidence_root / _DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json"
+        )
         for v in (1, 2, 3)
     )
-    metadata = read_recording(_DATA / "no_nve_109.42.0_1001_series.recording.json")
+    metadata = read_recording(retained_evidence_root / _DATA / "no_nve_109.42.0_1001_series.recording.json")
     replay = ReplayTransport((*recordings, metadata))
 
     class DifferentStatistic:

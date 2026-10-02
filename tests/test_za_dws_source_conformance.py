@@ -29,10 +29,10 @@ def test_provenance_does_not_claim_runtime_observation_acquisition() -> None:
     )
 
 
-def test_exact_monthly_recording_does_not_establish_enrolled_columns() -> None:
+def test_exact_monthly_recording_does_not_establish_enrolled_columns(retained_evidence_root: Path) -> None:
     import hashlib
 
-    payload = (Path(__file__).parent / "test_data/za_dws_terms_licence-5.html").read_bytes()
+    payload = (retained_evidence_root / "tests/test_data/za_dws_terms_licence-5.html").read_bytes()
     assert hashlib.sha256(payload).hexdigest() == "5d10dfdb5c487c4884983cf71149a0533f35b9af0f7ad45f81a8f2e9540baf36"
     assert b"Variable 100.00 Surface Water Level" in payload
     assert b"12 Monthly volumes in million cubic metres from Oct to Sep." in payload
@@ -111,10 +111,12 @@ def test_public_discovery_pick_and_fetch_refusal_are_offline(policy, cache, monk
         ("point", "7b266fa724354709d1c3cb5602e0bf1b5bfa80e09bc5b272d4145d6153d88ae4", 5134),
     ],
 )
-def test_historical_definition_fixtures_preserve_git_blob_bytes(kind, digest, size) -> None:
+def test_historical_definition_fixtures_preserve_git_blob_bytes(
+    retained_evidence_root: Path, kind, digest, size
+) -> None:
     import hashlib
 
-    raw = (Path(__file__).parent / f"recordings/za_dws/X3H001_{kind}_2020-01.html").read_bytes()
+    raw = (retained_evidence_root / f"tests/recordings/za_dws/X3H001_{kind}_2020-01.html").read_bytes()
     assert len(raw) == size
     assert hashlib.sha256(raw).hexdigest() == digest
     assert b"Variable 100.00 Surface Water Level" in raw

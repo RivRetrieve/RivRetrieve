@@ -906,9 +906,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--env-file", type=Path)
     parser.add_argument("--capture-record-out", type=Path)
     parser.add_argument("--native-out", type=Path)
-    parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--evidence-root",
+        "--repository-root",
+        dest="evidence_root",
+        type=Path,
+        help="External input root containing the capture's repository-relative paths (--repository-root is an alias).",
+    )
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
+    if (args.capture_responses is not None or args.materialize_record is not None) and args.evidence_root is None:
+        parser.error("capture and materialization require --evidence-root")
     if args.capture_responses is not None:
         if args.env_file is None or args.capture_record_out is None or args.native_out is None or args.out is not None:
             parser.error(
@@ -919,12 +927,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             HttpClient(), (CredentialHeader("X-API-Key", secret, ("https://hydapi.nve.no",)),)
         )
         try:
-            repository_root = args.repository_root.resolve()
-            response_repository_directory = args.capture_responses.resolve().relative_to(repository_root).as_posix()
-            native_repository_path = args.native_out.resolve().relative_to(repository_root).as_posix()
+            evidence_root = args.evidence_root.resolve()
+            response_repository_directory = args.capture_responses.resolve().relative_to(evidence_root).as_posix()
+            native_repository_path = args.native_out.resolve().relative_to(evidence_root).as_posix()
         except ValueError as exc:
             raise FatalContractError(
-                "no_nve capture response and native paths must be inside the repository root"
+                "no_nve capture response and native paths must be inside the evidence root"
             ) from exc
         responses, bodies = capture_station_catalogue(
             transport,
@@ -946,7 +954,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             native_table=placeholder_native_identity,
         )
         # Materialize from the just-written, digest-bound responses through the same offline path.
-        table = materialize_captured_native_table(temporary, args.repository_root)
+        table = materialize_captured_native_table(temporary, args.evidence_root)
         write_native_table(table, args.native_out)
         native_bytes = args.native_out.read_bytes()
         capture = StationCatalogueCapture(
@@ -975,7 +983,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ):
             parser.error("--materialize-record requires --native-out and cannot use capture or build options")
         capture = read_capture_record(args.materialize_record)
-        table = materialize_captured_native_table(capture, args.repository_root)
+        table = materialize_captured_native_table(capture, args.evidence_root)
         if native_table_semantic_digest(table) != capture.native_table.semantic_sha256:
             raise FatalContractError("no_nve materialized native semantic digest mismatch")
         candidate = args.native_out.with_name(f".{args.native_out.name}.candidate")

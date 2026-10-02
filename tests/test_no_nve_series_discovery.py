@@ -11,15 +11,19 @@ from rivretrieve._internal.providers.no_nve.series import describe_series
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.source_series import SeriesScope
 
-_DATA = Path(__file__).parent / "test_data"
+_DATA = Path("tests/test_data")
 
 
-def test_recorded_current_inventory_finds_versions_outside_acquired_subset():
+def test_recorded_current_inventory_finds_versions_outside_acquired_subset(retained_evidence_root):
     """The deliberately partial catalogue input is authored; publisher bytes are exact."""
     product = ProductId("discharge_daily_mean")
-    recordings = [read_recording(_DATA / "no_nve_109.42.0_1001_series.recording.json")]
+    recordings = [read_recording(retained_evidence_root / _DATA / "no_nve_109.42.0_1001_series.recording.json")]
     recordings.extend(
-        read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{version}_2024-01-01_2024-01-03.recording.json")
+        read_recording(
+            retained_evidence_root
+            / _DATA
+            / f"no_nve_109.42.0_1001_1440_version-{version}_2024-01-01_2024-01-03.recording.json"
+        )
         for version in (1, 2, 3)
     )
     transport = _ObservedTransport(recordings)
@@ -95,18 +99,22 @@ def _recorded_fetch(transport, *, known=(1, 2, 3), scope=None):
     )
 
 
-def _recordings():
+def _recordings(retained_evidence_root):
     return (
-        read_recording(_DATA / "no_nve_109.42.0_1001_series.recording.json"),
+        read_recording(retained_evidence_root / _DATA / "no_nve_109.42.0_1001_series.recording.json"),
         *(
-            read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_2024-01-01_2024-01-03.recording.json")
+            read_recording(
+                retained_evidence_root
+                / _DATA
+                / f"no_nve_109.42.0_1001_1440_version-{v}_2024-01-01_2024-01-03.recording.json"
+            )
             for v in (1, 2, 3)
         ),
     )
 
 
-def test_current_metadata_does_not_erase_historical_acquired_version():
-    transport = _ObservedTransport(_recordings(), metadata="missing-historical")
+def test_current_metadata_does_not_erase_historical_acquired_version(retained_evidence_root):
+    transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="missing-historical")
     acquired = _recorded_fetch(transport)
     assert {item.origin.request_parameters["VersionNumber"] for item in acquired.value} == {1, 2, 3}
     assert acquired.inventories[0].completeness == "incomplete"
@@ -114,8 +122,8 @@ def test_current_metadata_does_not_erase_historical_acquired_version():
     assert acquired.issues
 
 
-def test_metadata_failure_keeps_independent_known_versions_without_complete_inventory():
-    transport = _ObservedTransport(_recordings(), metadata="failure")
+def test_metadata_failure_keeps_independent_known_versions_without_complete_inventory(retained_evidence_root):
+    transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="failure")
     acquired = _recorded_fetch(transport)
     assert {item.origin.request_parameters["VersionNumber"] for item in acquired.value} == {1, 2, 3}
     assert acquired.inventories[0].completeness == "incomplete"
@@ -124,10 +132,10 @@ def test_metadata_failure_keeps_independent_known_versions_without_complete_inve
     assert acquired.calls[0].status_code == 503
 
 
-def test_explicit_identity_never_widens_or_requires_metadata():
+def test_explicit_identity_never_widens_or_requires_metadata(retained_evidence_root):
     from rivretrieve._internal.source_series import RestrictionKind
 
-    transport = _ObservedTransport(_recordings())
+    transport = _ObservedTransport(_recordings(retained_evidence_root))
     scope = SeriesScope(
         provider_ids=("no_nve",),
         station_ids=("109.42.0",),
@@ -140,23 +148,23 @@ def test_explicit_identity_never_widens_or_requires_metadata():
     assert not any(request.url.endswith("/Series") for request in transport.requests)
 
 
-def test_malformed_metadata_member_does_not_drop_valid_version():
-    transport = _ObservedTransport(_recordings(), metadata="malformed-member")
+def test_malformed_metadata_member_does_not_drop_valid_version(retained_evidence_root):
+    transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="malformed-member")
     acquired = _recorded_fetch(transport, known=())
     assert {item.origin.request_parameters["VersionNumber"] for item in acquired.value} == {1, 2}
     assert acquired.inventories[0].completeness == "incomplete"
     assert acquired.issues
 
 
-def test_wrong_station_metadata_never_becomes_a_version_selector():
-    transport = _ObservedTransport(_recordings(), metadata="wrong-station")
+def test_wrong_station_metadata_never_becomes_a_version_selector(retained_evidence_root):
+    transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="wrong-station")
     acquired = _recorded_fetch(transport, known=())
     assert {item.origin.request_parameters["VersionNumber"] for item in acquired.value} == {1, 2}
     assert "station or parameter" in acquired.inventories[0].reason
 
 
-def test_current_empty_inventory_is_not_unidentified_empty_observations():
-    transport = _ObservedTransport(_recordings(), metadata="empty")
+def test_current_empty_inventory_is_not_unidentified_empty_observations(retained_evidence_root):
+    transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="empty")
     acquired = _recorded_fetch(transport, known=())
     assert acquired.value == ()
     assert acquired.inventories[0].completeness == "complete"
@@ -164,10 +172,10 @@ def test_current_empty_inventory_is_not_unidentified_empty_observations():
     assert acquired.issues == ()
 
 
-def test_current_complete_inventory_can_settle_no_physical_match():
+def test_current_complete_inventory_can_settle_no_physical_match(retained_evidence_root):
     from rivretrieve._internal.source_series import PhysicalPredicate
 
-    transport = _ObservedTransport(_recordings())
+    transport = _ObservedTransport(_recordings(retained_evidence_root))
     scope = SeriesScope(
         provider_ids=("no_nve",),
         station_ids=("109.42.0",),
@@ -181,10 +189,10 @@ def test_current_complete_inventory_can_settle_no_physical_match():
     assert not acquired.issues
 
 
-def test_unknown_admission_metadata_is_not_established_physical_absence():
+def test_unknown_admission_metadata_is_not_established_physical_absence(retained_evidence_root):
     from rivretrieve._internal.source_series import PhysicalPredicate
 
-    transport = _ObservedTransport(_recordings(), metadata="unknown-unit")
+    transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="unknown-unit")
     scope = SeriesScope(
         provider_ids=("no_nve",),
         station_ids=("109.42.0",),

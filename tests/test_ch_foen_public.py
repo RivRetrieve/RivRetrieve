@@ -13,19 +13,23 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
-_RECORDING = read_recording(Path(__file__).parent / "test_data" / "ch_foen_2135_rest_engine_2026-09-01.recording.json")
+
+@pytest.fixture
+def recording(retained_evidence_root: Path):
+    return read_recording(retained_evidence_root / "tests/test_data/ch_foen_2135_rest_engine_2026-09-01.recording.json")
 
 
 @pytest.fixture(autouse=True)
-def recording_clock(monkeypatch: pytest.MonkeyPatch):
+def recording_clock(recording, monkeypatch: pytest.MonkeyPatch):
     """Replay recent REST access at its captured retrieval time, not today's age."""
-    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: _RECORDING.retrieved_at)
+    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
 
 
 def test_public_selection_uses_anonymous_rest_and_returns_identity_and_physical_context_with_raw_receipt(
+    recording,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    replay = ReplayTransport((_RECORDING,))
+    replay = ReplayTransport((recording,))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(provider="ch_foen", station="2135", quantity="discharge")
     result = rr.fetch(selection, start="2026-09-01", end="2026-09-02", receipts=True, on_issue="ignore")
@@ -45,16 +49,17 @@ def test_public_selection_uses_anonymous_rest_and_returns_identity_and_physical_
     assert result.data["time"].min() == datetime(2026, 9, 1)
     assert result.data["time"].max() == datetime(2026, 9, 2, 16, 30)
     assert len(result.receipts.entries) == 1
-    assert result.receipts.entries[0].content == _RECORDING.content
+    assert result.receipts.entries[0].content == recording.content
     assert result.receipts.entries[0].authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
     utc = rr.to_utc(result)
     assert set(utc.data["time_zone"]) == {"+00:00"}
 
 
 def test_public_unknown_zone_refusal_is_atomic_and_identifies_swiss_rows(
+    recording,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((_RECORDING,)))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     fetched = rr.fetch(
         rr.find(provider="ch_foen", station="2135", quantity="discharge"),
         start="2026-09-01",
@@ -90,8 +95,8 @@ def test_public_unknown_zone_refusal_is_atomic_and_identifies_swiss_rows(
     pl_testing.assert_frame_equal(result.data, untouched, check_exact=True)
 
 
-def test_public_receipts_false_omits_publisher_bytes(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((_RECORDING,)))
+def test_public_receipts_false_omits_publisher_bytes(recording, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     result = rr.fetch(
         rr.find(provider="ch_foen", station="2135", quantity="discharge"),
         start="2026-09-01",
@@ -101,9 +106,9 @@ def test_public_receipts_false_omits_publisher_bytes(monkeypatch: pytest.MonkeyP
     )
     assert result.receipts.entries == ()
     assert result.provenance.endpoints == ("https://api.existenz.ch/apiv1/hydro/daterange",)
-    assert result.provenance.retrieved_at == _RECORDING.retrieved_at
+    assert result.provenance.retrieved_at == recording.retrieved_at
     assert len(result.provenance.calls_made) == 1
-    assert result.provenance.calls_made[0]["request_parameters"] == dict(_RECORDING.request.parameters or {})
+    assert result.provenance.calls_made[0]["request_parameters"] == dict(recording.request.parameters or {})
     assert result.provenance.calls_made[0]["query"] == {
         "status": "unknown",
         "reason": "unknown",

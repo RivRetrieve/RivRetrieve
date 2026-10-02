@@ -28,7 +28,7 @@ from rivretrieve._internal.providers.cz_chmi.parse import parse
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
-_DATA = Path(__file__).parent / "test_data"
+_DATA = Path("tests/test_data")
 _DQ = _DATA / "cz_chmi_0-203-1-000400_DQ_2023.recording.json"
 _HQ = _DATA / "cz_chmi_0-203-1-000400_HQ_2023.recording.json"
 _STATION = "0-203-1-000400"
@@ -45,8 +45,8 @@ def _window(start: datetime = datetime(2023, 1, 1), end: datetime = datetime(202
     return _make_fetch_window(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end))
 
 
-def test_fetch_coalesces_five_products_into_exactly_two_annual_calls() -> None:
-    replay = ReplayTransport([_DQ, _HQ])
+def test_fetch_coalesces_five_products_into_exactly_two_annual_calls(retained_evidence_root) -> None:
+    replay = ReplayTransport([(retained_evidence_root / _DQ), (retained_evidence_root / _HQ)])
     rendered = MappingProxyType({product: (RenderedWindow("2023", None, _window()),) for product in _PRODUCTS})
     result = fetch((_STATION,), _PRODUCTS, rendered, _window(), config(), replay)
     assert len(result.value) == 2
@@ -55,10 +55,13 @@ def test_fetch_coalesces_five_products_into_exactly_two_annual_calls() -> None:
         tuple((_STATION, product) for product in _PRODUCTS[3:]),
     ]
     assert [payload.origin.url for payload in result.value] == [
-        read_recording(_DQ).request.url,
-        read_recording(_HQ).request.url,
+        read_recording(retained_evidence_root / _DQ).request.url,
+        read_recording(retained_evidence_root / _HQ).request.url,
     ]
-    assert [payload.content for payload in result.value] == [read_recording(_DQ).content, read_recording(_HQ).content]
+    assert [payload.content for payload in result.value] == [
+        read_recording(retained_evidence_root / _DQ).content,
+        read_recording(retained_evidence_root / _HQ).content,
+    ]
 
 
 @pytest.mark.parametrize(
@@ -69,9 +72,14 @@ def test_fetch_coalesces_five_products_into_exactly_two_annual_calls() -> None:
     ],
 )
 def test_parse_official_annual_recordings(
-    recording: str, products: tuple[ProductId, ...], counts: list[int], first: datetime, last: datetime
+    retained_evidence_root,
+    recording: str,
+    products: tuple[ProductId, ...],
+    counts: list[int],
+    first: datetime,
+    last: datetime,
 ) -> None:
-    replay = ReplayTransport([_DATA / recording])
+    replay = ReplayTransport([(retained_evidence_root / _DATA) / recording])
     rendered = MappingProxyType({product: (RenderedWindow("2023", None, _window()),) for product in products})
     fetched = fetch((_STATION,), products, rendered, _window(), config(), replay)
     rows = parse(fetched.value[0], config()).rows
@@ -93,7 +101,7 @@ def test_parse_official_annual_recordings(
         assert series["time_zone"].unique().to_list() == ["+00:00"]
 
 
-def test_official_recording_literals_and_shared_conversion() -> None:
+def test_official_recording_literals_and_shared_conversion(retained_evidence_root) -> None:
     daily = parse(
         fetch(
             (_STATION,),
@@ -101,7 +109,7 @@ def test_official_recording_literals_and_shared_conversion() -> None:
             MappingProxyType({p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[:3]}),
             _window(),
             config(),
-            ReplayTransport([_DQ]),
+            ReplayTransport([(retained_evidence_root / _DQ)]),
         ).value[0],
         config(),
     ).rows
@@ -112,7 +120,7 @@ def test_official_recording_literals_and_shared_conversion() -> None:
             MappingProxyType({p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[3:]}),
             _window(),
             config(),
-            ReplayTransport([_HQ]),
+            ReplayTransport([(retained_evidence_root / _HQ)]),
         ).value[0],
         config(),
     ).rows
@@ -128,7 +136,7 @@ def test_official_recording_literals_and_shared_conversion() -> None:
     ]
 
 
-def test_real_driver_path_clips_and_returns_one_receipt_for_coalesced_daily_call() -> None:
+def test_real_driver_path_clips_and_returns_one_receipt_for_coalesced_daily_call(retained_evidence_root) -> None:
     assert isinstance(declaration.observations, LiveStages)
     request = ObservationRequest(
         ProviderId("cz_chmi"),
@@ -143,7 +151,7 @@ def test_real_driver_path_clips_and_returns_one_receipt_for_coalesced_daily_call
         declaration.observations.stages,
         provenance=ObservationProvenance(source="recording", provider_id=ProviderId("cz_chmi")),
         receipts=ReceiptMode.INCLUDE,
-        transport=ReplayTransport([_DQ]),
+        transport=ReplayTransport([(retained_evidence_root / _DQ)]),
     )
     assert result.canonical_rows.height == 6
     assert len(result.receipts.entries) == 3
@@ -151,7 +159,7 @@ def test_real_driver_path_clips_and_returns_one_receipt_for_coalesced_daily_call
     assert stage["value"][0] == pytest.approx(0.13)
 
 
-def test_coalesced_receipts_preserve_exact_publisher_bytes_origin_order_and_opt_out() -> None:
+def test_coalesced_receipts_preserve_exact_publisher_bytes_origin_order_and_opt_out(retained_evidence_root) -> None:
     assert isinstance(declaration.observations, LiveStages)
     request = ObservationRequest(
         ProviderId("cz_chmi"),
@@ -167,10 +175,10 @@ def test_coalesced_receipts_preserve_exact_publisher_bytes_origin_order_and_opt_
         declaration.observations.stages,
         provenance=ObservationProvenance(source="recording", provider_id=ProviderId("cz_chmi")),
         receipts=ReceiptMode.INCLUDE,
-        transport=ReplayTransport([_DQ, _HQ]),
+        transport=ReplayTransport([(retained_evidence_root / _DQ), (retained_evidence_root / _HQ)]),
     )
-    daily = read_recording(_DQ)
-    hourly = read_recording(_HQ)
+    daily = read_recording(retained_evidence_root / _DQ)
+    hourly = read_recording(retained_evidence_root / _HQ)
     assert [entry.content for entry in included.receipts.entries] == [
         daily.content,
         daily.content,
@@ -204,19 +212,19 @@ def test_coalesced_receipts_preserve_exact_publisher_bytes_origin_order_and_opt_
         declaration.observations.stages,
         provenance=ObservationProvenance(source="recording", provider_id=ProviderId("cz_chmi")),
         receipts=ReceiptMode.OMIT,
-        transport=ReplayTransport([_DQ, _HQ]),
+        transport=ReplayTransport([(retained_evidence_root / _DQ), (retained_evidence_root / _HQ)]),
     )
     assert omitted.receipts.entries == ()
 
 
-def test_parse_preserves_source_null_as_missing_value() -> None:
+def test_parse_preserves_source_null_as_missing_value(retained_evidence_root) -> None:
     fetched = fetch(
         (_STATION,),
         (_PRODUCTS[0],),
         MappingProxyType({_PRODUCTS[0]: (RenderedWindow("2023", None, _window()),)}),
         _window(),
         config(),
-        ReplayTransport([_DQ]),
+        ReplayTransport([(retained_evidence_root / _DQ)]),
     ).value[0]
     document = json.loads(fetched.content)
     document["tsList"][0]["tsData"]["data"]["values"][0][1] = None
@@ -226,8 +234,8 @@ def test_parse_preserves_source_null_as_missing_value() -> None:
     assert parsed["value"][0] is None
 
 
-def test_parse_rejects_non_utc_and_does_not_invent_quality() -> None:
-    recording = read_recording(_DQ)
+def test_parse_rejects_non_utc_and_does_not_invent_quality(retained_evidence_root) -> None:
+    recording = read_recording(retained_evidence_root / _DQ)
     content = recording.content.replace(b"2023-01-01T00:00:00Z", b"2023-01-01T00:00:00+01:00", 1)
     fetched = fetch(
         (_STATION,),
@@ -235,7 +243,7 @@ def test_parse_rejects_non_utc_and_does_not_invent_quality() -> None:
         MappingProxyType({_PRODUCTS[0]: (RenderedWindow("2023", None, _window()),)}),
         _window(),
         config(),
-        ReplayTransport([_DQ]),
+        ReplayTransport([(retained_evidence_root / _DQ)]),
     ).value[0]
     from dataclasses import replace
 
@@ -247,8 +255,8 @@ def test_parse_rejects_non_utc_and_does_not_invent_quality() -> None:
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_public_selection_routes_to_czech_live_engine(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport([_HQ]))
+def test_public_selection_routes_to_czech_live_engine(retained_evidence_root, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport([(retained_evidence_root / _HQ)]))
     selection = rr.find(
         provider="cz_chmi", station=_STATION, quantity="discharge", frequency="hourly", statistic="mean"
     )
@@ -263,7 +271,7 @@ def test_public_selection_routes_to_czech_live_engine(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.parametrize("malformed_id", [{"malformed": "HD"}, ["HD"]])
-def test_malformed_external_identity_retains_supported_siblings(malformed_id):
+def test_malformed_external_identity_retains_supported_siblings(retained_evidence_root, malformed_id):
     from dataclasses import replace
 
     from polars.testing import assert_frame_equal
@@ -274,7 +282,7 @@ def test_malformed_external_identity_retains_supported_siblings(malformed_id):
         {p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[:3]},
         _window(),
         config(),
-        ReplayTransport([_DQ]),
+        ReplayTransport([(retained_evidence_root / _DQ)]),
     ).value[0]
     expected = parse(fetched, config())
     document = json.loads(fetched.content)
@@ -290,7 +298,7 @@ def test_malformed_external_identity_retains_supported_siblings(malformed_id):
 
 
 @pytest.mark.parametrize("timestamp", ["2023-01-01T00:00:00+01:00Z", "2023-01-01T00:00:00+00:00Z"])
-def test_double_zone_external_timestamp_retains_supported_siblings(timestamp):
+def test_double_zone_external_timestamp_retains_supported_siblings(retained_evidence_root, timestamp):
     from dataclasses import replace
 
     from polars.testing import assert_frame_equal
@@ -301,7 +309,7 @@ def test_double_zone_external_timestamp_retains_supported_siblings(timestamp):
         {p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[:3]},
         _window(),
         config(),
-        ReplayTransport([_DQ]),
+        ReplayTransport([(retained_evidence_root / _DQ)]),
     ).value[0]
     expected = parse(fetched, config())
     document = json.loads(fetched.content)
@@ -315,7 +323,7 @@ def test_double_zone_external_timestamp_retains_supported_siblings(timestamp):
     assert len(result.issues) == 1
 
 
-def test_invalid_internal_request_tag_remains_fatal():
+def test_invalid_internal_request_tag_remains_fatal(retained_evidence_root):
     from dataclasses import replace
 
     from rivretrieve._internal.engine import SourceCoordinates
@@ -327,7 +335,7 @@ def test_invalid_internal_request_tag_remains_fatal():
         {p: (RenderedWindow("2023", None, _window()),) for p in _PRODUCTS[:3]},
         _window(),
         config(),
-        ReplayTransport([_DQ]),
+        ReplayTransport([(retained_evidence_root / _DQ)]),
     ).value[0]
     with pytest.raises(FatalContractError, match="invalid request coordinates"):
         parse(replace(fetched, source_coordinates=SourceCoordinates(None)), config())

@@ -22,17 +22,23 @@ from rivretrieve._internal.recordings import read_recording
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
-DATA = Path(__file__).parent / "test_data"
-ARCHIVE = read_recording(DATA / "ch_foen_2018_flux_january2024_full.recording.json")
-REST = json.loads((DATA / "ch_foen_2018_historical_rest.json").read_text())
+
+@pytest.fixture
+def archive(retained_evidence_root: Path):
+    return read_recording(retained_evidence_root / "tests/test_data/ch_foen_2018_flux_january2024_full.recording.json")
 
 
-def expected_flow(*, clipped=True):
+@pytest.fixture
+def rest(retained_evidence_root: Path):
+    return json.loads((retained_evidence_root / "tests/test_data/ch_foen_2018_historical_rest.json").read_text())
+
+
+def expected_flow(archive, *, clipped=True):
     # Independently decode the recorded source table.
-    lines = ARCHIVE.content.decode().splitlines()
+    lines = archive.content.decode().splitlines()
     header = next(csv.reader([lines[0]]))
     rows = []
-    for values in csv.reader(io.StringIO(ARCHIVE.content.decode())):
+    for values in csv.reader(io.StringIO(archive.content.decode())):
         if not values or values == header:
             continue
         record = dict(zip(header, values, strict=True))
@@ -47,7 +53,9 @@ def expected_flow(*, clipped=True):
     )
 
 
-def test_public_historical_archive_without_personal_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_public_historical_archive_without_personal_credentials(
+    rest, archive, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
     monkeypatch.chdir(tmp_path)
     routes = []
 
@@ -59,28 +67,30 @@ def test_public_historical_archive_without_personal_credentials(monkeypatch: pyt
         return result
 
     def get(url, **kwargs):
-        assert url == REST["url"]
-        assert kwargs["params"] == REST["params"]
+        assert url == rest["url"]
+        assert kwargs["params"] == rest["params"]
         assert "Authorization" not in kwargs["headers"]
-        routes.append("REST GET")
-        return response(REST["body"].encode(), REST["status"], REST["content_type"])
+        routes.append("rest GET")
+        return response(rest["body"].encode(), rest["status"], rest["content_type"])
 
     def post(url, **kwargs):
-        assert url == ARCHIVE.request.url
-        assert kwargs["params"] == dict(ARCHIVE.request.parameters)
-        assert kwargs["data"] == ARCHIVE.request.body
+        assert url == archive.request.url
+        assert kwargs["params"] == dict(archive.request.parameters)
+        assert kwargs["data"] == archive.request.body
         assert kwargs["allow_redirects"] is False
         has_token_auth = kwargs["headers"].get("Authorization", "").startswith("Token ")
         assert has_token_auth, "archive request lacks token authentication"
         routes.append("archive POST")
-        return response(ARCHIVE.content, ARCHIVE.status_code, ARCHIVE.content_type)
+        return response(archive.content, archive.status_code, archive.content_type)
 
     monkeypatch.setattr(requests, "get", get)
     monkeypatch.setattr(requests, "post", post)
     selection = rr.find(provider="ch_foen", station="2018", quantity="discharge")
     result = rr.fetch(selection, start="2024-01-01", end="2024-01-31", receipts=True, on_issue="ignore")
     assert routes == ["archive POST"], f"Historical public retrieval selected {routes}"
-    pl_testing.assert_frame_equal(result.data.select("time", "value", "source_unit").sort("time"), expected_flow())
+    pl_testing.assert_frame_equal(
+        result.data.select("time", "value", "source_unit").sort("time"), expected_flow(archive)
+    )
     assert result.data.height == 4402
     assert result.data["time"].min() == datetime(2024, 1, 1)
     assert result.data["time"].max() == datetime(2024, 1, 31, 23, 50)
@@ -88,6 +98,6 @@ def test_public_historical_archive_without_personal_credentials(monkeypatch: pyt
     assert result.data["time_zone"].unique().to_list() == ["+00:00"]
     assert any("flow_ls" in issue.message and "unresolved" in issue.message for issue in result.issues)
     assert len(result.receipts.entries) == 1
-    assert result.receipts.entries[0].content == ARCHIVE.content
+    assert result.receipts.entries[0].content == archive.content
     assert result.receipts.entries[0].authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
     assert result.provenance.calls_made[0]["request_parameters"] == {"org": "api.existenz.ch"}

@@ -298,11 +298,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--fixture", type=Path, help="Path to a Meteo.lt hydro-stations JSON fixture.")
     source.add_argument("--live", action="store_true", help="Fetch the live Meteo.lt hydro-stations endpoint.")
-    source.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
+    source.add_argument("--native", type=Path, help="Path to the retained native Parquet table.")
     destination = parser.add_mutually_exclusive_group(required=True)
     destination.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     destination.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
+    parser.add_argument("--evidence-root", type=Path, help="External root for retained provenance inputs.")
     args = parser.parse_args(argv)
 
     if args.native_out is not None:
@@ -323,8 +324,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--retrieved-at is only valid with refresh mode")
     from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS
 
+    if args.evidence_root is None:
+        parser.error("--out requires --evidence-root")
     provenance = build_acquisition_provenance()
-    verify_provenance_recordings(provenance, Path(__file__).resolve().parents[5])
+    verify_provenance_recordings(provenance, args.evidence_root)
     catalogue = build_catalogue(
         read_native_table(
             args.native,

@@ -26,8 +26,10 @@ def window(a, b):
     )
 
 
-def test_recent_request_replays_exact_anonymous_rest_envelope_and_coalesces_fields():
-    replay = ReplayTransport((read_recording(DATA / "ch_foen_2135_rest_2026-09-01.recording.json"),))
+def test_recent_request_replays_exact_anonymous_rest_envelope_and_coalesces_fields(retained_evidence_root: Path):
+    replay = ReplayTransport(
+        (read_recording((retained_evidence_root / DATA) / "ch_foen_2135_rest_2026-09-01.recording.json"),)
+    )
     rendered = MappingProxyType(
         {p: (RenderedWindow("2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z"),) for p in PRODUCTS}
     )
@@ -43,8 +45,8 @@ def test_recent_request_replays_exact_anonymous_rest_envelope_and_coalesces_fiel
     assert result.value[0].origin.request_parameters["parameters"] == "flow,flow_ls,height_abs,height,temperature"
 
 
-def test_old_request_replays_exact_flux_body_and_preserves_query_origin():
-    recording = read_recording(DATA / "ch_foen_2135_flux_2020-01-01.recording.json")
+def test_old_request_replays_exact_flux_body_and_preserves_query_origin(retained_evidence_root: Path):
+    recording = read_recording((retained_evidence_root / DATA) / "ch_foen_2135_flux_2020-01-01.recording.json")
     replay = AuthenticatedTransport(
         ReplayTransport((recording,)),
         (CredentialHeader("Authorization", "Token SENTINEL-NOT-A-REAL-TOKEN", ("https://influx.konzept.space",)),),
@@ -63,7 +65,9 @@ def test_old_request_replays_exact_flux_body_and_preserves_query_origin():
     assert payload.origin.request_parameters == {"org": "api.existenz.ch"}
 
 
-def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(monkeypatch) -> None:
+def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(
+    retained_evidence_root: Path, monkeypatch
+) -> None:
     from datetime import timedelta
 
     import rivretrieve._internal.driver as driver_module
@@ -74,7 +78,7 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(mon
     from rivretrieve._internal.providers.ch_foen.declaration import declaration
     from rivretrieve._internal.providers.registration import LiveStages
 
-    recording = read_recording(DATA / "ch_foen_2135_flux_2020-01-01.recording.json")
+    recording = read_recording((retained_evidence_root / DATA) / "ch_foen_2135_flux_2020-01-01.recording.json")
     transport = AuthenticatedTransport(
         ReplayTransport((recording,)),
         (CredentialHeader("Authorization", "Token SENTINEL-NOT-A-REAL-TOKEN", ("https://influx.konzept.space",)),),

@@ -14,7 +14,7 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
-_DATA = Path(__file__).parent / "test_data"
+_DATA = Path("tests/test_data")
 
 
 @pytest.mark.parametrize("parameter,quantity", [(1000, "stage"), (1001, "discharge"), (1003, "temperature")])
@@ -23,13 +23,15 @@ _DATA = Path(__file__).parent / "test_data"
     [(0, None, "instantaneous"), (60, "hourly", "mean"), (1440, "daily", "mean")],
 )
 def test_every_enrolled_route_replays_current_inventory_explicit_version_and_cache(
-    monkeypatch, tmp_path, parameter, quantity, resolution, frequency, statistic
+    retained_evidence_root, monkeypatch, tmp_path, parameter, quantity, resolution, frequency, statistic
 ):
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    metadata = read_recording(_DATA / f"no_nve_series_1.200.0_{parameter}.recording.json")
+    metadata = read_recording(retained_evidence_root / _DATA / f"no_nve_series_1.200.0_{parameter}.recording.json")
     observation = read_recording(
-        _DATA / f"no_nve_observations_1.200.0_{parameter}_{resolution}_v1_engine_2025-07-10.recording.json"
+        retained_evidence_root
+        / _DATA
+        / f"no_nve_observations_1.200.0_{parameter}_{resolution}_v1_engine_2025-07-10.recording.json"
     )
     requests = []
     replay = ReplayTransport((metadata, observation))
@@ -79,12 +81,18 @@ def test_every_enrolled_route_replays_current_inventory_explicit_version_and_cac
     assert "protocol-only-nve-key" not in repr(result)
 
 
-def test_current_version_specific_method_obeys_original_physical_predicate(monkeypatch, tmp_path):
+def test_current_version_specific_method_obeys_original_physical_predicate(
+    retained_evidence_root, monkeypatch, tmp_path
+):
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    metadata = read_recording(_DATA / "no_nve_series_1.46.0_1000.recording.json")
+    metadata = read_recording(retained_evidence_root / _DATA / "no_nve_series_1.46.0_1000.recording.json")
     observations = tuple(
-        read_recording(_DATA / f"no_nve_observations_1.46.0_1000_1440_v{v}_engine_2024-10-01.recording.json")
+        read_recording(
+            retained_evidence_root
+            / _DATA
+            / f"no_nve_observations_1.46.0_1000_1440_v{v}_engine_2024-10-01.recording.json"
+        )
         for v in (1, 2)
     )
     replay = ReplayTransport((metadata, *observations))
@@ -110,13 +118,17 @@ def test_current_version_specific_method_obeys_original_physical_predicate(monke
     assert {facts.statistic.value for item in both.source_series for facts in item.facts} == {"mean", "instantaneous"}
 
 
-def test_failed_current_inventory_retains_known_results_and_cannot_satisfy_all_cache(monkeypatch, tmp_path):
+def test_failed_current_inventory_retains_known_results_and_cannot_satisfy_all_cache(
+    retained_evidence_root, monkeypatch, tmp_path
+):
     from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
 
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     recordings = tuple(
-        read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
+        read_recording(
+            retained_evidence_root / _DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json"
+        )
         for v in (1, 2, 3)
     )
     requests = []
@@ -150,12 +162,16 @@ def test_failed_current_inventory_retains_known_results_and_cannot_satisfy_all_c
     assert restored.outcomes == again.outcomes
 
 
-def test_subset_cannot_satisfy_all_current_versions_and_refresh_keeps_siblings(monkeypatch, tmp_path):
+def test_subset_cannot_satisfy_all_current_versions_and_refresh_keeps_siblings(
+    retained_evidence_root, monkeypatch, tmp_path
+):
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    metadata = read_recording(_DATA / "no_nve_109.42.0_1001_series.recording.json")
+    metadata = read_recording(retained_evidence_root / _DATA / "no_nve_109.42.0_1001_series.recording.json")
     observations = tuple(
-        read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
+        read_recording(
+            retained_evidence_root / _DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json"
+        )
         for v in (1, 2, 3)
     )
     requests = []
@@ -192,7 +208,9 @@ def test_subset_cannot_satisfy_all_current_versions_and_refresh_keeps_siblings(m
     assert len(requests) == 10
 
 
-def test_failed_version_refresh_retains_old_success_without_fresh_all_coverage(monkeypatch, tmp_path):
+def test_failed_version_refresh_retains_old_success_without_fresh_all_coverage(
+    retained_evidence_root, monkeypatch, tmp_path
+):
     from dataclasses import replace
     from datetime import timedelta
 
@@ -200,9 +218,11 @@ def test_failed_version_refresh_retains_old_success_without_fresh_all_coverage(m
 
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    metadata = read_recording(_DATA / "no_nve_109.42.0_1001_series.recording.json")
+    metadata = read_recording(retained_evidence_root / _DATA / "no_nve_109.42.0_1001_series.recording.json")
     observations = tuple(
-        read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
+        read_recording(
+            retained_evidence_root / _DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json"
+        )
         for v in (1, 2, 3)
     )
     replay = ReplayTransport((metadata, *observations))

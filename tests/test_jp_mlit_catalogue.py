@@ -86,8 +86,10 @@ def _frame_content_digest(frame: pl.DataFrame) -> str:
 
 
 @pytest.fixture(scope="module")
-def _pristine_projection():
-    built = generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+def _pristine_projection(retained_evidence_root):
+    built = generate_catalogue.build_catalogue(
+        read_native_table(retained_evidence_root / NATIVE_PATH), STATION_CATALOGUE_ORIGINS
+    )
     return copy_catalogue_projection(built)
 
 
@@ -134,8 +136,8 @@ def _native_for(ids: list[str]) -> NativeTable:
     ).value
 
 
-def test_rejected_response_fixture_identity() -> None:
-    body = REJECTED_PATH.read_bytes()
+def test_rejected_response_fixture_identity(retained_evidence_root) -> None:
+    body = (retained_evidence_root / REJECTED_PATH).read_bytes()
     assert len(body) == 489
     assert hashlib.sha256(body).hexdigest() == "2e83eed5a64cf91d9351f2abc28c151dec420a24265dd9db194fd7132bd31faf"
     assert body.count(generate_catalogue._SOURCE_MARKER) == 0
@@ -256,8 +258,8 @@ def test_packaged_station_products_count() -> None:
     assert pl.read_parquet(CATALOGUE_PATH / "station_products.parquet").height == 4092
 
 
-def test_tracked_fixture_is_exact_native_subset() -> None:
-    fixture = json.loads(FIXTURE_PATH.read_text())
+def test_retained_fixture_is_exact_native_subset(retained_evidence_root) -> None:
+    fixture = json.loads((retained_evidence_root / FIXTURE_PATH).read_text())
     assert len(fixture) == 3
     assert [row["観測所記号"] for row in fixture] == FIXTURE_IDS
     assert all(set(row) == set(generate_catalogue.NATIVE_COLUMNS) for row in fixture)
@@ -265,8 +267,8 @@ def test_tracked_fixture_is_exact_native_subset() -> None:
     assert _canonical_digest(fixture) == FIXTURE_DIGEST
 
 
-def test_base_packaged_ids_are_pinned() -> None:
-    published_ids = read_native_table(NATIVE_PATH).data["観測所記号"].to_list()
+def test_base_packaged_ids_are_pinned(retained_evidence_root) -> None:
+    published_ids = read_native_table(retained_evidence_root / NATIVE_PATH).data["観測所記号"].to_list()
     seed = sorted([*published_ids, "307051287711040"])
     assert len(seed) == len(set(seed)) == 1024 and seed == sorted(seed)
     assert all(isinstance(station_id, str) and len(station_id) == 15 and station_id.isdigit() for station_id in seed)
@@ -372,11 +374,11 @@ ISSUE_CODES = [
 
 
 @pytest.mark.parametrize("code", ISSUE_CODES)
-def test_refresh_issue_code(code: str) -> None:
+def test_refresh_issue_code(retained_evidence_root, code: str) -> None:
     station_id = "100000000000001"
     prior = _native_for([station_id])
     if code == "station_not_published":
-        body = REJECTED_PATH.read_bytes().replace(b"307051287711040", station_id.encode())
+        body = (retained_evidence_root / REJECTED_PATH).read_bytes().replace(b"307051287711040", station_id.encode())
         prior_arg = prior
     elif code == "refresh_response_rejected":
         body = b"generic HTTP 200 body"
@@ -400,11 +402,11 @@ def test_refresh_issue_code(code: str) -> None:
     assert issue.details is not None and issue.details["station_id"] == station_id and issue.details["reason"]
 
 
-def test_absence_response_for_different_station_is_rejected() -> None:
+def test_absence_response_for_different_station_is_rejected(retained_evidence_root) -> None:
     station_id = "100000000000001"
     prior = _native_for([station_id])
     outcome = generate_catalogue.refresh_native_table(
-        {station_id: REJECTED_PATH.read_bytes()},
+        {station_id: (retained_evidence_root / REJECTED_PATH).read_bytes()},
         station_ids=[station_id],
         retrieved_at_by_station=_timestamps([station_id]),
         prior=prior,
@@ -600,8 +602,8 @@ def test_supplied_capture_cli_is_atomic_and_offline(tmp_path: Path, monkeypatch:
     assert table.data.height == 1
 
 
-def test_recorded_rejection_retains_source_absence(capsys: pytest.CaptureFixture[str]) -> None:
-    fetched = REJECTED_PATH.read_bytes()
+def test_recorded_rejection_retains_source_absence(retained_evidence_root, capsys: pytest.CaptureFixture[str]) -> None:
+    fetched = (retained_evidence_root / REJECTED_PATH).read_bytes()
     assert generate_catalogue._SOURCE_MARKER not in fetched
     outcome = generate_catalogue.refresh_native_table(
         {"307051287711040": fetched},
@@ -615,8 +617,8 @@ def test_recorded_rejection_retains_source_absence(capsys: pytest.CaptureFixture
     assert capsys.readouterr() == ("", "")
 
 
-def test_committed_native_table_contract() -> None:
-    native = read_native_table(NATIVE_PATH)
+def test_retained_native_table_contract(retained_evidence_root) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE_PATH)
     assert native.data.schema == NATIVE_SCHEMA and native.data.schema["観測所記号"] == pl.Utf8
     ids = native.data["観測所記号"].to_list()
     assert len(ids) == len(set(ids)) == 1023 and ids == sorted(ids)
@@ -637,10 +639,11 @@ def test_committed_native_table_contract() -> None:
     assert generate_catalogue.native_table_content_digest(native) == NATIVE_FRAME_DIGEST
 
 
-def test_committed_native_source_states_and_fixture_records() -> None:
-    native = read_native_table(NATIVE_PATH).data
+def test_retained_native_source_states_and_fixture_records(retained_evidence_root) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE_PATH).data
     fixture = pl.DataFrame(
-        json.loads(FIXTURE_PATH.read_text()), schema=dict.fromkeys(generate_catalogue.NATIVE_COLUMNS, pl.Utf8)
+        json.loads((retained_evidence_root / FIXTURE_PATH).read_text()),
+        schema=dict.fromkeys(generate_catalogue.NATIVE_COLUMNS, pl.Utf8),
     )
     actual = native.filter(pl.col("観測所記号").is_in(FIXTURE_IDS)).select(generate_catalogue.NATIVE_COLUMNS)
     pl_testing.assert_frame_equal(actual, fixture, check_exact=True)
@@ -662,11 +665,11 @@ def test_committed_native_source_states_and_fixture_records() -> None:
     assert missing["流域面積"][0] is None and missing["零点高"][0] is None
 
 
-def test_committed_accepted_responses_rematerialize_exact_native_rows() -> None:
+def test_retained_accepted_responses_rematerialize_exact_native_rows(retained_evidence_root) -> None:
     responses: dict[str, bytes] = {}
     retrieved_at_by_station: dict[str, RetrievedAt] = {}
     for station_id, (path, size, digest, instant) in ACCEPTED_SOURCE_FIXTURES.items():
-        body = path.read_bytes()
+        body = (retained_evidence_root / path).read_bytes()
         assert len(body) == size
         assert hashlib.sha256(body).hexdigest() == digest
         assert body.count(generate_catalogue._SOURCE_MARKER) == 1
@@ -677,14 +680,16 @@ def test_committed_accepted_responses_rematerialize_exact_native_rows() -> None:
         station_ids=list(ACCEPTED_SOURCE_FIXTURES),
         retrieved_at_by_station=retrieved_at_by_station,
     ).value.data
-    expected = read_native_table(NATIVE_PATH).data.filter(pl.col("観測所記号").is_in(list(ACCEPTED_SOURCE_FIXTURES)))
+    expected = read_native_table(retained_evidence_root / NATIVE_PATH).data.filter(
+        pl.col("観測所記号").is_in(list(ACCEPTED_SOURCE_FIXTURES))
+    )
     pl_testing.assert_frame_equal(actual, expected, check_exact=True)
     assert actual.filter(pl.col("観測所記号") == "301031281101220")["日本測地系"].item() == ""
     assert actual.filter(pl.col("観測所記号") == "301011281104310")["流域面積"].item() == "\u00a0"
 
 
-def test_native_coordinates_are_an_independent_exact_projection(catalogue) -> None:
-    native = read_native_table(NATIVE_PATH).data.select("観測所記号", "世界測地系")
+def test_native_coordinates_are_an_independent_exact_projection(retained_evidence_root, catalogue) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE_PATH).data.select("観測所記号", "世界測地系")
     pattern = re.compile(r"北緯\s*(\d+)度(\d+)分(\d+)秒\s*東経\s*(\d+)度(\d+)分(\d+)秒")
     rows = []
     for station_id, text in native.iter_rows():
@@ -791,8 +796,8 @@ def test_mixed_native_instants_drive_station_dates_and_maximum_version() -> None
     assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
 
 
-def test_each_station_product_date_is_its_native_station_date(catalogue) -> None:
-    native_dates = read_native_table(NATIVE_PATH).data.select(
+def test_each_station_product_date_is_its_native_station_date(retained_evidence_root, catalogue) -> None:
+    native_dates = read_native_table(retained_evidence_root / NATIVE_PATH).data.select(
         pl.col("観測所記号").alias("station_id"), pl.col("retrieved_at").dt.date().alias("native_date")
     )
     joined = catalogue.station_products.join(native_dates, on="station_id")
@@ -817,14 +822,14 @@ def test_provider_info_is_exactly_the_reduced_carrier(catalogue) -> None:
     )
 
 
-def test_broken_longitude_origin_fails_with_full_gate_message() -> None:
+def test_broken_longitude_origin_fails_with_full_gate_message(retained_evidence_root) -> None:
     longitude_origin = STATION_CATALOGUE_ORIGINS["longitude"]
     broken = {
         **STATION_CATALOGUE_ORIGINS,
         "longitude": type(longitude_origin)(type(longitude_origin.native_column)("missing")),
     }
     with pytest.raises(FatalContractError) as caught:
-        generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), broken)
+        generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), broken)
     assert str(caught.value) == "jp_mlit.longitude: native column 'missing' does not exist"
 
 
@@ -872,7 +877,9 @@ def test_cli_rejects_mixed_modes(capsys: pytest.CaptureFixture[str]) -> None:
     assert "jp_mlit modes cannot mix native-build and supplied-capture arguments" in capsys.readouterr().err
 
 
-def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_native_cli_is_offline_and_byte_deterministic(
+    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     calls: list[str] = []
 
     def forbidden(*args: object, **kwargs: object) -> None:
@@ -880,23 +887,23 @@ def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatc
         raise AssertionError((args, kwargs))
 
     monkeypatch.setattr(urllib.request, "urlopen", forbidden)
-    before = NATIVE_PATH.read_bytes()
+    before = (retained_evidence_root / NATIVE_PATH).read_bytes()
     assert (
         generate_catalogue.main(
             [
                 "--native",
-                str(NATIVE_PATH),
+                str(retained_evidence_root / NATIVE_PATH),
                 "--out",
                 str(tmp_path),
                 "--license-recording",
-                str(LICENSE_RECORDING),
+                str(retained_evidence_root / LICENSE_RECORDING),
                 "--citation-recording",
-                str(CITATION_RECORDING),
+                str(retained_evidence_root / CITATION_RECORDING),
             ]
         )
         == 0
     )
-    assert calls == [] and NATIVE_PATH.read_bytes() == before
+    assert calls == [] and (retained_evidence_root / NATIVE_PATH).read_bytes() == before
     expected_names = {
         "croissant.json",
         "provider.json",
@@ -920,6 +927,7 @@ def test_native_cli_is_offline_and_byte_deterministic(tmp_path: Path, monkeypatc
 
 @pytest.mark.parametrize("statement_kind", ["license", "citation"])
 def test_native_cli_rejects_statement_absent_from_recording(
+    retained_evidence_root,
     statement_kind: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -942,18 +950,18 @@ def test_native_cli_rejects_statement_absent_from_recording(
         generate_catalogue.main(
             [
                 "--native",
-                str(NATIVE_PATH),
+                str(retained_evidence_root / NATIVE_PATH),
                 "--out",
                 str(tmp_path / "catalogue"),
                 "--license-recording",
-                str(LICENSE_RECORDING),
+                str(retained_evidence_root / LICENSE_RECORDING),
                 "--citation-recording",
-                str(CITATION_RECORDING),
+                str(retained_evidence_root / CITATION_RECORDING),
             ]
         )
 
 
-def test_native_build_removes_withheld_fact_before_writing(tmp_path: Path) -> None:
+def test_native_build_removes_withheld_fact_before_writing(retained_evidence_root, tmp_path: Path) -> None:
     provenance = generate_catalogue.build_acquisition_provenance()
     payload = provenance.model_dump(mode="json")
     product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
@@ -968,7 +976,9 @@ def test_native_build_removes_withheld_fact_before_writing(tmp_path: Path) -> No
     withheld = type(provenance).model_validate(payload)
 
     catalogue = generate_catalogue.build_catalogue(
-        read_native_table(NATIVE_PATH, expected_sha256=generate_catalogue.NATIVE_TABLE_SHA256),
+        read_native_table(
+            (retained_evidence_root / NATIVE_PATH), expected_sha256=generate_catalogue.NATIVE_TABLE_SHA256
+        ),
         STATION_CATALOGUE_ORIGINS,
         withheld,
     )

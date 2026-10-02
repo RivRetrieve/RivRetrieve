@@ -23,9 +23,9 @@ assert isinstance(declaration.observations, LiveStages)
 _STAGES = declaration.observations.stages
 _PROVIDER = ProviderId("cz_chmi")
 _STATION = "0-203-1-000400"
-_DATA = Path(__file__).parent / "test_data"
-_DQ = read_recording(_DATA / "cz_chmi_0-203-1-000400_DQ_2023.recording.json")
-_HQ = read_recording(_DATA / "cz_chmi_0-203-1-000400_HQ_2023.recording.json")
+_DATA = Path("tests/test_data")
+_DQ = _DATA / "cz_chmi_0-203-1-000400_DQ_2023.recording.json"
+_HQ = _DATA / "cz_chmi_0-203-1-000400_HQ_2023.recording.json"
 _PRODUCTS = (
     (ProductId("stage_daily_mean"), _DQ, 2, "2023-06-02T00:00:00"),
     (ProductId("discharge_daily_mean"), _DQ, 2, "2023-06-02T00:00:00"),
@@ -56,13 +56,13 @@ def _runner(product: ProductId):
     return run
 
 
-def test_all_five_products_have_recorded_live_boundary_proofs() -> None:
+def test_all_five_products_have_recorded_live_boundary_proofs(retained_evidence_root) -> None:
     keys = tuple((_PROVIDER, product) for product, _, _, _ in _PRODUCTS)
     probes = tuple(
         BoundaryProbe(
             provider_id=_PROVIDER,
             product_id=product,
-            recordings=(recording,),
+            recordings=(read_recording(retained_evidence_root / recording),),
             assertions={
                 READING_COUNT: count,
                 FIRST_WALL_CLOCK_TIME: WallClockExpectation("2023-06-01T00:00:00", "+00:00"),

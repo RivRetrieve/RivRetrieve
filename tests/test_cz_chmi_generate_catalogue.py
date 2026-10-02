@@ -195,9 +195,9 @@ CRS_ABSENCE_TOKENS = (
 )
 
 
-def test_publisher_crs_evidence_names_coordinates_but_no_reference_system() -> None:
-    capture = CRS_EVIDENCE_PATH.read_bytes()
-    reader = PdfReader(CRS_EVIDENCE_PATH)
+def test_publisher_crs_evidence_names_coordinates_but_no_reference_system(retained_evidence_root) -> None:
+    capture = (retained_evidence_root / CRS_EVIDENCE_PATH).read_bytes()
+    reader = PdfReader(retained_evidence_root / CRS_EVIDENCE_PATH)
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
     folded = text.casefold()
 
@@ -212,8 +212,8 @@ def test_publisher_crs_evidence_names_coordinates_but_no_reference_system() -> N
     assert all(token.casefold() not in folded for token in CRS_ABSENCE_TOKENS)
 
 
-def _fixture_payload() -> dict[str, object]:
-    value = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+def _fixture_payload(retained_evidence_root) -> dict[str, object]:
+    value = json.loads((retained_evidence_root / FIXTURE_PATH).read_text(encoding="utf-8"))
     assert isinstance(value, dict)
     return cast("dict[str, object]", value)
 
@@ -244,12 +244,12 @@ class _FixtureResponse(io.BytesIO):
     status = 200
 
 
-def _build_committed_catalogue() -> generate_catalogue.GeneratedCzChmiCatalogue:
-    return generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), CZ_ORIGINS)
+def _build_committed_catalogue(retained_evidence_root) -> generate_catalogue.GeneratedCzChmiCatalogue:
+    return generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), CZ_ORIGINS)
 
 
-def test_committed_native_build_has_expected_counts_and_schema() -> None:
-    cat = _build_committed_catalogue()
+def test_committed_native_build_has_expected_counts_and_schema(retained_evidence_root) -> None:
+    cat = _build_committed_catalogue(retained_evidence_root)
 
     assert cat.stations.height == 831
     assert cat.products.height == 5
@@ -259,8 +259,8 @@ def test_committed_native_build_has_expected_counts_and_schema() -> None:
     assert cat.station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
 
 
-def test_generate_catalogue_station_fields_are_source_correct() -> None:
-    cat = _build_committed_catalogue()
+def test_generate_catalogue_station_fields_are_source_correct(retained_evidence_root) -> None:
+    cat = _build_committed_catalogue(retained_evidence_root)
     station = cat.stations.filter(pl.col("station_id") == "0-203-1-016000")
 
     assert station.height == 1
@@ -364,13 +364,15 @@ def test_refresh_rejects_invalid_obj_id(station_id: object) -> None:
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
-def test_refresh_fixture_is_network_free_and_source_faithful(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_refresh_fixture_is_network_free_and_source_faithful(
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def fail_network(url: str) -> object:
         raise AssertionError(f"unexpected live request to {url}")
 
     monkeypatch.setattr(generate_catalogue, "_read_live_json", fail_network)
     outcome = generate_catalogue.refresh_native_table_from_fixture(
-        FIXTURE_PATH,
+        retained_evidence_root / FIXTURE_PATH,
         retrieved_at=ATTESTED_RETRIEVED_AT,
     )
 
@@ -399,13 +401,13 @@ def test_refresh_live_transport_seam_uses_url_and_timeout(monkeypatch: pytest.Mo
     assert outcome.issues == ()
 
 
-def test_refresh_cli_writes_fixture_native_table(tmp_path: Path) -> None:
+def test_refresh_cli_writes_fixture_native_table(retained_evidence_root, tmp_path: Path) -> None:
     output_path = tmp_path / "native.parquet"
 
     result = generate_catalogue.main(
         [
             "--fixture",
-            str(FIXTURE_PATH),
+            str(retained_evidence_root / FIXTURE_PATH),
             "--native-out",
             str(output_path),
             "--retrieved-at",
@@ -434,8 +436,8 @@ def test_cli_rejects_invalid_mode_combinations(argv: list[str]) -> None:
     assert exc_info.value.code != 0
 
 
-def test_active_fixture_is_verbatim_attested_subset() -> None:
-    fixture = _fixture_payload()
+def test_active_fixture_is_verbatim_attested_subset(retained_evidence_root) -> None:
+    fixture = _fixture_payload(retained_evidence_root)
     expected = _valid_payload()
 
     assert {key: fixture[key] for key in fixture if key != "data"} == {
@@ -450,8 +452,11 @@ def test_active_fixture_is_verbatim_attested_subset() -> None:
     ]
 
 
-def test_previous_fixture_source_defects_are_not_retained() -> None:
-    rows = cast("list[list[object]]", _data_block(_fixture_payload())["values"])
+def test_previous_fixture_source_defects_are_not_retained(retained_evidence_root) -> None:
+    rows = cast(
+        "list[list[object]]",
+        _data_block(_fixture_payload(retained_evidence_root))["values"],
+    )
     by_id = {row[0]: row for row in rows}
 
     assert by_id["0-203-1-016000"][4:6] == [50.3427582, 15.9249555]
@@ -459,8 +464,8 @@ def test_previous_fixture_source_defects_are_not_retained() -> None:
     assert "0-204-1-001000" not in by_id
 
 
-def test_committed_native_table_invariants() -> None:
-    table = read_native_table(NATIVE_PATH).data
+def test_committed_native_table_invariants(retained_evidence_root) -> None:
+    table = read_native_table(retained_evidence_root / NATIVE_PATH).data
     ids = sorted(cast("list[str]", table["objID"].to_list()))
     id_digest = hashlib.sha256(
         json.dumps(ids, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -489,10 +494,10 @@ def test_committed_native_table_invariants() -> None:
     assert table_digest == "b13d49902967e6f2fe182348999d24af711868f0c38032c425485aa41a66dd2b"
 
 
-def test_fixture_refresh_equals_committed_source_rows_exactly() -> None:
-    committed = read_native_table(NATIVE_PATH).data
+def test_fixture_refresh_equals_committed_source_rows_exactly(retained_evidence_root) -> None:
+    committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
     fixture = generate_catalogue.refresh_native_table_from_fixture(
-        FIXTURE_PATH,
+        retained_evidence_root / FIXTURE_PATH,
         retrieved_at=ATTESTED_RETRIEVED_AT,
     ).value.data
     expected = committed.filter(pl.col("objID").is_in([row[0] for row in EXPECTED_ROWS]))
@@ -510,7 +515,7 @@ def test_fixture_refresh_equals_committed_source_rows_exactly() -> None:
     }
 
 
-def test_native_build_is_gated_on_origins() -> None:
+def test_native_build_is_gated_on_origins(retained_evidence_root) -> None:
     broken = dict(CZ_ORIGINS)
     del broken["longitude"]
 
@@ -518,12 +523,12 @@ def test_native_build_is_gated_on_origins() -> None:
         FatalContractError,
         match=r"cz_chmi\.longitude: canonical column has no origin declaration",
     ):
-        generate_catalogue.build_catalogue(read_native_table(NATIVE_PATH), broken)
+        generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), broken)
 
 
-def test_native_and_canonical_identity_and_coordinates_are_exactly_aligned() -> None:
-    native = read_native_table(NATIVE_PATH).data
-    stations = _build_committed_catalogue().stations
+def test_native_and_canonical_identity_and_coordinates_are_exactly_aligned(retained_evidence_root) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE_PATH).data
+    stations = _build_committed_catalogue(retained_evidence_root).stations
     expected = (
         native.select(
             pl.lit("cz_chmi").alias("provider_id"),
@@ -540,8 +545,8 @@ def test_native_and_canonical_identity_and_coordinates_are_exactly_aligned() -> 
     assert {"STATION_NAME", "STREAM_NAME", "PLO_STA", "HLGP4"} <= set(native.columns)
 
 
-def test_committed_stations_artifact_equals_native_exactly_and_is_inside_czechia() -> None:
-    native = read_native_table(NATIVE_PATH).data
+def test_committed_stations_artifact_equals_native_exactly_and_is_inside_czechia(retained_evidence_root) -> None:
+    native = read_native_table(retained_evidence_root / NATIVE_PATH).data
     committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
     expected = (
         native.select(
@@ -560,8 +565,8 @@ def test_committed_stations_artifact_equals_native_exactly_and_is_inside_czechia
     assert committed["longitude"].is_between(12.09, 18.90, closed="both").all()
 
 
-def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version() -> None:
-    source = read_native_table(NATIVE_PATH).data.head(2)
+def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version(retained_evidence_root) -> None:
+    source = read_native_table(retained_evidence_root / NATIVE_PATH).data.head(2)
     station_ids = source["objID"].to_list()
     mixed = source.with_columns(
         pl.when(pl.col("objID") == station_ids[0])
@@ -582,20 +587,22 @@ def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version() -
     assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
 
 
-def _two_row_native() -> pl.DataFrame:
-    return read_native_table(NATIVE_PATH).data.head(2)
+def _two_row_native(retained_evidence_root) -> pl.DataFrame:
+    return read_native_table(retained_evidence_root / NATIVE_PATH).data.head(2)
 
 
-def test_build_rejects_empty_native_table_by_message() -> None:
-    empty = read_native_table(NATIVE_PATH).data.head(0)
+def test_build_rejects_empty_native_table_by_message(retained_evidence_root) -> None:
+    empty = read_native_table(retained_evidence_root / NATIVE_PATH).data.head(0)
 
     with pytest.raises(FatalContractError, match="Czech native table must not be empty"):
         generate_catalogue.build_catalogue(NativeTable(empty), CZ_ORIGINS)
 
 
 @pytest.mark.parametrize("station_id", [None, 206200, "", "   "])
-def test_build_rejects_one_invalid_obj_id_in_multi_row_native_by_message(station_id: object) -> None:
-    source = _two_row_native()
+def test_build_rejects_one_invalid_obj_id_in_multi_row_native_by_message(
+    retained_evidence_root, station_id: object
+) -> None:
+    source = _two_row_native(retained_evidence_root)
     broken = source.with_columns(pl.Series("objID", [source["objID"].item(0), station_id], dtype=pl.Object))
 
     with pytest.raises(FatalContractError, match=r"cz_chmi native station row 2 has an invalid objID"):
@@ -603,9 +610,11 @@ def test_build_rejects_one_invalid_obj_id_in_multi_row_native_by_message(station
 
 
 @pytest.mark.parametrize(("column", "label"), [("GEOGR1", "latitude"), ("GEOGR2", "longitude")])
-def test_build_rejects_one_missing_coordinate_in_multi_row_native_by_message(column: str, label: str) -> None:
-    station_id = _two_row_native()["objID"].item(1)
-    broken = _two_row_native().with_columns(
+def test_build_rejects_one_missing_coordinate_in_multi_row_native_by_message(
+    retained_evidence_root, column: str, label: str
+) -> None:
+    station_id = _two_row_native(retained_evidence_root)["objID"].item(1)
+    broken = _two_row_native(retained_evidence_root).with_columns(
         pl.when(pl.int_range(pl.len()) == 1).then(None).otherwise(pl.col(column)).alias(column)
     )
 
@@ -617,8 +626,10 @@ def test_build_rejects_one_missing_coordinate_in_multi_row_native_by_message(col
 
 
 @pytest.mark.parametrize(("column", "label"), [("GEOGR1", "latitude"), ("GEOGR2", "longitude")])
-def test_build_rejects_one_non_numeric_coordinate_in_multi_row_native_by_message(column: str, label: str) -> None:
-    source = _two_row_native()
+def test_build_rejects_one_non_numeric_coordinate_in_multi_row_native_by_message(
+    retained_evidence_root, column: str, label: str
+) -> None:
+    source = _two_row_native(retained_evidence_root)
     station_id = source["objID"].item(1)
     broken = source.with_columns(pl.Series(column, [source[column].item(0), "not-numeric"], dtype=pl.Object))
 
@@ -629,11 +640,14 @@ def test_build_rejects_one_non_numeric_coordinate_in_multi_row_native_by_message
         generate_catalogue.build_catalogue(NativeTable(broken), CZ_ORIGINS)
 
 
-def test_build_rejects_invalid_per_row_retrieval_date_pairing_by_message() -> None:
-    station_id = _two_row_native()["objID"].item(1)
+def test_build_rejects_invalid_per_row_retrieval_date_pairing_by_message(retained_evidence_root) -> None:
+    station_id = _two_row_native(retained_evidence_root)["objID"].item(1)
     station_dates = pl.DataFrame(
         {
-            "station_id": [_two_row_native()["objID"].item(0), station_id],
+            "station_id": [
+                _two_row_native(retained_evidence_root)["objID"].item(0),
+                station_id,
+            ],
             "retrieved_date": [date(2026, 8, 2), None],
         }
     )
@@ -645,10 +659,13 @@ def test_build_rejects_invalid_per_row_retrieval_date_pairing_by_message() -> No
         generate_catalogue.build_station_products(station_dates)
 
 
-def test_build_rejects_invalid_station_identifier_in_multi_row_dates_by_message() -> None:
+def test_build_rejects_invalid_station_identifier_in_multi_row_dates_by_message(retained_evidence_root) -> None:
     station_dates = pl.DataFrame(
         {
-            "station_id": [_two_row_native()["objID"].item(0), None],
+            "station_id": [
+                _two_row_native(retained_evidence_root)["objID"].item(0),
+                None,
+            ],
             "retrieved_date": [date(2026, 8, 2), date(2026, 8, 2)],
         }
     )
@@ -660,8 +677,10 @@ def test_build_rejects_invalid_station_identifier_in_multi_row_dates_by_message(
         generate_catalogue.build_station_products(station_dates)
 
 
-def test_native_table_rejects_null_retrieval_timestamps_before_build() -> None:
-    broken = _two_row_native().with_columns(pl.lit(None).cast(NATIVE_SCHEMA["retrieved_at"]).alias("retrieved_at"))
+def test_native_table_rejects_null_retrieval_timestamps_before_build(retained_evidence_root) -> None:
+    broken = _two_row_native(retained_evidence_root).with_columns(
+        pl.lit(None).cast(NATIVE_SCHEMA["retrieved_at"]).alias("retrieved_at")
+    )
 
     with pytest.raises(FatalContractError, match="native table retrieved_at must not contain nulls"):
         NativeTable(broken)
@@ -673,13 +692,22 @@ def test_legacy_canonical_generation_apis_are_removed() -> None:
     assert not hasattr(generate_catalogue, "generate_catalogue_from_live")
 
 
-def test_native_cli_writes_five_artifacts_without_touching_native(tmp_path: Path) -> None:
-    native_bytes = NATIVE_PATH.read_bytes()
+def test_native_cli_writes_five_artifacts_without_touching_native(retained_evidence_root, tmp_path: Path) -> None:
+    native_bytes = (retained_evidence_root / NATIVE_PATH).read_bytes()
 
-    result = generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)])
+    result = generate_catalogue.main(
+        [
+            "--native",
+            str(retained_evidence_root / NATIVE_PATH),
+            "--evidence-root",
+            str(retained_evidence_root),
+            "--out",
+            str(tmp_path),
+        ]
+    )
 
     assert result == 0
-    assert NATIVE_PATH.read_bytes() == native_bytes
+    assert (retained_evidence_root / NATIVE_PATH).read_bytes() == native_bytes
     assert {path.name for path in tmp_path.iterdir()} == {
         "croissant.json",
         "provider.json",
@@ -699,6 +727,7 @@ def test_native_cli_writes_five_artifacts_without_touching_native(tmp_path: Path
 
 
 def test_native_build_is_network_free_and_byte_deterministic(
+    retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -711,9 +740,25 @@ def test_native_build_is_network_free_and_byte_deterministic(
     monkeypatch.setattr(generate_catalogue, "_read_live_json", fail_network)
     monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", fail_network)
 
-    result = generate_catalogue.main(["--native", str(NATIVE_PATH), "--out", str(tmp_path)])
+    result = generate_catalogue.main(
+        [
+            "--native",
+            str(retained_evidence_root / NATIVE_PATH),
+            "--evidence-root",
+            str(retained_evidence_root),
+            "--out",
+            str(tmp_path),
+        ]
+    )
 
     assert result == 0
     assert calls == []
     for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
         assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
+
+
+def test_native_build_requires_explicit_evidence_root(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        generate_catalogue.main(["--native", str(tmp_path / "native.parquet"), "--out", str(tmp_path / "catalogue")])
+
+    assert exc_info.value.code == 2
