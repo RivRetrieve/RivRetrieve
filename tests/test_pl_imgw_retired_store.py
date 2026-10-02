@@ -18,9 +18,11 @@ from rivretrieve._internal.store.validation import ObservationStoreRefusedError,
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage", "temperature"])
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
-def test_retired_compiled_products_refused_before_read_and_left_intact(tmp_path, monkeypatch, quantity, policy):
+def test_retired_compiled_products_refused_before_read_and_left_intact(
+    retained_evidence_root: Path, tmp_path, monkeypatch, quantity, policy
+):
     store = tmp_path / "store"
-    shutil.copytree(Path(__file__).parent / "test_data/boundary_stores/pl_imgw_retired_mean", store)
+    shutil.copytree(retained_evidence_root / "tests/test_data/boundary_stores/pl_imgw_retired_mean", store)
     before = {
         str(p.relative_to(store)): hashlib.sha256(p.read_bytes()).hexdigest() for p in store.rglob("*") if p.is_file()
     }

@@ -1,7 +1,0 @@
-{
-  "kind": "authored incompatible-store control",
-  "source": "One authored CSV row, compiled through revision-5 compiler before retiring the universal-mean mapping. Not a publisher capture.",
-  "compiler_base": "0954c479032dc33685342f6c97ecf6adb981499d",
-  "source_row": "154210010;SEPOPOL;Lyna;2023;03;01;100;10;7;01",
-  "url_note": "Official URL is required by archive protocol validation; it identifies the route, not an assertion that these authored bytes were downloaded."
-}

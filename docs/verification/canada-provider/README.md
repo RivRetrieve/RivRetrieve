@@ -1,134 +1,41 @@
 # Canada provider verification
 
-## Scope and revision
+The private [source archive](https://github.com/RivRetrieve/verification-evidence)
+retains the acquisition records, source index and execution logs for the September
+2026 provider documentation review. Its inventory records exact collections,
+member identities and known limits. These historical records do not establish
+current service availability.
 
-This is documentation verification, not a production-code change.
-Revision `6da9b64` merges original PR #274 (`c909dbf`) with main `5469884`.
-Only documentation and focused documentation tests change after that merge.
-The original author commits remain in the existing branch.
+The retained national acquisition record describes a fresh HYDAT download and
+certified compilation. The compact ZIP used by `test_ca_eccc_boundary_probe.py`
+is a separate derived input, not that national publisher artifact. The test
+preserves this distinction and compares compiled cells with a separate OGC
+recording. Retained SQLite witnesses in the `NO_DAYS` tests are also distinct
+from a complete publisher database.
 
-## Fresh national acquisition
+## Run retained-input checks
 
-`acquisition.json` records the successful public `rr.download("ca_eccc")`
-execution, edition, source URL, SHA-256, timing and compiled footprint.
-The complete national July 17, 2026 ZIP was freshly acquired on September 22;
-compilation and certification completed successfully. This was not a fixture,
-old-store read, monkeypatched download or recorded-response replay.
-The public compiler removes publisher artifacts after successful certification.
+Retrieve the reviewed archive selections outside source checkouts. Set
+`RIVRETRIEVE_TEST_EVIDENCE_ROOT` to that external directory, keeping the
+repository-relative paths recorded by the archive. The documentation source
+index belongs under `docs/verification/canada-provider/sources/INDEX.json` in
+that directory. Test recordings and native-table inputs keep their corresponding
+`tests/test_data/` and `src/rivretrieve/_internal/providers/` relative paths.
 
-From the checkout, the executed commands were:
-
-```bash
-export UV_CACHE_DIR="$PWD/.uv-cache"
-export RIVRETRIEVE_CACHE_DIR="$PWD/.evidence/canada-2026-09-23/cache"
-
-uv run python -u .evidence/canada-2026-09-23/acquire.py
-RIVRETRIEVE_CACHE_DIR="$PWD/.evidence/canada-2026-09-23/missing-cache" uv run python -u .evidence/canada-2026-09-23/isolated_conditions.py
-uv run python -u .evidence/canada-2026-09-23/retrieve_available.py
-uv run python -u .evidence/canada-2026-09-23/final_snippets.py
+```sh
+uv run pytest tests/test_ca_eccc_boundary_probe.py tests/test_ca_eccc_no_days_evidence.py tests/test_ca_eccc_catalogue.py tests/test_ca_eccc_acquisition_provenance.py tests/test_canada_documentation.py -q --tb=no -p no:cacheprovider --basetemp "$PRIVATE_TEST_OUTPUT"
 ```
 
-The exports reproduce the environment retained by the original orchestration.
-The one-command missing-cache override leaves the exported acquisition cache
-unchanged for the later retrieval commands.
-The scripts here preserve the commands' inputs; full execution logs and the
-compiled store remain in the checkout's `.evidence/canada-2026-09-23/`.
-The 57 MB acquisition log contains full manifest object representations;
-`acquisition.json` is its concise transcription, not a second acquisition.
+Use a fresh external `PRIVATE_TEST_OUTPUT` directory. Keep full output private.
+The tests compare retained inputs; they do not reacquire the national archive or
+verify missing historical publisher bodies. See [verification evidence](../../maintenance/evidence.md)
+for archive selection, review and handling requirements.
 
-Before acquisition, available disk was 323,697,803,264 bytes and physical RAM
-was 68,719,476,736 bytes. These are host resources, not minimum requirements.
-Public download and compilation took 3,585.31 seconds. The resulting store
-occupies 412,848,037 bytes. Peak disk and RAM usage were not measured.
-The publisher listing independently shows the compressed ZIP as 266M;
-an exact transferred-byte count was not retained. No 1 GB estimate is asserted.
-An inherited uv package cache initially had a missing wheel file. Setup was
-retried with checkout-local `UV_CACHE_DIR` before project execution.
+## Maintained interpretation
 
-## Local retrieval from that acquisition
-
-The main page retains station `05OG008`. The original year 2000 has no rows
-for that station in the freshly certified store. `diagnose_empty.py` and its
-log retain that inspection; selection and compiled series/facts identities
-agree. This is absent data, not a confirmed retrieval defect. A new historical
-week, March 1–7, 1991, returns seven rows with no issues. A short example does
-not establish continuous station history or national availability.
-
-`retrieve_available.py` used the public API with receipts and compared bypass
-and reuse using `polars.testing.assert_frame_equal`. `retrieval.log` retains a
-concise extract: seven values, the ten public columns, no issues, identical
-reuse, and the local edition. The public result has no quality column.
-The preserved full local receipt log shows native `FLOW_SYMBOL` fields in the
-store excerpt; this does not make those symbols canonical quality flags.
-
-`final_snippets.py` executes the exact final retrieval and status blocks in
-order, using the already prepared national store. The preparation block uses
-the same public download call as `acquire.py`; the national transfer was not
-needlessly repeated. `final_snippets.log` is the exact displayed output.
-
-## Isolated conditions and catalogue
-
-`isolated_conditions.py` and its log confirm 8,057 packaged station locations
-and one daily mean discharge candidate at `05OG008`. The separate missing
-cache returns zero rows with `bulk.store_missing`, and no source calls.
-`cache="refresh"` raises `FatalContractError` and directs explicit `download`.
-No existing user cache was read, modified or cleared. Two initial author
-mistakes accessing selection locations were corrected before the successful
-probe; they were not library defects.
-
-The declarations and compiler establish daily mean discharge and stage, their
-units, unknown time zone/day definition, native symbol retention and monthly
-cell unpivoting. The catalogue's source facts leave vertical reference and
-record dates unestablished. These code facts do not establish publisher terms.
-
-## Authoritative publisher evidence
-
-`sources/INDEX.json` identifies fresh HTTP checks, URLs, status, retrieval times,
-byte counts and SHA-256 hashes. Raw publisher responses are kept locally in
-`.evidence/canada-2026-09-23/publisher-snapshots/`, outside the PR diff.
-The index records their acquisition identity; offline tests do not reverify
-the hashes without those local response bodies.
-`source-claims.md` distinguishes institutional, time, status and legal claims.
-The full researcher directory remains at repository-root
-`.worktrees/visions/canada-source-evidence/`; broad searches and unused bodies
-are deliberately not committed. References to auxiliary PDF/release evidence
-in that matrix refer to this full retained directory.
-
-The official historical dataset record links the SQL archive and names OGL.
-ECCC's separate server licence is not treated as identical or given invented
-precedence. MDB-specific citation wording is not relabelled as SQLite wording.
-These publisher-page checks are distinct from the actual fresh archive download.
-
-## Validation and review
-
-`tests/test_canada_documentation.py` checks snippet syntax/current selection,
-packaged count, source-reference metadata and the index link. These are authored
-offline checks, not live acquisition evidence. Missing-store tests exercise
-isolation with test doubles. Initial validation passed 15 focused tests and 42
-existing documentation/reference tests (one upstream rdflib deprecation warning).
-Independent review passed 51 offline tests and found no outstanding issues after
-corrections at `3380799`.
-
-Nicolas reviewed the provider page and requested a smaller evidence diff and a
-clearer archive-release sentence. He then explicitly authorized completion and
-merging, superseding the vision's earlier human gate and merge restriction.
-Raw responses remain locally preserved; source URLs, acquisition metadata,
-claim checks and execution results remain in this record. Public code snippets
-and displayed output are unchanged by that feedback.
-
-Current validation commands:
-
-```bash
-uv run pytest -q tests/test_canada_documentation.py tests/test_missing_bulk_outcomes.py tests/test_supporting_documentation.py tests/test_reference_contracts.py
-uv run ruff check tests/test_canada_documentation.py
-uv run ruff format --check tests/test_canada_documentation.py
-git diff --check origin/main
-```
-
-## Script formatting
-
-On 2026-09-28, ancillary scripts received whitespace and import cleanup only.
-The original executed bytes remain in Git at
-`0b443049d50819978030e29e46011ca2101cb337`. The exact provider-example script
-was left unchanged to preserve the recorded execution input. These maintenance
-changes do not constitute a new execution of the historical verification.
+[Source claims](source-claims.md) and [repository claims](repository-claims.md)
+record the reviewed interpretation and its limits. References to source records
+and execution logs on those pages identify privately retained historical
+material. The Python scripts here preserve executable checks. They use the
+explicit runtime cache location when run against a prepared national store;
+`acquire.py` starts a new public download and is not an archive retrieval tool.

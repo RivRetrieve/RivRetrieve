@@ -1,11 +1,10 @@
 # Canada authoritative-source claim matrix
 
 Fresh publisher-page checks were made on 2026-09-22 UTC. URLs, timestamps and
-response hashes are in [the source index](sources/INDEX.json). The response
-bodies and auxiliary PDFs remain in the local evidence locations described in
-[the verification record](README.md), not in this PR. Evidence names below
-identify those retained captures. These checks are distinct from the fresh
-national archive acquisition and public-API execution.
+response hashes are in `sources/INDEX.json` in the private source archive.
+The [verification instructions](README.md) describe external input selection.
+Evidence names below identify retained historical captures. These checks are
+distinct from the national archive acquisition and public-API execution.
 
 ## Claim matrix
 

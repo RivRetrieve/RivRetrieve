@@ -30,20 +30,23 @@ from rivretrieve._internal.store import StoreQuery, StoreRoot, read_store
 from rivretrieve._internal.store.validation import StoreManifest
 from rivretrieve._internal.transport import HttpMethod, TransportRequest
 
-_DATA = Path(__file__).parent / "test_data"
-_STORE = StoreRoot(_DATA / "boundary_stores" / "ca_eccc_02GA010_2020_01")
 _PRODUCTS = tuple(ProductId(value) for value in ("discharge_daily_mean", "stage_daily_mean"))
-_DERIVED_INPUT = _DATA / "ca_eccc_02GA010_2020_01_derived_input.zip"
 _DERIVED_SHA256 = "e495f496c829df145add21a5e9aae321abfff3096734933a6287ae3f559e6cb2"
+# Historical acquisition identity of the derived input; no network fetch uses it.
 _DERIVED_URL = (
     "https://raw.githubusercontent.com/RivRetrieve/RivRetrieve/main/"
     "tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip"
 )
 
 
-def _compiled_derived_store(tmp_path: Path) -> StoreRoot:
+@pytest.fixture(scope="module")
+def evidence_data(retained_evidence_root: Path) -> Path:
+    return retained_evidence_root / "tests" / "test_data"
+
+
+def _compiled_derived_store(tmp_path: Path, evidence_data: Path) -> StoreRoot:
     copied = tmp_path / "derived-input.zip"
-    shutil.copyfile(_DERIVED_INPUT, copied)
+    shutil.copyfile((evidence_data / "ca_eccc_02GA010_2020_01_derived_input.zip"), copied)
     root = StoreRoot(tmp_path / "compiled-store")
     compile_hydat(
         HydatCompileRequest(copied, root, _DERIVED_URL, date(2020, 1, 31), datetime(2026, 9, 2, tzinfo=UTC), "0.1.49")
@@ -51,10 +54,13 @@ def _compiled_derived_store(tmp_path: Path) -> StoreRoot:
     return root
 
 
-def test_committed_derived_input_replays_through_production_compiler(tmp_path: Path) -> None:
-    assert hashlib.sha256(_DERIVED_INPUT.read_bytes()).hexdigest() == _DERIVED_SHA256
+def test_retained_derived_input_replays_through_production_compiler(evidence_data: Path, tmp_path: Path) -> None:
+    assert (
+        hashlib.sha256((evidence_data / "ca_eccc_02GA010_2020_01_derived_input.zip").read_bytes()).hexdigest()
+        == _DERIVED_SHA256
+    )
     copied_input = tmp_path / "derived-input.zip"
-    shutil.copyfile(_DERIVED_INPUT, copied_input)
+    shutil.copyfile((evidence_data / "ca_eccc_02GA010_2020_01_derived_input.zip"), copied_input)
     compiled = compile_hydat(
         HydatCompileRequest(
             copied_input,
@@ -71,8 +77,10 @@ def test_committed_derived_input_replays_through_production_compiler(tmp_path: P
     assert compiled.manifest.publisher_artifact.url == _DERIVED_URL
 
 
-def test_derived_compiler_preserves_attested_native_cells_for_both_products(tmp_path: Path) -> None:
-    current_store = _compiled_derived_store(tmp_path)
+def test_derived_compiler_preserves_attested_native_cells_for_both_products(
+    evidence_data: Path, tmp_path: Path
+) -> None:
+    current_store = _compiled_derived_store(tmp_path, evidence_data)
     probes = tuple(
         StoreBoundaryProbe(
             ProviderId("ca_eccc"),
@@ -100,8 +108,8 @@ def test_derived_compiler_preserves_attested_native_cells_for_both_products(tmp_
     assert level_partition["DLY_LEVELS.NO_DAYS"].unique().to_list() == [31]
 
 
-def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input(tmp_path: Path) -> None:
-    recording = read_recording(_DATA / "ca_eccc_02GA010_daily_2020-01-01_2020-01-03.ogc.recording.json")
+def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input(evidence_data: Path, tmp_path: Path) -> None:
+    recording = read_recording(evidence_data / "ca_eccc_02GA010_daily_2020-01-01_2020-01-03.ogc.recording.json")
     response = ReplayTransport((recording,)).send(
         TransportRequest(
             recording.request.method,
@@ -110,10 +118,12 @@ def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input(tmp_p
             body=recording.request.body,
         )
     )
-    attestation = json.loads((Path(_STORE) / "attestation.json").read_text())
+    attestation = json.loads(
+        ((evidence_data / "boundary_stores" / "ca_eccc_02GA010_2020_01") / "attestation.json").read_text()
+    )
     store = read_store(
         StoreQuery(
-            _compiled_derived_store(tmp_path),
+            _compiled_derived_store(tmp_path, evidence_data),
             ProviderId("ca_eccc"),
             ("02GA010",),
             _PRODUCTS,
@@ -146,7 +156,7 @@ def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input(tmp_p
 
 
 def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hydat_provenance(
-    monkeypatch, tmp_path: Path
+    evidence_data: Path, monkeypatch, tmp_path: Path
 ) -> None:
     from io import BytesIO
 
@@ -164,7 +174,7 @@ def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hy
         "ca_eccc",
         load_packaged_catalogue_artifact(declaration.catalogue, on_issue="raise"),
         bulk_config=config,
-        observation_store=_compiled_derived_store(tmp_path),
+        observation_store=_compiled_derived_store(tmp_path, evidence_data),
     )
     monkeypatch.setattr(discovery, "_registry", registry)
     monkeypatch.setattr(discovery, "_provider_lookup", registry.get)
@@ -212,8 +222,8 @@ def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hy
         lambda request: replace(request, body=b"unexpected"),
     ),
 )
-def test_canada_ogc_replay_refuses_any_request_mutation(mutation) -> None:
-    recording = read_recording(_DATA / "ca_eccc_02GA010_daily_2020-01-01_2020-01-03.ogc.recording.json")
+def test_canada_ogc_replay_refuses_any_request_mutation(evidence_data: Path, mutation) -> None:
+    recording = read_recording(evidence_data / "ca_eccc_02GA010_daily_2020-01-01_2020-01-03.ogc.recording.json")
     request = TransportRequest(
         recording.request.method,
         recording.request.url,

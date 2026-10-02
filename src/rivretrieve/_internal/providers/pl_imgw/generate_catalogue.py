@@ -509,7 +509,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         help="Recovered source CSV used only to refresh a native table.",
     )
-    parser.add_argument("--native", type=Path, help="Committed native Parquet used for canonical generation.")
+    parser.add_argument(
+        "--native", type=Path, help="Retained native Parquet supplied from the external evidence directory."
+    )
     parser.add_argument("--out", type=Path, help="Output directory for catalogue artifacts.")
     parser.add_argument("--roster", type=Path, help="Path to the captured CP1250 IMGW station roster.")
     parser.add_argument("--roster-retrieved-at", help="Roster capture instant as RFC 3339 UTC.")

@@ -8,12 +8,14 @@ from pathlib import Path
 from rivretrieve._internal.providers.pl_imgw.bulk import ImgwCompileRequest, compile_imgw
 from rivretrieve._internal.store import StoreRoot
 
-DATA = Path(__file__).parent / "test_data" / "pl_imgw_annual"
+DATA = Path("tests/test_data") / "pl_imgw_annual"
 URL = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/2024/codz_2024.zip"
 
 
-def test_exact_annual_archive_compiles_without_losing_native_cells(tmp_path: Path, monkeypatch) -> None:
-    source = DATA / "codz_2024.zip"
+def test_exact_annual_archive_compiles_without_losing_native_cells(
+    retained_evidence_root: Path, tmp_path: Path, monkeypatch
+) -> None:
+    source = (retained_evidence_root / DATA) / "codz_2024.zip"
     assert hashlib.sha256(source.read_bytes()).hexdigest() == (
         "c40ebcda7a6b7ee30c936531fd0f391ba34d5bdf1545b535c3347c39319651fa"
     )
@@ -93,23 +95,23 @@ def test_exact_annual_archive_compiles_without_losing_native_cells(tmp_path: Pat
             assert raw.filter(pl.col("time") == datetime(2023, 11, 1))["value"].item() == 113.0
 
 
-def test_annual_definitions_are_exact_publisher_bytes() -> None:
+def test_annual_definitions_are_exact_publisher_bytes(retained_evidence_root: Path) -> None:
     import json
 
     for name in ("CODZ_publiczne_format.txt", "UWAGA.txt", "codz_2024.zip", "yearbook-2025.pdf"):
-        metadata = json.loads((DATA / (name + ".metadata.json")).read_text())
-        assert hashlib.sha256((DATA / name).read_bytes()).hexdigest() == metadata["sha256"]
+        metadata = json.loads(((retained_evidence_root / DATA) / (name + ".metadata.json")).read_text())
+        assert hashlib.sha256(((retained_evidence_root / DATA) / name).read_bytes()).hexdigest() == metadata["sha256"]
         assert metadata["status"] == 200
         assert metadata["url"].startswith("https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/")
-    definitions = (DATA / "CODZ_publiczne_format.txt").read_bytes().decode("cp1250")
+    definitions = ((retained_evidence_root / DATA) / "CODZ_publiczne_format.txt").read_bytes().decode("cp1250")
     assert "Przepływ 99999.999 albo NULL" in definitions
     assert "Od roku 2024 braki w danych są oznaczane zawsze jako NULL." in definitions
 
 
-def test_yearbook_method_scope_is_not_an_archive_wide_mean_definition() -> None:
+def test_yearbook_method_scope_is_not_an_archive_wide_mean_definition(retained_evidence_root: Path) -> None:
     from pypdf import PdfReader
 
-    pages = PdfReader(DATA / "yearbook-2025.pdf").pages
+    pages = PdfReader((retained_evidence_root / DATA) / "yearbook-2025.pdf").pages
     level = " ".join((pages[6].extract_text() or "").split())
     flow = " ".join((pages[7].extract_text() or "").split())
     temperature = " ".join((pages[8].extract_text() or "").split())
