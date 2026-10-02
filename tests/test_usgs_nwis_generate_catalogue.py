@@ -23,11 +23,11 @@ from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_
 from rivretrieve._internal.recordings import read_recording
 
 # Decoded historical native-table subsets, not HTTP response recordings.
-# Exact equality with the committed snapshot is tested below.
+# Exact equality with the retained snapshot is tested below.
 SERIES_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_series.json")
 EXPANDED_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_expanded.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
-CATALOGUE_PATH = NATIVE_PATH.parent
+CATALOGUE_PATH = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue")
 ATTESTED_DATETIME = datetime(2026, 8, 2, 1, 14, 11, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
 
@@ -203,10 +203,10 @@ def _rdb_text(
     )
 
 
-def _fixture_refresh() -> object:
+def _fixture_refresh(retained_evidence_root) -> object:
     return generator.refresh_native_table_from_fixtures(
-        SERIES_FIXTURE_PATH,
-        EXPANDED_FIXTURE_PATH,
+        (retained_evidence_root / SERIES_FIXTURE_PATH),
+        (retained_evidence_root / EXPANDED_FIXTURE_PATH),
         retrieved_at=ATTESTED_RETRIEVED_AT,
     )
 
@@ -262,14 +262,20 @@ def _frame_content_sha256(frame: pl.DataFrame) -> str:
     return hashlib.sha256(json.dumps(rows, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
-def test_existing_generation_path_does_not_fabricate_all_unknown_station_products() -> None:
-    catalogue = generator.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+def test_existing_generation_path_does_not_fabricate_all_unknown_station_products(
+    retained_evidence_root,
+) -> None:
+    catalogue = generator.build_catalogue(
+        read_native_table(retained_evidence_root / NATIVE_PATH), STATION_CATALOGUE_ORIGINS
+    )
 
     assert "unknown" not in set(catalogue.station_products["availability"].cast(str))
 
 
-def test_strict_rdb_parser_preserves_source_strings_and_empty_fields() -> None:
-    rows = _fixture_rows(SERIES_FIXTURE_PATH)
+def test_strict_rdb_parser_preserves_source_strings_and_empty_fields(
+    retained_evidence_root,
+) -> None:
+    rows = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
 
     parsed = generator.parse_series_rdb(_rdb_text(SERIES_HEADER, SERIES_FORMAT, rows))
 
@@ -288,8 +294,8 @@ def test_strict_rdb_parser_preserves_source_strings_and_empty_fields() -> None:
         (*SERIES_HEADER[:-1], "substituted"),
     ],
 )
-def test_strict_rdb_parser_rejects_non_exact_headers(header: tuple[str, ...]) -> None:
-    rows = _fixture_rows(SERIES_FIXTURE_PATH)
+def test_strict_rdb_parser_rejects_non_exact_headers(retained_evidence_root, header: tuple[str, ...]) -> None:
+    rows = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
     values = [rows[0].get(name, "value") for name in header]
     text = "\n".join(("\t".join(header), "\t".join("1s" for _ in header), "\t".join(values)))
 
@@ -297,8 +303,10 @@ def test_strict_rdb_parser_rejects_non_exact_headers(header: tuple[str, ...]) ->
         generator.parse_series_rdb(text)
 
 
-def test_strict_rdb_parser_rejects_non_exact_format_row() -> None:
-    rows = _fixture_rows(EXPANDED_FIXTURE_PATH)
+def test_strict_rdb_parser_rejects_non_exact_format_row(
+    retained_evidence_root,
+) -> None:
+    rows = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
     malformed_format = (*EXPANDED_FORMAT[:-2], EXPANDED_FORMAT[-1], EXPANDED_FORMAT[-2])
 
     with pytest.raises(FatalContractError, match="format"):
@@ -328,9 +336,9 @@ def test_strict_rdb_parser_rejects_empty_data() -> None:
 
 
 @pytest.mark.parametrize("site_no", [None, "", "   "])
-def test_refresh_rejects_absent_or_blank_site_no(site_no: str | None) -> None:
-    series = _fixture_rows(SERIES_FIXTURE_PATH)
-    expanded = _fixture_rows(EXPANDED_FIXTURE_PATH)
+def test_refresh_rejects_absent_or_blank_site_no(retained_evidence_root, site_no: str | None) -> None:
+    series = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
+    expanded = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
     if site_no is None:
         del series[0]["site_no"]
     else:
@@ -345,12 +353,14 @@ def test_refresh_rejects_absent_or_blank_site_no(site_no: str | None) -> None:
         )
 
 
-def test_refresh_rejects_duplicate_expanded_site() -> None:
-    expanded = _fixture_rows(EXPANDED_FIXTURE_PATH)
+def test_refresh_rejects_duplicate_expanded_site(
+    retained_evidence_root,
+) -> None:
+    expanded = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
 
     with pytest.raises(FatalContractError, match="duplicate"):
         generator.refresh_native_table(
-            _fixture_rows(SERIES_FIXTURE_PATH),
+            _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH),
             [expanded[0], dict(expanded[0])],
             retrieved_at=ATTESTED_RETRIEVED_AT,
             input_kind=generator.NativeInputKind.FIXTURE,
@@ -358,9 +368,9 @@ def test_refresh_rejects_duplicate_expanded_site() -> None:
 
 
 @pytest.mark.parametrize("orphan_pass", ["series", "expanded"])
-def test_refresh_rejects_cross_pass_orphan(orphan_pass: str) -> None:
-    series = _fixture_rows(SERIES_FIXTURE_PATH)
-    expanded = _fixture_rows(EXPANDED_FIXTURE_PATH)
+def test_refresh_rejects_cross_pass_orphan(retained_evidence_root, orphan_pass: str) -> None:
+    series = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
+    expanded = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
     if orphan_pass == "series":
         series[0]["site_no"] = "99999999"
     else:
@@ -375,66 +385,78 @@ def test_refresh_rejects_cross_pass_orphan(orphan_pass: str) -> None:
         )
 
 
-def test_refresh_rejects_conflicting_repeated_fact_within_series() -> None:
-    series = _fixture_rows(SERIES_FIXTURE_PATH)
+def test_refresh_rejects_conflicting_repeated_fact_within_series(
+    retained_evidence_root,
+) -> None:
+    series = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
     series[1]["station_nm"] = "CONFLICT"
 
     with pytest.raises(FatalContractError, match="station_nm"):
         generator.refresh_native_table(
             series,
-            _fixture_rows(EXPANDED_FIXTURE_PATH),
+            _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH),
             retrieved_at=ATTESTED_RETRIEVED_AT,
             input_kind=generator.NativeInputKind.FIXTURE,
         )
 
 
-def test_refresh_rejects_conflicting_repeated_fact_between_passes() -> None:
-    expanded = _fixture_rows(EXPANDED_FIXTURE_PATH)
+def test_refresh_rejects_conflicting_repeated_fact_between_passes(
+    retained_evidence_root,
+) -> None:
+    expanded = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
     expanded[0]["huc_cd"] = "CONFLICT"
 
     with pytest.raises(FatalContractError, match="huc_cd"):
         generator.refresh_native_table(
-            _fixture_rows(SERIES_FIXTURE_PATH),
+            _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH),
             expanded,
             retrieved_at=ATTESTED_RETRIEVED_AT,
             input_kind=generator.NativeInputKind.FIXTURE,
         )
 
 
-def test_refresh_rejects_malformed_series_shape() -> None:
-    series = _fixture_rows(SERIES_FIXTURE_PATH)
+def test_refresh_rejects_malformed_series_shape(
+    retained_evidence_root,
+) -> None:
+    series = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
     del series[0]["count_nu"]
 
     with pytest.raises(FatalContractError, match="series row"):
         generator.refresh_native_table(
             series,
-            _fixture_rows(EXPANDED_FIXTURE_PATH),
+            _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH),
             retrieved_at=ATTESTED_RETRIEVED_AT,
             input_kind=generator.NativeInputKind.FIXTURE,
         )
 
 
-def test_refresh_rejects_missing_required_data_type() -> None:
-    series = [row for row in _fixture_rows(SERIES_FIXTURE_PATH) if row["data_type_cd"] == "dv"]
+def test_refresh_rejects_missing_required_data_type(
+    retained_evidence_root,
+) -> None:
+    series = [row for row in _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH) if row["data_type_cd"] == "dv"]
 
     with pytest.raises(FatalContractError, match="dv and uv"):
         generator.refresh_native_table(
             series,
-            _fixture_rows(EXPANDED_FIXTURE_PATH),
+            _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH),
             retrieved_at=ATTESTED_RETRIEVED_AT,
             input_kind=generator.NativeInputKind.FIXTURE,
         )
 
 
-def test_fixture_refresh_is_exempt_from_live_minimum() -> None:
-    outcome = _fixture_refresh()
+def test_fixture_refresh_is_exempt_from_live_minimum(
+    retained_evidence_root,
+) -> None:
+    outcome = _fixture_refresh(retained_evidence_root)
 
     assert outcome.value.data.height == 1
 
 
-def test_supplied_national_refresh_enforces_live_minimum() -> None:
-    expanded_template = _fixture_rows(EXPANDED_FIXTURE_PATH)[0]
-    series_template = _fixture_rows(SERIES_FIXTURE_PATH)[0]
+def test_supplied_national_refresh_enforces_live_minimum(
+    retained_evidence_root,
+) -> None:
+    expanded_template = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)[0]
+    series_template = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)[0]
     expanded_rows: list[dict[str, str]] = []
     series_rows: list[dict[str, str]] = []
     for index in range(9_999):
@@ -692,16 +714,18 @@ def test_native_build_rejects_impossible_retrieval_timestamp() -> None:
         _native_table([{"retrieved_at": None}])
 
 
-def test_fixture_refresh_preserves_exact_source_data_and_alignment() -> None:
-    series_rows = _fixture_rows(SERIES_FIXTURE_PATH)
-    expanded_row = _fixture_rows(EXPANDED_FIXTURE_PATH)[0]
+def test_fixture_refresh_preserves_exact_source_data_and_alignment(
+    retained_evidence_root,
+) -> None:
+    series_rows = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
+    expanded_row = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)[0]
     ordered_series = sorted(series_rows, key=lambda row: tuple(row[name] for name in SERIES_HEADER))
     expected_row: dict[str, object] = dict(expanded_row)
     expected_row.update({name: [row[name] for row in ordered_series] for name in SERIES_ONLY_FIELDS})
     expected_row["retrieved_at"] = ATTESTED_DATETIME
     expected = pl.DataFrame([expected_row], schema=NATIVE_SCHEMA)
 
-    outcome = _fixture_refresh()
+    outcome = _fixture_refresh(retained_evidence_root)
 
     assert outcome.issues == ()
     pl_testing.assert_frame_equal(outcome.value.data, expected, check_exact=True)
@@ -720,9 +744,13 @@ class _FixtureResponse(io.BytesIO):
     status = 200
 
 
-def test_live_transport_uses_exact_102_in_scope_urls(monkeypatch: pytest.MonkeyPatch) -> None:
-    series_bytes = _rdb_text(SERIES_HEADER, SERIES_FORMAT, _fixture_rows(SERIES_FIXTURE_PATH)).encode()
-    expanded_bytes = _rdb_text(EXPANDED_HEADER, EXPANDED_FORMAT, _fixture_rows(EXPANDED_FIXTURE_PATH)).encode()
+def test_live_transport_uses_exact_102_in_scope_urls(retained_evidence_root, monkeypatch: pytest.MonkeyPatch) -> None:
+    series_bytes = _rdb_text(
+        SERIES_HEADER, SERIES_FORMAT, _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
+    ).encode()
+    expanded_bytes = _rdb_text(
+        EXPANDED_HEADER, EXPANDED_FORMAT, _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
+    ).encode()
     calls: list[tuple[str, int]] = []
 
     def fake_urlopen(url: str, *, timeout: int) -> _FixtureResponse:
@@ -756,6 +784,7 @@ def test_native_cli_requires_strict_z_retrieval_instant(tmp_path: Path) -> None:
 
 
 def test_native_cli_writes_table_without_rewriting_canonical_artifacts(
+    retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -763,7 +792,7 @@ def test_native_cli_writes_table_without_rewriting_canonical_artifacts(
     native_out = tmp_path / "native.parquet"
     sentinel = tmp_path / "provider.json"
     sentinel.write_text("unchanged", encoding="utf-8")
-    expected = _fixture_refresh()
+    expected = _fixture_refresh(retained_evidence_root)
 
     monkeypatch.setattr(generator, "refresh_native_table_from_rdb_directory", lambda *args, **kwargs: expected)
 
@@ -837,6 +866,10 @@ def test_cli_rejects_cross_mode_combinations(
     [
         (["--native", "native.parquet"], "--native requires --out"),
         (
+            ["--native", "native.parquet", "--out", "catalogue", "--modern-metadata", "metadata"],
+            "--native publication requires --evidence-root",
+        ),
+        (
             ["--native", "native.parquet", "--out", "catalogue", "--native-out", "other.parquet"],
             "--native cannot be combined with --native-out or --retrieved-at",
         ),
@@ -852,7 +885,7 @@ def test_cli_rejects_cross_mode_combinations(
             "--native cannot be combined with --native-out or --retrieved-at",
         ),
     ],
-    ids=["requires-out", "rejects-native-out", "rejects-retrieved-at"],
+    ids=["requires-out", "requires-evidence", "rejects-native-out", "rejects-retrieved-at"],
 )
 def test_cli_rejects_invalid_native_mode_options(
     argv: list[str],
@@ -897,8 +930,10 @@ def test_cli_rejects_relative_rdb_directory(
     assert "--rdb-dir must be an absolute path" in capsys.readouterr().err
 
 
-def test_committed_native_table_exact_schema_counts_and_provenance() -> None:
-    native_table = read_native_table(NATIVE_PATH)
+def test_committed_native_table_exact_schema_counts_and_provenance(
+    retained_evidence_root,
+) -> None:
+    native_table = read_native_table(retained_evidence_root / NATIVE_PATH)
     native = native_table.data
 
     assert native.schema == NATIVE_SCHEMA
@@ -920,8 +955,14 @@ def test_committed_native_table_exact_schema_counts_and_provenance() -> None:
     assert total_records == 2_036_546
 
 
-def test_committed_native_table_representative_station() -> None:
-    row = read_native_table(NATIVE_PATH).data.filter(pl.col("site_no") == "02339495").row(0, named=True)
+def test_committed_native_table_representative_station(
+    retained_evidence_root,
+) -> None:
+    row = (
+        read_native_table(retained_evidence_root / NATIVE_PATH)
+        .data.filter(pl.col("site_no") == "02339495")
+        .row(0, named=True)
+    )
 
     assert row["station_nm"] == "OSELIGEE CREEK NEAR LANETT AL"
     assert row["dec_coord_datum_cd"] == "NAD83"
@@ -945,8 +986,14 @@ def test_committed_native_table_representative_station() -> None:
     } <= keys
 
 
-def test_fixture_refresh_frame_equals_matching_committed_subset() -> None:
-    committed_row = read_native_table(NATIVE_PATH).data.filter(pl.col("site_no") == "02339495").row(0, named=True)
+def test_fixture_refresh_frame_equals_matching_committed_subset(
+    retained_evidence_root,
+) -> None:
+    committed_row = (
+        read_native_table(retained_evidence_root / NATIVE_PATH)
+        .data.filter(pl.col("site_no") == "02339495")
+        .row(0, named=True)
+    )
     wanted = {
         ("dv", "00060", "00003"),
         ("dv", "00065", "00003"),
@@ -965,15 +1012,25 @@ def test_fixture_refresh_frame_equals_matching_committed_subset() -> None:
     subset_row["retrieved_at"] = committed_row["retrieved_at"]
     committed_subset = pl.DataFrame([subset_row], schema=NATIVE_SCHEMA)
 
-    pl_testing.assert_frame_equal(_fixture_refresh().value.data, committed_subset, check_exact=True)
+    pl_testing.assert_frame_equal(
+        _fixture_refresh(retained_evidence_root).value.data, committed_subset, check_exact=True
+    )
 
 
-def test_committed_canonical_artifacts_have_pinned_whole_content() -> None:
-    provider_bytes = (Path("research/usgs-modern-coverage/legacy-catalogue") / "provider.json").read_bytes()
-    products = pl.read_parquet(Path("research/usgs-modern-coverage/legacy-catalogue") / "products.parquet")
-    stations = pl.read_parquet(Path("research/usgs-modern-coverage/legacy-catalogue") / "stations.parquet")
+def test_committed_canonical_artifacts_have_pinned_whole_content(
+    retained_evidence_root,
+) -> None:
+    provider_bytes = (
+        (retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue") / "provider.json"
+    ).read_bytes()
+    products = pl.read_parquet(
+        (retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue") / "products.parquet"
+    )
+    stations = pl.read_parquet(
+        (retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue") / "stations.parquet"
+    )
     station_products = pl.read_parquet(
-        Path("research/usgs-modern-coverage/legacy-catalogue") / "station_products.parquet"
+        (retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue") / "station_products.parquet"
     )
 
     assert products.schema == PRODUCT_CATALOG_SCHEMA.polars_schema
@@ -991,6 +1048,7 @@ def test_committed_canonical_artifacts_have_pinned_whole_content() -> None:
 
 
 def test_native_build_is_network_free_and_byte_deterministic(
+    retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1007,13 +1065,31 @@ def test_native_build_is_network_free_and_byte_deterministic(
 
     assert (
         generator.main(
-            ["--native", str(NATIVE_PATH), "--modern-metadata", "research/usgs-modern-coverage", "--out", str(first)]
+            [
+                "--native",
+                str(retained_evidence_root / NATIVE_PATH),
+                "--evidence-root",
+                str(retained_evidence_root),
+                "--modern-metadata",
+                str(retained_evidence_root / "research/usgs-modern-coverage"),
+                "--out",
+                str(first),
+            ]
         )
         == 0
     )
     assert (
         generator.main(
-            ["--native", str(NATIVE_PATH), "--modern-metadata", "research/usgs-modern-coverage", "--out", str(second)]
+            [
+                "--native",
+                str(retained_evidence_root / NATIVE_PATH),
+                "--evidence-root",
+                str(retained_evidence_root),
+                "--modern-metadata",
+                str(retained_evidence_root / "research/usgs-modern-coverage"),
+                "--out",
+                str(second),
+            ]
         )
         == 0
     )
@@ -1024,8 +1100,10 @@ def test_native_build_is_network_free_and_byte_deterministic(
         assert artifact.read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
 
 
-def test_live_rdb_recordings_preserve_source_strings_and_native_alignment() -> None:
-    data = Path("tests/test_data")
+def test_live_rdb_recordings_preserve_source_strings_and_native_alignment(
+    retained_evidence_root,
+) -> None:
+    data = retained_evidence_root / "tests/test_data"
     series_recording = read_recording(data / "usgs_nwis_02339495_site_series.recording.json")
     expanded_recording = read_recording(data / "usgs_nwis_02339495_site_expanded.recording.json")
     series = generator.parse_series_rdb(series_recording.content.decode("utf-8"))
@@ -1055,8 +1133,10 @@ def test_live_rdb_recordings_preserve_source_strings_and_native_alignment() -> N
     assert refreshed.issues == ()
 
 
-def test_legacy_native_build_cannot_publish_under_modern_identity(tmp_path: Path) -> None:
-    catalogue = generator.build_catalogue(read_native_table(NATIVE_PATH), STATION_CATALOGUE_ORIGINS)
+def test_legacy_native_build_cannot_publish_under_modern_identity(retained_evidence_root, tmp_path: Path) -> None:
+    catalogue = generator.build_catalogue(
+        read_native_table(retained_evidence_root / NATIVE_PATH), STATION_CATALOGUE_ORIGINS
+    )
     output = tmp_path / "must-not-be-created"
     with pytest.raises(FatalContractError, match="legacy native builds cannot be published"):
         generator.write_catalogue(catalogue, output)

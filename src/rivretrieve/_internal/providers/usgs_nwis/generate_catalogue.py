@@ -1067,10 +1067,11 @@ def _parse_retrieved_at(value: str) -> RetrievedAt:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate the packaged usgs_nwis catalogue artifacts.")
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--native", type=Path, help="Path to the committed native Parquet table.")
+    source.add_argument("--native", type=Path, help="Path to the retained native Parquet table.")
     source.add_argument("--rdb-dir", type=Path, help="Absolute directory containing the two attested RDB passes.")
     source.add_argument("--live", action="store_true", help="Refresh from the live USGS NWIS site service.")
     parser.add_argument("--modern-metadata", type=Path, help="Verified complete modern metadata recording directory.")
+    parser.add_argument("--evidence-root", type=Path, help="External retained inputs in repository-relative layout.")
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for an attested native Parquet table.")
     parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
@@ -1090,7 +1091,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             build_acquisition_provenance,
         )
 
-        verify_provenance_recordings(build_acquisition_provenance(), Path(__file__).resolve().parents[5])
+        if args.evidence_root is None:
+            parser.error("--native publication requires --evidence-root")
+        verify_provenance_recordings(build_acquisition_provenance(), args.evidence_root)
         native_table = read_native_table(
             args.native,
             expected_sha256=NATIVE_TABLE_SHA256,

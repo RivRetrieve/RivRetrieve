@@ -12,7 +12,6 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
 from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import read_modern_metadata
 
-RECORDINGS = Path("research/usgs-modern-coverage")
 CATALOGUE = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue")
 
 
@@ -44,8 +43,14 @@ def test_modern_concrete_snapshot_retains_siblings_unknowns_and_legacy_scope():
     assert (CATALOGUE / "source_series.json").stat().st_size < 100_000_000
 
 
-def test_description_preserves_empty_and_null_without_parameter_prose():
-    page = json.loads(gzip.decompress((RECORDINGS / "metadata-00060-0000.json.gz").read_bytes()))
+def test_description_preserves_empty_and_null_without_parameter_prose(
+    retained_evidence_root,
+):
+    page = json.loads(
+        gzip.decompress(
+            (retained_evidence_root / "research/usgs-modern-coverage" / "metadata-00060-0000.json.gz").read_bytes()
+        )
+    )
     properties = page["features"][0]["properties"]
     locations = {"10172640": "USGS-10172640"}
     for description in (None, "", "publisher text"):
@@ -55,8 +60,10 @@ def test_description_preserves_empty_and_null_without_parameter_prose():
         assert result.descriptions[0].identity.description == description
 
 
-def test_saved_pagination_rejects_incomplete_chain(tmp_path):
-    completion = json.loads((RECORDINGS / "metadata-00060-completion.json").read_text())
+def test_saved_pagination_rejects_incomplete_chain(retained_evidence_root, tmp_path):
+    completion = json.loads(
+        (retained_evidence_root / "research/usgs-modern-coverage" / "metadata-00060-completion.json").read_text()
+    )
     completion["status"] = "incomplete"  # Authored negative control.
     (tmp_path / "metadata-00060-completion.json").write_text(json.dumps(completion))
     with pytest.raises(FatalContractError, match="complete unsorted"):

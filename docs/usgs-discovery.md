@@ -61,7 +61,7 @@ The September 22, 2026 metadata snapshot retains the established 26,258 stream
 station scope from the 50 states plus DC. It includes discontinued records.
 Native agency prefixes are retained; they are not always `USGS`.
 
-The [full-baseline audit](../research/usgs-modern-coverage/REPORT.md) compared
+The [full-baseline audit](https://github.com/RivRetrieve/verification-evidence) compared
 57,961 previously supported station/product pairs: 57,950 metadata matches,
 five metadata gaps, and six continuous records with unknown precise statistic.
 The owner approved modern-only service with these limits on

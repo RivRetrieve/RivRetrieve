@@ -10,7 +10,7 @@ import pytest
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.providers.usgs_nwis.config import config
-from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
+from tests.usgs_modern_recordings import ModernReplay, body, coordinates, manifest
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
@@ -29,10 +29,12 @@ def test_public_route_recordings_cover_exact_active_declaration():
 
 
 @pytest.mark.parametrize("product", ROUTES)
-def test_recorded_public_route_identity_physics_cache_and_receipt(monkeypatch, tmp_path, product):
+def test_recorded_public_route_identity_physics_cache_and_receipt(
+    monkeypatch, tmp_path, product, retained_evidence_root
+):
     suffix, quantity, statistic, factor = ROUTES[product]
-    content = body(suffix)
-    replay = ModernReplay(suffix)
+    content = body(suffix, evidence_root=retained_evidence_root)
+    replay = ModernReplay(suffix, evidence_root=retained_evidence_root)
     calls = []
 
     class CountingReplay:
@@ -69,7 +71,9 @@ def test_recorded_public_route_identity_physics_cache_and_receipt(monkeypatch, t
     assert set(bypass.data["unit"]) == ({"m3/s"} if quantity == "discharge" else {"m"})
     assert set(bypass.data["time_zone"]) == ({"unknown"} if daily else {"+00:00"})
     assert bypass.receipts.entries[0].content == content
-    assert bypass.receipts.entries[0].origin.retrieved_at == datetime.fromisoformat(MANIFEST[suffix]["acquired_utc"])
+    assert bypass.receipts.entries[0].origin.retrieved_at == datetime.fromisoformat(
+        manifest(retained_evidence_root)[suffix]["acquired_utc"]
+    )
     for mode in ("reuse", "reuse", "refresh", "reuse"):
         result = fetch(mode)
         pt.assert_frame_equal(result.data, bypass.data)
@@ -77,8 +81,12 @@ def test_recorded_public_route_identity_physics_cache_and_receipt(monkeypatch, t
     assert len(calls) == 3
 
 
-def test_daily_response_label_does_not_establish_filterable_timestamp_anchor(monkeypatch):
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay("daily-07374000-discharge-mean"))
+def test_daily_response_label_does_not_establish_filterable_timestamp_anchor(monkeypatch, retained_evidence_root):
+    monkeypatch.setattr(
+        discovery,
+        "HttpClient",
+        lambda: ModernReplay("daily-07374000-discharge-mean", evidence_root=retained_evidence_root),
+    )
     selection = rr.find(
         provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
     )
@@ -105,14 +113,14 @@ def test_daily_catalogue_does_not_promote_label_representation_to_anchor():
     assert not narrowed.series
 
 
-def test_authored_non_date_daily_series_is_unsupported_with_peer_preserved(monkeypatch):
+def test_authored_non_date_daily_series_is_unsupported_with_peer_preserved(monkeypatch, retained_evidence_root):
     """Authored mutation of exact modern bytes, not evidence of a nonmidnight USGS product."""
     from copy import deepcopy
 
     from rivretrieve._internal.transport import TransportResponse
 
     name = "daily-07374000-discharge-mean"
-    content = body(name)
+    content = body(name, evidence_root=retained_evidence_root)
     document = json.loads(content)
     original = document["features"]
     healthy_id = "authored-independent-series"
@@ -126,11 +134,13 @@ def test_authored_non_date_daily_series_is_unsupported_with_peer_preserved(monke
 
     class AuthoredTransport:
         def send(self, request):
-            assert coordinates(request.url, request.params) == coordinates(MANIFEST[name]["original_url"])
+            assert coordinates(request.url, request.params) == coordinates(
+                manifest(retained_evidence_root)[name]["original_url"]
+            )
             return TransportResponse(
                 content,
                 200,
-                datetime.fromisoformat(MANIFEST[name]["acquired_utc"]),
+                datetime.fromisoformat(manifest(retained_evidence_root)[name]["acquired_utc"]),
                 "application/json",
                 request.url,
                 request.params,

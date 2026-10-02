@@ -23,8 +23,8 @@ def test_usgs_provenance_names_nwis_and_verified_source_words() -> None:
     assert provenance.header.withheld_facts == ()
 
 
-def test_usgs_build_rejects_changed_terms_recording(tmp_path: Path) -> None:
-    source = Path("tests/test_data")
+def test_usgs_build_rejects_changed_terms_recording(retained_evidence_root, tmp_path: Path) -> None:
+    source = retained_evidence_root / "tests/test_data"
     target = tmp_path / "tests/test_data"
     target.mkdir(parents=True)
     (target / "usgs_nwis_terms_licence-1.html").write_bytes(
@@ -38,23 +38,30 @@ def test_usgs_build_rejects_changed_terms_recording(tmp_path: Path) -> None:
         verify_provenance_recordings(build_acquisition_provenance(), tmp_path)
 
 
-def test_usgs_cli_rejects_native_byte_substitution(tmp_path: Path) -> None:
+def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_path: Path) -> None:
     native = tmp_path / "native.parquet"
-    native.write_bytes((declaration.catalogue / "native.parquet").read_bytes() + b"changed")
+    native.write_bytes(
+        (retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet").read_bytes()
+        + b"changed"
+    )
     with pytest.raises(FatalContractError, match="native table digest mismatch: expected .* observed"):
         generate_catalogue.main(
             [
                 "--native",
                 str(native),
+                "--evidence-root",
+                str(retained_evidence_root),
                 "--modern-metadata",
-                "research/usgs-modern-coverage",
+                str(retained_evidence_root / "research/usgs-modern-coverage"),
                 "--out",
                 str(tmp_path / "out"),
             ]
         )
 
 
-def test_usgs_cli_invokes_recording_verification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_usgs_cli_invokes_recording_verification(
+    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def reject(*_args: object) -> None:
         raise FatalContractError("recording verification invoked")
 
@@ -63,9 +70,11 @@ def test_usgs_cli_invokes_recording_verification(tmp_path: Path, monkeypatch: py
         generate_catalogue.main(
             [
                 "--native",
-                str(declaration.catalogue / "native.parquet"),
+                str(retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"),
+                "--evidence-root",
+                str(retained_evidence_root),
                 "--modern-metadata",
-                "research/usgs-modern-coverage",
+                str(retained_evidence_root / "research/usgs-modern-coverage"),
                 "--out",
                 str(tmp_path),
             ]

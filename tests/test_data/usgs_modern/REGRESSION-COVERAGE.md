@@ -3,7 +3,7 @@
 The retired WaterML fetch/parse tests asserted the dv/iv request protocol,
 methodID/methodCode blocks, sentinel markers and naive WaterML daily timestamps.
 Those are not modern API contracts. Their original tests remain in Git history;
-all original source recordings and provenance remain unchanged. No retired
+all original source recordings and provenance remain preserved in the private archive. No retired
 provider implementation is kept as a test-only duplicate or runtime fallback.
 
 Current protections:
@@ -24,10 +24,10 @@ Current protections:
 - `test_usgs_artifact_boundaries.py`: non-destructive legacy artifact refusal
   and independent French/USGS mixed-provider identity fields.
 
-Legacy body hashes, counts, method descriptions and explicit unknown acquisition
-facts remain tested in `test_source_series_usgs.py`. Historical local-offset
-interpretation remains separate in the boundary and UTC tests. No legacy method
-ID is joined to a modern series through coincident values or dates.
+Raw legacy counts and method-description checks do not exercise the current
+provider and are retired. Their original inputs remain archived. The bounded
+historical-to-modern comparisons in `test_usgs_modern_evidence.py` remain.
+No legacy method ID is joined to a modern series through coincident values or dates.
 
 
 Shared tests keep their behavioral contracts while replaying the active service:

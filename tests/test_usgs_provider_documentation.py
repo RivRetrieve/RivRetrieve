@@ -18,13 +18,12 @@ from tests.usgs_modern_recordings import coordinates
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "docs/verification/usgs-provider"
 PAGE = ROOT / "docs/providers/usgs_nwis.md"
 
 
-def test_usgs_provider_page_exact_snippets_and_displayed_outputs(monkeypatch, capsys):
+def test_usgs_provider_page_exact_snippets_and_displayed_outputs(retained_evidence_root, monkeypatch, capsys):
     recordings = {}
-    for path in EVIDENCE.glob("*-receipt-*-origin.json"):
+    for path in (retained_evidence_root / "docs/verification/usgs-provider").glob("*-receipt-*-origin.json"):
         origin = json.loads(path.read_text())
         content = path.with_name(path.name.replace("-origin", "")).read_bytes()
         assert hashlib.sha256(content).hexdigest() == origin["sha256"]

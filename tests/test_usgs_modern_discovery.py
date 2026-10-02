@@ -5,7 +5,6 @@ import hashlib
 import importlib
 import json
 from datetime import datetime
-from pathlib import Path
 
 import polars.testing as pt
 import pytest
@@ -38,7 +37,7 @@ def test_offline_discovery_exposes_both_siblings_and_exact_descriptions(monkeypa
         assert restored.scope == selection.scope
 
 
-def test_v1_pagination_keeps_exact_pages_clips_and_reuses_all(monkeypatch, tmp_path):
+def test_v1_pagination_keeps_exact_pages_clips_and_reuses_all(monkeypatch, tmp_path, retained_evidence_root):
     fetch_module = importlib.import_module("rivretrieve._internal.providers.usgs_nwis.fetch")
     original = fetch_module._request
 
@@ -50,7 +49,7 @@ def test_v1_pagination_keeps_exact_pages_clips_and_reuses_all(monkeypatch, tmp_p
 
     monkeypatch.setattr(fetch_module, "_request", small_page)
     names = tuple(f"daily-02196000-v1-pagination-page{i:02}" for i in range(1, 6))
-    replay = ModernReplay(*names)
+    replay = ModernReplay(*names, evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     selection = rr.find(
@@ -59,14 +58,18 @@ def test_v1_pagination_keeps_exact_pages_clips_and_reuses_all(monkeypatch, tmp_p
     result = rr.fetch(selection, start="2000-01-01", end="2000-01-07", receipts=True, cache="reuse", on_issue="raise")
     assert result.data.height == 14
     assert result.data["series_id"].n_unique() == 2
-    assert [receipt.content for receipt in result.receipts.entries] == [body(name) for name in names]
+    assert [receipt.content for receipt in result.receipts.entries] == [
+        body(name, retained_evidence_root) for name in names
+    ]
     assert len(replay.calls) == 5
     reused = rr.fetch(selection, start="2000-01-01", end="2000-01-07", cache="reuse", on_issue="raise")
     assert len(replay.calls) == 5
     pt.assert_frame_equal(result.data, reused.data)
 
 
-def test_unknown_continuous_statistic_is_broad_compatible_not_instantaneous(monkeypatch, tmp_path):
+def test_unknown_continuous_statistic_is_broad_compatible_not_instantaneous(
+    retained_evidence_root, monkeypatch, tmp_path
+):
     station = "02246518"
     selection = rr.find(provider="usgs_nwis", station=station, quantity="discharge")
     unknown = tuple(
@@ -76,7 +79,7 @@ def test_unknown_continuous_statistic_is_broad_compatible_not_instantaneous(monk
     )
     assert unknown
     assert not rr.find(provider="usgs_nwis", station=station, quantity="discharge", statistic="instantaneous").series
-    path = Path("research/usgs-modern-coverage/probes/modern-02246518-discharge_instantaneous-start")
+    path = retained_evidence_root / "research/usgs-modern-coverage/probes/modern-02246518-discharge_instantaneous-start"
     receipt = json.loads(path.with_suffix(".receipt.json").read_text())
     content = gzip.decompress(path.with_suffix(".json.gz").read_bytes())
     assert hashlib.sha256(content).hexdigest() == receipt["sha256"]
@@ -130,7 +133,9 @@ def test_unknown_continuous_statistic_is_broad_compatible_not_instantaneous(monk
     pt.assert_frame_equal(result.data, reused.data)
 
 
-def test_unrestricted_snapshot_does_not_hide_newly_encountered_real_identity(monkeypatch, tmp_path):
+def test_unrestricted_snapshot_does_not_hide_newly_encountered_real_identity(
+    monkeypatch, tmp_path, retained_evidence_root
+):
     """Authored older-inventory control; the replayed publisher response is untouched."""
     from dataclasses import replace
 
@@ -147,7 +152,7 @@ def test_unrestricted_snapshot_does_not_hide_newly_encountered_real_identity(mon
         ),
     )
     assert len(snapshot.series) == 1
-    replay = ModernReplay("daily-02196000-2000-all")
+    replay = ModernReplay("daily-02196000-2000-all", evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     result = rr.fetch(snapshot, start="2000-01-01", end="2000-01-07", cache="reuse", receipts=True, on_issue="raise")
@@ -157,7 +162,7 @@ def test_unrestricted_snapshot_does_not_hide_newly_encountered_real_identity(mon
         "0df18b246e8f48ec8e6547a92070e94a",
         "4d186669708e4dc18f84d271efb953a1",
     }
-    assert result.receipts.entries[0].content == body("daily-02196000-2000-all")
+    assert result.receipts.entries[0].content == body("daily-02196000-2000-all", retained_evidence_root)
     reused = rr.fetch(snapshot, start="2000-01-01", end="2000-01-07", cache="reuse", on_issue="raise")
     assert len(replay.calls) == 1
     pt.assert_frame_equal(result.data, reused.data)

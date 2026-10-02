@@ -1,5 +1,10 @@
 # USGS source-series conformance
 
+This is a historical WaterServices implementation record. Current provider behavior
+is described in the USGS provider documentation. Original recordings are retained
+in the private source archive; their paths below identify historical inputs.
+
+
 ## Supported access and evidence
 
 The six enrolled routes use `https://waterservices.usgs.gov/nwis/`:
