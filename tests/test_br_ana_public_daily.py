@@ -21,7 +21,6 @@ from rivretrieve._internal.transport import HttpClient, TransportRequest, Transp
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
-_DATA = Path(__file__).parent / "recordings" / "br_ana"
 _PRODUCTS = (
     "discharge_daily_mean_bruto",
     "discharge_daily_mean_consistido",
@@ -59,10 +58,13 @@ def isolated_public_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
 
 class _AuthenticatedReplay:
-    def __init__(self, product: str) -> None:
+    def __init__(self, retained_evidence_root, product: str) -> None:
         endpoint = "HidroSerieCotas" if product.startswith("stage") else "HidroSerieVazao"
         month = "2024-01" if product == "discharge_daily_mean_bruto" else "2020-01"
-        self.recording = read_recording(_DATA / f"{endpoint}_15400000_{month}-01_{month}-31.recording.json")
+        self.recording = read_recording(
+            (retained_evidence_root / "tests/recordings/br_ana")
+            / f"{endpoint}_15400000_{month}-01_{month}-31.recording.json"
+        )
         self.replay = ReplayTransport((self.recording,))
         self.exchange_calls = 0
         self.observation_calls = 0
@@ -85,10 +87,12 @@ class _AuthenticatedReplay:
         return self.replay.send(request)
 
 
-def _authenticated_replay(monkeypatch: pytest.MonkeyPatch, product: str) -> _AuthenticatedReplay:
+def _authenticated_replay(
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch, product: str
+) -> _AuthenticatedReplay:
     monkeypatch.setenv("ANA_IDENTIFICADOR", _IDENTIFIER)
     monkeypatch.setenv("ANA_SENHA", _PASSWORD)
-    transport = _AuthenticatedReplay(product)
+    transport = _AuthenticatedReplay(retained_evidence_root, product)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     return transport
 
@@ -102,8 +106,10 @@ def test_public_daily_requires_credentials_before_transport(product: str) -> Non
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
-def test_public_daily_authenticated_receipt_and_cache_roundtrip(monkeypatch: pytest.MonkeyPatch, product: str) -> None:
-    transport = _authenticated_replay(monkeypatch, product)
+def test_public_daily_authenticated_receipt_and_cache_roundtrip(
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch, product: str
+) -> None:
+    transport = _authenticated_replay(retained_evidence_root, monkeypatch, product)
     year = 2024 if product == "discharge_daily_mean_bruto" else 2020
     start, end = f"{year}-01-10", f"{year}-01-20"
     selection = _selection(product)
@@ -177,8 +183,10 @@ def test_public_daily_credential_rejection_is_safe(monkeypatch: pytest.MonkeyPat
         assert secret not in repr(result) + caplog.text
 
 
-def test_daily_subset_cache_cannot_answer_all_and_refresh_preserves_sibling(monkeypatch: pytest.MonkeyPatch) -> None:
-    transport = _authenticated_replay(monkeypatch, "stage_daily_mean_bruto")
+def test_daily_subset_cache_cannot_answer_all_and_refresh_preserves_sibling(
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transport = _authenticated_replay(retained_evidence_root, monkeypatch, "stage_daily_mean_bruto")
     selection = rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean")
     bruto = rr.pick(selection, variant="bruto")
     consistido = rr.pick(selection, variant="consistido")
@@ -204,8 +212,10 @@ def test_daily_subset_cache_cannot_answer_all_and_refresh_preserves_sibling(monk
     assert restored.inventories == held.inventories
 
 
-def test_unobserved_daily_sibling_is_unresolved_not_successful_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
-    transport = _authenticated_replay(monkeypatch, "discharge_daily_mean_bruto")
+def test_unobserved_daily_sibling_is_unresolved_not_successful_coverage(
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transport = _authenticated_replay(retained_evidence_root, monkeypatch, "discharge_daily_mean_bruto")
     selection = rr.find(
         provider="br_ana", station="15400000", quantity="discharge", frequency="daily", statistic="mean"
     )

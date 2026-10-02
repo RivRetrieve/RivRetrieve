@@ -1,7 +1,5 @@
 """ANA adopted products and candidate availability retain exact evidence and honest absence."""
 
-from pathlib import Path
-
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
@@ -19,25 +17,22 @@ from rivretrieve._internal.providers.br_ana.origins import (
 )
 from rivretrieve._internal.recordings import read_recording
 
-ROOT = Path(__file__).parents[1]
-DATA = ROOT / "tests/recordings/br_ana"
 
-
-def telemetry_evidence():
-    path = DATA / "telemetry_15400000_2024-01-04_DIAS_30.recording.json"
+def telemetry_evidence(retained_evidence_root):
+    path = (retained_evidence_root / "tests/recordings/br_ana") / "telemetry_15400000_2024-01-04_DIAS_30.recording.json"
     return parse_adopted_telemetry_evidence(
-        (DATA / "manual-page11-acquisition.json").read_bytes(),
-        (DATA / "manual-page11-derived.txt").read_bytes(),
+        ((retained_evidence_root / "tests/recordings/br_ana") / "manual-page11-acquisition.json").read_bytes(),
+        ((retained_evidence_root / "tests/recordings/br_ana") / "manual-page11-derived.txt").read_bytes(),
         read_recording(path),
-        str(path.relative_to(ROOT)),
+        str(path.relative_to(retained_evidence_root)),
     )
 
 
 @pytest.fixture(scope="module")
-def inputs():
-    capture = read_capture_record(ROOT / "tests/test_data/br_ana_inventory/capture.json")
-    native = read_native_table(ROOT / capture.native_table.repository_path)
-    telemetry = telemetry_evidence()
+def inputs(retained_evidence_root):
+    capture = read_capture_record(retained_evidence_root / "tests/test_data/br_ana_inventory/capture.json")
+    native = read_native_table(retained_evidence_root / capture.native_table.repository_path)
+    telemetry = telemetry_evidence(retained_evidence_root)
     provenance = with_observation_products(
         build_acquisition_provenance(capture), capture, project_stations(native).data, telemetry
     )
@@ -209,18 +204,19 @@ def test_normalized_marker_validation_rejects_mismatched_type(catalogue, inputs)
         )
 
 
-def test_manual_derived_excerpt_is_verified_not_pretended_publisher_recording():
+def test_manual_derived_excerpt_is_verified_not_pretended_publisher_recording(retained_evidence_root):
     from rivretrieve._internal.issues import FatalContractError
 
-    path = DATA / "telemetry_15400000_2024-01-04_DIAS_30.recording.json"
+    path = (retained_evidence_root / "tests/recordings/br_ana") / "telemetry_15400000_2024-01-04_DIAS_30.recording.json"
     with pytest.raises(FatalContractError, match="derived excerpt identity"):
         parse_adopted_telemetry_evidence(
-            (DATA / "manual-page11-acquisition.json").read_bytes(),
-            (DATA / "manual-page11-derived.txt").read_bytes() + b"changed",
+            ((retained_evidence_root / "tests/recordings/br_ana") / "manual-page11-acquisition.json").read_bytes(),
+            ((retained_evidence_root / "tests/recordings/br_ana") / "manual-page11-derived.txt").read_bytes()
+            + b"changed",
             read_recording(path),
-            str(path.relative_to(ROOT)),
+            str(path.relative_to(retained_evidence_root)),
         )
-    evidence = telemetry_evidence()
+    evidence = telemetry_evidence(retained_evidence_root)
     assert evidence.documentation.recording_ids == ()
     assert evidence.documentation.material.sha256 == "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3"
 

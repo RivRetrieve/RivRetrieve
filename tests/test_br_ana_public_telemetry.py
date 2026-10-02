@@ -21,7 +21,6 @@ from rivretrieve._internal.transport import HttpClient, TransportRequest, Transp
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
-_DATA = Path(__file__).parent / "recordings" / "br_ana"
 _PRODUCTS = ("discharge_instantaneous", "stage_instantaneous")
 _START = "2024-01-01T23:30:00"
 _END = "2024-01-02T00:30:00"
@@ -45,8 +44,11 @@ def isolated_public_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
 
 class _AuthenticatedReplay:
-    def __init__(self) -> None:
-        self.recording = read_recording(_DATA / "telemetry_15400000_2024-01-04_DIAS_30.recording.json")
+    def __init__(self, retained_evidence_root) -> None:
+        self.recording = read_recording(
+            (retained_evidence_root / "tests/recordings/br_ana")
+            / "telemetry_15400000_2024-01-04_DIAS_30.recording.json"
+        )
         self.replay = ReplayTransport((self.recording,))
         self.exchange_calls = 0
         self.observation_calls = 0
@@ -69,10 +71,10 @@ class _AuthenticatedReplay:
         return self.replay.send(request)
 
 
-def _authenticated_replay(monkeypatch: pytest.MonkeyPatch) -> _AuthenticatedReplay:
+def _authenticated_replay(retained_evidence_root, monkeypatch: pytest.MonkeyPatch) -> _AuthenticatedReplay:
     monkeypatch.setenv("ANA_IDENTIFICADOR", _IDENTIFIER)
     monkeypatch.setenv("ANA_SENHA", _PASSWORD)
-    transport = _AuthenticatedReplay()
+    transport = _AuthenticatedReplay(retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     return transport
 
@@ -109,8 +111,10 @@ def test_public_fetch_requires_both_ana_credentials_before_transport() -> None:
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
-def test_public_native_midnight_values_receipts_and_provenance(monkeypatch: pytest.MonkeyPatch, product: str) -> None:
-    transport = _authenticated_replay(monkeypatch)
+def test_public_native_midnight_values_receipts_and_provenance(
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch, product: str
+) -> None:
+    transport = _authenticated_replay(retained_evidence_root, monkeypatch)
     selection = rr.pick(
         rr.find(provider="br_ana", timestamp_anchor="measurement_time"),
         station="15400000",
@@ -165,8 +169,10 @@ def test_public_native_midnight_values_receipts_and_provenance(monkeypatch: pyte
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
-def test_public_cache_reuse_needs_no_new_exchange_or_observation(monkeypatch: pytest.MonkeyPatch, product: str) -> None:
-    transport = _authenticated_replay(monkeypatch)
+def test_public_cache_reuse_needs_no_new_exchange_or_observation(
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch, product: str
+) -> None:
+    transport = _authenticated_replay(retained_evidence_root, monkeypatch)
     selection = rr.pick(
         rr.find(
             provider="br_ana",
@@ -189,8 +195,10 @@ def test_public_cache_reuse_needs_no_new_exchange_or_observation(monkeypatch: py
     assert transport.exchange_calls == transport.observation_calls == 1
 
 
-def test_unrestricted_telemetry_keeps_incomplete_inventory_and_reacquires(monkeypatch: pytest.MonkeyPatch) -> None:
-    transport = _authenticated_replay(monkeypatch)
+def test_unrestricted_telemetry_keeps_incomplete_inventory_and_reacquires(
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transport = _authenticated_replay(retained_evidence_root, monkeypatch)
     selection = rr.find(provider="br_ana", station="15400000", quantity="stage", timestamp_anchor="measurement_time")
     first = rr.fetch(selection, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
     assert first.data.height == 5

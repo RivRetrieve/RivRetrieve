@@ -1,5 +1,6 @@
 """Public ANA verification: owner-local credentials x public selection -> safe audit summary."""
 
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -9,6 +10,9 @@ from rivretrieve._internal.discovery import _resolve_credentials
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, required=True, help="Private output file outside the checkout")
+    args = parser.parse_args()
     rr.providers()
     secrets = tuple(_resolve_credentials(("br_ana",), require_all=True)["br_ana"].values())
     selection = rr.find(provider="br_ana", station="15400000")
@@ -29,7 +33,7 @@ def main():
     encoded = json.dumps(summary, default=str, indent=2)
     if any(secret in encoded for secret in secrets):
         raise RuntimeError("unsafe audit output refused")
-    output = Path(".worktrees/brazil-public-validation/live-result.json")
+    output = args.output
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(encoded + "\n")
     print(

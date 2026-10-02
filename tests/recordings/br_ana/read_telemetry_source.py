@@ -1,5 +1,6 @@
 """source_audit : ANARecordingBytes -> BoundarySourceRows (no provider imports)."""
 
+import argparse
 import base64
 import hashlib
 import json
@@ -8,7 +9,9 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
-SOURCE = Path(__file__).with_name("telemetry_15400000_2024-01-04_DIAS_30.recording.json")
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("recording", type=Path, help="External retained telemetry recording")
+SOURCE = parser.parse_args().recording
 DIGEST = "7cd09799a09f22f8d18cb5f34e6b08a1d74066a70ef9a16fc4bb1bcb27cdc691"
 envelope_bytes = SOURCE.read_bytes()
 envelope = json.loads(envelope_bytes)

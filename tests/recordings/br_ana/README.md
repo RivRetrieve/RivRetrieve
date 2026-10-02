@@ -1,9 +1,12 @@
 # ANA adopted telemetry recordings
 
-These four unchanged `RecordingEnvelope` files were acquired through the shared
+The archived four unchanged `RecordingEnvelope` files were acquired through the shared
 credential-exchange and recording transports on 2026-09-16. They carry safe request
 identities, response bytes, retrieval instants and SHA-256 digests. Token-exchange
-bodies and credential values are not retained. These test inputs do not ship in the wheel.
+bodies and credential values are not retained. These inputs are outside the code tree. Retrieve the exact Brazil inputs from the
+private source archive in repository-relative layout. Tests use
+`RIVRETRIEVE_TEST_EVIDENCE_ROOT`; catalogue tools require `--evidence-root`.
+See [catalogue maintenance](../../../maintenance/catalogue/br_ana/README.md).
 
 Official sources:
 - OpenAPI: https://www.ana.gov.br/hidrowebservice/api-docs
@@ -19,7 +22,7 @@ shows only 24-hour choices. The source versions are not conflated.
 
 Manual PDF page 11 documents `Cota_Adotada` in cm, `Vazao_Adotada` in m3/s and
 `Data_Hora_Medicao` as measurement/collection time. The safe page 11–12 text excerpt
-is retained here. Source timezone and sentinel meanings are not established.
+is retained in the archive. Source timezone and sentinel meanings are not established.
 Finite decimal strings remain values; JSON nulls remain nulls. Blank, nonfinite,
 malformed values and invalid source identity fail loudly. No value is discarded
 or selected using adopted status or update time. Status strings/nulls are surfaced
@@ -84,31 +87,28 @@ an explicit command-line argument. It never reads credentials or persists the fu
 PDF. An authorized maintainer can reacquire into a separate directory using:
 
 ```sh
-uv run --with pypdf==6.13.1 python tests/recordings/br_ana/capture_manual_page11.py .worktrees/ana-manual-refresh
+uv run --with pypdf==6.13.1 python tests/recordings/br_ana/capture_manual_page11.py "$PRIVATE_OUTPUT/ana-manual-refresh"
 ```
 
 This command makes a live unauthenticated request; ordinary tests do not run it.
 A fresh response may differ. Original source identity and derived identity must
 not be conflated or overwritten without evidence review.
 
-## Root-owned public live verification
+## Public telemetry verification
 
-The root implementing agent ran the normal public API with its intentionally
-provisioned working-directory credentials against implementation commit
-`c3ec5f34972ce8076daeac4a19037c6299867f39` on 2026-09-16. No credential file was copied.
-`public-live-verification.json` is the unchanged sanitized summary, not a source
-recording or independent expectation. Both products returned five native rows across
-midnight, unknown zone, two exact-body receipts matching the Jan4 recording SHA,
-and three source calls (one shared exchange and two observation requests). Only
-informational source-status and unestablished-citation issues occurred.
+Historical public live verification records and result summaries are retained
+in the private source archive. They establish only their recorded acquisition,
+not current service availability or nationwide product support.
 
-The root-authored script is retained as `verify_public_ana.py`; formatting and
-creation of its output directory were added, without changing its public calls.
-An authorized maintainer can run `uv run python tests/recordings/br_ana/verify_public_ana.py`
-from the working directory containing their own credentials. It makes live requests;
-ordinary tests never run it. This proves representative telemetry access, not daily
-support, universal station availability or completion of the full Brazil vision.
+`verify_public_ana.py` keeps the public API verification logic. An authorized
+maintainer can run it from an intentionally credential-provisioned working
+directory, with a private output file outside the checkout:
 
+```sh
+uv run python tests/recordings/br_ana/verify_public_ana.py --output "$PRIVATE_OUTPUT/telemetry-result.json"
+```
+
+This makes live requests. Ordinary tests never run it.
 
 ## Conventional daily source evidence
 
@@ -152,29 +152,22 @@ All evidence in this directory is excluded from wheel and sdist payloads. The
 packaged normalized provenance carries original material identities, exact
 recording references, derived-artifact digests, and per-variant row predicates.
 
-## Root-owned daily public verification and legacy retirement
+## Public daily verification
 
-The root agent verified committed `c149e2d0a9d478e9ad90a574e940e458f7e57972`
-through actual `find`, `pick`, and `fetch` with its intentionally provisioned credentials.
-`daily-public-live-verification.json` is the unchanged sanitized summary, not an independent
-expectation or recording. All four independent January probes passed: eight total rows,
-exact modern values subject only to normal floating-point conversion, native unknown zone,
-safe receipt hashes and no error issues. Together with the retained adopted telemetry
-public verification, this authorized removal of `reference/legacy_observations/br_ana/`.
-Useful source leads, documentary identities and the unsupported temperature decision remain
-retained. Historical legacy source is recoverable at main commit `33e063a`.
+Historical daily public verification results and retirement records are retained
+in the private source archive. They do not establish continuity, source quality
+or nationwide availability.
 
-`verify_daily_public.py` retains the root-authored verification logic. Maintenance changes
-are limited to formatter/import ordering, explicit expectation/output CLI paths, output
-parent creation, and explicit strict zip after the existing equal-length guard. It reads credentials only from the caller's own environment/current-directory
-`.env` via the established resolver, and makes live calls. Ordinary tests never execute it.
-An authorized maintainer can run from their credential-provisioned working directory:
+`verify_daily_public.py` keeps the public verification logic. It receives the
+archived independent expectations and a private output path explicitly. It
+reads credentials through the established resolver and makes live requests.
+Ordinary tests never execute it. An authorized maintainer can run from their
+intentionally credential-provisioned working directory:
 
-```text
-uv run python tests/recordings/br_ana/verify_daily_public.py tests/recordings/br_ana/daily-independent-expectations.json .worktrees/ana-daily-verification/result.json
+```sh
+uv run python tests/recordings/br_ana/verify_daily_public.py "$EVIDENCE_ROOT/tests/recordings/br_ana/daily-independent-expectations.json" "$PRIVATE_OUTPUT/daily-result.json"
 ```
 
-This is representative access evidence, not a promise of continuity, source quality,
-national availability or final vision acceptance. Water-temperature field existence in a
-bounded detailed response is established, but every water-temperature value/status was null.
-`Temperatura_Interna` has both strings and nulls and is never substituted for water temperature.
+Water temperature remains unsupported. `Temperatura_Interna` is never substituted
+for water temperature. The detailed-channel investigation and its bounded source
+findings remain in the archive.
