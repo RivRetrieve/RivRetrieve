@@ -81,6 +81,7 @@ def test_invalid_internal_tags_remain_fatal(retained_evidence_root: Path):
     "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
     "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
     "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
     "tests/test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json",
 )
 def test_other_recorded_provider_parsers_retain_series_context(retained_evidence_root: Path):
@@ -120,7 +121,10 @@ def test_other_recorded_provider_parsers_retain_series_context(retained_evidence
         assert parsed.rows["series_id"].unique().to_list() == [parsed.series[0].series_id]
 
 
-@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
+)
 def test_czech_internal_request_coordinates_are_not_rewritten_to_match_tags(retained_evidence_root: Path):
     import pytest
 

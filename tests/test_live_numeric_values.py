@@ -164,32 +164,48 @@ def _mutated(provider, source, mutation):
 @pytest.mark.parametrize(
     ("provider", "mutation"),
     [
-        (provider, mutation)
-        for provider in (
-            "fr_hubeau",
-            "no_nve",
-            "ch_foen",
-            "lt_lhmt",
-            "th_thaiwater",
-            "cz_chmi",
-            "ba_fhmzbih",
-            "jp_mlit",
+        pytest.param(provider, mutation, marks=pytest.mark.recorded(*requirements))
+        for provider, requirements in (
+            (
+                "fr_hubeau",
+                ("tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",),
+            ),
+            (
+                "no_nve",
+                (
+                    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+                    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+                ),
+            ),
+            (
+                "ch_foen",
+                ("tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json",),
+            ),
+            (
+                "lt_lhmt",
+                ("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",),
+            ),
+            (
+                "th_thaiwater",
+                ("tests/test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json",),
+            ),
+            (
+                "cz_chmi",
+                ("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",),
+            ),
+            (
+                "ba_fhmzbih",
+                ("tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",),
+            ),
+            (
+                "jp_mlit",
+                ("tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",),
+            ),
         )
         for mutation in (*BAD, "zero", "finite", "null")
         # DAT missing slots use source flags, tested separately, not a JSON null token.
         if (provider, mutation) != ("jp_mlit", "null")
     ],
-)
-@pytest.mark.recorded(
-    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
-    "tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json",
-    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
-    "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
-    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
-    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
-    "tests/test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json",
 )
 def test_actual_live_parser_isolates_unrepresentable_numeric_cells(retained_evidence_root: Path, provider, mutation):
     config, parse, source, baseline, target = _source(retained_evidence_root, provider)

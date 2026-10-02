@@ -83,6 +83,8 @@ dev = [
     "mlcroissant>=1.1.0",
     "mkdocs-material>=9.7.7",
     "mkdocstrings[python]>=1.0.6",
+    "geopandas>=1.2.0",
+    "matplotlib>=3.11.2",
 ]
 
 # -----------------------

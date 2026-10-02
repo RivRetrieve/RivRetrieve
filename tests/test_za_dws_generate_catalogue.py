@@ -756,7 +756,12 @@ def test_cli_rejects_every_cross_mode_combination(argv: list[str]) -> None:
     assert exc_info.value.code != 0
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
+    "tests/test_data/za_dws_terms_licence-1.html",
+    "tests/test_data/za_dws_terms_licence-4.html",
+    "tests/test_data/za_dws_terms_licence-5.html",
+)
 def test_canonical_cli_writes_versioned_native_built_artifacts(retained_evidence_root: Path, tmp_path: Path) -> None:
     assert (
         generator.main(
@@ -783,7 +788,12 @@ def test_canonical_cli_writes_versioned_native_built_artifacts(retained_evidence
     }
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
+    "tests/test_data/za_dws_terms_licence-1.html",
+    "tests/test_data/za_dws_terms_licence-4.html",
+    "tests/test_data/za_dws_terms_licence-5.html",
+)
 def test_native_build_is_network_free_and_byte_deterministic(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

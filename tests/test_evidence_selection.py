@@ -144,3 +144,95 @@ def test_plan_flags_require_correct_phase(pytester, flags):
         pytester.runpytest(flags[0], str(pytester.path / "plan.json"), *flags[1:], "-q").ret
         == pytest.ExitCode.USAGE_ERROR
     )
+
+
+def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, monkeypatch):
+    """Collect real consumers once; never resolve or open their retained inputs."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.delenv("RIVRETRIEVE_TEST_EVIDENCE_ROOT", raising=False)
+    monkeypatch.delenv("THAIWATER_REVIEW_EVIDENCE_ROOT", raising=False)
+    modules = (
+        "test_drainage_areas",
+        "test_cz_fr_lt_acquisition_provenance",
+        "test_catalogue_origin_certification",
+        "test_catalogue_evidence",
+        "test_live_numeric_values",
+        "test_provider_series_parse",
+        "test_za_dws_acquisition_provenance",
+        "test_za_dws_generate_catalogue",
+    )
+    plan = pytester.path / "selected.json"
+    result = pytester.runpytest_subprocess(
+        *(str(root / "tests" / f"{module}.py") for module in modules),
+        "--collect-only",
+        "-q",
+        "--evidence-plan",
+        str(plan),
+    )
+    assert result.ret == 0
+    selected = {item["nodeid"].split("::", 1)[1]: item for item in json.loads(plan.read_text())["tests"]}
+
+    def check(name, purposes, requirements, full=()):
+        item = selected[name]
+        assert item["purposes"] == sorted(purposes)
+        assert item["requirements"] == sorted(requirements)
+        assert item["full_verification"] == sorted(full)
+
+    native = "src/rivretrieve/_internal/providers/{}/catalogue/native.parquet"
+    for provider in ("cz_chmi", "fr_hubeau", "lt_lhmt"):
+        check(f"test_projection_preserves_every_native_scalar[{provider}]", ["derived"], [native.format(provider)])
+        check(f"test_native_cli_invokes_shared_recording_verifier[{provider}]", ["derived"], [native.format(provider)])
+        terms = f"tests/test_data/{provider}_terms_licence.html"
+        check(
+            f"test_production_provenance_rejects_changed_recording[{provider}-{provider}_terms_licence.html]",
+            ["governing"],
+            [terms],
+            ["fr_hubeau"] if provider == "fr_hubeau" else [],
+        )
+    for provider, extra in (
+        ("cz_chmi", ["tests/test_data/cz_chmi_terms_licence.html", "tests/test_data/cz_meta2.json"]),
+        ("fr_hubeau", []),
+        ("lt_lhmt", ["tests/test_data/lt_lhmt_terms_licence.html"]),
+    ):
+        check(
+            f"test_native_cli_rejects_raw_byte_substitution[{provider}]",
+            ["governing"],
+            [native.format(provider), *extra],
+            ["fr_hubeau"] if provider == "fr_hubeau" else [],
+        )
+    check(
+        "test_committed_declaration_case_passes_real_build_and_origin_gate[lt_lhmt-stations]",
+        ["derived"],
+        [native.format("lt_lhmt")],
+    )
+    check(
+        "test_native_composition_root_rebuilds_committed_artifacts_without_network[za_dws]",
+        ["governing"],
+        [native.format("za_dws"), *(f"tests/test_data/za_dws_terms_licence-{n}.html" for n in (1, 4, 5))],
+    )
+    for provider in ("cz_chmi", "jp_mlit", "lt_lhmt", "no_nve", "th_thaiwater"):
+        check(f"test_all_ordered_source_assertions_match_pinned_original_revision[{provider}]", [], [])
+    check(
+        "test_actual_live_parser_isolates_unrepresentable_numeric_cells[lt_lhmt-zero]",
+        ["recorded"],
+        ["tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json"],
+    )
+    lithuanian = "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json"
+    check(
+        "test_czech_internal_request_coordinates_are_not_rewritten_to_match_tags",
+        ["recorded"],
+        ["tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json", lithuanian],
+    )
+    assert lithuanian in selected["test_other_recorded_provider_parsers_retain_series_context"]["requirements"]
+    for name in (
+        "test_south_africa_cli_rejects_native_byte_substitution",
+        "test_canonical_cli_writes_versioned_native_built_artifacts",
+        "test_native_build_is_network_free_and_byte_deterministic",
+    ):
+        check(
+            name,
+            ["governing"],
+            [native.format("za_dws"), *(f"tests/test_data/za_dws_terms_licence-{n}.html" for n in (1, 4, 5))],
+        )

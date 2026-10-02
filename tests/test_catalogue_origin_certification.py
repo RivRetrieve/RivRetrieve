@@ -237,6 +237,22 @@ DECLARATIONS[ProviderId("fr_hubeau")] = (
 CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case in cases]
 
 
+def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDecorator:
+    paths = [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
+    if provider == "br_ana":
+        paths.extend(
+            (
+                "tests/test_data/br_ana_inventory/capture.json",
+                "tests/recordings/br_ana/manual-page11-acquisition.json",
+                "tests/recordings/br_ana/manual-page11-derived.txt",
+                "tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json",
+            )
+        )
+    elif provider == "fr_hydroportail":
+        paths.append("maintenance/catalogue/fr_hydroportail/evidence")
+    return pytest.mark.derived(*paths, *additional_paths)
+
+
 @pytest.fixture(scope="module")
 def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> ProviderAdapter:
     return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param])
@@ -432,31 +448,23 @@ def test_adapter_discovery_is_exact_and_deferred_providers_remain_building(retai
 
 @pytest.mark.parametrize(
     ("adapter", "case"),
-    CASES,
+    [
+        pytest.param(
+            provider,
+            case,
+            marks=_adapter_input_mark(
+                provider,
+                *(
+                    ("tests/test_data/catalogue_origin_evidence_receipts.json",)
+                    if isinstance(case.declarations["crs"], NotPublished)
+                    else ()
+                ),
+            ),
+        )
+        for provider, case in CASES
+    ],
     ids=[f"{provider}-{case.identity}" for provider, case in CASES],
     indirect=["adapter"],
-)
-@pytest.mark.derived(
-    "maintenance/catalogue/fr_hydroportail/evidence",
-    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
-    "tests/recordings/br_ana/manual-page11-acquisition.json",
-    "tests/recordings/br_ana/manual-page11-derived.txt",
-    "tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json",
-    "tests/test_data/br_ana_inventory/capture.json",
-    "tests/test_data/catalogue_origin_evidence_receipts.json",
 )
 def test_committed_declaration_case_passes_real_build_and_origin_gate(
     retained_evidence_root: Path, adapter: ProviderAdapter, case: DeclarationCase
@@ -477,30 +485,12 @@ REMOVAL_CASES = [(adapter, case, column) for adapter, case in CASES for column i
 
 @pytest.mark.parametrize(
     ("adapter", "case", "column"),
-    REMOVAL_CASES,
+    [
+        pytest.param(provider, case, column, marks=_adapter_input_mark(provider))
+        for provider, case, column in REMOVAL_CASES
+    ],
     ids=[f"{provider}-{case.identity}-{column}" for provider, case, column in REMOVAL_CASES],
     indirect=["adapter"],
-)
-@pytest.mark.derived(
-    "maintenance/catalogue/fr_hydroportail/evidence",
-    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
-    "tests/recordings/br_ana/manual-page11-acquisition.json",
-    "tests/recordings/br_ana/manual-page11-derived.txt",
-    "tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json",
-    "tests/test_data/br_ana_inventory/capture.json",
 )
 def test_real_build_rejects_each_removed_declaration(
     adapter: ProviderAdapter, case: DeclarationCase, column: str
@@ -602,17 +592,64 @@ def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed(retained_e
 
 
 @pytest.mark.parametrize(
-    "provider", ("ba_fhmzbih", "ch_foen", "cz_chmi", "jp_mlit", "no_nve", "pl_imgw", "th_thaiwater", "za_dws")
-)
-@pytest.mark.governing(
-    "tests/test_data/catalogue_origin_evidence_receipts.json",
-    "tests/test_data/ba_fhmzbih_crs_evidence_stations.json",
-    "tests/test_data/ch_foen_api_docs.html",
-    "tests/test_data/cz_chmi_popis_kodu_historical.pdf",
-    "tests/test_data/jp_mlit_site_info_detail_301011281104010.html",
-    "tests/test_data/no_nve_swagger.json",
-    "tests/test_data/pl_imgw_apiinfo.html",
-    "tests/test_data/th_thaiwater_coordinate_standard.html",
+    "provider",
+    [
+        pytest.param(
+            "ba_fhmzbih",
+            marks=pytest.mark.governing(
+                "tests/test_data/catalogue_origin_evidence_receipts.json",
+                "tests/test_data/ba_fhmzbih_crs_evidence_stations.json",
+            ),
+        ),
+        pytest.param(
+            "ch_foen",
+            marks=pytest.mark.governing(
+                "tests/test_data/catalogue_origin_evidence_receipts.json",
+                "tests/test_data/ch_foen_api_docs.html",
+            ),
+        ),
+        pytest.param(
+            "cz_chmi",
+            marks=pytest.mark.governing(
+                "tests/test_data/catalogue_origin_evidence_receipts.json",
+                "tests/test_data/cz_chmi_popis_kodu_historical.pdf",
+            ),
+        ),
+        pytest.param(
+            "jp_mlit",
+            marks=pytest.mark.governing(
+                "tests/test_data/catalogue_origin_evidence_receipts.json",
+                "tests/test_data/jp_mlit_site_info_detail_301011281104010.html",
+            ),
+        ),
+        pytest.param(
+            "no_nve",
+            marks=pytest.mark.governing(
+                "tests/test_data/catalogue_origin_evidence_receipts.json",
+                "tests/test_data/no_nve_swagger.json",
+            ),
+        ),
+        pytest.param(
+            "pl_imgw",
+            marks=pytest.mark.governing(
+                "tests/test_data/catalogue_origin_evidence_receipts.json",
+                "tests/test_data/pl_imgw_apiinfo.html",
+            ),
+        ),
+        pytest.param(
+            "th_thaiwater",
+            marks=pytest.mark.governing(
+                "tests/test_data/catalogue_origin_evidence_receipts.json",
+                "tests/test_data/th_thaiwater_coordinate_standard.html",
+            ),
+        ),
+        pytest.param(
+            "za_dws",
+            marks=pytest.mark.governing(
+                "tests/test_data/catalogue_origin_evidence_receipts.json",
+            ),
+        ),
+    ],
 )
 def test_receipt_capture_digest(retained_evidence_root: Path, provider: str) -> None:
     receipts = [row for row in _receipts(retained_evidence_root) if row["provider_id"] == provider]
@@ -811,82 +848,133 @@ def _normalized_built_at(payload: bytes) -> bytes:
     return replaced
 
 
-@pytest.mark.parametrize("adapter", tuple(DECLARATIONS), indirect=True)
-@pytest.mark.governing(
-    "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
-    "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
-    "maintenance/catalogue/fr_hydroportail/evidence",
-    "maintenance/catalogue/fr_hydroportail/evidence/about.body",
-    "maintenance/catalogue/fr_hydroportail/evidence/chunk-8529.fdb00780.js.body",
-    "maintenance/catalogue/fr_hydroportail/evidence/legal.body",
-    "research/usgs-modern-coverage",
-    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
-    "tests/recordings/br_ana",
-    "tests/recordings/br_ana/manual-page11-acquisition.json",
-    "tests/recordings/br_ana/manual-page11-derived.txt",
-    "tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json",
-    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
-    "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
-    "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
-    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
-    "tests/test_data/ba_fhmzbih_terms_absence.html",
-    "tests/test_data/br_ana_inventory",
-    "tests/test_data/br_ana_inventory/capture.json",
-    "tests/test_data/br_ana_terms_licence.html",
-    "tests/test_data/ca_eccc_terms_citation.html",
-    "tests/test_data/ca_eccc_terms_licence.html",
-    "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
-    "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
-    "tests/test_data/ch_foen_bafu_current_hydrological_data.html",
-    "tests/test_data/ch_foen_bafu_hydrology_data_service.html",
-    "tests/test_data/ch_foen_parameters_2026-09-02.recording.json",
-    "tests/test_data/ch_foen_terms_bafu.html",
-    "tests/test_data/ch_foen_terms_existenz.html",
-    "tests/test_data/cz_chmi_terms_licence.html",
-    "tests/test_data/cz_meta2.json",
-    "tests/test_data/fr_hubeau_hydrometrie.html",
-    "tests/test_data/fr_hubeau_temperature_openapi.json",
-    "tests/test_data/fr_hubeau_terms_licence.html",
-    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
-    "tests/test_data/jp_mlit_terms_citation.pdf",
-    "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
-    "tests/test_data/lt_lhmt_terms_licence.html",
-    "tests/test_data/no_nve_stations_active_0.json",
-    "tests/test_data/no_nve_stations_active_1.json",
-    "tests/test_data/no_nve_swagger.json",
-    "tests/test_data/no_nve_terms_licence.html",
-    "tests/test_data/pl_imgw_annual/CODZ_publiczne_format.txt",
-    "tests/test_data/pl_imgw_annual/yearbook-2025.pdf",
-    "tests/test_data/pl_imgw_terms_regulations.html",
-    "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
-    "tests/test_data/th_thaiwater_official_water_wl-2026-09-02.html",
-    "tests/test_data/th_thaiwater_terms_licence-1.html",
-    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
-    "tests/test_data/usgs_nwis_terms_citation-1.html",
-    "tests/test_data/usgs_nwis_terms_licence-1.html",
-    "tests/test_data/za_dws_terms_licence-1.html",
-    "tests/test_data/za_dws_terms_licence-4.html",
-    "tests/test_data/za_dws_terms_licence-5.html",
+@pytest.mark.parametrize(
+    "adapter",
+    [
+        pytest.param(
+            "ba_fhmzbih",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+                "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+                "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
+                "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
+                "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+                "tests/test_data/ba_fhmzbih_terms_absence.html",
+            ),
+        ),
+        pytest.param(
+            "br_ana",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+                "tests/test_data/br_ana_inventory/capture.json",
+                "tests/recordings/br_ana",
+            ),
+        ),
+        pytest.param(
+            "ca_eccc",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
+                "tests/test_data/ca_eccc_terms_citation.html",
+                "tests/test_data/ca_eccc_terms_licence.html",
+            ),
+        ),
+        pytest.param(
+            "ch_foen",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
+                "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
+                "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
+                "tests/test_data/ch_foen_bafu_current_hydrological_data.html",
+                "tests/test_data/ch_foen_bafu_hydrology_data_service.html",
+                "tests/test_data/ch_foen_parameters_2026-09-02.recording.json",
+                "tests/test_data/ch_foen_terms_bafu.html",
+                "tests/test_data/ch_foen_terms_existenz.html",
+            ),
+        ),
+        pytest.param(
+            "cz_chmi",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
+                "tests/test_data/cz_chmi_terms_licence.html",
+                "tests/test_data/cz_meta2.json",
+            ),
+        ),
+        pytest.param(
+            "fr_hydroportail",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
+                "maintenance/catalogue/fr_hydroportail/evidence",
+            ),
+        ),
+        pytest.param(
+            "jp_mlit",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
+                "tests/test_data/jp_mlit_terms_citation.pdf",
+                "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
+            ),
+        ),
+        pytest.param(
+            "lt_lhmt",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+                "tests/test_data/lt_lhmt_terms_licence.html",
+            ),
+        ),
+        pytest.param(
+            "no_nve",
+            marks=pytest.mark.derived(
+                "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
+            ),
+        ),
+        pytest.param(
+            "pl_imgw",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
+                "tests/test_data/pl_imgw_terms_regulations.html",
+            ),
+        ),
+        pytest.param(
+            "th_thaiwater",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
+                "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
+                "tests/test_data/th_thaiwater_official_water_wl-2026-09-02.html",
+                "tests/test_data/th_thaiwater_terms_licence-1.html",
+            ),
+        ),
+        pytest.param(
+            "usgs_nwis",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+                "research/usgs-modern-coverage",
+                "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+                "tests/test_data/usgs_nwis_terms_citation-1.html",
+                "tests/test_data/usgs_nwis_terms_licence-1.html",
+            ),
+        ),
+        pytest.param(
+            "za_dws",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
+                "tests/test_data/za_dws_terms_licence-1.html",
+                "tests/test_data/za_dws_terms_licence-4.html",
+                "tests/test_data/za_dws_terms_licence-5.html",
+            ),
+        ),
+        pytest.param(
+            "fr_hubeau",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+                "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
+                "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
+                "tests/test_data/fr_hubeau_hydrometrie.html",
+                "tests/test_data/fr_hubeau_temperature_openapi.json",
+                "tests/test_data/fr_hubeau_terms_licence.html",
+            ),
+        ),
+    ],
+    indirect=True,
 )
 def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     retained_evidence_root: Path, adapter: ProviderAdapter, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
