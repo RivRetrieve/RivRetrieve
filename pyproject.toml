@@ -1,6 +1,6 @@
 [project]
 name = "rivretrieve"
-version = "0.1.49"
+version = "0.1.0"
 description = "A Python package for downloading global river gauge data"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -77,7 +77,6 @@ dev = [
     "pytest>=8.3", # tests
     "pytest-cov>=6.2.1",
     "ruff>=0.12", # linter + formatter
-    "bump-my-version>=1.2.7",
     "ty>=0.0.35",
     "tqdm>=4.70.0",
     "mlcroissant>=1.1.0",
@@ -134,25 +133,6 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
-
-# -----------------------
-# Bump My Version
-# -----------------------
-[tool.bumpversion]
-current_version = "0.1.49"
-commit = false
-tag = false
-allow_dirty = true
-
-[[tool.bumpversion.files]]
-filename = "pyproject.toml"
-search = 'version = "{current_version}"'
-replace = 'version = "{new_version}"'
-
-[[tool.bumpversion.files]]
-filename = "src/rivretrieve/__init__.py"
-search = '__version__ = "{current_version}"'
-replace = '__version__ = "{new_version}"'
 
 [tool.uv.sources]
 # ctrl-freak = { git = "https://github.com/hydrosolutions/ctrl-freak.git", rev = "main" } # example of how to add a git dependency
