@@ -37,6 +37,7 @@ def test_offline_discovery_exposes_both_siblings_and_exact_descriptions(monkeypa
         assert restored.scope == selection.scope
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_v1_pagination_keeps_exact_pages_clips_and_reuses_all(monkeypatch, tmp_path, retained_evidence_root):
     fetch_module = importlib.import_module("rivretrieve._internal.providers.usgs_nwis.fetch")
     original = fetch_module._request
@@ -67,6 +68,10 @@ def test_v1_pagination_keeps_exact_pages_clips_and_reuses_all(monkeypatch, tmp_p
     pt.assert_frame_equal(result.data, reused.data)
 
 
+@pytest.mark.recorded(
+    "research/usgs-modern-coverage/probes/modern-02246518-discharge_instantaneous-start.json.gz",
+    "research/usgs-modern-coverage/probes/modern-02246518-discharge_instantaneous-start.receipt.json",
+)
 def test_unknown_continuous_statistic_is_broad_compatible_not_instantaneous(
     retained_evidence_root, monkeypatch, tmp_path
 ):
@@ -133,6 +138,7 @@ def test_unknown_continuous_statistic_is_broad_compatible_not_instantaneous(
     pt.assert_frame_equal(result.data, reused.data)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_unrestricted_snapshot_does_not_hide_newly_encountered_real_identity(
     monkeypatch, tmp_path, retained_evidence_root
 ):

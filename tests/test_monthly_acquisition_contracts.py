@@ -167,6 +167,7 @@ def test_authentication_status_does_not_establish_source_absence():
 
 @pytest.mark.parametrize("failure_carrier", ["outcomes", "failed_requests", "both", "parsed_outcomes"])
 @pytest.mark.parametrize("failure_status", ["failed", "unsupported", "unresolved"])
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_empty(
     tmp_path, failure_carrier, failure_status, retained_evidence_root: Path
 ):

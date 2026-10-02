@@ -13,6 +13,7 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
 def test_public_swiss_litre_series_preserves_identity_unit_and_unknown_time(
     retained_evidence_root: Path, monkeypatch, tmp_path
 ):
@@ -40,6 +41,12 @@ def test_public_swiss_litre_series_preserves_identity_unit_and_unknown_time(
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_public_nve_all_versions_include_null_series_without_upstream_selection(
     retained_evidence_root: Path, monkeypatch, tmp_path
 ):
@@ -73,6 +80,7 @@ def test_public_nve_all_versions_include_null_series_without_upstream_selection(
     assert "protocol-only-nve-key" not in repr(result)
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_public_ana_physical_daily_scope_returns_both_consistencies_and_narrows(
     retained_evidence_root: Path, monkeypatch, tmp_path
 ):
@@ -95,6 +103,7 @@ def test_public_ana_physical_daily_scope_returns_both_consistencies_and_narrows(
     assert narrowed.provenance.calls_made == result.provenance.calls_made
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
 def test_public_explicit_swiss_field_does_not_diagnose_unrequested_sibling(
     retained_evidence_root: Path, monkeypatch, tmp_path
 ):
@@ -110,6 +119,10 @@ def test_public_explicit_swiss_field_does_not_diagnose_unrequested_sibling(
     assert not any(issue.severity in ("warning", "error") for issue in result.issues)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-99999_engine_2024-01-02.recording.json",
+)
 def test_public_nve_failed_explicit_version_survives_physical_predicate(
     retained_evidence_root: Path, monkeypatch, tmp_path
 ):
@@ -144,7 +157,22 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
     assert failed_rows.item(0, "outcomes").to_list() == ["failed"]
 
 
-@pytest.mark.parametrize("provider", ["ch_foen", "no_nve", "br_ana"])
+@pytest.mark.parametrize(
+    "provider",
+    [
+        pytest.param(
+            "ch_foen",
+            marks=pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json"),
+        ),
+        pytest.param(
+            "no_nve",
+            marks=pytest.mark.recorded(
+                "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
+            ),
+        ),
+        pytest.param("br_ana", marks=pytest.mark.recorded("tests/recordings/br_ana")),
+    ],
+)
 def test_public_explicit_series_cache_and_bundle_preserve_identity(
     retained_evidence_root: Path, provider, monkeypatch, tmp_path
 ):

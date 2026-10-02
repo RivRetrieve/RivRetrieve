@@ -37,6 +37,7 @@ def changed(recording, mutate):
     return replace(recording, content=json.dumps(payload, ensure_ascii=False).encode())
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_complete_retained_ac_response(recording):
     result = materialize_inventory((recording,), expected_units=("AC",))
     rows = json.loads(recording.content)["items"]
@@ -56,6 +57,7 @@ def test_complete_retained_ac_response(recording):
     assert response.row_count == response.distinct_station_count == 152
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_null_coordinates_and_source_strings_are_retained(recording):
     def mutate(payload):
         payload["items"][0]["Latitude"] = None
@@ -70,6 +72,7 @@ def test_null_coordinates_and_source_strings_are_retained(recording):
 
 
 @pytest.mark.parametrize("conflict", [False, True])
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_duplicate_identity_is_rejected(recording, conflict):
     def mutate(payload):
         duplicate = dict(payload["items"][0])
@@ -85,6 +88,7 @@ def test_duplicate_identity_is_rejected(recording, conflict):
     "field,value",
     [("Latitude", 3.0), ("Operando", True), ("codigoestacao", None), ("codigoestacao", ""), ("UF_Estacao", "AM")],
 )
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_invalid_source_value_is_rejected(recording, field, value):
     altered = changed(recording, lambda p: p["items"][0].__setitem__(field, value))
     with pytest.raises(FatalContractError):
@@ -100,11 +104,13 @@ def test_invalid_source_value_is_rejected(recording, field, value):
         lambda p: p.__setitem__("items", {}),
     ],
 )
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_schema_drift_and_source_failure_are_rejected(recording, mutation):
     with pytest.raises(FatalContractError):
         materialize_inventory((changed(recording, mutation),), expected_units=("AC",))
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_missing_units_and_repeated_requests_are_rejected(recording):
     with pytest.raises(FatalContractError, match="units"):
         materialize_inventory((recording,))
@@ -112,6 +118,7 @@ def test_missing_units_and_repeated_requests_are_rejected(recording):
         materialize_inventory((recording, recording), expected_units=("AC",))
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_wrong_request_and_http_failure_are_rejected(recording):
     for altered in (
         replace(recording, status_code=503),
@@ -122,6 +129,7 @@ def test_wrong_request_and_http_failure_are_rejected(recording):
             materialize_inventory((altered,), expected_units=("AC",))
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_source_order_does_not_change_native_table(recording):
     reversed_rows = changed(recording, lambda p: p["items"].reverse())
     assert_frame_equal(
@@ -130,6 +138,7 @@ def test_source_order_does_not_change_native_table(recording):
     )
 
 
+@pytest.mark.governing("tests/test_data/br_ana_inventory")
 def test_full_domestic_acquisition(retained_evidence_root, tmp_path):
     recordings = []
     expected_frames = []
@@ -164,12 +173,14 @@ def test_full_domestic_acquisition(retained_evidence_root, tmp_path):
 
 
 @pytest.mark.parametrize("value", [None, "", "Fluviométrica", "unknown"])
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_unestablished_station_type_fails(recording, value):
     altered = changed(recording, lambda p: p["items"][0].__setitem__("Tipo_Estacao", value))
     with pytest.raises(FatalContractError, match="station type"):
         materialize_inventory((altered,), expected_units=("AC",))
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_recording_digest_tampering_fails(retained_evidence_root, tmp_path):
     document = json.loads(
         lzma.decompress(
@@ -185,6 +196,7 @@ def test_recording_digest_tampering_fails(retained_evidence_root, tmp_path):
         read_recording(path)
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_duplicate_json_members_fail(recording):
     altered = replace(recording, content=recording.content.replace(b'"status":"OK"', b'"status":"OK","status":"OK"', 1))
     # Publisher uses compact JSON; this must actually instrument the duplicate path.
@@ -193,6 +205,7 @@ def test_duplicate_json_members_fail(recording):
         materialize_inventory((altered,), expected_units=("AC",))
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_cross_uf_duplicate_identity_fails(recording):
     def mutate(payload):
         for row in payload["items"]:
@@ -204,6 +217,7 @@ def test_cross_uf_duplicate_identity_fails(recording):
         materialize_inventory((recording, other), expected_units=("AC", "AM"))
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_basin_overlap_union_is_exact_and_order_independent(recording):
     basin = replace(
         recording,
@@ -220,6 +234,7 @@ def test_basin_overlap_union_is_exact_and_order_independent(recording):
     assert sum(response.row_count for response in left.responses) == 304
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json.xz")
 def test_basin_overlap_conflict_fails(recording):
     basin = changed(recording, lambda p: p["items"][0].__setitem__("Altitude", "changed"))
     basin = replace(basin, request=replace(basin.request, parameters={"Código da Bacia": 1}))
@@ -227,6 +242,7 @@ def test_basin_overlap_conflict_fails(recording):
         materialize_inventory((recording, basin), expected_units=("AC",), expected_basins=(1,))
 
 
+@pytest.mark.recorded("tests/test_data/br_ana_inventory/population_inventory_basin9.recording.json.xz")
 def test_retained_basin9_preserves_foreign_population(retained_evidence_root, tmp_path):
     path = tmp_path / "basin9.recording.json"
     path.write_bytes(
@@ -252,6 +268,7 @@ def test_retained_basin9_preserves_foreign_population(retained_evidence_root, tm
     assert result.responses[0].uf is None
 
 
+@pytest.mark.governing("tests/test_data/br_ana_inventory")
 def test_full_acquired_population_union(retained_evidence_root, tmp_path):
     names: list[str] = [f"inventory_UF_{uf}.recording.json" for uf in BRAZILIAN_UNITS]
     names += [f"population_inventory_basin{basin}.recording.json" for basin in range(1, 10)]

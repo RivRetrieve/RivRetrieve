@@ -5,6 +5,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 import polars as pl
+import pytest
 
 from rivretrieve._internal.boundary_probes import (
     FIRST_WALL_CLOCK_TIME,
@@ -59,6 +60,16 @@ def _runner(product: ProductId):
     return run
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_every_product_has_exact_two_call_source_boundary_probe(retained_evidence_root) -> None:
     probes = tuple(
         BoundaryProbe(

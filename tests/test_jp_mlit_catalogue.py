@@ -136,6 +136,7 @@ def _native_for(ids: list[str]) -> NativeTable:
     ).value
 
 
+@pytest.mark.recorded("tests/test_data/jp_mlit_site_info_detail_rejected_307051287711040.html")
 def test_rejected_response_fixture_identity(retained_evidence_root) -> None:
     body = (retained_evidence_root / REJECTED_PATH).read_bytes()
     assert len(body) == 489
@@ -143,10 +144,12 @@ def test_rejected_response_fixture_identity(retained_evidence_root) -> None:
     assert body.count(generate_catalogue._SOURCE_MARKER) == 0
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_products_count(catalogue) -> None:
     assert catalogue.products.height == 4
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_products_ids(catalogue) -> None:
     assert set(catalogue.products["product_id"]) == {
         "stage_daily",
@@ -156,12 +159,14 @@ def test_products_ids(catalogue) -> None:
     }
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_canonical_products_have_correct_units(catalogue) -> None:
     products = catalogue.products
     assert products.filter(pl.col("product_id") == "stage_daily")["unit"][0] == "m"
     assert products.filter(pl.col("product_id") == "discharge_daily")["unit"][0] == "m3/s"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_provider_specific_products_have_correct_frequency(catalogue) -> None:
     row = catalogue.products.filter(pl.col("product_id") == "stage_hourly")
     assert row["frequency"][0] == "hourly"
@@ -173,26 +178,32 @@ def test_provider_specific_products_have_correct_frequency(catalogue) -> None:
     ]
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_product_native_ids_preserve_integer_kind_identity(catalogue) -> None:
     assert set(catalogue.products["native_id"]) == {"2", "3", "6", "7"}
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_stations_count(catalogue) -> None:
     assert catalogue.stations.height == 1023
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_stations_have_unknown_crs(catalogue) -> None:
     assert catalogue.stations["crs"].unique().to_list() == ["unknown"]
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_stations_have_exact_schema(catalogue) -> None:
     assert catalogue.stations.schema == STATION_CATALOG_SCHEMA.polars_schema
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_known_station_present(catalogue) -> None:
     assert "301011281104010" in catalogue.stations["station_id"].to_list()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_stations_have_valid_coordinates(catalogue) -> None:
     stations = catalogue.stations
     assert stations["latitude"].null_count() == stations["longitude"].null_count() == 0
@@ -200,27 +211,33 @@ def test_stations_have_valid_coordinates(catalogue) -> None:
     assert stations["longitude"].min() >= 120.0 and stations["longitude"].max() <= 155.0
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_station_products_count(catalogue) -> None:
     assert catalogue.station_products.height == 4092
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_station_products_availability_unknown(catalogue) -> None:
     assert catalogue.station_products["availability"].cast(pl.Utf8).unique().to_list() == ["unknown"]
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_provider_info_id(catalogue) -> None:
     assert catalogue.provider_info["provider_id"] == "jp_mlit"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_provider_info_catalogue_version(catalogue) -> None:
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_provider_info_live_flags_false(catalogue) -> None:
     provider = catalogue.provider_info
     assert provider["live_stations"] is provider["live_products"] is provider["live_station_products"] is False
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_provider_info_name_and_bulk_observation_description(catalogue) -> None:
     provider = catalogue.provider_info
     assert provider["name"] == "MLIT Water Information System — Japan national hydrometric network"
@@ -231,6 +248,7 @@ def test_provider_info_name_and_bulk_observation_description(catalogue) -> None:
     )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_catalogue_validates_without_error(catalogue) -> None:
     validate_catalogue(
         pl.DataFrame([catalogue.provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema),
@@ -258,6 +276,7 @@ def test_packaged_station_products_count() -> None:
     assert pl.read_parquet(CATALOGUE_PATH / "station_products.parquet").height == 4092
 
 
+@pytest.mark.recorded("tests/test_data/jp_mlit_metadata.json")
 def test_retained_fixture_is_exact_native_subset(retained_evidence_root) -> None:
     fixture = json.loads((retained_evidence_root / FIXTURE_PATH).read_text())
     assert len(fixture) == 3
@@ -267,6 +286,7 @@ def test_retained_fixture_is_exact_native_subset(retained_evidence_root) -> None
     assert _canonical_digest(fixture) == FIXTURE_DIGEST
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_base_packaged_ids_are_pinned(retained_evidence_root) -> None:
     published_ids = read_native_table(retained_evidence_root / NATIVE_PATH).data["観測所記号"].to_list()
     seed = sorted([*published_ids, "307051287711040"])
@@ -373,6 +393,7 @@ ISSUE_CODES = [
 ]
 
 
+@pytest.mark.recorded("tests/test_data/jp_mlit_site_info_detail_rejected_307051287711040.html")
 @pytest.mark.parametrize("code", ISSUE_CODES)
 def test_refresh_issue_code(retained_evidence_root, code: str) -> None:
     station_id = "100000000000001"
@@ -402,6 +423,7 @@ def test_refresh_issue_code(retained_evidence_root, code: str) -> None:
     assert issue.details is not None and issue.details["station_id"] == station_id and issue.details["reason"]
 
 
+@pytest.mark.recorded("tests/test_data/jp_mlit_site_info_detail_rejected_307051287711040.html")
 def test_absence_response_for_different_station_is_rejected(retained_evidence_root) -> None:
     station_id = "100000000000001"
     prior = _native_for([station_id])
@@ -602,6 +624,7 @@ def test_supplied_capture_cli_is_atomic_and_offline(tmp_path: Path, monkeypatch:
     assert table.data.height == 1
 
 
+@pytest.mark.recorded("tests/test_data/jp_mlit_site_info_detail_rejected_307051287711040.html")
 def test_recorded_rejection_retains_source_absence(retained_evidence_root, capsys: pytest.CaptureFixture[str]) -> None:
     fetched = (retained_evidence_root / REJECTED_PATH).read_bytes()
     assert generate_catalogue._SOURCE_MARKER not in fetched
@@ -617,6 +640,7 @@ def test_recorded_rejection_retains_source_absence(retained_evidence_root, capsy
     assert capsys.readouterr() == ("", "")
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_retained_native_table_contract(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH)
     assert native.data.schema == NATIVE_SCHEMA and native.data.schema["観測所記号"] == pl.Utf8
@@ -639,6 +663,8 @@ def test_retained_native_table_contract(retained_evidence_root) -> None:
     assert generate_catalogue.native_table_content_digest(native) == NATIVE_FRAME_DIGEST
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
+@pytest.mark.recorded("tests/test_data/jp_mlit_metadata.json")
 def test_retained_native_source_states_and_fixture_records(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH).data
     fixture = pl.DataFrame(
@@ -665,6 +691,11 @@ def test_retained_native_source_states_and_fixture_records(retained_evidence_roo
     assert missing["流域面積"][0] is None and missing["零点高"][0] is None
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_site_info_detail_accepted_301011281104310.html",
+    "tests/test_data/jp_mlit_site_info_detail_accepted_301031281101220.html",
+)
 def test_retained_accepted_responses_rematerialize_exact_native_rows(retained_evidence_root) -> None:
     responses: dict[str, bytes] = {}
     retrieved_at_by_station: dict[str, RetrievedAt] = {}
@@ -688,6 +719,7 @@ def test_retained_accepted_responses_rematerialize_exact_native_rows(retained_ev
     assert actual.filter(pl.col("観測所記号") == "301011281104310")["流域面積"].item() == "\u00a0"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_native_coordinates_are_an_independent_exact_projection(retained_evidence_root, catalogue) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH).data.select("観測所記号", "世界測地系")
     pattern = re.compile(r"北緯\s*(\d+)度(\d+)分(\d+)秒\s*東経\s*(\d+)度(\d+)分(\d+)秒")
@@ -796,6 +828,7 @@ def test_mixed_native_instants_drive_station_dates_and_maximum_version() -> None
     assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_each_station_product_date_is_its_native_station_date(retained_evidence_root, catalogue) -> None:
     native_dates = read_native_table(retained_evidence_root / NATIVE_PATH).data.select(
         pl.col("観測所記号").alias("station_id"), pl.col("retrieved_at").dt.date().alias("native_date")
@@ -805,6 +838,7 @@ def test_each_station_product_date_is_its_native_station_date(retained_evidence_
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_provider_info_is_exactly_the_reduced_carrier(catalogue) -> None:
     fresh = catalogue.provider_info
     committed = json.loads((CATALOGUE_PATH / "provider.json").read_text())
@@ -822,6 +856,7 @@ def test_provider_info_is_exactly_the_reduced_carrier(catalogue) -> None:
     )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_broken_longitude_origin_fails_with_full_gate_message(retained_evidence_root) -> None:
     longitude_origin = STATION_CATALOGUE_ORIGINS["longitude"]
     broken = {
@@ -877,6 +912,11 @@ def test_cli_rejects_mixed_modes(capsys: pytest.CaptureFixture[str]) -> None:
     assert "jp_mlit modes cannot mix native-build and supplied-capture arguments" in capsys.readouterr().err
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
+    "tests/test_data/jp_mlit_terms_citation.pdf",
+    "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
+)
 def test_native_cli_is_offline_and_byte_deterministic(
     retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -925,6 +965,11 @@ def test_native_cli_is_offline_and_byte_deterministic(
         assert (tmp_path / name).read_bytes() == (CATALOGUE_PATH / name).read_bytes()
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
+    "tests/test_data/jp_mlit_terms_citation.pdf",
+    "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
+)
 @pytest.mark.parametrize("statement_kind", ["license", "citation"])
 def test_native_cli_rejects_statement_absent_from_recording(
     retained_evidence_root,
@@ -961,6 +1006,7 @@ def test_native_cli_rejects_statement_absent_from_recording(
         )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_native_build_removes_withheld_fact_before_writing(retained_evidence_root, tmp_path: Path) -> None:
     provenance = generate_catalogue.build_acquisition_provenance()
     payload = provenance.model_dump(mode="json")

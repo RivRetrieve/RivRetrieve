@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
 
+import pytest
+
 from rivretrieve._internal.boundary_probes import (
     FIRST_WALL_CLOCK_TIME,
     LAST_WALL_CLOCK_TIME,
@@ -34,6 +36,7 @@ def _run(replay):
     return parse(payload, config()).rows
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json")
 def test_every_swiss_product_has_exact_rest_boundary_proof(retained_evidence_root: Path):
     recording = read_recording(retained_evidence_root / "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json")
     probes = tuple(

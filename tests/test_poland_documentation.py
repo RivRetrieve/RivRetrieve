@@ -55,6 +55,7 @@ def test_poland_documentation_selection_matches_packaged_catalogue():
     assert "providers/pl_imgw.md" in (ROOT / "docs/README.md").read_text()
 
 
+@pytest.mark.recorded("tests/test_data/pl_imgw_annual/codz_2024.zip")
 def test_poland_retrieval_snippets_replay_committed_archive(retained_evidence_root: Path, tmp_path, monkeypatch):
     artifact = tmp_path / (retained_evidence_root / ARCHIVE).name
     shutil.copyfile((retained_evidence_root / ARCHIVE), artifact)

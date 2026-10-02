@@ -38,6 +38,7 @@ def load_verifier():
         "extra",
     ],
 )
+@pytest.mark.governing("maintenance/catalogue/fr_hubeau/evidence", full_verification=("fr_hubeau",))
 def test_history_claim_must_match_recorded_body(retained_evidence_root, tmp_path, defect):
     verifier = load_verifier()
     original = retained_evidence_root / "maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz"
@@ -93,6 +94,7 @@ def test_history_claim_must_match_recorded_body(retained_evidence_root, tmp_path
 
 @pytest.mark.parametrize("defect", ["missing_answered_body", "request_url"])
 @pytest.mark.parametrize("status", ["200", "500"])
+@pytest.mark.governing("maintenance/catalogue/fr_hubeau/evidence", full_verification=("fr_hubeau",))
 def test_answered_count_requires_body_and_request_identity(retained_evidence_root, tmp_path, defect, status):
     verifier = load_verifier()
     with tarfile.open(

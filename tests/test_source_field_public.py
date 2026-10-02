@@ -15,6 +15,7 @@ from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHe
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_flux_engine_2020-01-01.recording.json")
 def test_public_authenticated_flux_normal_padding_cache_and_receipts(
     retained_evidence_root: Path, monkeypatch, tmp_path
 ):
@@ -82,6 +83,11 @@ def test_public_authenticated_flux_normal_padding_cache_and_receipts(
         ),
     ],
 )
+@pytest.mark.recorded(
+    "tests/test_data/ba_fhmzbih_2101-B_H_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+    "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
+)
 def test_named_source_selection_cache_and_bundle(
     retained_evidence_root: Path, monkeypatch, tmp_path, provider, station, quantity, variant, recordings, start, end
 ):
@@ -132,6 +138,10 @@ def test_published_instantaneous_support_has_one_cross_provider_predicate():
 
 
 @pytest.mark.parametrize("code,quantity,expected", [("QIXnJ", "discharge", 0.823), ("HIXnJ", "stage", 0.449)])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+)
 def test_french_daily_maxima_keep_distinct_published_physics(
     retained_evidence_root: Path, monkeypatch, code, quantity, expected
 ):

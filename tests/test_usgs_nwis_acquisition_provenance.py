@@ -23,6 +23,27 @@ def test_usgs_provenance_names_nwis_and_verified_source_words() -> None:
     assert provenance.header.withheld_facts == ()
 
 
+@pytest.mark.governing(
+    "research/usgs-modern-coverage",
+    "research/usgs-modern-coverage/metadata-00060-0000.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0001.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0002.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0003.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0004.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0005.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0006.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0007.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0000.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0001.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0002.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0003.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0004.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0005.json.gz",
+    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+    "tests/test_data/usgs_nwis_terms_citation-1.html",
+    "tests/test_data/usgs_nwis_terms_licence-1.html",
+)
 def test_usgs_build_rejects_changed_terms_recording(retained_evidence_root, tmp_path: Path) -> None:
     source = retained_evidence_root / "tests/test_data"
     target = tmp_path / "tests/test_data"
@@ -38,6 +59,27 @@ def test_usgs_build_rejects_changed_terms_recording(retained_evidence_root, tmp_
         verify_provenance_recordings(build_acquisition_provenance(), tmp_path)
 
 
+@pytest.mark.governing(
+    "research/usgs-modern-coverage",
+    "research/usgs-modern-coverage/metadata-00060-0000.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0001.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0002.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0003.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0004.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0005.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0006.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0007.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0000.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0001.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0002.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0003.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0004.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0005.json.gz",
+    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+    "tests/test_data/usgs_nwis_terms_citation-1.html",
+    "tests/test_data/usgs_nwis_terms_licence-1.html",
+)
 def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_path: Path) -> None:
     native = tmp_path / "native.parquet"
     native.write_bytes(
@@ -59,6 +101,27 @@ def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_p
         )
 
 
+@pytest.mark.governing(
+    "research/usgs-modern-coverage",
+    "research/usgs-modern-coverage/metadata-00060-0000.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0001.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0002.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0003.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0004.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0005.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0006.json.gz",
+    "research/usgs-modern-coverage/metadata-00060-0007.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0000.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0001.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0002.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0003.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0004.json.gz",
+    "research/usgs-modern-coverage/metadata-00065-0005.json.gz",
+    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+    "tests/test_data/usgs_nwis_terms_citation-1.html",
+    "tests/test_data/usgs_nwis_terms_licence-1.html",
+)
 def test_usgs_cli_invokes_recording_verification(
     retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

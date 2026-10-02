@@ -55,6 +55,10 @@ def fetch(**kwargs):
     return rr.fetch(selection(), start="2021-03-01", end="2023-09-01", on_issue="ignore", **kwargs)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+)
 @pytest.mark.parametrize("failed", [(2021,), (2022,), (2023,), (2021, 2022, 2023)])
 def test_independent_annual_failure_positions(recording, monkeypatch, failed):
     transport = AnnualTransport(recording, dict.fromkeys(failed, 404))
@@ -70,6 +74,10 @@ def test_independent_annual_failure_positions(recording, monkeypatch, failed):
     assert len(result.provenance.calls_made) == 3
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+)
 @pytest.mark.parametrize("failed", [2021, 2023])
 def test_partial_refresh_persists_healthy_year_and_preserves_held_year(recording, monkeypatch, tmp_path, failed):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
@@ -88,6 +96,10 @@ def test_partial_refresh_persists_healthy_year_and_preserves_held_year(recording
     pt.assert_frame_equal(result.data.sort("time"), reused.data.sort("time"))
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+)
 def test_uncached_partial_success_persists_and_failed_interval_retries(recording, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     transport = AnnualTransport(recording, {2022: 503})
@@ -101,6 +113,10 @@ def test_uncached_partial_success_persists_and_failed_interval_retries(recording
     assert transport.calls == [2021, 2022, 2023]
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+)
 def test_padding_only_missing_year_remains_diagnostic(recording, monkeypatch):
     transport = AnnualTransport(recording, {2022: 404})
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
@@ -138,6 +154,10 @@ def test_shared_annual_failure_has_one_call_and_distinct_series_events():
     assert len({item.series.series_id for item in result.failed_requests}) == 3
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+)
 def test_valid_empty_annual_refresh_replaces_only_its_year(recording, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     transport = AnnualTransport(recording)
@@ -152,6 +172,10 @@ def test_valid_empty_annual_refresh_replaces_only_its_year(recording, monkeypatc
     assert any(item.status == "empty" and item.window.start.year == 2022 for item in result.outcomes)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+)
 def test_hourly_shared_annual_file_preserves_siblings_around_failed_year(
     retained_evidence_root, recording, monkeypatch
 ):

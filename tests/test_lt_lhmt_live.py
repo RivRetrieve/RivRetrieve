@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import pytest
 
 from rivretrieve._internal.boundary_probes import (
     FIRST_WALL_CLOCK_TIME,
@@ -70,11 +71,13 @@ def _probe(product: ProductId, recording) -> LiveBoundaryProbe:
     )
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_each_lithuania_product_has_an_exact_live_replay_probe(retained_evidence_root) -> None:
     recording = read_recording(retained_evidence_root / _RECORDING_PATH)
     run_manifest_boundary_probes(_DECLARED, tuple(_probe(product, recording) for product in _PRODUCTS))
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_both_product_series_share_one_monthly_response_and_receipt(retained_evidence_root) -> None:
     recording = read_recording(retained_evidence_root / _RECORDING_PATH)
     replay = ReplayTransport((recording,))

@@ -236,22 +236,26 @@ def _weak_native(*, second_id: object = "151140030", latitude: object = 51.0, lo
     )
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_metadata.csv")
 def test_generate_catalogue_station_count_fixture(retained_evidence_root: Path, tmp_path: Path) -> None:
     """Fixture has 3 stations with valid coordinates."""
     cat = _subset_catalogue(retained_evidence_root, tmp_path)
     assert cat.stations.height == 3
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_metadata.csv")
 def test_generate_catalogue_product_count(retained_evidence_root: Path, tmp_path: Path) -> None:
     cat = _subset_catalogue(retained_evidence_root, tmp_path)
     assert cat.products.height == 3
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_metadata.csv")
 def test_generate_catalogue_station_products_cross(retained_evidence_root: Path, tmp_path: Path) -> None:
     cat = _subset_catalogue(retained_evidence_root, tmp_path)
     assert cat.station_products.height == 3 * 3
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_metadata.csv")
 def test_generate_catalogue_station_fields(retained_evidence_root: Path, tmp_path: Path) -> None:
     cat = _subset_catalogue(retained_evidence_root, tmp_path)
     row = cat.stations.filter(pl.col("station_id") == _STATION_ID)
@@ -261,17 +265,20 @@ def test_generate_catalogue_station_fields(retained_evidence_root: Path, tmp_pat
     assert row["longitude"][0] == pytest.approx(14.8218, abs=1e-3)
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_metadata.csv")
 def test_generate_catalogue_product_ids(retained_evidence_root: Path, tmp_path: Path) -> None:
     cat = _subset_catalogue(retained_evidence_root, tmp_path)
     ids = set(cat.products["product_id"].to_list())
     assert ids == {"discharge_daily", "stage_daily", "water_temperature_daily"}
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_metadata.csv")
 def test_generate_catalogue_all_availability_unknown(retained_evidence_root: Path, tmp_path: Path) -> None:
     cat = _subset_catalogue(retained_evidence_root, tmp_path)
     assert cat.station_products["availability"].cast(pl.Utf8).to_list() == ["unknown"] * 9
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_metadata.csv", "tests/test_data/pl_imgw_stations.csv")
 def test_metadata_fixture_is_exact_recovered_subset(retained_evidence_root: Path) -> None:
     raw = (retained_evidence_root / _METADATA_FIXTURE).read_bytes()
     assert len(raw) == 321
@@ -286,11 +293,21 @@ def test_metadata_fixture_is_exact_recovered_subset(retained_evidence_root: Path
     assert subset_records == expected
 
 
+@pytest.mark.governing(
+    "tests/test_data/pl_imgw_apiinfo.html",
+    "tests/test_data/pl_imgw_hydro_api.json",
+    "tests/test_data/pl_imgw_kody_stacji.csv",
+)
 def test_committed_publisher_evidence_raw_bytes_are_attested(retained_evidence_root: Path) -> None:
     for path in _EVIDENCE:
         _assert_capture(retained_evidence_root, path)
 
 
+@pytest.mark.governing(
+    "tests/test_data/pl_imgw_apiinfo.html",
+    "tests/test_data/pl_imgw_hydro_api.json",
+    "tests/test_data/pl_imgw_kody_stacji.csv",
+)
 def test_publisher_crs_evidence_decoding_and_tokens_are_pinned(retained_evidence_root: Path) -> None:
     api_raw = _assert_capture(retained_evidence_root, _APIINFO_CAPTURE)
     csv_raw = _assert_capture(retained_evidence_root, _KODY_STACJI_CAPTURE)
@@ -318,6 +335,7 @@ def test_publisher_crs_evidence_decoding_and_tokens_are_pinned(retained_evidence
     assert b"/api/data/hydro" in api_raw
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_metadata.csv")
 def test_native_build_is_network_free_and_repeatable(
     retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -369,6 +387,7 @@ def test_duplicate_native_identifier_fails_loudly() -> None:
     )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet")
 def test_build_catalogue_is_gated_on_origins(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
 
@@ -416,6 +435,7 @@ def test_invalid_native_coordinate_fails_loudly(field: str, value: object, rende
     )
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_full_recovered_refresh_preserves_exact_source_data(retained_evidence_root: Path, tmp_path: Path) -> None:
     outcome = _refresh(retained_evidence_root, tmp_path)
     frame = outcome.value.data
@@ -436,6 +456,7 @@ def test_full_recovered_refresh_preserves_exact_source_data(retained_evidence_ro
     pl_testing.assert_frame_equal(frame, _expected_native_frame(retained_evidence_root), check_exact=True)
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_absent_recovered_input_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     missing = tmp_path / "missing.csv"
     roster = tmp_path / "roster.csv"
@@ -450,6 +471,7 @@ def test_absent_recovered_input_fails_loudly(retained_evidence_root: Path, tmp_p
     assert str(exc_info.value) == f"pl_imgw recovered input not found: {missing}"
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_malformed_recovered_header_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     recovered = tmp_path / "recovered.csv"
     recovered.write_text("wrong,header\n1,2\n", encoding="utf-8")
@@ -468,6 +490,7 @@ def test_malformed_recovered_header_fails_loudly(retained_evidence_root: Path, t
     )
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_malformed_recovered_value_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     recovered = tmp_path / "recovered.csv"
     rows = (retained_evidence_root / _RECOVERED_FIXTURE).read_text(encoding="utf-8").splitlines()
@@ -486,6 +509,7 @@ def test_malformed_recovered_value_fails_loudly(retained_evidence_root: Path, tm
     assert str(exc_info.value) == "pl_imgw recovered value invalid: row=2; field=area; value='invalid'"
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_absent_roster_input_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     missing = tmp_path / "missing.csv"
     with pytest.raises(FatalContractError) as exc_info:
@@ -498,6 +522,7 @@ def test_absent_roster_input_fails_loudly(retained_evidence_root: Path, tmp_path
     assert str(exc_info.value) == f"pl_imgw roster input not found: {missing}"
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_invalid_cp1250_roster_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
     roster.write_bytes(b"\x81")
@@ -511,6 +536,7 @@ def test_invalid_cp1250_roster_fails_loudly(retained_evidence_root: Path, tmp_pa
     assert str(exc_info.value) == f"pl_imgw roster encoding invalid: expected=cp1250; path={roster}"
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_invalid_roster_shape_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
     _write_roster(roster, _recovered_ids(retained_evidence_root), columns=3)
@@ -524,6 +550,7 @@ def test_invalid_roster_shape_fails_loudly(retained_evidence_root: Path, tmp_pat
     assert str(exc_info.value) == "pl_imgw roster row invalid: row=1; expected_columns=4; actual_columns=3"
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_incomplete_roster_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
     _write_roster(roster, _recovered_ids(retained_evidence_root)[:1300])
@@ -537,6 +564,7 @@ def test_incomplete_roster_fails_loudly(retained_evidence_root: Path, tmp_path: 
     assert str(exc_info.value) == "pl_imgw roster row count invalid: expected=1301; actual=1300"
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_duplicate_roster_identifiers_fail_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
     ids = _recovered_ids(retained_evidence_root)
@@ -552,6 +580,7 @@ def test_duplicate_roster_identifiers_fail_loudly(retained_evidence_root: Path, 
     assert str(exc_info.value) == f"pl_imgw roster identifiers duplicated: ['{ids[0]}']"
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_complete_roster_identifier_mismatch_is_fatal_and_silent(
     retained_evidence_root: Path,
     tmp_path: Path,
@@ -574,6 +603,7 @@ def test_complete_roster_identifier_mismatch_is_fatal_and_silent(
     assert capsys.readouterr() == ("", "")
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_missing_roster_retrieved_at_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
     _write_roster(roster, _recovered_ids(retained_evidence_root))
@@ -593,6 +623,7 @@ def test_missing_roster_retrieved_at_fails_loudly(retained_evidence_root: Path, 
     assert str(exc_info.value) == "pl_imgw --roster-retrieved-at is required for native refresh"
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_malformed_roster_retrieved_at_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
     _write_roster(roster, _recovered_ids(retained_evidence_root))
@@ -616,6 +647,7 @@ def test_malformed_roster_retrieved_at_fails_loudly(retained_evidence_root: Path
     )
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_malformed_recovered_retrieved_at_fails_loudly(retained_evidence_root: Path, tmp_path: Path) -> None:
     roster = tmp_path / "roster.csv"
     _write_roster(roster, _recovered_ids(retained_evidence_root))
@@ -653,6 +685,10 @@ def test_incomplete_native_cli_combination_fails_loudly(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
+    "tests/test_data/pl_imgw_stations.csv",
+)
 def test_committed_native_frame_is_exact_recovered_projection(retained_evidence_root: Path) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE_PATH).data
     assert native.schema == pl.Schema(
@@ -676,6 +712,7 @@ def test_committed_native_frame_is_exact_recovered_projection(retained_evidence_
     )
 
 
+@pytest.mark.derived("tests/test_data/pl_imgw_stations.csv")
 def test_recovered_coordinate_audit(retained_evidence_root: Path) -> None:
     frame = _expected_native_frame(retained_evidence_root)
     assert frame["latitude"].null_count() == 0
@@ -693,6 +730,12 @@ def test_recovered_coordinate_audit(retained_evidence_root: Path) -> None:
     assert frame.select(["latitude", "longitude"]).is_duplicated().sum() == 0
 
 
+@pytest.mark.governing(
+    "tests/test_data/pl_imgw_apiinfo.html",
+    "tests/test_data/pl_imgw_hydro_api.json",
+    "tests/test_data/pl_imgw_kody_stacji.csv",
+    "tests/test_data/pl_imgw_stations.csv",
+)
 def test_publisher_route_partition_and_coordinate_agreement(retained_evidence_root: Path) -> None:
     csv_ids, csv_coordinates, api_ids, usable_api_ids = _publisher_coordinate_sets(retained_evidence_root)
     recovered = {row["gauge_id"]: row for row in _recovered_records(retained_evidence_root)}
@@ -745,6 +788,7 @@ def test_publisher_route_partition_and_coordinate_agreement(retained_evidence_ro
     assert differences[worst_station] == pytest.approx(0.0054, abs=5e-5)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet")
 def test_native_build_matches_independent_exact_full_projections(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
 
@@ -769,6 +813,10 @@ def test_native_build_matches_independent_exact_full_projections(retained_eviden
     }
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
+    "tests/test_data/pl_imgw_terms_regulations.html",
+)
 def test_native_build_without_reverification_input_is_byte_identical_to_committed_artifacts(
     retained_evidence_root: Path, tmp_path: Path
 ) -> None:

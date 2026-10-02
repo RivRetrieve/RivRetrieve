@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+import pytest
+
 from rivretrieve._internal.boundary_probes import (
     FIRST_WALL_CLOCK_TIME,
     LAST_WALL_CLOCK_TIME,
@@ -39,6 +41,7 @@ def _compiled_store(retained_evidence_root: Path, tmp_path: Path) -> StoreRoot:
     return root
 
 
+@pytest.mark.recorded("tests/test_data/pl_imgw_codz_2022_01.recording.json")
 def test_exact_monthly_recording_replays_through_compiler_and_three_store_probes(
     retained_evidence_root: Path, tmp_path: Path
 ) -> None:
@@ -71,6 +74,7 @@ def test_exact_monthly_recording_replays_through_compiler_and_three_store_probes
     assert compiled_manifest.source_vintage == date(2021, 11, 30)
 
 
+@pytest.mark.recorded("tests/test_data/pl_imgw_codz_2022_01.recording.json")
 def test_monthly_hydrological_mapping_and_source_values_are_not_inferred(
     retained_evidence_root: Path, tmp_path: Path
 ) -> None:
@@ -93,6 +97,7 @@ def test_monthly_hydrological_mapping_and_source_values_are_not_inferred(
     ]
 
 
+@pytest.mark.recorded("tests/test_data/pl_imgw_codz_2022_01.recording.json")
 def test_warsaw_source_sentinel_remains_null_state_without_losing_stage_or_discharge(
     retained_evidence_root: Path, tmp_path: Path
 ) -> None:
@@ -121,6 +126,7 @@ def test_warsaw_source_sentinel_remains_null_state_without_losing_stage_or_disch
     assert temperature["IMGW_DAILY.temperature_c"].to_list() == ["99.9"] * 3
 
 
+@pytest.mark.recorded("tests/test_data/pl_imgw_codz_2022_01.recording.json")
 def test_public_bulk_engine_reads_validated_store_and_authors_exact_receipt(
     retained_evidence_root: Path, tmp_path: Path
 ) -> None:

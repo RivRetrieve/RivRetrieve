@@ -82,6 +82,11 @@ def test_boundaries_must_match_country_not_sovereign_and_must_include_supported_
         module["draw"](world.loc[world["ADM0_A3"] != "USA"], stations, tmp_path / "missing.png")
 
 
+@pytest.mark.derived(
+    "research/usgs-modern-coverage/legacy-catalogue/station_products.parquet",
+    "research/usgs-modern-coverage/missing.json",
+    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+)
 def test_usgs_supported_station_counts_preserve_native_scope_and_exact_approved_gaps(retained_evidence_root: Path):
     import json
 

@@ -25,6 +25,7 @@ def recording_clock(recording, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_rest_engine_2026-09-01.recording.json")
 def test_public_selection_uses_anonymous_rest_and_returns_identity_and_physical_context_with_raw_receipt(
     recording,
     monkeypatch: pytest.MonkeyPatch,
@@ -55,6 +56,7 @@ def test_public_selection_uses_anonymous_rest_and_returns_identity_and_physical_
     assert set(utc.data["time_zone"]) == {"+00:00"}
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_rest_engine_2026-09-01.recording.json")
 def test_public_unknown_zone_refusal_is_atomic_and_identifies_swiss_rows(
     recording,
     monkeypatch: pytest.MonkeyPatch,
@@ -95,6 +97,7 @@ def test_public_unknown_zone_refusal_is_atomic_and_identifies_swiss_rows(
     pl_testing.assert_frame_equal(result.data, untouched, check_exact=True)
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_rest_engine_2026-09-01.recording.json")
 def test_public_receipts_false_omits_publisher_bytes(recording, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     result = rr.fetch(

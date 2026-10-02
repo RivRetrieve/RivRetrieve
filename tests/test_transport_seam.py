@@ -59,6 +59,7 @@ def _provenance() -> ObservationProvenance:
     return ObservationProvenance(source="recording", provider_id=ProviderId("usgs_nwis"))
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_stop_convention_flip_misses_exact_recording(retained_evidence_root: Path) -> None:
     import json
 

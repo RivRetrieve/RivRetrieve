@@ -113,6 +113,7 @@ def assert_calls(result, transport, products=PRODUCTS):
         ("2023-06-01", "2023-06-30", ["2023-05", "2023-06", "2023-07"], 30),
     ],
 )
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_one_attempt_per_station_month_with_exact_receipts(transport, receipts, quantity, start, end, months, days):
     chosen = selection(**({"quantity": quantity} if quantity else {}))
     result = fetch(chosen, start=start, end=end, receipts=receipts)
@@ -160,6 +161,7 @@ def test_one_attempt_per_station_month_with_exact_receipts(transport, receipts, 
 
 
 @pytest.mark.parametrize("failure", [404, 500, TransportFailureReason.RETRY_EXHAUSTED])
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_multiple_stations_and_months_keep_independent_failures(transport, failure):
     for station in (STATION, OTHER):
         transport.put(transport.document("2023-05", station), "2023-05", station)
@@ -186,6 +188,7 @@ def test_multiple_stations_and_months_keep_independent_failures(transport, failu
     assert not any(item.status.value == "empty" for item in result.outcomes)
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_malformed_stage_keeps_discharge_and_separate_outcomes(transport):
     document = transport.document()
     document["observations"][0]["waterLevel"] = "not a number"
@@ -203,6 +206,7 @@ def test_malformed_stage_keeps_discharge_and_separate_outcomes(transport):
     assert {item.series_id for item in coverage} == set(result.data["series_id"])
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_empty_null_absent_and_failed_months_are_distinct(transport):
     empty = transport.document("2023-05")
     empty["observations"] = []
@@ -225,6 +229,7 @@ def test_empty_null_absent_and_failed_months_are_distinct(transport):
     assert len({item.series_id for item in coverage}) == 2
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_warm_reuse_deduplicates_shared_historical_call(transport):
     seed = fetch(cache="reuse")
     chosen = rr.pick(selection(), series_id=tuple(seed.data["series_id"].unique()))
@@ -244,6 +249,7 @@ def test_warm_reuse_deduplicates_shared_historical_call(transport):
 
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_mixed_cache_eligibility_does_not_refresh_reused_series(transport, quantity):
     seed = fetch(selection(quantity=quantity), cache="reuse")
     old_vintage = transport.retrieved_at
@@ -275,6 +281,7 @@ def test_mixed_cache_eligibility_does_not_refresh_reused_series(transport, quant
 
 
 @pytest.mark.parametrize("failure", [404, "malformed-stage"])
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_refresh_retains_failed_series_original_values_and_vintage(transport, failure):
     seed = fetch(cache="reuse")
     old_vintage = transport.retrieved_at
@@ -313,6 +320,7 @@ def test_refresh_retains_failed_series_original_values_and_vintage(transport, fa
 
 
 @pytest.mark.parametrize("policy", ["ignore", "warn", "raise"])
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_shared_internal_parser_contract_errors_still_raise(transport, monkeypatch, policy):
     from rivretrieve._internal.providers.lt_lhmt.declaration import declaration
 
@@ -342,6 +350,7 @@ def test_shared_internal_parser_contract_errors_still_raise(transport, monkeypat
 
 
 @pytest.mark.parametrize("advance_clock", [False, True])
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_refresh_keeps_same_url_attempts_distinct(transport, advance_clock):
     first = fetch(cache="reuse")
     old = transport.retrieved_at
@@ -365,6 +374,7 @@ def test_refresh_keeps_same_url_attempts_distinct(transport, advance_clock):
 
 @pytest.mark.parametrize("failure", [401, 403, 500, b"not JSON", TransportFailureReason.RETRY_EXHAUSTED])
 @pytest.mark.parametrize("requested", [False, True])
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_shared_non_absence_failure_preserves_other_month(transport, failure, requested):
     transport.responses[STATION, "2023-05"] = failure
     result = fetch(start="2023-05-03" if requested else "2023-06-01", end="2023-06-05")
@@ -387,6 +397,7 @@ def test_shared_non_absence_failure_preserves_other_month(transport, failure, re
 
 
 @pytest.mark.parametrize("scenario", ["http-success", "http-exhausted", "exception-success"])
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_shared_http_retries_preserve_each_physical_attempt(transport, monkeypatch, scenario):
     from rivretrieve._internal.transport import TRANSPORT_POLICY, HttpClient, SenderResponse
 
@@ -455,6 +466,7 @@ def test_shared_http_retries_preserve_each_physical_attempt(transport, monkeypat
         pt.assert_frame_equal(held.data, result.data)
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_unrestricted_incomplete_inventory_reacquires_once_for_both_products(transport):
     seed = fetch(cache="reuse")
     assert all(item.completeness.value == "incomplete" for item in seed.inventories)
@@ -465,6 +477,7 @@ def test_unrestricted_incomplete_inventory_reacquires_once_for_both_products(tra
     pt.assert_frame_equal(seed.data, result.data)
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_shared_multimonth_refresh_preserves_failed_month_and_replaces_success(transport):
     transport.put(transport.document("2023-05"), "2023-05")
     seed = fetch(start="2023-05-03", cache="reuse")

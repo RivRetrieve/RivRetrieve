@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = Path("docs/verification/norway-provider")
 
 
+@pytest.mark.recorded("docs/verification/norway-provider/recordings")
 def test_norway_page_examples_match_recorded_responses(retained_evidence_root, monkeypatch, tmp_path):
     page = (ROOT / "docs/providers/no_nve.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.S)

@@ -112,6 +112,7 @@ def test_physical_predicates_do_not_rewrite_acquired_catalogue_inventory():
     assert precise == broad
 
 
+@pytest.mark.derived("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
 def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_legacy_aliases(
     retained_evidence_root: Path,
 ):
@@ -137,6 +138,7 @@ def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_lega
     assert set(claims["namespace"]) == {"NWIS.ts_id"}
 
 
+@pytest.mark.derived("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
 def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary(retained_evidence_root: Path):
     import polars as pl
 
@@ -166,6 +168,7 @@ def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary(ret
         )
 
 
+@pytest.mark.derived("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
 def test_changed_catalogue_claims_change_snapshot_identity_at_same_check_date(retained_evidence_root: Path):
     from dataclasses import replace
 

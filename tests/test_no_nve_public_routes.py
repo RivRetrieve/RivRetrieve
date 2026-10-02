@@ -22,6 +22,20 @@ _DATA = Path("tests/test_data")
     "resolution,frequency,statistic",
     [(0, None, "instantaneous"), (60, "hourly", "mean"), (1440, "daily", "mean")],
 )
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_observations_1.200.0_1000_0_v1_engine_2025-07-10.recording.json",
+    "tests/test_data/no_nve_observations_1.200.0_1000_1440_v1_engine_2025-07-10.recording.json",
+    "tests/test_data/no_nve_observations_1.200.0_1000_60_v1_engine_2025-07-10.recording.json",
+    "tests/test_data/no_nve_observations_1.200.0_1001_0_v1_engine_2025-07-10.recording.json",
+    "tests/test_data/no_nve_observations_1.200.0_1001_1440_v1_engine_2025-07-10.recording.json",
+    "tests/test_data/no_nve_observations_1.200.0_1001_60_v1_engine_2025-07-10.recording.json",
+    "tests/test_data/no_nve_observations_1.200.0_1003_0_v1_engine_2025-07-10.recording.json",
+    "tests/test_data/no_nve_observations_1.200.0_1003_1440_v1_engine_2025-07-10.recording.json",
+    "tests/test_data/no_nve_observations_1.200.0_1003_60_v1_engine_2025-07-10.recording.json",
+    "tests/test_data/no_nve_series_1.200.0_1000.recording.json",
+    "tests/test_data/no_nve_series_1.200.0_1001.recording.json",
+    "tests/test_data/no_nve_series_1.200.0_1003.recording.json",
+)
 def test_every_enrolled_route_replays_current_inventory_explicit_version_and_cache(
     retained_evidence_root, monkeypatch, tmp_path, parameter, quantity, resolution, frequency, statistic
 ):
@@ -81,6 +95,11 @@ def test_every_enrolled_route_replays_current_inventory_explicit_version_and_cac
     assert "protocol-only-nve-key" not in repr(result)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_observations_1.46.0_1000_1440_v1_engine_2024-10-01.recording.json",
+    "tests/test_data/no_nve_observations_1.46.0_1000_1440_v2_engine_2024-10-01.recording.json",
+    "tests/test_data/no_nve_series_1.46.0_1000.recording.json",
+)
 def test_current_version_specific_method_obeys_original_physical_predicate(
     retained_evidence_root, monkeypatch, tmp_path
 ):
@@ -118,6 +137,11 @@ def test_current_version_specific_method_obeys_original_physical_predicate(
     assert {facts.statistic.value for item in both.source_series for facts in item.facts} == {"mean", "instantaneous"}
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_engine_2024-01-02.recording.json",
+)
 def test_failed_current_inventory_retains_known_results_and_cannot_satisfy_all_cache(
     retained_evidence_root, monkeypatch, tmp_path
 ):
@@ -162,6 +186,12 @@ def test_failed_current_inventory_retains_known_results_and_cannot_satisfy_all_c
     assert restored.outcomes == again.outcomes
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_subset_cannot_satisfy_all_current_versions_and_refresh_keeps_siblings(
     retained_evidence_root, monkeypatch, tmp_path
 ):
@@ -208,6 +238,12 @@ def test_subset_cannot_satisfy_all_current_versions_and_refresh_keeps_siblings(
     assert len(requests) == 10
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_failed_version_refresh_retains_old_success_without_fresh_all_coverage(
     retained_evidence_root, monkeypatch, tmp_path
 ):

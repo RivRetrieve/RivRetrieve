@@ -42,6 +42,7 @@ def test_offline_mixed_explicit_members_preserve_each_unresolved_selector():
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_public_mixed_nve_member_is_not_silently_omitted(monkeypatch, tmp_path, policy, retained_evidence_root: Path):
     recording = read_recording(
         retained_evidence_root
@@ -82,6 +83,10 @@ def test_public_mixed_nve_member_is_not_silently_omitted(monkeypatch, tmp_path, 
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-99999_engine_2024-01-02.recording.json",
+)
 def test_narrowed_result_policy_ignores_excluded_failure_but_preserves_history(
     monkeypatch, tmp_path, policy, retained_evidence_root: Path
 ):
@@ -138,6 +143,7 @@ def test_narrowed_result_policy_ignores_excluded_failure_but_preserves_history(
     assert [item.code for item in empty_error.value.issues] == ["selection.no_match"]
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_public_mixed_missing_member_survives_inspection_bundle_and_narrowing(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -176,6 +182,7 @@ def test_public_mixed_missing_member_survives_inspection_bundle_and_narrowing(
     assert narrowed.issues[: len(result.issues)] == result.issues
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -237,6 +244,7 @@ def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(
     assert any(item.code == "selection.unresolved_inventory" for item in missing_view.issues)
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
 def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -257,6 +265,7 @@ def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(
     assert not any(item.status.value in ("no_match", "unresolved") for item in result.outcomes)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_response_discovered_global_ids_are_settled_across_station_results(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -330,6 +339,12 @@ def test_response_discovered_global_ids_are_settled_across_station_results(
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_finite_view_does_not_report_original_all_inventory_uncertainty(
     monkeypatch, tmp_path, policy, retained_evidence_root: Path
 ):
@@ -397,6 +412,7 @@ def test_finite_view_does_not_report_original_all_inventory_uncertainty(
     assert not positive_warnings
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
 def test_global_id_view_excludes_other_inventory_search_coordinates(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -471,6 +487,7 @@ def test_global_id_view_excludes_other_inventory_search_coordinates(
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 @pytest.mark.parametrize("restriction", ["disjoint", "empty-list"])
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_current_empty_result_view_diagnostics_follow_policy(
     monkeypatch, tmp_path, policy, restriction, retained_evidence_root: Path
 ):

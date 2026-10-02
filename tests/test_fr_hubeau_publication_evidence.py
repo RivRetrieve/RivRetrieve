@@ -11,6 +11,11 @@ _MANIFEST = json.loads((_TEST_DATA / "fr_official_publication_manifest.json").re
 
 
 @pytest.mark.parametrize("entry", _MANIFEST["source_documents"], ids=lambda entry: entry["scope"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_hydrometrie.html",
+    "tests/test_data/fr_hydroportail_about.html",
+    "tests/test_data/fr_hydroportail_legal.html",
+)
 def test_official_publication_document_is_exact_retained_body(retained_evidence_root, entry: dict) -> None:
     acquisition = entry["acquisition"]
     material = acquisition["material"]

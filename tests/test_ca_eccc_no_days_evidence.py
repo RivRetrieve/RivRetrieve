@@ -41,6 +41,7 @@ def _decoded_sparse_rows(tmp_path: Path, evidence_root: Path):
 
 
 @pytest.mark.parametrize("period", ("2013-03", "2014-05"))
+@pytest.mark.recorded("tests/test_data/ca_eccc_hydat_no_days")
 def test_official_daily_csv_replay_matches_sparse_hydat_cells(
     tmp_path: Path, period: str, no_days_evidence_root: Path
 ) -> None:
@@ -72,6 +73,7 @@ def test_official_daily_csv_replay_matches_sparse_hydat_cells(
         ReplayTransport((recording,)).send(replace(request, url=request.url + "&unexpected=1"))
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_hydat_no_days")
 def test_retained_definition_and_guideline_are_exact_untouched_publisher_bytes(no_days_evidence_root: Path) -> None:
     expected = {
         "HYDAT_Definition_EN.pdf": (51748, "b3ab1954bf5aeedb026cebe939764fcfbda0266fb267cb6a7315544c9be8e1ee"),
@@ -86,6 +88,7 @@ def test_retained_definition_and_guideline_are_exact_untouched_publisher_bytes(n
         assert hashlib.sha256(content).hexdigest() == digest
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_hydat_no_days")
 def test_hydat_no_days_evidence_uses_portable_source_identities(no_days_evidence_root: Path) -> None:
     audit = json.loads((no_days_evidence_root / "audit_result.json").read_text())
     assert audit["source_database"] == "Hydat.sqlite3 (sole SQLite member of source_zip_url)"

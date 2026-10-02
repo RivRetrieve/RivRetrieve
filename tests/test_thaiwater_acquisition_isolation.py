@@ -57,6 +57,10 @@ def test_shared_chunks_keep_precise_bounds_and_call_identity(failed):
 
 
 @pytest.mark.parametrize("failed_index", [0, 1])
+@pytest.mark.recorded(
+    "tests/test_data/th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2026-09-09_2026-09-12.recording.json",
+)
 def test_public_failed_span_retains_sibling_rows(retained_evidence_root: Path, monkeypatch, failed_index):
 
     import rivretrieve as rr

@@ -93,6 +93,22 @@ def test_empty_and_invalid_selection() -> None:
         rr.drainage_areas(pl.DataFrame())  # ty: ignore[invalid-argument-type]
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
+)
 @pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
 def test_projection_preserves_every_native_scalar(provider: str, retained_evidence_root: Path) -> None:
     repository = Path(__file__).parents[1]
@@ -138,6 +154,22 @@ def test_nonbreaking_space_and_blank_are_values() -> None:
     assert set(blanks["state"]) == {"value"}
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
+)
 def test_projection_build_is_current(retained_evidence_root: Path) -> None:
     result = subprocess.run(
         [

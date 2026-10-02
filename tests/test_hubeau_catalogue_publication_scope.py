@@ -1,15 +1,22 @@
+import pytest
+
 from rivretrieve._internal.catalogues.native import read_native_table
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import build_catalogue
 from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 from tests.test_fr_hubeau_generate_catalogue import NATIVE_PATH, _availability, _refresh, _sample_payloads
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_refresh_accepts_changed_complete_populations(retained_evidence_root):
     result = _refresh(*_sample_payloads(retained_evidence_root))
     assert not result.issues
     assert result.value.data.height == 4
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_hubeau_catalogue_contains_only_its_publication_service(retained_evidence_root):
     # This assertion owns a generation boundary, not inspection of a cached projection.
     result = build_catalogue(
@@ -24,6 +31,10 @@ def test_hubeau_catalogue_contains_only_its_publication_service(retained_evidenc
     assert {source.source_id for source in result.acquisition_provenance.source_records} == {"fr_hubeau"}
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_refresh_rejects_unconsumed_pagination(retained_evidence_root):
     hydro, temperature = _sample_payloads(retained_evidence_root)
     hydro["next"] = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations?page=2"
@@ -32,6 +43,7 @@ def test_native_refresh_rejects_unconsumed_pagination(retained_evidence_root):
     assert "pagination" in result.issues[0].message
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
 def test_refreshed_native_build_retains_unknown_pairs_without_observation_claims(retained_evidence_root):
     import json
     from pathlib import Path

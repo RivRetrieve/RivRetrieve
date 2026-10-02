@@ -44,6 +44,10 @@ class _CountingReplay(ReplayTransport):
         ),
     ],
 )
+@pytest.mark.recorded(
+    "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2026-07-30_2026-08-04.recording.json",
+)
 def test_public_fetch_preserves_provider_acquisition_boundaries(
     retained_evidence_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -118,6 +122,7 @@ def test_thaiwater_find_exposes_the_original_baseline_available_and_unknown_pair
     ]
 
 
+@pytest.mark.recorded("tests/test_data/th_thaiwater_11688546_2026-06-08_2026-09-06.recording.json")
 def test_thaiwater_null_rows_do_not_establish_complete_inventory_for_reuse(
     retained_evidence_root: Path,
     tmp_path: Path,

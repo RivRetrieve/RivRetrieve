@@ -43,6 +43,7 @@ def test_modern_concrete_snapshot_retains_siblings_unknowns_and_legacy_scope():
     assert (CATALOGUE / "source_series.json").stat().st_size < 100_000_000
 
 
+@pytest.mark.recorded("research/usgs-modern-coverage")
 def test_description_preserves_empty_and_null_without_parameter_prose(
     retained_evidence_root,
 ):
@@ -60,6 +61,7 @@ def test_description_preserves_empty_and_null_without_parameter_prose(
         assert result.descriptions[0].identity.description == description
 
 
+@pytest.mark.recorded("research/usgs-modern-coverage")
 def test_saved_pagination_rejects_incomplete_chain(retained_evidence_root, tmp_path):
     completion = json.loads(
         (retained_evidence_root / "research/usgs-modern-coverage" / "metadata-00060-completion.json").read_text()

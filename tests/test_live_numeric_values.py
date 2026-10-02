@@ -180,6 +180,17 @@ def _mutated(provider, source, mutation):
         if (provider, mutation) != ("jp_mlit", "null")
     ],
 )
+@pytest.mark.recorded(
+    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+    "tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json",
+)
 def test_actual_live_parser_isolates_unrepresentable_numeric_cells(retained_evidence_root: Path, provider, mutation):
     config, parse, source, baseline, target = _source(retained_evidence_root, provider)
     changed = parse(replace(source, content=_mutated(provider, source, mutation)), config)
@@ -199,6 +210,7 @@ def test_actual_live_parser_isolates_unrepresentable_numeric_cells(retained_evid
     )
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json")
 def test_workbook_boolean_is_not_a_numeric_observation(retained_evidence_root: Path):
     config, parse, source, _, target = _source(retained_evidence_root, "ba_fhmzbih")
     changed = parse(replace(source, content=_mutated("ba_fhmzbih", source, "boolean")), config)
@@ -206,6 +218,7 @@ def test_workbook_boolean_is_not_a_numeric_observation(retained_evidence_root: P
 
 
 @pytest.mark.parametrize("mutation", [*BAD, "zero", "finite", "null"])
+@pytest.mark.recorded("tests/recordings/br_ana/HidroSerieCotas_15400000_2020-01-01_2020-01-31.recording.json")
 def test_ana_decimal_string_guard_preserves_consistency_sibling(retained_evidence_root: Path, mutation):
     from rivretrieve._internal.providers.br_ana.config import config
     from rivretrieve._internal.providers.br_ana.parse import parse
@@ -236,6 +249,7 @@ def test_ana_decimal_string_guard_preserves_consistency_sibling(retained_evidenc
     )
 
 
+@pytest.mark.recorded("tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json")
 def test_japan_published_missing_flag_remains_absent_not_invalid_numeric(retained_evidence_root: Path):
     config, parse, source, baseline, _ = _source(retained_evidence_root, "jp_mlit")
     content = source.content.replace(b"321.52, ", b"321.52,$", 1)

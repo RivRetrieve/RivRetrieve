@@ -42,6 +42,11 @@ def _catalogue(retained_evidence_root):
     )
 
 
+@pytest.mark.governing(
+    "tests/test_data/no_nve_station_catalogue_capture.json",
+    "tests/test_data/no_nve_stations_active_0.json",
+    "tests/test_data/no_nve_stations_active_1.json",
+)
 def test_complete_capture_identities_counts_and_request_set(retained_evidence_root) -> None:
     capture = _capture(retained_evidence_root)
     assert [item.activity for item in capture.responses] == [
@@ -76,6 +81,12 @@ def test_complete_capture_identities_counts_and_request_set(retained_evidence_ro
     assert all(all_by_id[station_id] == row for station_id, row in active_only_by_id.items())
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
+    "tests/test_data/no_nve_station_catalogue_capture.json",
+    "tests/test_data/no_nve_stations_active_0.json",
+    "tests/test_data/no_nve_stations_active_1.json",
+)
 def test_client_retrieval_instants_are_distinct_from_server_created_at(retained_evidence_root) -> None:
     capture = _capture(retained_evidence_root)
     for response in capture.responses:
@@ -93,6 +104,12 @@ def test_client_retrieval_instants_are_distinct_from_server_created_at(retained_
     )
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
+    "tests/test_data/no_nve_station_catalogue_capture.json",
+    "tests/test_data/no_nve_stations_active_0.json",
+    "tests/test_data/no_nve_stations_active_1.json",
+)
 def test_full_responses_materialize_the_exact_committed_semantic_frame(retained_evidence_root) -> None:
     capture = _capture(retained_evidence_root)
     fresh = generate_catalogue.materialize_captured_native_table(capture, retained_evidence_root)
@@ -114,6 +131,12 @@ def test_full_responses_materialize_the_exact_committed_semantic_frame(retained_
     assert generate_catalogue.native_table_semantic_digest(committed) == NATIVE_TABLE_SEMANTIC_SHA256
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
+    "tests/test_data/no_nve_station_catalogue_capture.json",
+    "tests/test_data/no_nve_stations_active_0.json",
+    "tests/test_data/no_nve_stations_active_1.json",
+)
 def test_offline_native_rematerialization_is_byte_identical(retained_evidence_root, tmp_path: Path) -> None:
     output = tmp_path / "native.parquet"
     assert (
@@ -132,6 +155,7 @@ def test_offline_native_rematerialization_is_byte_identical(retained_evidence_ro
     assert output.read_bytes() == (retained_evidence_root / _NATIVE).read_bytes()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_build_populates_exact_attested_catalogue(retained_evidence_root) -> None:
     catalogue = _catalogue(retained_evidence_root)
     assert (catalogue.stations.height, catalogue.products.height, catalogue.station_products.height) == (4902, 9, 44118)
@@ -146,6 +170,7 @@ def test_build_populates_exact_attested_catalogue(retained_evidence_root) -> Non
     assert catalogue.acquisition_provenance.withheld_facts == ()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_build_is_network_free_and_byte_identical(
     retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -185,6 +210,14 @@ def test_public_discovery_selects_a_real_norwegian_edge() -> None:
     assert "stage_daily_mean" in rr.products(provider="no_nve")
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
+    "tests/test_data/no_nve_station_catalogue_capture.json",
+    "tests/test_data/no_nve_stations_active_0.json",
+    "tests/test_data/no_nve_stations_active_1.json",
+    "tests/test_data/no_nve_swagger.json",
+    "tests/test_data/no_nve_terms_licence.html",
+)
 def test_packaged_provenance_closes_capture_and_canonical_facts(retained_evidence_root) -> None:
     provenance = build_acquisition_provenance()
     verify_provenance_recordings(provenance, retained_evidence_root)
@@ -197,6 +230,7 @@ def test_packaged_provenance_closes_capture_and_canonical_facts(retained_evidenc
     assert all(acquisition.material is not None for acquisition in provenance.source_records[0].acquisitions[1:])
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_native_value_mutation_is_rejected(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     mutated = NativeTable(

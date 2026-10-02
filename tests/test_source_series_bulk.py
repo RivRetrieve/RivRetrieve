@@ -11,7 +11,16 @@ from rivretrieve._internal.recordings import read_recording
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "pl_imgw"])
+@pytest.mark.parametrize(
+    "provider",
+    [
+        pytest.param(
+            "ca_eccc",
+            marks=pytest.mark.derived("tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip"),
+        ),
+        pytest.param("pl_imgw", marks=pytest.mark.recorded("tests/test_data/pl_imgw_codz_2022_01.recording.json")),
+    ],
+)
 def test_certified_native_bulk_retains_concrete_identity_and_physical_units(
     tmp_path: Path, provider: str, retained_evidence_root: Path
 ) -> None:

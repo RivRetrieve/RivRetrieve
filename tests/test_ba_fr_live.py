@@ -171,12 +171,32 @@ def test_france_temperature_support_remains_unknown():
     assert isinstance(product.semantics, UnknownTemporalSupport)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_2008-07-09_10_p1.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_2008-07-09_10_p2.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_HIXnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QIXnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hydroportail_historical_H.recording.json",
+    "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
+)
 def test_every_bosnia_and_france_product_has_exact_live_probe(probes):
     obligations = tuple((p.provider_id, p.product_id) for p in probes)
     results = run_boundary_probes(obligations, probes)
     assert len(results) == 9
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_01001336_temp_2008-07-09_10_p1.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_2008-07-09_10_p2.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_HIXnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QIXnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_2025-01-01_03.recording.json",
+)
 def test_france_uses_current_daily_parameter_names_and_next_url_without_original_parameters(
     retained_evidence_root: Path,
 ):

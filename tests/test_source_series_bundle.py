@@ -32,6 +32,7 @@ def _result(monkeypatch, tmp_path, retained_evidence_root: Path):
     return result, body(_RECORDING, evidence_root=retained_evidence_root)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_recorded_result_round_trip_keeps_response_identity_facts_outcomes_and_receipts(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -51,6 +52,7 @@ def test_recorded_result_round_trip_keeps_response_identity_facts_outcomes_and_r
     assert restored.receipts.entries[0].content == content
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_post_fetch_pick_preserves_original_request_and_publisher_receipt(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -66,6 +68,7 @@ def test_post_fetch_pick_preserves_original_request_and_publisher_receipt(
     pl_testing.assert_frame_equal(restored.data, narrowed.data)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_bundle_refuses_unknown_format_before_scientific_decode(monkeypatch, tmp_path, retained_evidence_root: Path):
     result, _ = _result(monkeypatch, tmp_path, retained_evidence_root=retained_evidence_root)
     original = rr.to_bundle(result)
@@ -82,6 +85,7 @@ def test_bundle_refuses_unknown_format_before_scientific_decode(monkeypatch, tmp
         rr.from_bundle(output.getvalue())
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_catalogue_known_explicit_restriction_reuses_without_stale_policy_failure(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -101,6 +105,7 @@ def test_catalogue_known_explicit_restriction_reuses_without_stale_policy_failur
     assert pending.scope.variants == (_KNOWN,)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 @pytest.mark.parametrize("variant", ["0df18b246e8f48ec8e6547a92070e94a", "authored-unknown"])
 def test_before_fetch_restriction_bundle_retains_acquired_scoped_inventory(
     monkeypatch, tmp_path, variant, retained_evidence_root: Path
@@ -153,6 +158,7 @@ def test_before_fetch_restriction_bundle_retains_acquired_scoped_inventory(
         assert {item.status.value for item in restored.outcomes} == {"unresolved"}
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_recorded_ended_empty_result_bundle_retains_inventory_definition(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -173,6 +179,7 @@ def test_recorded_ended_empty_result_bundle_retains_inventory_definition(
     assert {item.identity.published_id for item in restored.source_series} == {ended}
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_bundle_container_is_deterministic_without_rewriting_source_timestamps(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -189,6 +196,7 @@ def test_bundle_container_is_deterministic_without_rewriting_source_timestamps(
     assert restored.provenance.calls_made == result.provenance.calls_made
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_bundle_rejects_inventory_fact_membership_missing_from_its_source_definition(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -212,6 +220,10 @@ def test_bundle_rejects_inventory_fact_membership_missing_from_its_source_defini
         rr.from_bundle(output.getvalue())
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-99999_engine_2024-01-02.recording.json",
+)
 def test_failed_explicit_identity_remains_inspectable_without_claiming_unknown_physical_facts(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):

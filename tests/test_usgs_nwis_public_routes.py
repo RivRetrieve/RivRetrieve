@@ -29,6 +29,7 @@ def test_public_route_recordings_cover_exact_active_declaration():
 
 
 @pytest.mark.parametrize("product", ROUTES)
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_recorded_public_route_identity_physics_cache_and_receipt(
     monkeypatch, tmp_path, product, retained_evidence_root
 ):
@@ -81,6 +82,7 @@ def test_recorded_public_route_identity_physics_cache_and_receipt(
     assert len(calls) == 3
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_daily_response_label_does_not_establish_filterable_timestamp_anchor(monkeypatch, retained_evidence_root):
     monkeypatch.setattr(
         discovery,
@@ -113,6 +115,7 @@ def test_daily_catalogue_does_not_promote_label_representation_to_anchor():
     assert not narrowed.series
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_authored_non_date_daily_series_is_unsupported_with_peer_preserved(monkeypatch, retained_evidence_root):
     """Authored mutation of exact modern bytes, not evidence of a nonmidnight USGS product."""
     from copy import deepcopy

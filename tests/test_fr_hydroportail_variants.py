@@ -93,6 +93,7 @@ def retrieve(selection, **kwargs):
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
 @pytest.mark.parametrize("variant", sorted(VARIANTS))
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_J783301020_empty.body")
 def test_explicit_variant_requests_only_its_identity(retained_evidence_root, monkeypatch, tmp_path, quantity, variant):
     transport = SyntheticVariantTransport(retained_evidence_root)
     install(monkeypatch, tmp_path, transport)
@@ -114,6 +115,7 @@ def test_explicit_variant_requests_only_its_identity(retained_evidence_root, mon
 
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_J783301020_empty.body")
 def test_subset_cache_cannot_satisfy_all_variants_and_identical_rows_stay_distinct(
     retained_evidence_root, monkeypatch, tmp_path, quantity
 ):
@@ -140,6 +142,7 @@ def test_subset_cache_cannot_satisfy_all_variants_and_identical_rows_stay_distin
 
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_J783301020_empty.body")
 def test_null_absent_empty_and_failed_variants_remain_distinct(retained_evidence_root, monkeypatch, tmp_path, quantity):
     transport = SyntheticVariantTransport(
         retained_evidence_root, empty={"validated"}, failed={"pre_validated_and_validated"}
@@ -166,6 +169,7 @@ def test_null_absent_empty_and_failed_variants_remain_distinct(retained_evidence
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
 @pytest.mark.parametrize("variant", sorted(VARIANTS))
 @pytest.mark.parametrize("field", ["code", "metric", "unit", "statuses", "timezone", "title"])
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_variants")
 def test_empty_variant_parser_checks_envelope_identity(retained_evidence_root, quantity, variant, field):
     metric = "Q" if quantity == "discharge" else "H"
     recording = read_recording(
@@ -199,6 +203,7 @@ def test_empty_variant_parser_checks_envelope_identity(retained_evidence_root, q
 
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_J783301020_empty.body")
 def test_public_empty_variant_failure_keeps_identity_receipt_and_no_coverage(
     retained_evidence_root, monkeypatch, tmp_path, quantity
 ):
@@ -221,6 +226,10 @@ def test_public_empty_variant_failure_keeps_identity_receipt_and_no_coverage(
     assert transport.calls == ["validated", "validated"]
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hydroportail_legacy_raw",
+    "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
+)
 def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(retained_evidence_root, monkeypatch, tmp_path):
     import shutil
 
@@ -290,6 +299,7 @@ def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(retained_evi
 )
 @pytest.mark.parametrize("metric,quantity", [("Q", "discharge"), ("H", "stage")])
 @pytest.mark.parametrize("variant", sorted(VARIANTS))
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_variants")
 def test_recorded_source_variant_public_path(
     retained_evidence_root, monkeypatch, tmp_path, station, start, end, metric, quantity, variant
 ):
@@ -329,6 +339,7 @@ def test_recorded_source_variant_public_path(
 
 
 @pytest.mark.parametrize("metric,quantity", [("Q", "discharge"), ("H", "stage")])
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_variants")
 def test_recorded_unrestricted_overlaps_keep_source_identities(
     retained_evidence_root, monkeypatch, tmp_path, metric, quantity
 ):

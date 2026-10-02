@@ -43,6 +43,10 @@ def _public(retained_evidence_root: Path, monkeypatch, provider, station, produc
     return result
 
 
+@pytest.mark.recorded(
+    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+)
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_bosnia_public_path_clips_converts_and_keeps_exact_receipts(retained_evidence_root: Path, monkeypatch):
     result = _public(
@@ -70,6 +74,16 @@ def test_bosnia_public_path_clips_converts_and_keeps_exact_receipts(retained_evi
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hydroportail_H_padded.recording.json",
+    "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
+)
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(retained_evidence_root: Path, monkeypatch):
     cases = (
@@ -150,6 +164,7 @@ def test_france_sparse_catalogue_does_not_invent_cross_products():
     ).is_empty()
 
 
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_station_Q_padded.recording.json")
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_france_station_discharge_uses_series_unit_not_display_preference(retained_evidence_root: Path, monkeypatch):
     result = _public(
@@ -171,6 +186,7 @@ def test_france_station_discharge_uses_series_unit_not_display_preference(retain
     assert result.receipts.entries[0].content == recording.content
 
 
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_station_Q_empty_clip.recording.json")
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_france_valid_station_discharge_capture_can_clip_to_empty(retained_evidence_root: Path, monkeypatch):
     result = _public(

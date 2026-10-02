@@ -57,6 +57,7 @@ def _empty_payload(retained_evidence_root):
     )
 
 
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_station_Q_padded.recording.json")
 def test_station_own_discharge_fetch_replays_exact_non_sample_station(retained_evidence_root):
     recording = read_recording(retained_evidence_root / DATA / "fr_hydroportail_station_Q_padded.recording.json")
     fetched = fetch(
@@ -75,6 +76,7 @@ def test_station_own_discharge_fetch_replays_exact_non_sample_station(retained_e
     assert frame["station_id"].unique().to_list() == ["1232000101"]
 
 
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_station_Q_padded.recording.json")
 def test_station_own_discharge_parser_does_not_require_the_old_sample_site(retained_evidence_root):
     recording = read_recording(retained_evidence_root / DATA / "fr_hydroportail_station_Q_padded.recording.json")
     assert recording.content_type is not None
@@ -97,6 +99,10 @@ def test_station_own_discharge_parser_does_not_require_the_old_sample_site(retai
     assert not parse(payload, config()).rows.is_empty()
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hydroportail_J783301020_empty.body",
+    "tests/test_data/fr_hydroportail_J783301020_empty.receipt.json",
+)
 def test_valid_empty_envelope_is_not_a_source_identity_failure(retained_evidence_root):
     assert parse(_empty_payload(retained_evidence_root), config()).rows.is_empty()
 
@@ -110,6 +116,10 @@ def test_valid_empty_envelope_is_not_a_source_identity_failure(retained_evidence
         ("statuses", "validated"),
     ],
 )
+@pytest.mark.recorded(
+    "tests/test_data/fr_hydroportail_J783301020_empty.body",
+    "tests/test_data/fr_hydroportail_J783301020_empty.receipt.json",
+)
 def test_empty_envelope_checks_series_contract_before_iteration(retained_evidence_root, field, value):
     payload = _empty_payload(retained_evidence_root)
     document = json.loads(payload.content)
@@ -120,6 +130,10 @@ def test_empty_envelope_checks_series_contract_before_iteration(retained_evidenc
     assert unsupported.outcomes[0].reason
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hydroportail_J783301020_empty.body",
+    "tests/test_data/fr_hydroportail_J783301020_empty.receipt.json",
+)
 def test_empty_envelope_requires_source_utc_before_iteration(retained_evidence_root):
     payload = _empty_payload(retained_evidence_root)
     document = json.loads(payload.content)
@@ -130,6 +144,10 @@ def test_empty_envelope_requires_source_utc_before_iteration(retained_evidence_r
     assert unsupported.outcomes[0].reason
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hydroportail_J783301020_empty.body",
+    "tests/test_data/fr_hydroportail_J783301020_empty.receipt.json",
+)
 def test_empty_envelope_requires_identity_metadata_before_iteration(retained_evidence_root):
     payload = _empty_payload(retained_evidence_root)
     document = json.loads(payload.content)

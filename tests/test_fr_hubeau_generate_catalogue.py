@@ -116,6 +116,7 @@ def catalogue(_pristine_projection):
     ],
     ids=["hydrometry", "temperature"],
 )
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_native_build_enforces_each_endpoint_origin_declaration(
     retained_evidence_root,
     endpoint: str,
@@ -144,6 +145,10 @@ def test_native_build_enforces_each_endpoint_origin_declaration(
     ],
     ids=["hydrometry", "temperature"],
 )
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet",
+    full_verification=("fr_hubeau",),
+)
 def test_native_build_rejects_unattested_partition_changes(
     retained_evidence_root,
     endpoint: str,
@@ -164,20 +169,24 @@ def test_native_build_rejects_unattested_partition_changes(
     assert str(raised.value) == "Hub’Eau native content does not match its acquisition identity"
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_station_count(catalogue) -> None:
     assert catalogue.stations.height == 7323
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_product_count(catalogue) -> None:
     cat = catalogue
     assert cat.products.height == 4
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_station_products_cross(catalogue) -> None:
     cat = catalogue
     assert cat.station_products.height == 20231
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_hydro_station_fields(catalogue) -> None:
     cat = catalogue
     station = cat.stations.filter(pl.col("station_id") == "1011000101")
@@ -185,6 +194,7 @@ def test_generate_catalogue_hydro_station_fields(catalogue) -> None:
     assert station["crs"][0] == "EPSG:4326"
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_temp_station_fields(catalogue) -> None:
     cat = catalogue
     station = cat.stations.filter(pl.col("station_id") == "01001336")
@@ -192,10 +202,12 @@ def test_generate_catalogue_temp_station_fields(catalogue) -> None:
     assert station["crs"][0] == "EPSG:4326"
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_filters_no_stations(retained_evidence_root, catalogue) -> None:
     assert catalogue.stations.height == read_native_table(retained_evidence_root / NATIVE_PATH).data.height
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_hydro_station_products(catalogue) -> None:
     cat = catalogue
     hydro_sp = cat.station_products.filter(pl.col("station_id") == "1011000101")
@@ -207,6 +219,7 @@ def test_generate_catalogue_hydro_station_products(catalogue) -> None:
     }
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_temp_station_products(catalogue) -> None:
     cat = catalogue
     temp_sp = cat.station_products.filter(pl.col("station_id") == "01001336")
@@ -221,6 +234,7 @@ def _assert_fatal_issue(table: NativeTable, code: str, message: str) -> None:
     ]
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_native_builder_rejects_one_unknown_endpoint_row(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH)
     station_id = native.data["code_station"][0]
@@ -246,6 +260,7 @@ def test_native_builder_rejects_one_unknown_endpoint_row(retained_evidence_root)
         ("latitude", "fr_hubeau.latitude: native column 'latitude' does not exist"),
     ],
 )
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_native_builder_rejects_each_absent_endpoint_coordinate(
     retained_evidence_root, column: str, message: str
 ) -> None:
@@ -258,6 +273,7 @@ def test_native_builder_rejects_each_absent_endpoint_coordinate(
 
 
 @pytest.mark.parametrize("signature_column", ["coordonnee_x_station", "coordonnee_y_station"])
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_code_31_correction_requires_each_signature_half(retained_evidence_root, signature_column: str) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH)
     station_id = "H000000201"
@@ -285,6 +301,7 @@ def test_code_31_correction_requires_each_signature_half(retained_evidence_root,
         ("latitude_station", "coordonnee_x_station", 5.593354),
     ],
 )
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_code_31_correction_checks_each_inclusive_bound(
     retained_evidence_root, source_column: str, signature_column: str, value: float
 ) -> None:
@@ -304,6 +321,7 @@ def test_code_31_correction_checks_each_inclusive_bound(
     )
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_only_code_31_coordinates_are_transposed(retained_evidence_root, catalogue) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH).data
     stations = catalogue.stations
@@ -405,6 +423,7 @@ def test_only_code_31_coordinates_are_transposed(retained_evidence_root, catalog
     assert old_orientation["longitude_station"].max() == 49.9048593
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_code_26_changed_ids_pass_through_exactly(retained_evidence_root, catalogue) -> None:
     ids = [
         "F462000701",
@@ -441,6 +460,10 @@ def test_code_26_changed_ids_pass_through_exactly(retained_evidence_root, catalo
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_envelope_must_be_object(retained_evidence_root, endpoint: str) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     if endpoint == "hydrometry":
@@ -451,6 +474,10 @@ def test_native_envelope_must_be_object(retained_evidence_root, endpoint: str) -
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_data_must_be_list(retained_evidence_root, endpoint: str) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
@@ -460,6 +487,10 @@ def test_native_data_must_be_list(retained_evidence_root, endpoint: str) -> None
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
 @pytest.mark.parametrize("invalid_count", [True, "2"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_count_must_be_non_boolean_integer(retained_evidence_root, endpoint: str, invalid_count: object) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
@@ -471,6 +502,10 @@ def test_native_count_must_be_non_boolean_integer(retained_evidence_root, endpoi
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_count_must_match_rows(retained_evidence_root, endpoint: str) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
@@ -482,6 +517,10 @@ def test_native_count_must_match_rows(retained_evidence_root, endpoint: str) -> 
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_row_must_be_object(retained_evidence_root, endpoint: str) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
@@ -490,6 +529,10 @@ def test_native_row_must_be_object(retained_evidence_root, endpoint: str) -> Non
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_row_requires_complete_endpoint_key_set(retained_evidence_root, endpoint: str) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
@@ -503,6 +546,10 @@ def test_native_row_requires_complete_endpoint_key_set(retained_evidence_root, e
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_scalar_value_must_inhabit_schema(retained_evidence_root, endpoint: str) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
@@ -515,6 +562,10 @@ def test_native_scalar_value_must_inhabit_schema(retained_evidence_root, endpoin
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_list_value_must_inhabit_schema(retained_evidence_root) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
@@ -525,6 +576,10 @@ def test_native_list_value_must_inhabit_schema(retained_evidence_root) -> None:
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_list_value_must_be_a_list(retained_evidence_root) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
@@ -535,6 +590,10 @@ def test_native_list_value_must_be_a_list(retained_evidence_root) -> None:
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_float_value_must_be_finite(retained_evidence_root) -> None:
     for invalid_value in (float("nan"), float("inf")):
         hydro, temperature = _sample_payloads(retained_evidence_root)
@@ -546,6 +605,10 @@ def test_native_float_value_must_be_finite(retained_evidence_root) -> None:
         )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_float_value_must_not_be_boolean(retained_evidence_root) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
@@ -556,6 +619,10 @@ def test_native_float_value_must_not_be_boolean(retained_evidence_root) -> None:
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_integer_value_must_not_be_boolean(retained_evidence_root) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
@@ -566,6 +633,10 @@ def test_native_integer_value_must_not_be_boolean(retained_evidence_root) -> Non
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_en_service_value_must_be_boolean(retained_evidence_root) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
@@ -583,6 +654,10 @@ def test_native_en_service_value_must_be_boolean(retained_evidence_root) -> None
         ("temperature", "descriptif_station"),
         ("hydrometry", "nature_station"),
     ],
+)
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
 )
 def test_native_upstream_field_addition_changes_nothing(
     retained_evidence_root, endpoint: str, injected_field: str
@@ -692,6 +767,10 @@ def test_native_upstream_field_addition_changes_nothing(
         ),
     ],
 )
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_geometry_container_and_nested_members_are_strict(
     retained_evidence_root, geometries: list[object]
 ) -> None:
@@ -705,6 +784,10 @@ def test_native_geometry_container_and_nested_members_are_strict(
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
 @pytest.mark.parametrize("invalid_id", [7, "   "])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_ids_are_nonempty_strings_without_normalization(
     retained_evidence_root, endpoint: str, invalid_id: object
 ) -> None:
@@ -718,6 +801,10 @@ def test_native_ids_are_nonempty_strings_without_normalization(
 
 
 @pytest.mark.parametrize("endpoint", ["hydrometry", "temperature"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_endpoint_duplicate_is_an_issue(retained_evidence_root, endpoint: str) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     target = hydro if endpoint == "hydrometry" else temperature
@@ -729,6 +816,10 @@ def test_native_endpoint_duplicate_is_an_issue(retained_evidence_root, endpoint:
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_cross_endpoint_collision_is_an_issue(retained_evidence_root) -> None:
     hydro, temperature = _sample_payloads(retained_evidence_root)
     station_id = hydro["data"][0]["code_station"]
@@ -736,10 +827,20 @@ def test_native_cross_endpoint_collision_is_an_issue(retained_evidence_root) -> 
     _assert_issue(_refresh(hydro, temperature), f"fr_hubeau station {station_id} occurs in both station endpoints")
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_native_population_is_not_frozen_to_historical_snapshot(retained_evidence_root) -> None:
     assert _refresh(*_sample_payloads(retained_evidence_root)).issues == ()
 
 
+@pytest.mark.governing(
+    "tests/test_data/fr_hubeau_geojson_crs_evidence.json",
+    "tests/test_data/fr_hubeau_openapi_v2.json",
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_capture_boundaries_and_documentation_evidence(retained_evidence_root) -> None:
     hydro = _full_payload(retained_evidence_root / _HYDRO_FULL_FIXTURE)
     temperature = _full_payload(retained_evidence_root / _TEMP_FULL_FIXTURE)
@@ -955,6 +1056,10 @@ def test_fixture_refresh_cli_rejections(argv: list[str], message: str, capsys: p
     assert message in capsys.readouterr().err
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_fixture_native_cli_is_offline_and_prints_only_digest(
     retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -983,6 +1088,10 @@ def test_fixture_native_cli_is_offline_and_prints_only_digest(
     assert capsys.readouterr().out == native_table_content_digest(committed) + "\n"
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_fixture_native_cli_rejects_census_error_without_writing(retained_evidence_root, tmp_path: Path) -> None:
     hydro = _full_payload(retained_evidence_root / _HYDRO_FULL_FIXTURE)
     hydro["data"] = hydro["data"][:5]
@@ -1013,6 +1122,11 @@ def test_fixture_native_cli_rejects_census_error_without_writing(retained_eviden
     assert not native_path.exists()
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet",
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_complete_native_table_is_source_faithful(retained_evidence_root) -> None:
     hydro = _full_payload(retained_evidence_root / _HYDRO_FULL_FIXTURE)
     temperature = _full_payload(retained_evidence_root / _TEMP_FULL_FIXTURE)
@@ -1096,6 +1210,10 @@ def test_complete_native_table_is_source_faithful(retained_evidence_root) -> Non
     assert native_table_content_digest(rematerialized.value) == _PINNED_NATIVE_DIGEST
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
+    "tests/test_data/fr_hubeau_temperature_stations_full.json",
+)
 def test_fixture_wrapper_matches_direct_refresh(retained_evidence_root) -> None:
     wrapped = refresh_native_table_from_fixtures(
         retained_evidence_root / _HYDRO_FULL_FIXTURE,
@@ -1111,6 +1229,10 @@ def test_fixture_wrapper_matches_direct_refresh(retained_evidence_root) -> None:
     pl_testing.assert_frame_equal(wrapped.value.data, direct.value.data, check_exact=True)
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet",
+    full_verification=("fr_hubeau",),
+)
 def test_native_dates_cannot_change_without_new_acquisition(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH)
     hydro_first = native.data.filter(pl.col("source_endpoint") == "hydrometrie/referentiel/stations")["code_station"][0]
@@ -1129,6 +1251,7 @@ def test_native_dates_cannot_change_without_new_acquisition(retained_evidence_ro
         build_catalogue(changed, FRANCE_ORIGIN_DECLARATIONS, availability)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
 def test_committed_catalogue_matches_independent_source_projection(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / CURRENT_NATIVE_PATH).data
     catalogue_dir = Path(__file__).parents[1] / CURRENT_NATIVE_PATH.parent
@@ -1206,6 +1329,14 @@ def test_committed_catalogue_matches_independent_source_projection(retained_evid
     assert committed_provider == generator.build_provider_info(native["retrieved_at"].max().date())
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
+    "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
+    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+    "tests/test_data/fr_hubeau_hydrometrie.html",
+    "tests/test_data/fr_hubeau_temperature_openapi.json",
+    "tests/test_data/fr_hubeau_terms_licence.html",
+)
 def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
     retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

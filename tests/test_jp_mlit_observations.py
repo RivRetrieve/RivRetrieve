@@ -67,6 +67,16 @@ def _fetched(retained_evidence_root):
     ).value
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_page_rejects_stage_html_when_exact_recorded_unit_is_mutated(retained_evidence_root) -> None:
     content = read_recording(_recording_paths(retained_evidence_root)[0]).content
     mutated = content.replace("単位：m".encode("euc-jp"), "単位：cm".encode("euc-jp"))
@@ -94,6 +104,16 @@ def test_page_rejects_stage_html_when_exact_recorded_unit_is_mutated(retained_ev
         "discharge-ambiguous",
     ),
 )
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_page_rejects_wrong_missing_ambiguous_or_unstructured_units(
     retained_evidence_root, path_index: int, kind: int, original: str, replacement: str
 ) -> None:
@@ -106,6 +126,16 @@ def test_page_rejects_wrong_missing_ambiguous_or_unstructured_units(
         _page(mutated, kind, _STATION)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_page_rejects_discharge_unit_when_title_is_mutated_to_stage_product(retained_evidence_root) -> None:
     content = read_recording(_recording_paths(retained_evidence_root)[4]).content
     mutated = content.replace("時刻流量月表検索結果".encode("euc-jp"), "時刻水位月表検索結果".encode("euc-jp"))
@@ -114,6 +144,16 @@ def test_page_rejects_discharge_unit_when_title_is_mutated_to_stage_product(reta
         _page(mutated, 2, _STATION)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_fetch_returns_all_eight_untouched_payloads_in_caller_order(retained_evidence_root) -> None:
     payloads = _fetched(retained_evidence_root)
     assert [(p.source_coordinates.value.kind, p.source_coordinates.value.role) for p in payloads] == [
@@ -142,6 +182,16 @@ def test_fetch_returns_all_eight_untouched_payloads_in_caller_order(retained_evi
         (5, 192, datetime(2023, 1, 1, 1), datetime(2023, 1, 31, 12), 2.52, 1.99),
         (7, 365, datetime(2023, 1, 1), datetime(2023, 12, 31), 4.47, 3.61),
     ],
+)
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
 )
 def test_exact_official_boundaries(
     retained_evidence_root,
@@ -175,11 +225,31 @@ def test_exact_official_boundaries(
         assert (issue.code, issue.details["count"]) == ("source_missing", 552)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_html_parse_validates_and_returns_no_rows(retained_evidence_root) -> None:
     for payload in _fetched(retained_evidence_root)[::2]:
         assert parse(payload, config()).rows.is_empty()
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_flags_control_observation_status_without_numeric_threshold(retained_evidence_root) -> None:
     payload = _fetched(retained_evidence_root)[1]
     negative = replace(payload, content=payload.content.replace(b"321.52", b"-9999.00", 1))
@@ -198,6 +268,16 @@ def test_flags_control_observation_status_without_numeric_threshold(retained_evi
 @pytest.mark.parametrize(
     ("flag", "code"), [("$", "source_missing"), ("#", "source_closed_station"), ("-", "source_unregistered")]
 )
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_native_non_observation_flags_are_distinct_and_dropped(retained_evidence_root, flag: str, code: str) -> None:
     payload = _fetched(retained_evidence_root)[1]
     changed = replace(payload, content=payload.content.replace(b"321.52, ", f"321.52,{flag}".encode(), 1))
@@ -206,6 +286,16 @@ def test_native_non_observation_flags_are_distinct_and_dropped(retained_evidence
     assert result.issues[0].code == code
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_nonnumeric_usable_cell_fails_loud(retained_evidence_root) -> None:
     payload = _fetched(retained_evidence_root)[1]
     changed = replace(payload, content=payload.content.replace(b"321.52, ", b"unknown, ", 1))
@@ -226,6 +316,16 @@ def _request() -> ObservationRequest:
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts(retained_evidence_root) -> None:
     assert isinstance(declaration.observations, LiveStages)
     result = drive(
@@ -278,6 +378,16 @@ def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts(reta
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_public_selection_uses_corrected_ids_and_exact_eight_call_replay(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch
 ) -> None:

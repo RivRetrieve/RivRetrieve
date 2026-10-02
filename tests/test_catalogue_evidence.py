@@ -843,6 +843,19 @@ def _assert_bulk_source_history_preserved(retained_evidence_root: Path, provider
     return original
 
 
+@pytest.mark.recorded(
+    "research/usgs-modern-coverage",
+    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+    "tests/test_data/ch_foen_terms_existenz.html",
+    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+)
+@pytest.mark.derived(
+    "tests/test_data/french_combined_catalogue",
+    "tests/test_data/catalogue_provenance_original_v2",
+)
 @pytest.mark.parametrize(
     "provider", tuple(provider for provider in BUILTIN_PROVIDER_IDS if provider not in {"br_ana", "fr_hydroportail"})
 )

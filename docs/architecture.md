@@ -238,8 +238,11 @@ See [drainage-area metadata](drainage-areas.md) for the output and offline build
 `describe` reads the packaged Croissant descriptor offline.
 The current evidence representation uses a typed header and five normalized relations, with explicit resolution of individual fact lineage.
 
-Observation tests read explicitly supplied archive inputs outside the checkout and
-replay saved real interactions through the transport seam.
+The reviewed private archive coordinator selects exact inputs for the requested
+tests and verifies them before supplying one local input root outside the checkout.
+Test collection declares public consumer paths and test purposes without opening
+private inputs. `uv run pytest --logic-only` runs the source-independent checks.
+Observation tests replay saved real interactions through the transport seam.
 Replay refuses a request that has no matching recording, so changed request bounds cannot receive an unrelated answer.
 Boundary probes assert source-checkable counts and first and last native labels.
 These checks establish behavior against recorded interactions, not current service availability.

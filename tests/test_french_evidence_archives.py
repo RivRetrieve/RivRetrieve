@@ -16,6 +16,10 @@ MANIFEST = json.loads((VERIFICATION / "evidence-archives.json").read_text())
 
 
 @pytest.mark.parametrize("identity", MANIFEST["archives"], ids=lambda item: Path(item["path"]).name)
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hydroportail/evidence",
+    "maintenance/verification/french-publication-services",
+)
 def test_archive_members_keep_original_bytes_and_safe_paths(retained_evidence_root, identity):
     path = retained_evidence_root / identity["path"]
     content = path.read_bytes()
@@ -54,6 +58,10 @@ def test_archive_members_keep_original_bytes_and_safe_paths(retained_evidence_ro
         assert sum(member.size for member in members) == identity["original_bytes"]
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hydroportail/evidence",
+    "maintenance/verification/french-publication-services",
+)
 def test_reconciliation_reports_regenerate_byte_for_byte(retained_evidence_root, tmp_path):
     result = subprocess.run(
         [

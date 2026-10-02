@@ -3,6 +3,8 @@
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from rivretrieve._internal.boundary_probes import (
     FIRST_WALL_CLOCK_TIME,
     LAST_WALL_CLOCK_TIME,
@@ -56,6 +58,10 @@ def _runner(product: ProductId):
     return run
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+)
 def test_all_five_products_have_recorded_live_boundary_proofs(retained_evidence_root) -> None:
     keys = tuple((_PROVIDER, product) for product, _, _, _ in _PRODUCTS)
     probes = tuple(

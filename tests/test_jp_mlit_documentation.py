@@ -17,6 +17,7 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.recorded("tests/test_data/japan_provider_documentation")
 def test_japan_page_examples_and_displayed_outputs(monkeypatch, tmp_path, retained_evidence_root):
     page = (ROOT / "docs/providers/jp_mlit.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.DOTALL)

@@ -69,6 +69,16 @@ def _windows(product):
 @pytest.mark.parametrize("product", ["stage_hourly", "stage_daily", "discharge_hourly", "discharge_daily"])
 @pytest.mark.parametrize("role", ["html", "dat"])
 @pytest.mark.parametrize("failed", [(2021,), (2022,), (2023,), (2021, 2022, 2023)])
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_independent_chunks_retain_bounds_failures_and_prerequisites(retained_evidence_root, product, role, failed):
     product = ProductId(product)
     windows = _windows(product)
@@ -102,6 +112,16 @@ def test_independent_chunks_retain_bounds_failures_and_prerequisites(retained_ev
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_public_dat_failure_retains_html_and_cache_coverage(retained_evidence_root, monkeypatch, tmp_path):
     # One public composition covers receipts, partial persistence, and retry. The
     # cheap stage matrix above exercises all independent positions and products.
@@ -131,6 +151,16 @@ def test_public_dat_failure_retains_html_and_cache_coverage(retained_evidence_ro
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_hour_24_month_end_survives_failed_or_empty_neighbor_and_reuse(retained_evidence_root, monkeypatch, tmp_path):
     import polars as pl
     from polars.testing import assert_frame_equal

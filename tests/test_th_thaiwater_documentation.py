@@ -18,6 +18,7 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.recorded("docs/verification/thailand-provider/recordings")
 def test_thailand_page_examples_match_recorded_response(retained_evidence_root: Path, monkeypatch, tmp_path):
     page = (ROOT / "docs/providers/th_thaiwater.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.S)
@@ -49,6 +50,7 @@ def test_thailand_page_examples_match_recorded_response(retained_evidence_root: 
         rr.to_utc(result)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_thailand_page_catalogue_counts_and_index(
     retained_evidence_root: Path,
 ):

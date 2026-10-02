@@ -38,6 +38,7 @@ def test_real_selection_exposes_normalized_metadata_without_legacy_aliases():
     assert set(frame["variant"]) == {"raw", "validated", "pre_validated_and_validated", "most_valid"}
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_recorded_public_fetch_normalized_provenance_serialization(
     monkeypatch: pytest.MonkeyPatch, retained_evidence_root: Path
 ):

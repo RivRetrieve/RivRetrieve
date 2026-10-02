@@ -88,6 +88,15 @@ def test_bosnia_provenance_binds_baseline_to_actual_acquisitions() -> None:
         assert availability.transformation.external_inputs[0].fact == pair.source_fact
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+    "tests/test_data/ba_fhmzbih_terms_absence.html",
+    full_verification=("ba_fhmzbih",),
+)
 def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path, retained_evidence_root: Path) -> None:
     verify_provenance_recordings(_provenance(), retained_evidence_root)
     evidence = Path("tests/test_data/ba_fhmzbih_terms_absence.html")

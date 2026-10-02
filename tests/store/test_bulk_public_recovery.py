@@ -37,7 +37,19 @@ def _poland_one_month(request: BulkDownloadRequest) -> tuple[DownloadedBulkArtif
     return (DownloadedBulkArtifact(item.path, item.url, item.source_vintage),)
 
 
-@pytest.mark.parametrize("provider_id", ("ca_eccc", "pl_imgw"))
+@pytest.mark.parametrize(
+    "provider_id",
+    (
+        pytest.param(
+            "ca_eccc",
+            marks=pytest.mark.derived("tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip"),
+        ),
+        pytest.param(
+            "pl_imgw",
+            marks=pytest.mark.recorded("tests/test_data/pl_imgw_codz_2022_01.recording.json"),
+        ),
+    ),
+)
 def test_public_failed_bulk_compile_requires_explicit_clear_then_retries(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

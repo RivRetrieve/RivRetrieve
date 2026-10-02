@@ -18,6 +18,7 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2018_flux_january2024_full.recording.json")
 def test_swiss_page_examples_and_displayed_outputs(retained_evidence_root: Path, monkeypatch, tmp_path):
     page = (ROOT / "docs/providers/ch_foen.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.DOTALL)

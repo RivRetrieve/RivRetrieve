@@ -45,6 +45,10 @@ class NumericReplay(ReplayTransport):
     [("large_exponent", policy) for policy in ("raise", "warn", "ignore")]
     + [(mutation, "raise") for mutation in ("zero", "finite", "null")],
 )
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+)
 def test_public_numeric_representation_preserves_sibling_receipts_and_coverage(
     retained_evidence_root: Path, tmp_path, monkeypatch, mutation, policy
 ):

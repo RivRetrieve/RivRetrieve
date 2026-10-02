@@ -24,14 +24,23 @@ def _verify(retained_evidence_root: Path, stem: str, text: str) -> None:
     )
 
 
+@pytest.mark.governing(
+    "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
+    "tests/test_data/jp_mlit_terms_licence_euc_jp.json",
+)
 def test_euc_jp_source_statement_is_verified_from_recorded_bytes(retained_evidence_root: Path) -> None:
     _verify(retained_evidence_root, "jp_mlit_terms_licence_euc_jp", _LICENSE)
 
 
+@pytest.mark.governing("tests/test_data/jp_mlit_terms_citation.json", "tests/test_data/jp_mlit_terms_citation.pdf")
 def test_pdf_source_statement_is_verified_from_recorded_bytes(retained_evidence_root: Path) -> None:
     _verify(retained_evidence_root, "jp_mlit_terms_citation", _CITATION)
 
 
+@pytest.mark.governing(
+    "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
+    "tests/test_data/jp_mlit_terms_licence_euc_jp.json",
+)
 def test_absent_source_statement_is_rejected_by_recording_name(retained_evidence_root: Path) -> None:
     with pytest.raises(
         FatalContractError,

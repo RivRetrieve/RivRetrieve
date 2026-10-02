@@ -75,6 +75,7 @@ def test_accumulation_rejects_copied_internal_normalization_contradiction(tmp_pa
     assert not store.exists()
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_public_recorded_bundle_import_refuses_scale_changed_facts(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(
@@ -102,6 +103,7 @@ def test_public_recorded_bundle_import_refuses_scale_changed_facts(monkeypatch, 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 @pytest.mark.parametrize("answer_rows", ["nonempty", "empty", "unsupported_empty"])
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_public_recorded_conversion_rejects_internal_scale_change_under_every_policy(
     monkeypatch, tmp_path, policy, answer_rows, retained_evidence_root: Path
 ):

@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
 
 from rivretrieve._internal.engine import (
@@ -59,6 +60,10 @@ def _recorded_database_failure(retained_evidence_root: Path) -> Payload:
     )
 
 
+@pytest.mark.recorded(
+    "maintenance/catalogue/th_thaiwater/evidence/graph_receipts.csv",
+    "maintenance/catalogue/th_thaiwater/recordings/1109499_2026-06-08_2026-09-06_a1.body",
+)
 def test_recorded_http200_database_failure_returns_source_issue(retained_evidence_root: Path) -> None:
     assert isinstance(declaration.observations, LiveStages)
     stages = declaration.observations.stages
@@ -80,6 +85,10 @@ def test_recorded_http200_database_failure_returns_source_issue(retained_evidenc
     assert issue.details["source_message"] == "500:  Internal Database Error ...pq: out of shared memory"
 
 
+@pytest.mark.recorded(
+    "maintenance/catalogue/th_thaiwater/evidence/graph_receipts.csv",
+    "maintenance/catalogue/th_thaiwater/recordings/1109499_2026-06-08_2026-09-06_a1.body",
+)
 def test_malformed_failure_message_and_broken_json_remain_identified_unsupported_outcomes(
     retained_evidence_root: Path,
 ) -> None:
@@ -104,6 +113,10 @@ def test_malformed_failure_message_and_broken_json_remain_identified_unsupported
         assert result.issues[0].code == "unsupported_source_structure"
 
 
+@pytest.mark.recorded(
+    "maintenance/catalogue/th_thaiwater/evidence/graph_receipts.csv",
+    "maintenance/catalogue/th_thaiwater/recordings/1109499_2026-06-08_2026-09-06_a1.body",
+)
 def test_unknown_result_state_is_unsupported_not_an_asserted_source_failure(retained_evidence_root: Path) -> None:
     import json
     from dataclasses import replace

@@ -35,6 +35,7 @@ def test_describe_rejects_unknown_provider(provider: str) -> None:
         rr.describe(provider)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_recorded_usgs_fetch_carries_exact_verified_source_words(
     monkeypatch: pytest.MonkeyPatch, retained_evidence_root: Path
 ) -> None:

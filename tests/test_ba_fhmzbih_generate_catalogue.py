@@ -147,6 +147,7 @@ def _frame_content_digest(frame: pl.DataFrame) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_has_exact_counts_dates_and_schemas(retained_evidence_root: Path) -> None:
     catalogue = _catalogue(retained_evidence_root)
 
@@ -180,6 +181,7 @@ def test_native_build_has_exact_counts_dates_and_schemas(retained_evidence_root:
     )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_is_exact_source_projection_and_preserves_native_material(retained_evidence_root: Path) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     actual = generate_catalogue.build_catalogue(native, _origins(), _access()).stations
@@ -230,6 +232,7 @@ def test_native_build_is_exact_source_projection_and_preserves_native_material(r
     }
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_crs_evidence_stations.json")
 def test_publisher_capture_and_attestation_support_not_published_crs(retained_evidence_root: Path) -> None:
     crs_origin = _origins()["crs"]
     assert crs_origin == NotPublished(Evidence("https://vodostaji.voda.ba/data/internet/stations/stations.json"))
@@ -275,6 +278,7 @@ def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
     )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_enforces_origins_before_writing(retained_evidence_root: Path, tmp_path: Path) -> None:
     broken = dict(_origins())
     del broken["longitude"]
@@ -283,6 +287,7 @@ def test_native_build_enforces_origins_before_writing(retained_evidence_root: Pa
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_rejects_empty_and_malformed_retrieval_timestamps(retained_evidence_root: Path) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     with pytest.raises(FatalContractError, match="native table must not be empty"):
@@ -297,6 +302,7 @@ def test_native_build_rejects_empty_and_malformed_retrieval_timestamps(retained_
         generate_catalogue.build_catalogue(malformed, _origins(), _access())
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_uses_workbook_dates_and_maximum_metadata_provider_date(retained_evidence_root: Path) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     mixed = native.data.head(2).with_columns(
@@ -331,6 +337,7 @@ def test_native_build_uses_workbook_dates_and_maximum_metadata_provider_date(ret
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 def test_fixture_digest_is_pinned(retained_evidence_root: Path) -> None:
     payload = _fixture_payload(retained_evidence_root)
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
@@ -350,6 +357,7 @@ def test_refresh_rejects_non_list_envelope(
     )
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 def test_refresh_rejects_missing_required_field(
     retained_evidence_root: Path,
     tmp_path: Path,
@@ -366,6 +374,7 @@ def test_refresh_rejects_missing_required_field(
     )
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 def test_refresh_rejects_non_object_row(
     retained_evidence_root: Path,
     tmp_path: Path,
@@ -382,6 +391,7 @@ def test_refresh_rejects_non_object_row(
     )
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 @pytest.mark.parametrize("invalid_id", [None, "", "nan", "none", "null"])
 def test_refresh_rejects_missing_or_blank_station_id(
     retained_evidence_root: Path,
@@ -403,6 +413,7 @@ def test_refresh_rejects_missing_or_blank_station_id(
     )
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 def test_refresh_rejects_duplicate_station_id(
     retained_evidence_root: Path,
     tmp_path: Path,
@@ -419,6 +430,7 @@ def test_refresh_rejects_duplicate_station_id(
     )
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 @pytest.mark.parametrize(
     "coordinate",
     ["metadata_station_latitude", "metadata_station_longitude"],
@@ -440,6 +452,7 @@ def test_refresh_rejects_unparseable_coordinates(
     )
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 def test_live_refresh_enforces_minimum_after_parsing(
     retained_evidence_root: Path,
     tmp_path: Path,
@@ -455,6 +468,7 @@ def test_live_refresh_enforces_minimum_after_parsing(
     )
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 def test_fixture_refresh_preserves_stable_source_fields(retained_evidence_root: Path) -> None:
     outcome = generate_catalogue.refresh_native_table(
         _fixture_payload(retained_evidence_root),
@@ -477,6 +491,8 @@ def test_fixture_refresh_preserves_stable_source_fields(retained_evidence_root: 
     assert not any(name.startswith("L1_") for name in native.columns)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 def test_fixture_refresh_frame_equals_committed_rows(retained_evidence_root: Path) -> None:
     outcome = generate_catalogue.refresh_native_table(
         _fixture_payload(retained_evidence_root),
@@ -490,6 +506,7 @@ def test_fixture_refresh_frame_equals_committed_rows(retained_evidence_root: Pat
     pl_testing.assert_frame_equal(outcome.value.data, committed, check_exact=True)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_committed_native_table_contract(retained_evidence_root: Path) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     frame = native.data
@@ -511,6 +528,7 @@ def test_committed_native_table_contract(retained_evidence_root: Path) -> None:
     assert row_4121["metadata_station_carteasting"].item() == "6520724.16"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_committed_native_table_digests(retained_evidence_root: Path) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     stable = native.data.select(_METADATA_COLUMNS).to_dicts()
@@ -522,6 +540,7 @@ def test_committed_native_table_digests(retained_evidence_root: Path) -> None:
     )
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 def test_main_raises_returned_issue_without_writing(retained_evidence_root: Path, tmp_path: Path) -> None:
     payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
     del payload[0]["metadata_station_name"]  # type: ignore[index]
@@ -634,6 +653,15 @@ def test_main_rejects_incoherent_modes(
     assert message in captured.err
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+    "tests/test_data/ba_fhmzbih_terms_absence.html",
+    full_verification=("ba_fhmzbih",),
+)
 def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
     retained_evidence_root: Path,
     tmp_path: Path,
@@ -668,6 +696,7 @@ def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
         assert (first / artifact).read_bytes() == (_CATALOGUE_DIR / artifact).read_bytes()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_public_artifact_exposes_evidenced_baseline(retained_evidence_root: Path) -> None:
     artifact = _catalogue(retained_evidence_root).public_artifact
     assert artifact.stations.height == 60
@@ -706,6 +735,10 @@ def test_workbook_ledger_rejects_inconsistent_pair(field, value) -> None:
         TypeAdapter(WorkbookAccessLedger).validate_python(document)
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    full_verification=("ba_fhmzbih",),
+)
 @pytest.mark.parametrize("mutation", ["duplicate", "missing", "extra", "site", "native_hash", "empty_status"])
 def test_workbook_build_rejects_unmatched_or_inconsistent_ledger(retained_evidence_root: Path, mutation) -> None:
     from pydantic import ValidationError
@@ -737,6 +770,7 @@ def test_workbook_build_rejects_unmatched_or_inconsistent_ledger(retained_eviden
         )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_workbook_dates_reasons_and_unknown_published_bounds_are_preserved(retained_evidence_root: Path) -> None:
     catalogue = _catalogue(retained_evidence_root)
     expected = _access()

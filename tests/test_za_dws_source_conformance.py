@@ -29,6 +29,7 @@ def test_provenance_does_not_claim_runtime_observation_acquisition() -> None:
     )
 
 
+@pytest.mark.recorded("tests/test_data/za_dws_terms_licence-5.html")
 def test_exact_monthly_recording_does_not_establish_enrolled_columns(retained_evidence_root: Path) -> None:
     import hashlib
 
@@ -104,6 +105,10 @@ def test_public_discovery_pick_and_fetch_refusal_are_offline(policy, cache, monk
             rr.fetch(chosen, start="2020-01-01", end="2020-01-02", cache=cache, receipts=True, on_issue=policy)
 
 
+@pytest.mark.recorded(
+    "tests/recordings/za_dws/X3H001_daily_2020-01.html",
+    "tests/recordings/za_dws/X3H001_point_2020-01.html",
+)
 @pytest.mark.parametrize(
     "kind, digest, size",
     [

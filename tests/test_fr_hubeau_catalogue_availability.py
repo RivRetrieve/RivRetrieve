@@ -3,6 +3,8 @@
 import lzma
 from pathlib import Path
 
+import pytest
+
 from rivretrieve._internal.catalogues.native import read_native_table
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
     EXPECTED_PRODUCT_IDS,
@@ -13,6 +15,7 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
 from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
 def test_catalogue_admits_full_evidenced_native_inventory(retained_evidence_root) -> None:
     native_path = retained_evidence_root / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
     native = read_native_table(native_path)

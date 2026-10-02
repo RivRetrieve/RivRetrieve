@@ -63,6 +63,12 @@ DATA = Path("tests/test_data")
         ),
     ],
 )
+@pytest.mark.recorded(
+    "tests/test_data/ba_fhmzbih_2010_Q_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_2101-B_H_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_2101-B_Q_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+)
 def test_recorded_public_boundaries_keep_exact_identity_and_blank_rows(
     retained_evidence_root, monkeypatch, station, product, code, start, end, count, first, last
 ):
@@ -102,6 +108,10 @@ def test_recorded_public_boundaries_keep_exact_identity_and_blank_rows(
         assert result.data["value"][-1] == pytest.approx(expected)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/ba_fhmzbih_2101-B_WT_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+)
 def test_recorded_empty_temperature_remains_selectable_and_keeps_receipts(retained_evidence_root, monkeypatch):
     recordings = tuple(
         read_recording(retained_evidence_root / DATA / name)

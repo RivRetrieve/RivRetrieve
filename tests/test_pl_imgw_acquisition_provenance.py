@@ -208,6 +208,7 @@ def test_packaged_poland_rejects_external_direct_canonical_station_ownership(tmp
         load_packaged_catalogue_artifact(mutated, on_issue="raise")
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet")
 def test_poland_withheld_crs_origin_rejects_an_asserted_crs(retained_evidence_root: Path) -> None:
     native = read_native_table(retained_evidence_root / NATIVE)
     claimed = generate_catalogue.build_stations(native).with_columns(pl.lit("EPSG:4326").alias("crs"))
@@ -235,6 +236,10 @@ def test_poland_recovery_and_corroboration_are_distinct_acquisitions() -> None:
     assert workbook.material.sha256 == WORKBOOK_SHA256
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
+    "tests/test_data/pl_imgw_terms_regulations.html",
+)
 def test_poland_native_identity_and_raw_substitution_refusal(retained_evidence_root: Path, tmp_path: Path) -> None:
     provenance = build_acquisition_provenance()
     assert provenance.native_table.repository_path == str(NATIVE)
@@ -267,6 +272,10 @@ def test_poland_native_identity_and_raw_substitution_refusal(retained_evidence_r
         )
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
+    "tests/test_data/pl_imgw_terms_regulations.html",
+)
 def test_poland_terms_are_verified_in_real_generation_path(retained_evidence_root: Path, tmp_path: Path) -> None:
     assert (
         generate_catalogue.main(
@@ -401,6 +410,10 @@ def test_private_verification_record_is_redacted_and_not_packaged() -> None:
     assert not list(CATALOGUE.glob("*.eml"))
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
+    "tests/test_data/pl_imgw_terms_regulations.html",
+)
 def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
     retained_evidence_root: Path, tmp_path: Path
 ) -> None:
@@ -548,6 +561,10 @@ def test_packaged_poland_rejects_exposed_withheld_provider_scalar(tmp_path: Path
         load_packaged_catalogue_artifact(mutated, on_issue="raise")
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
+    "tests/test_data/pl_imgw_terms_regulations.html",
+)
 def test_generator_rejects_original_private_identity_claim(retained_evidence_root: Path, tmp_path: Path) -> None:
     claim = {
         "schema_version": 2,

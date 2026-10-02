@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs/providers/usgs_nwis.md"
 
 
+@pytest.mark.recorded("docs/verification/usgs-provider")
 def test_usgs_provider_page_exact_snippets_and_displayed_outputs(retained_evidence_root, monkeypatch, capsys):
     recordings = {}
     for path in (retained_evidence_root / "docs/verification/usgs-provider").glob("*-receipt-*-origin.json"):

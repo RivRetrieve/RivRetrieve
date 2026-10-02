@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tests._distribution import InstalledDistribution
 
 _CANONICAL_CATALOGUE_FILES = {
@@ -454,6 +456,7 @@ assert set(rivretrieve.products(provider="br_ana")) == {"discharge_daily_mean_br
 """
 
 
+@pytest.mark.derived("tests/test_data/french_combined_artifacts.tar.xz")
 def test_historical_french_closure_oracles_against_immutable_combined_evidence(retained_evidence_root: Path):
     import hashlib
     import tarfile

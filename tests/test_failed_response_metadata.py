@@ -42,6 +42,7 @@ def client(sender):
 
 
 @pytest.mark.parametrize("delay,attempts,reason", [(None, 3, "retry_exhausted"), ("999", 1, "retry_delay_exceeded")])
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_public_monthly_failure_retains_received_metadata(
     retained_evidence_root: Path, monkeypatch, delay, attempts, reason
 ):

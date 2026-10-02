@@ -195,6 +195,7 @@ CRS_ABSENCE_TOKENS = (
 )
 
 
+@pytest.mark.governing("tests/test_data/cz_chmi_popis_kodu_historical.pdf")
 def test_publisher_crs_evidence_names_coordinates_but_no_reference_system(retained_evidence_root) -> None:
     capture = (retained_evidence_root / CRS_EVIDENCE_PATH).read_bytes()
     reader = PdfReader(retained_evidence_root / CRS_EVIDENCE_PATH)
@@ -248,6 +249,7 @@ def _build_committed_catalogue(retained_evidence_root) -> generate_catalogue.Gen
     return generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), CZ_ORIGINS)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_committed_native_build_has_expected_counts_and_schema(retained_evidence_root) -> None:
     cat = _build_committed_catalogue(retained_evidence_root)
 
@@ -259,6 +261,7 @@ def test_committed_native_build_has_expected_counts_and_schema(retained_evidence
     assert cat.station_products.schema == STATION_PRODUCT_CATALOG_SCHEMA.polars_schema
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_generate_catalogue_station_fields_are_source_correct(retained_evidence_root) -> None:
     cat = _build_committed_catalogue(retained_evidence_root)
     station = cat.stations.filter(pl.col("station_id") == "0-203-1-016000")
@@ -364,6 +367,7 @@ def test_refresh_rejects_invalid_obj_id(station_id: object) -> None:
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
+@pytest.mark.derived("tests/test_data/cz_chmi_metadata.json")
 def test_refresh_fixture_is_network_free_and_source_faithful(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -401,6 +405,7 @@ def test_refresh_live_transport_seam_uses_url_and_timeout(monkeypatch: pytest.Mo
     assert outcome.issues == ()
 
 
+@pytest.mark.derived("tests/test_data/cz_chmi_metadata.json")
 def test_refresh_cli_writes_fixture_native_table(retained_evidence_root, tmp_path: Path) -> None:
     output_path = tmp_path / "native.parquet"
 
@@ -436,6 +441,7 @@ def test_cli_rejects_invalid_mode_combinations(argv: list[str]) -> None:
     assert exc_info.value.code != 0
 
 
+@pytest.mark.derived("tests/test_data/cz_chmi_metadata.json")
 def test_active_fixture_is_verbatim_attested_subset(retained_evidence_root) -> None:
     fixture = _fixture_payload(retained_evidence_root)
     expected = _valid_payload()
@@ -452,6 +458,7 @@ def test_active_fixture_is_verbatim_attested_subset(retained_evidence_root) -> N
     ]
 
 
+@pytest.mark.derived("tests/test_data/cz_chmi_metadata.json")
 def test_previous_fixture_source_defects_are_not_retained(retained_evidence_root) -> None:
     rows = cast(
         "list[list[object]]",
@@ -464,6 +471,7 @@ def test_previous_fixture_source_defects_are_not_retained(retained_evidence_root
     assert "0-204-1-001000" not in by_id
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_committed_native_table_invariants(retained_evidence_root) -> None:
     table = read_native_table(retained_evidence_root / NATIVE_PATH).data
     ids = sorted(cast("list[str]", table["objID"].to_list()))
@@ -494,6 +502,10 @@ def test_committed_native_table_invariants(retained_evidence_root) -> None:
     assert table_digest == "b13d49902967e6f2fe182348999d24af711868f0c38032c425485aa41a66dd2b"
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
+    "tests/test_data/cz_chmi_metadata.json",
+)
 def test_fixture_refresh_equals_committed_source_rows_exactly(retained_evidence_root) -> None:
     committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
     fixture = generate_catalogue.refresh_native_table_from_fixture(
@@ -515,6 +527,7 @@ def test_fixture_refresh_equals_committed_source_rows_exactly(retained_evidence_
     }
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_native_build_is_gated_on_origins(retained_evidence_root) -> None:
     broken = dict(CZ_ORIGINS)
     del broken["longitude"]
@@ -526,6 +539,7 @@ def test_native_build_is_gated_on_origins(retained_evidence_root) -> None:
         generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), broken)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_native_and_canonical_identity_and_coordinates_are_exactly_aligned(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH).data
     stations = _build_committed_catalogue(retained_evidence_root).stations
@@ -545,6 +559,7 @@ def test_native_and_canonical_identity_and_coordinates_are_exactly_aligned(retai
     assert {"STATION_NAME", "STREAM_NAME", "PLO_STA", "HLGP4"} <= set(native.columns)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_committed_stations_artifact_equals_native_exactly_and_is_inside_czechia(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH).data
     committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
@@ -565,6 +580,7 @@ def test_committed_stations_artifact_equals_native_exactly_and_is_inside_czechia
     assert committed["longitude"].is_between(12.09, 18.90, closed="both").all()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version(retained_evidence_root) -> None:
     source = read_native_table(retained_evidence_root / NATIVE_PATH).data.head(2)
     station_ids = source["objID"].to_list()
@@ -591,6 +607,7 @@ def _two_row_native(retained_evidence_root) -> pl.DataFrame:
     return read_native_table(retained_evidence_root / NATIVE_PATH).data.head(2)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_build_rejects_empty_native_table_by_message(retained_evidence_root) -> None:
     empty = read_native_table(retained_evidence_root / NATIVE_PATH).data.head(0)
 
@@ -599,6 +616,7 @@ def test_build_rejects_empty_native_table_by_message(retained_evidence_root) -> 
 
 
 @pytest.mark.parametrize("station_id", [None, 206200, "", "   "])
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_build_rejects_one_invalid_obj_id_in_multi_row_native_by_message(
     retained_evidence_root, station_id: object
 ) -> None:
@@ -610,6 +628,7 @@ def test_build_rejects_one_invalid_obj_id_in_multi_row_native_by_message(
 
 
 @pytest.mark.parametrize(("column", "label"), [("GEOGR1", "latitude"), ("GEOGR2", "longitude")])
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_build_rejects_one_missing_coordinate_in_multi_row_native_by_message(
     retained_evidence_root, column: str, label: str
 ) -> None:
@@ -626,6 +645,7 @@ def test_build_rejects_one_missing_coordinate_in_multi_row_native_by_message(
 
 
 @pytest.mark.parametrize(("column", "label"), [("GEOGR1", "latitude"), ("GEOGR2", "longitude")])
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_build_rejects_one_non_numeric_coordinate_in_multi_row_native_by_message(
     retained_evidence_root, column: str, label: str
 ) -> None:
@@ -640,6 +660,7 @@ def test_build_rejects_one_non_numeric_coordinate_in_multi_row_native_by_message
         generate_catalogue.build_catalogue(NativeTable(broken), CZ_ORIGINS)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_build_rejects_invalid_per_row_retrieval_date_pairing_by_message(retained_evidence_root) -> None:
     station_id = _two_row_native(retained_evidence_root)["objID"].item(1)
     station_dates = pl.DataFrame(
@@ -659,6 +680,7 @@ def test_build_rejects_invalid_per_row_retrieval_date_pairing_by_message(retaine
         generate_catalogue.build_station_products(station_dates)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_build_rejects_invalid_station_identifier_in_multi_row_dates_by_message(retained_evidence_root) -> None:
     station_dates = pl.DataFrame(
         {
@@ -677,6 +699,7 @@ def test_build_rejects_invalid_station_identifier_in_multi_row_dates_by_message(
         generate_catalogue.build_station_products(station_dates)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_native_table_rejects_null_retrieval_timestamps_before_build(retained_evidence_root) -> None:
     broken = _two_row_native(retained_evidence_root).with_columns(
         pl.lit(None).cast(NATIVE_SCHEMA["retrieved_at"]).alias("retrieved_at")
@@ -692,6 +715,11 @@ def test_legacy_canonical_generation_apis_are_removed() -> None:
     assert not hasattr(generate_catalogue, "generate_catalogue_from_live")
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
+    "tests/test_data/cz_chmi_terms_licence.html",
+    "tests/test_data/cz_meta2.json",
+)
 def test_native_cli_writes_five_artifacts_without_touching_native(retained_evidence_root, tmp_path: Path) -> None:
     native_bytes = (retained_evidence_root / NATIVE_PATH).read_bytes()
 
@@ -726,6 +754,11 @@ def test_native_cli_writes_five_artifacts_without_touching_native(retained_evide
     }
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
+    "tests/test_data/cz_chmi_terms_licence.html",
+    "tests/test_data/cz_meta2.json",
+)
 def test_native_build_is_network_free_and_byte_deterministic(
     retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,

@@ -92,6 +92,7 @@ def test_no_nve_is_enrolled_and_cli_has_no_value_bearing_key_argument(capsys: py
     "mutation",
     ["missing_series", "null_series", "malformed_member", "missing_coordinate", "duplicate_id", "item_count"],
 )
+@pytest.mark.recorded("tests/test_data/no_nve_stations_active_1.json")
 def test_complete_response_shape_refuses_every_previous_silent_loss(retained_evidence_root, mutation: str) -> None:
     document = _active_document(retained_evidence_root)
     rows_value = document["data"]
@@ -114,6 +115,7 @@ def test_complete_response_shape_refuses_every_previous_silent_loss(retained_evi
         generate_catalogue._parse_station_response(_encoded(document), generate_catalogue.StationActivityFilter.ALL)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_empty_complete_series_list_establishes_unavailability(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     row = native.data.head(1).with_columns(pl.lit([]).cast(native.data.schema["seriesList"]).alias("seriesList"))
@@ -121,6 +123,11 @@ def test_empty_complete_series_list_establishes_unavailability(retained_evidence
     assert set(products["availability"].cast(str)) == {"unavailable"}
 
 
+@pytest.mark.governing(
+    "tests/test_data/no_nve_station_catalogue_capture.json",
+    "tests/test_data/no_nve_stations_active_0.json",
+    "tests/test_data/no_nve_stations_active_1.json",
+)
 def test_capture_attestation_mutations_refuse_before_semantic_comparison(
     retained_evidence_root, tmp_path: Path
 ) -> None:
@@ -142,6 +149,11 @@ def _copy_capture_responses(
         shutil.copyfile(retained_evidence_root / response.repository_path, target)
 
 
+@pytest.mark.governing(
+    "tests/test_data/no_nve_station_catalogue_capture.json",
+    "tests/test_data/no_nve_stations_active_0.json",
+    "tests/test_data/no_nve_stations_active_1.json",
+)
 def test_captured_raw_response_substitution_refuses(retained_evidence_root, tmp_path: Path) -> None:
     capture = generate_catalogue.read_capture_record(retained_evidence_root / _CAPTURE)
     _copy_capture_responses(retained_evidence_root, tmp_path, capture)
@@ -154,6 +166,11 @@ def test_captured_raw_response_substitution_refuses(retained_evidence_root, tmp_
         generate_catalogue.materialize_captured_native_table(capture, tmp_path)
 
 
+@pytest.mark.governing(
+    "tests/test_data/no_nve_station_catalogue_capture.json",
+    "tests/test_data/no_nve_stations_active_0.json",
+    "tests/test_data/no_nve_stations_active_1.json",
+)
 def test_semantic_and_raw_native_attestation_mutations_refuse_without_output(
     retained_evidence_root,
     tmp_path: Path,
@@ -182,6 +199,7 @@ def test_semantic_and_raw_native_attestation_mutations_refuse_without_output(
         assert not output.with_name(f".{output.name}.candidate").exists()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_origin_gate_refuses_real_canonical_row_deletion_and_non_null_mutation(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     stations = generate_catalogue.build_stations(native)
@@ -197,6 +215,7 @@ def test_origin_gate_refuses_real_canonical_row_deletion_and_non_null_mutation(r
             enforce_catalogue_origins(ProviderId("no_nve"), STATION_CATALOGUE_ORIGINS, native, mutated)
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_stations_active_1.json")
 def test_full_response_duplicate_series_member_refuses_before_availability(retained_evidence_root) -> None:
     document = _active_document(retained_evidence_root)
     rows = cast("list[dict[str, object]]", document["data"])
@@ -208,6 +227,7 @@ def test_full_response_duplicate_series_member_refuses_before_availability(retai
         generate_catalogue._parse_station_response(_encoded(document), generate_catalogue.StationActivityFilter.ALL)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_non_null_wrong_field_origin_refuses_on_the_real_native_build(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     contradicted = dict(STATION_CATALOGUE_ORIGINS)
@@ -217,6 +237,7 @@ def test_non_null_wrong_field_origin_refuses_on_the_real_native_build(retained_e
         generate_catalogue.build_catalogue(native, contradicted)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_wrong_converter_refuses_on_the_real_native_build(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     contradicted = dict(STATION_CATALOGUE_ORIGINS)
@@ -226,6 +247,7 @@ def test_wrong_converter_refuses_on_the_real_native_build(retained_evidence_root
         generate_catalogue.build_catalogue(native, contradicted)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_conversion_error_fails_loud_on_the_real_native_build(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     contradicted = dict(STATION_CATALOGUE_ORIGINS)
@@ -235,6 +257,7 @@ def test_conversion_error_fails_loud_on_the_real_native_build(retained_evidence_
         generate_catalogue.build_catalogue(native, contradicted)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_provider_identifier_has_a_truthful_authored_origin(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     origin = STATION_CATALOGUE_ORIGINS["provider_id"]
@@ -246,6 +269,7 @@ def test_provider_identifier_has_a_truthful_authored_origin(retained_evidence_ro
         generate_catalogue.build_catalogue(native, contradicted)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_authored_origin_cannot_replace_crs_evidence_on_the_real_build(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     contradicted = dict(STATION_CATALOGUE_ORIGINS)
@@ -255,6 +279,7 @@ def test_authored_origin_cannot_replace_crs_evidence_on_the_real_build(retained_
         generate_catalogue.build_catalogue(native, contradicted)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_not_published_crs_refuses_a_fabricated_real_canonical_value(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     stations = generate_catalogue.build_stations(native).with_columns(pl.lit("EPSG:4326").alias("crs"))
@@ -263,6 +288,7 @@ def test_not_published_crs_refuses_a_fabricated_real_canonical_value(retained_ev
         enforce_catalogue_origins(ProviderId("no_nve"), STATION_CATALOGUE_ORIGINS, native, stations)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_authored_provider_identity_is_bound_to_the_gate_provider(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     stations = generate_catalogue.build_stations(native).with_columns(pl.lit("other_provider").alias("provider_id"))
@@ -273,6 +299,7 @@ def test_authored_provider_identity_is_bound_to_the_gate_provider(retained_evide
         enforce_catalogue_origins(ProviderId("no_nve"), contradicted, native, stations)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
 def test_each_real_origin_declaration_is_required_and_mutations_refuse(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE)
     stations = generate_catalogue.build_stations(native)

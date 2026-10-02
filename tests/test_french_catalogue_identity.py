@@ -7,6 +7,10 @@ import pytest
 from rivretrieve._internal.catalogues import artifact
 
 
+@pytest.mark.derived(
+    "tests/test_data/french_combined_catalogue",
+    "tests/test_data/french_combined_catalogue.identity.json",
+)
 def test_combined_catalogue_refused_before_observation_metadata(retained_evidence_root, monkeypatch):
     path = retained_evidence_root / "tests/test_data/french_combined_catalogue"
     before = {file.name: file.read_bytes() for file in path.iterdir()}
@@ -26,6 +30,10 @@ def test_other_provider_catalogue_keeps_existing_format():
     assert loaded.provider_info["provider_id"] == "usgs_nwis"
 
 
+@pytest.mark.derived(
+    "tests/test_data/french_combined_catalogue",
+    "tests/test_data/french_combined_catalogue.identity.json",
+)
 def test_combined_catalogue_is_authenticated_baseline(retained_evidence_root):
     import hashlib
     import json

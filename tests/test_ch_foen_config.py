@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from rivretrieve._internal.engine import StopConvention, Unit, UnknownTemporalSupport, ZoneValue
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ch_foen.config import ChFoenSourceCoordinates, config, window_declarations
@@ -49,6 +51,7 @@ def test_declaration_selects_route_specific_stop_semantics_from_transport_capabi
     } == {StopConvention.EXCLUSIVE}
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_parameters_2026-09-02.recording.json")
 def test_exact_parameters_recording_attests_native_units(retained_evidence_root: Path) -> None:
     import json
 

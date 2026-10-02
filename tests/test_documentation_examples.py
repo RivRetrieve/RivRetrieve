@@ -124,6 +124,12 @@ def execute_page(page, monkeypatch, tmp_path, retained_evidence_root: Path):
 
 
 @pytest.mark.parametrize("page", ["README.md", "docs/usage.md"])
+@pytest.mark.recorded(
+    "tests/recordings/br_ana",
+    "tests/test_data/lt_lhmt_anyksciu-vms_daily_2022-12.recording.json",
+    "tests/test_data/lt_lhmt_anyksciu-vms_daily_2023-01.recording.json",
+    "tests/test_data/usgs_modern",
+)
 def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path, request, retained_evidence_root: Path):
     if page == "README.md":
         request.getfixturevalue("reuse_packaged_catalogues")
@@ -277,6 +283,12 @@ def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded(
+    "tests/recordings/br_ana",
+    "tests/test_data/lt_lhmt_anyksciu-vms_daily_2022-12.recording.json",
+    "tests/test_data/lt_lhmt_anyksciu-vms_daily_2023-01.recording.json",
+    "tests/test_data/usgs_modern",
+)
 def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path, retained_evidence_root: Path):
     from polars.testing import assert_frame_equal
 
@@ -347,6 +359,7 @@ def issue_scope(monkeypatch, tmp_path, outcome, retained_evidence_root: Path):
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_actual_issue_example_success(monkeypatch, tmp_path, retained_evidence_root: Path):
     scope, replay = issue_scope(monkeypatch, tmp_path, "success", retained_evidence_root=retained_evidence_root)
     checked = execute_block(issue_example(), scope, "usage-issues-success")
@@ -358,6 +371,7 @@ def test_actual_issue_example_success(monkeypatch, tmp_path, retained_evidence_r
 @pytest.mark.parametrize("policy", ["warn", "ignore", "raise"])
 @pytest.mark.parametrize("outcome", ["success", "empty", 404, 503])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, outcome, retained_evidence_root: Path):
     """Run each page-authored fetch expression unchanged under transport scenarios."""
     from polars.testing import assert_frame_equal

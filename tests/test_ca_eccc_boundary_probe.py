@@ -54,6 +54,7 @@ def _compiled_derived_store(tmp_path: Path, evidence_data: Path) -> StoreRoot:
     return root
 
 
+@pytest.mark.derived("tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip")
 def test_retained_derived_input_replays_through_production_compiler(evidence_data: Path, tmp_path: Path) -> None:
     assert (
         hashlib.sha256((evidence_data / "ca_eccc_02GA010_2020_01_derived_input.zip").read_bytes()).hexdigest()
@@ -77,6 +78,7 @@ def test_retained_derived_input_replays_through_production_compiler(evidence_dat
     assert compiled.manifest.publisher_artifact.url == _DERIVED_URL
 
 
+@pytest.mark.derived("tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip")
 def test_derived_compiler_preserves_attested_native_cells_for_both_products(
     evidence_data: Path, tmp_path: Path
 ) -> None:
@@ -108,6 +110,11 @@ def test_derived_compiler_preserves_attested_native_cells_for_both_products(
     assert level_partition["DLY_LEVELS.NO_DAYS"].unique().to_list() == [31]
 
 
+@pytest.mark.derived(
+    "tests/test_data/boundary_stores/ca_eccc_02GA010_2020_01/attestation.json",
+    "tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip",
+)
+@pytest.mark.recorded("tests/test_data/ca_eccc_02GA010_daily_2020-01-01_2020-01-03.ogc.recording.json")
 def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input(evidence_data: Path, tmp_path: Path) -> None:
     recording = read_recording(evidence_data / "ca_eccc_02GA010_daily_2020-01-01_2020-01-03.ogc.recording.json")
     response = ReplayTransport((recording,)).send(
@@ -155,6 +162,7 @@ def test_ogc_recording_is_corroboration_not_hydat_replay_or_compiler_input(evide
     assert [item["LEVEL"] for item in properties] == by_product[ProductId("stage_daily_mean")]
 
 
+@pytest.mark.derived("tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip")
 def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hydat_provenance(
     evidence_data: Path, monkeypatch, tmp_path: Path
 ) -> None:
@@ -222,6 +230,7 @@ def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hy
         lambda request: replace(request, body=b"unexpected"),
     ),
 )
+@pytest.mark.recorded("tests/test_data/ca_eccc_02GA010_daily_2020-01-01_2020-01-03.ogc.recording.json")
 def test_canada_ogc_replay_refuses_any_request_mutation(evidence_data: Path, mutation) -> None:
     recording = read_recording(evidence_data / "ca_eccc_02GA010_daily_2020-01-01_2020-01-03.ogc.recording.json")
     request = TransportRequest(

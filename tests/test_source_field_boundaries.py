@@ -42,6 +42,10 @@ def invalid_workbook_time(content):
     return output.getvalue()
 
 
+@pytest.mark.recorded(
+    "tests/test_data/ba_fhmzbih_2101-B_Q_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+)
 def test_bosnia_invalid_row_cannot_become_successful_coverage(retained_evidence_root: Path, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     recordings = tuple(
@@ -59,6 +63,10 @@ def test_bosnia_invalid_row_cannot_become_successful_coverage(retained_evidence_
     assert not any(outcome.status in ("success", "empty") for outcome in result.outcomes)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/ba_fhmzbih_2101-B_Q_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+)
 def test_bosnia_does_not_silently_accept_first_of_multiple_sheets(retained_evidence_root: Path, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     recordings = tuple(
@@ -79,6 +87,7 @@ def test_bosnia_does_not_silently_accept_first_of_multiple_sheets(retained_evide
     assert len(result.receipts.entries) == 2
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata_index.recording.json")
 @pytest.mark.parametrize("bad_index", [b"{", b"{}", b"[]"])
 def test_bosnia_external_index_failure_is_retained_not_fatal(retained_evidence_root: Path, monkeypatch, bad_index):
     recording = read_recording(retained_evidence_root / "tests/test_data" / "ba_fhmzbih_metadata_index.recording.json")
@@ -97,6 +106,10 @@ def test_bosnia_external_index_failure_is_retained_not_fatal(retained_evidence_r
     assert result.receipts.entries[0].content == bad_index
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+)
 @pytest.mark.parametrize("next_value", [123, "https://example.org/untrusted"])
 def test_france_invalid_pagination_preserves_independent_series(
     retained_evidence_root: Path, monkeypatch, tmp_path, next_value
@@ -177,6 +190,10 @@ def test_hydroportail_title_establishes_statistic_not_frequency(quantity):
     assert all(item.facts[0].frequency.value is None for item in selected.series)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hydroportail_J783301020_empty.body",
+    "tests/test_data/fr_hydroportail_J783301020_empty.receipt.json",
+)
 def test_hydroportail_contradictory_temporal_title_is_unsupported(retained_evidence_root: Path):
     from rivretrieve._internal.providers.fr_hydroportail.config import config
     from rivretrieve._internal.providers.fr_hydroportail.parse import parse
@@ -189,6 +206,13 @@ def test_hydroportail_contradictory_temporal_title_is_unsupported(retained_evide
     assert parsed.outcomes[0].status == "unsupported"
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
+)
 def test_temperature_published_unit_spelling_survives_public_result(retained_evidence_root: Path, monkeypatch):
     recordings = tuple(
         read_recording(
@@ -205,6 +229,13 @@ def test_temperature_published_unit_spelling_survives_public_result(retained_evi
     assert result.data["source_unit"].unique().to_list() == ["°C"]
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
+)
 def test_temperature_contradictory_response_unit_is_not_admitted(retained_evidence_root: Path, monkeypatch):
     recordings = tuple(
         read_recording(
@@ -230,6 +261,13 @@ def test_temperature_contradictory_response_unit_is_not_admitted(retained_eviden
     assert any(outcome.status == "unsupported" for outcome in result.outcomes)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
+)
 def test_france_late_bad_continuation_cannot_certify_partial_interval(
     retained_evidence_root: Path, monkeypatch, tmp_path
 ):
@@ -273,6 +311,7 @@ def test_france_late_bad_continuation_cannot_certify_partial_interval(
     assert_frame_equal(reused.data, partial.data)
 
 
+@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata_index.recording.json")
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 def test_bosnia_index_issue_policy_cannot_admit_numbers(retained_evidence_root: Path, monkeypatch, policy):
     from rivretrieve._internal.issues import IssuePolicyError
@@ -294,6 +333,10 @@ def test_bosnia_index_issue_policy_cannot_admit_numbers(retained_evidence_root: 
         assert result.data.is_empty() and result.issues
 
 
+@pytest.mark.recorded(
+    "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+)
 def test_bosnia_missing_source_route_preserves_independent_station(retained_evidence_root: Path, monkeypatch):
     recordings = tuple(
         read_recording(retained_evidence_root / "tests/test_data" / name)

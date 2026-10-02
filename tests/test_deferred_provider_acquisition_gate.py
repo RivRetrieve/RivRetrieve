@@ -22,6 +22,7 @@ from tests._catalogue import catalogue_path, catalogue_reader
 from tests._provenance import legacy_provenance
 
 
+@pytest.mark.derived("tests/test_data/br_ana_inventory/capture.json")
 def test_brazil_inventory_and_adopted_candidates_are_certified(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.br_ana.capture import read_capture_record
 
@@ -151,6 +152,13 @@ def test_acquisition_provenance_v2_rejects_legacy_and_mixed_withheld_shapes() ->
         AcquisitionProvenance.model_validate(mixed)
 
 
+@pytest.mark.governing(
+    "tests/test_data/br_ana_terms_licence.html",
+    "tests/test_data/no_nve_stations_active_0.json",
+    "tests/test_data/no_nve_stations_active_1.json",
+    "tests/test_data/no_nve_swagger.json",
+    "tests/test_data/no_nve_terms_licence.html",
+)
 def test_deferred_public_terms_are_traced_without_republishing_catalogue_values(retained_evidence_root: Path) -> None:
     expected = {
         "br_ana": {"license"},

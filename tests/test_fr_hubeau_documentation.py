@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = Path("tests/test_data/french_provider_documentation")
 
 
+@pytest.mark.recorded("tests/test_data/french_provider_documentation")
 @pytest.mark.parametrize("provider,block_count", [("fr_hubeau", 1), ("fr_hydroportail", 3)])
 def test_french_page_examples_and_displayed_outputs(
     retained_evidence_root, monkeypatch, tmp_path, provider, block_count

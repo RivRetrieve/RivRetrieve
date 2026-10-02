@@ -195,6 +195,10 @@ def test_evidenced_baseline_record_sets_do_not_report_withheld_rows(provider: st
     assert "rr:absence" not in record
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/test_data/br_ana_inventory/capture.json",
+)
 def test_reference_loader_reads_empty_tables_and_null_fields(retained_evidence_root: Path, monkeypatch, tmp_path):
     # Inventory-only projection remains a valid empty-table fixture, even though
     # the shipped Brazil catalogue now includes evidenced adopted telemetry.
@@ -308,7 +312,16 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
     assert any(statement.kind == "terms" and statement.exact_text for statement in source.statements)
 
 
-@pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
+@pytest.mark.parametrize(
+    "provider",
+    [
+        pytest.param(
+            provider,
+            marks=pytest.mark.derived(f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"),
+        )
+        for provider in BUILTIN_PROVIDER_IDS
+    ],
+)
 def test_native_material_identity_matches_committed_provenance_and_bytes(retained_evidence_root: Path, provider: str):
     descriptor = _descriptor(provider)
     provenance, _, _ = _inputs(provider)

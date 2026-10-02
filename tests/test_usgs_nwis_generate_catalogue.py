@@ -262,6 +262,7 @@ def _frame_content_sha256(frame: pl.DataFrame) -> str:
     return hashlib.sha256(json.dumps(rows, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
 def test_existing_generation_path_does_not_fabricate_all_unknown_station_products(
     retained_evidence_root,
 ) -> None:
@@ -272,6 +273,7 @@ def test_existing_generation_path_does_not_fabricate_all_unknown_station_product
     assert "unknown" not in set(catalogue.station_products["availability"].cast(str))
 
 
+@pytest.mark.derived("tests/test_data/usgs_nwis_metadata_series.json")
 def test_strict_rdb_parser_preserves_source_strings_and_empty_fields(
     retained_evidence_root,
 ) -> None:
@@ -294,6 +296,7 @@ def test_strict_rdb_parser_preserves_source_strings_and_empty_fields(
         (*SERIES_HEADER[:-1], "substituted"),
     ],
 )
+@pytest.mark.derived("tests/test_data/usgs_nwis_metadata_series.json")
 def test_strict_rdb_parser_rejects_non_exact_headers(retained_evidence_root, header: tuple[str, ...]) -> None:
     rows = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
     values = [rows[0].get(name, "value") for name in header]
@@ -303,6 +306,7 @@ def test_strict_rdb_parser_rejects_non_exact_headers(retained_evidence_root, hea
         generator.parse_series_rdb(text)
 
 
+@pytest.mark.derived("tests/test_data/usgs_nwis_metadata_expanded.json")
 def test_strict_rdb_parser_rejects_non_exact_format_row(
     retained_evidence_root,
 ) -> None:
@@ -336,6 +340,10 @@ def test_strict_rdb_parser_rejects_empty_data() -> None:
 
 
 @pytest.mark.parametrize("site_no", [None, "", "   "])
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_refresh_rejects_absent_or_blank_site_no(retained_evidence_root, site_no: str | None) -> None:
     series = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
     expanded = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
@@ -353,6 +361,10 @@ def test_refresh_rejects_absent_or_blank_site_no(retained_evidence_root, site_no
         )
 
 
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_refresh_rejects_duplicate_expanded_site(
     retained_evidence_root,
 ) -> None:
@@ -368,6 +380,10 @@ def test_refresh_rejects_duplicate_expanded_site(
 
 
 @pytest.mark.parametrize("orphan_pass", ["series", "expanded"])
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_refresh_rejects_cross_pass_orphan(retained_evidence_root, orphan_pass: str) -> None:
     series = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
     expanded = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
@@ -385,6 +401,10 @@ def test_refresh_rejects_cross_pass_orphan(retained_evidence_root, orphan_pass: 
         )
 
 
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_refresh_rejects_conflicting_repeated_fact_within_series(
     retained_evidence_root,
 ) -> None:
@@ -400,6 +420,10 @@ def test_refresh_rejects_conflicting_repeated_fact_within_series(
         )
 
 
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_refresh_rejects_conflicting_repeated_fact_between_passes(
     retained_evidence_root,
 ) -> None:
@@ -415,6 +439,10 @@ def test_refresh_rejects_conflicting_repeated_fact_between_passes(
         )
 
 
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_refresh_rejects_malformed_series_shape(
     retained_evidence_root,
 ) -> None:
@@ -430,6 +458,10 @@ def test_refresh_rejects_malformed_series_shape(
         )
 
 
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_refresh_rejects_missing_required_data_type(
     retained_evidence_root,
 ) -> None:
@@ -444,6 +476,10 @@ def test_refresh_rejects_missing_required_data_type(
         )
 
 
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_fixture_refresh_is_exempt_from_live_minimum(
     retained_evidence_root,
 ) -> None:
@@ -452,6 +488,10 @@ def test_fixture_refresh_is_exempt_from_live_minimum(
     assert outcome.value.data.height == 1
 
 
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_supplied_national_refresh_enforces_live_minimum(
     retained_evidence_root,
 ) -> None:
@@ -714,6 +754,10 @@ def test_native_build_rejects_impossible_retrieval_timestamp() -> None:
         _native_table([{"retrieved_at": None}])
 
 
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_fixture_refresh_preserves_exact_source_data_and_alignment(
     retained_evidence_root,
 ) -> None:
@@ -744,6 +788,10 @@ class _FixtureResponse(io.BytesIO):
     status = 200
 
 
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_live_transport_uses_exact_102_in_scope_urls(retained_evidence_root, monkeypatch: pytest.MonkeyPatch) -> None:
     series_bytes = _rdb_text(
         SERIES_HEADER, SERIES_FORMAT, _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
@@ -783,6 +831,10 @@ def test_native_cli_requires_strict_z_retrieval_instant(tmp_path: Path) -> None:
         generator.main([*common, "--retrieved-at", "2026-08-02T01:14:11+00:00"])
 
 
+@pytest.mark.derived(
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_native_cli_writes_table_without_rewriting_canonical_artifacts(
     retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,
@@ -930,6 +982,7 @@ def test_cli_rejects_relative_rdb_directory(
     assert "--rdb-dir must be an absolute path" in capsys.readouterr().err
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
 def test_committed_native_table_exact_schema_counts_and_provenance(
     retained_evidence_root,
 ) -> None:
@@ -955,6 +1008,7 @@ def test_committed_native_table_exact_schema_counts_and_provenance(
     assert total_records == 2_036_546
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
 def test_committed_native_table_representative_station(
     retained_evidence_root,
 ) -> None:
@@ -986,6 +1040,11 @@ def test_committed_native_table_representative_station(
     } <= keys
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "tests/test_data/usgs_nwis_metadata_expanded.json",
+    "tests/test_data/usgs_nwis_metadata_series.json",
+)
 def test_fixture_refresh_frame_equals_matching_committed_subset(
     retained_evidence_root,
 ) -> None:
@@ -1017,6 +1076,12 @@ def test_fixture_refresh_frame_equals_matching_committed_subset(
     )
 
 
+@pytest.mark.derived(
+    "research/usgs-modern-coverage/legacy-catalogue/products.parquet",
+    "research/usgs-modern-coverage/legacy-catalogue/provider.json",
+    "research/usgs-modern-coverage/legacy-catalogue/station_products.parquet",
+    "research/usgs-modern-coverage/legacy-catalogue/stations.parquet",
+)
 def test_committed_canonical_artifacts_have_pinned_whole_content(
     retained_evidence_root,
 ) -> None:
@@ -1047,6 +1112,13 @@ def test_committed_canonical_artifacts_have_pinned_whole_content(
     )
 
 
+@pytest.mark.governing(
+    "research/usgs-modern-coverage",
+    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+    "tests/test_data/usgs_nwis_terms_citation-1.html",
+    "tests/test_data/usgs_nwis_terms_licence-1.html",
+)
 def test_native_build_is_network_free_and_byte_deterministic(
     retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,
@@ -1100,6 +1172,10 @@ def test_native_build_is_network_free_and_byte_deterministic(
         assert artifact.read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
 
 
+@pytest.mark.recorded(
+    "tests/test_data/usgs_nwis_02339495_site_expanded.recording.json",
+    "tests/test_data/usgs_nwis_02339495_site_series.recording.json",
+)
 def test_live_rdb_recordings_preserve_source_strings_and_native_alignment(
     retained_evidence_root,
 ) -> None:
@@ -1133,6 +1209,7 @@ def test_live_rdb_recordings_preserve_source_strings_and_native_alignment(
     assert refreshed.issues == ()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
 def test_legacy_native_build_cannot_publish_under_modern_identity(retained_evidence_root, tmp_path: Path) -> None:
     catalogue = generator.build_catalogue(
         read_native_table(retained_evidence_root / NATIVE_PATH), STATION_CATALOGUE_ORIGINS

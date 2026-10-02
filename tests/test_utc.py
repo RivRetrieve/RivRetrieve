@@ -230,6 +230,7 @@ def test_to_utc_unknown_zones_refuse_atomically_with_provider_and_count(
     pl_testing.assert_frame_equal(result.data, untouched, check_exact=True)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_nwis_07374000_iv_00060_2023-03-12.recording.json")
 def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
     retained_evidence_root: Path,
     monkeypatch: pytest.MonkeyPatch,

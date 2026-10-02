@@ -67,6 +67,7 @@ def test_invalid_coordinate_refused(value):
         decode(body)
 
 
+@pytest.mark.governing("maintenance/catalogue/fr_hydroportail/evidence")
 def test_retained_capture_identity(retained_evidence_root):
     native, receipt = read_inventory(
         retained_evidence_root / EVIDENCE / "national-tests.body",
@@ -86,6 +87,7 @@ def test_invalid_native_metadata_refused(field, value):
         decode(body)
 
 
+@pytest.mark.governing("maintenance/catalogue/fr_hydroportail/evidence")
 def test_history_projection_keeps_only_native_scopes(retained_evidence_root):
     import lzma
 
@@ -129,6 +131,7 @@ def test_missing_required_native_identity_or_coordinate_is_not_null(mutation):
         decode(body)
 
 
+@pytest.mark.governing("maintenance/catalogue/fr_hydroportail/evidence")
 def test_current_form_options_match_captured_native_query(retained_evidence_root):
     import runpy
 
@@ -143,6 +146,7 @@ def test_current_form_options_match_captured_native_query(retained_evidence_root
     }
 
 
+@pytest.mark.governing("maintenance/catalogue/fr_hydroportail/evidence")
 def test_source_capture_receipt_tamper_refused(retained_evidence_root, tmp_path):
     receipt = json.loads((retained_evidence_root / EVIDENCE / "national-tests.receipt.json").read_bytes())
     receipt["bytes"] += 1

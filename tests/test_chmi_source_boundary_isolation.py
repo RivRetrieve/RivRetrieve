@@ -49,6 +49,7 @@ def _payload(
         {"tsConID": False},
     ],
 )
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_unassignable_member_retains_named_daily_siblings(retained_evidence_root, member):
     payload = _payload(
         retained_evidence_root,
@@ -80,6 +81,7 @@ def test_unassignable_member_retains_named_daily_siblings(retained_evidence_root
         1,
     ],
 )
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_invalid_daily_label_retains_named_siblings(retained_evidence_root, label):
     payload = _payload(
         retained_evidence_root,
@@ -97,6 +99,7 @@ def test_invalid_daily_label_retains_named_siblings(retained_evidence_root, labe
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 @pytest.mark.parametrize("defect", ["member", "noon"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_public_malformed_daily_source_keeps_siblings_and_no_failed_coverage(
     retained_evidence_root, monkeypatch, tmp_path, policy, defect
 ):
@@ -141,6 +144,7 @@ def test_public_malformed_daily_source_keeps_siblings_and_no_failed_coverage(
     assert all(item["series_id"] != failed[0].series_id for item in manifest["coverage"])
 
 
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json")
 def test_recorded_hourly_nonmidnight_labels_remain_valid(
     retained_evidence_root,
 ):

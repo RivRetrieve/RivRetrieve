@@ -76,6 +76,7 @@ def test_cached_receipt_must_match_request_and_hash(tmp_path):
         audit.capture(receipt["url"], tmp_path, "page")
 
 
+@pytest.mark.governing("research/usgs-modern-coverage")
 @pytest.mark.parametrize("station,agency", [("09489082", "USFS"), ("09527500", "CA574")])
 def test_frozen_non_usgs_identity_matches_publisher_evidence(retained_evidence_root, station, agency):
     directory = retained_evidence_root / "research/usgs-modern-coverage"
@@ -95,6 +96,7 @@ def test_frozen_non_usgs_identity_matches_publisher_evidence(retained_evidence_r
     assert legacy["agencies"] == [agency]
 
 
+@pytest.mark.governing("research/usgs-modern-coverage")
 def test_frozen_full_denominator_and_receipt_hashes(
     retained_evidence_root,
 ):
@@ -118,6 +120,7 @@ def test_frozen_full_denominator_and_receipt_hashes(
         assert hashlib.sha256(raw).hexdigest() == receipt["sha256"]
 
 
+@pytest.mark.governing("research/usgs-modern-coverage")
 def test_unknown_statistic_with_observations_is_not_missing(
     retained_evidence_root,
 ):

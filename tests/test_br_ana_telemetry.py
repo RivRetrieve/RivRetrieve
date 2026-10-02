@@ -110,6 +110,7 @@ def _run(
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_independent_midnight_probe_through_actual_engine(retained_evidence_root, product: ProductId) -> None:
     # Independent author did not see the port or its output. Exactly three assertions.
     harness = BoundaryProbeHarness(((_PROVIDER, product),))
@@ -145,6 +146,7 @@ def test_independent_midnight_probe_through_actual_engine(retained_evidence_root
         ("2023-11-17", "2023-12-03", ("2023-12-05",)),
     ],
 )
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_fixed_spans_match_recorded_native_values_and_preserve_nulls(
     retained_evidence_root, product, start, end, anchors
 ) -> None:
@@ -184,6 +186,7 @@ def test_fixed_spans_match_recorded_native_values_and_preserve_nulls(
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_original_capped_span_reproduces_real_overlapping_rows(retained_evidence_root, product: ProductId) -> None:
     class CappedStages(_Stages):
         window_declarations = ProductWindowDeclarations(
@@ -207,6 +210,7 @@ def test_original_capped_span_reproduces_real_overlapping_rows(retained_evidence
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_cache_reuses_native_values_without_double_conversion(
     retained_evidence_root, product: ProductId, tmp_path: Path
 ) -> None:
@@ -235,6 +239,7 @@ def test_cache_reuses_native_values_without_double_conversion(
     assert live.receipts.entries == cached.receipts.entries == ()
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_wrong_anchor_fails_exact_replay(retained_evidence_root) -> None:
     with pytest.raises(UnmatchedRequestError):
         _run(retained_evidence_root, _PRODUCTS[0], "2024-01-02T23:30:00", "2024-01-03T00:30:00", ("2024-01-04",))
@@ -259,6 +264,7 @@ def _payload(retained_evidence_root, product: ProductId, anchor: str = "2024-01-
 
 
 @pytest.mark.parametrize("field", ["Cota_Adotada", "Vazao_Adotada", "Data_Hora_Medicao", "codigoestacao"])
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_missing_required_fields_fail_loud_from_corrupted_recording(retained_evidence_root, field: str) -> None:
     # Adversarial corruption only: not a source observation fixture or boundary expectation.
     product = ProductId("stage_instantaneous" if field == "Cota_Adotada" else "discharge_instantaneous")
@@ -271,6 +277,7 @@ def test_missing_required_fields_fail_loud_from_corrupted_recording(retained_evi
 
 
 @pytest.mark.parametrize("bad_value", ["", "NaN", "Infinity", "not-a-number", True, 1, "9" * 400])
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_invalid_values_fail_loud_from_corrupted_recording(retained_evidence_root, bad_value: object) -> None:
     payload = _payload(retained_evidence_root, ProductId("stage_instantaneous"))
     document = json.loads(payload.content)
@@ -280,12 +287,14 @@ def test_invalid_values_fail_loud_from_corrupted_recording(retained_evidence_roo
     assert any(issue.code.startswith("source.unsupported") for issue in result.issues)
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_real_null_values_and_status_are_retained(retained_evidence_root) -> None:
     result = _run(retained_evidence_root, ProductId("stage_instantaneous"), "2023-11-18", "2023-12-03", ("2023-12-05",))
     assert result.canonical_rows["value"].null_count() > 0
     assert any(issue.details["source_status"] is None for issue in result.issues if issue.code == "source_status")
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_duplicate_multiplicity_is_not_a_quality_selection_rule(retained_evidence_root) -> None:
     # Deliberately repeated *real* source bytes challenge multiplicity handling only.
     payload = _payload(retained_evidence_root, ProductId("stage_instantaneous"))
@@ -304,6 +313,7 @@ def test_duplicate_multiplicity_is_not_a_quality_selection_rule(retained_evidenc
     )
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_exact_detailed_recording_does_not_establish_adopted_equivalence(retained_evidence_root) -> None:
     recording = read_recording(
         (retained_evidence_root / "tests/recordings/br_ana")
