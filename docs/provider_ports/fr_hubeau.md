@@ -2,7 +2,7 @@
 
 Current providers are `fr_hubeau` for Hub'Eau daily hydrometry and temperature,
 and `fr_hydroportail` for HydroPortail station-own Q/H source variants. Each uses its own
-source station inventory. See the [current native coverage account](../../maintenance/catalogue/fr_hydroportail/COVERAGE.md).
+source station inventory. See the [catalogue scope](../../maintenance/catalogue/fr_hydroportail/COVERAGE.md).
 
 The acquisition figures and combined catalogue account below are historical.
 They preserve the scope of the original evidence, not current provider membership.

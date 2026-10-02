@@ -1,5 +1,0 @@
-/Users/nicolaslazaro/Desktop/work/RivRetrieve/.worktrees/visions/provider-examples-final/src/rivretrieve/_internal/discovery.py:964: RuntimeWarning: Provider fr_hydroportail failed for station Y251002001, product discharge_instantaneous: transport retries were exhausted after a timeout, connection interruption, or retryable response (timeout). Source variant: most_valid. Source interval: 2019-12-30T00:00:00..2020-01-04T23:59:59.999999.
-  apply_on_issue(result.issues, on_issue)
-[('Y251002001', 'most_valid')]
-0
-[('error', 'source.request_failed'), ('info', 'provenance.license_not_established'), ('info', 'provenance.citation_not_established')]
