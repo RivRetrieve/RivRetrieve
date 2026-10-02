@@ -30,7 +30,9 @@ def _evidence() -> GraphAvailabilityEvidence:
     return GraphAvailabilityEvidence(LEDGER_PATH.read_bytes())
 
 
-def test_thailand_provenance_maps_every_row_to_its_exact_native_agency() -> None:
+def test_thailand_provenance_maps_every_row_to_its_exact_native_agency(
+    retained_evidence_root: Path,
+) -> None:
     provenance = load_packaged_catalogue_artifact(declaration.catalogue).acquisition_provenance
     assert provenance is not None
     provenance = legacy_provenance(provenance)
@@ -47,7 +49,9 @@ def test_thailand_provenance_maps_every_row_to_its_exact_native_agency() -> None
     }
     assert Counter(b.source_id for b in observation_bindings) == Counter(b.source_id for b in station_bindings)
 
-    native = pl.read_parquet(declaration.catalogue / "native.parquet")
+    native = pl.read_parquet(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
+    )
     source_by_station = {
         str(station): f"th_agency_{agency}" for station, agency in native.select("station.id", "agency.id").iter_rows()
     }
@@ -186,8 +190,12 @@ def test_reviewed_ledger_rejects_identity_hash_date_and_status_tampering(field: 
         GraphAvailabilityEvidence(altered)
 
 
-def test_native_agency_disagreement_with_reviewed_acquisition_fails() -> None:
-    native = read_native_table(declaration.catalogue / "native.parquet")
+def test_native_agency_disagreement_with_reviewed_acquisition_fails(
+    retained_evidence_root: Path,
+) -> None:
+    native = read_native_table(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
+    )
     from rivretrieve._internal.catalogues.native import NativeTable
 
     altered = native.data.with_columns(
@@ -198,16 +206,32 @@ def test_native_agency_disagreement_with_reviewed_acquisition_fails() -> None:
         build_acquisition_provenance(NativeTable(altered), _evidence())
 
 
-def test_thailand_cli_rejects_native_byte_substitution(tmp_path: Path) -> None:
+def test_thailand_cli_rejects_native_byte_substitution(retained_evidence_root: Path, tmp_path: Path) -> None:
     native = tmp_path / "native.parquet"
-    native.write_bytes((declaration.catalogue / "native.parquet").read_bytes() + b"changed")
+    native.write_bytes(
+        (
+            retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
+        ).read_bytes()
+        + b"changed"
+    )
     with pytest.raises(FatalContractError, match="native table digest mismatch: expected .* observed"):
         generate_catalogue.main(
-            ["--native", str(native), "--availability-evidence", str(LEDGER_PATH), "--out", str(tmp_path / "out")]
+            [
+                "--evidence-root",
+                str(retained_evidence_root),
+                "--native",
+                str(native),
+                "--availability-evidence",
+                str(LEDGER_PATH),
+                "--out",
+                str(tmp_path / "out"),
+            ]
         )
 
 
-def test_thailand_cli_invokes_recording_verification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_thailand_cli_invokes_recording_verification(
+    retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def reject(*_args: object) -> None:
         raise FatalContractError("recording verification invoked")
 
@@ -215,8 +239,12 @@ def test_thailand_cli_invokes_recording_verification(tmp_path: Path, monkeypatch
     with pytest.raises(FatalContractError, match="recording verification invoked"):
         generate_catalogue.main(
             [
+                "--evidence-root",
+                str(retained_evidence_root),
                 "--native",
-                str(declaration.catalogue / "native.parquet"),
+                str(
+                    retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
+                ),
                 "--availability-evidence",
                 str(LEDGER_PATH),
                 "--out",
@@ -225,8 +253,15 @@ def test_thailand_cli_invokes_recording_verification(tmp_path: Path, monkeypatch
         )
 
 
-def test_thailand_station_carrier_has_exact_multi_agency_lineage() -> None:
-    provenance = build_acquisition_provenance(read_native_table(declaration.catalogue / "native.parquet"), _evidence())
+def test_thailand_station_carrier_has_exact_multi_agency_lineage(
+    retained_evidence_root: Path,
+) -> None:
+    provenance = build_acquisition_provenance(
+        read_native_table(
+            retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
+        ),
+        _evidence(),
+    )
     station_carrier = next(
         binding for binding in provenance.fact_bindings if binding.fact_group == "canonical_station_carrier"
     )
@@ -236,21 +271,21 @@ def test_thailand_station_carrier_has_exact_multi_agency_lineage() -> None:
     assert referenced_sources == {"th_agency_8", "th_agency_9", "th_agency_12", "th_agency_91"}
 
 
-def test_committed_thaiwater_official_evidence_matches_capture_manifest() -> None:
-    data = Path(__file__).parent / "test_data"
+def test_retained_thaiwater_official_evidence_matches_capture_manifest(retained_evidence_root: Path) -> None:
+    data = retained_evidence_root / "tests/test_data"
     manifest = json.loads((data / "th_thaiwater_official_evidence_manifest-2026-09-02.json").read_text())
-    committed = {
+    retained = {
         "official_water_wl.html": data / "th_thaiwater_official_water_wl-2026-09-02.html",
         "official_app.chunk.js": data / "th_thaiwater_official_app.chunk-2026-09-02.js",
     }
     captures = {item["file"]: item for item in manifest["captures"]}
 
-    assert set(captures) == set(committed)
-    for source_name, path in committed.items():
+    assert set(captures) == set(retained)
+    for source_name, path in retained.items():
         assert path.stat().st_size == captures[source_name]["bytes"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == captures[source_name]["sha256"]
 
-    bundle = committed["official_app.chunk.js"].read_bytes()
+    bundle = retained["official_app.chunk.js"].read_bytes()
     assert b"e.data.graph_data.filter(e=>null!==e.value):e.data.graph_data.filter(e=>null!==e.discharge)" in bundle
     assert "ระดับน้ำ".encode() in bundle
     assert "ม.รทก.".encode() in bundle
@@ -258,8 +293,15 @@ def test_committed_thaiwater_official_evidence_matches_capture_manifest() -> Non
     assert "(ม.3/วิ.)".encode() in bundle
 
 
-def test_platform_identity_does_not_claim_the_agency_supplied_measurements() -> None:
-    provenance = build_acquisition_provenance(read_native_table(declaration.catalogue / "native.parquet"), _evidence())
+def test_platform_identity_does_not_claim_the_agency_supplied_measurements(
+    retained_evidence_root: Path,
+) -> None:
+    provenance = build_acquisition_provenance(
+        read_native_table(
+            retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
+        ),
+        _evidence(),
+    )
     bindings = {binding.fact_group: binding for binding in provenance.fact_bindings}
     platform = bindings["canonical_platform_carrier"]
     assert platform.transformation is not None

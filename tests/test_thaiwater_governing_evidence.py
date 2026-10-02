@@ -18,7 +18,9 @@ def _governing_module(root: Path):
     return module
 
 
-def test_source_body_rejects_false_positive_even_when_derived_facts_agree(tmp_path: Path) -> None:
+def test_source_body_rejects_false_positive_even_when_derived_facts_agree(
+    retained_evidence_root: Path, tmp_path: Path
+) -> None:
     import json
 
     root = Path(__file__).resolve().parents[1]
@@ -26,9 +28,13 @@ def test_source_body_rejects_false_positive_even_when_derived_facts_agree(tmp_pa
     module = _governing_module(root)
     ledger = module.read_ledger(research / "inventory/governing_station_product_evidence.csv")
     row = next(dict(row) for row in ledger if row["station_id"] == "11688546" and row["product_id"] == "stage_reported")
-    receipts = module.read_ledger(research / "evidence/graph_receipts.csv")
+    receipts = module.read_ledger(
+        retained_evidence_root / "maintenance/catalogue/th_thaiwater/evidence/graph_receipts.csv"
+    )
     original = next(receipt for receipt in receipts if receipt["request_id"] == row["request_id"])
-    body = (research / "recordings" / f"{row['request_id']}.body").read_bytes()
+    body = (
+        retained_evidence_root / "maintenance/catalogue/th_thaiwater/recordings" / f"{row['request_id']}.body"
+    ).read_bytes()
     body_path = tmp_path / row["evidence_body"]
     body_path.parent.mkdir(parents=True)
     body_path.write_bytes(body)
@@ -47,14 +53,14 @@ def test_source_body_rejects_false_positive_even_when_derived_facts_agree(tmp_pa
         module.verify_bodies([row], tmp_path)
 
 
-def test_governing_ledger_preserves_every_baseline_pair_and_agency() -> None:
+def test_governing_ledger_preserves_every_baseline_pair_and_agency(retained_evidence_root: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     module = _governing_module(root)
     rows = module.read_ledger(
         root / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
     )
     agencies = module.station_agencies(
-        root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
+        retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
     )
     module.verify_ledger(rows, agencies)
     assert len(agencies) == 825
@@ -63,13 +69,13 @@ def test_governing_ledger_preserves_every_baseline_pair_and_agency() -> None:
     assert sum(row["availability"] == "unknown" for row in rows) == 554
 
 
-def test_each_station_acquisition_is_verified_when_body_path_is_reused() -> None:
+def test_each_station_acquisition_is_verified_when_body_path_is_reused(retained_evidence_root: Path) -> None:
     """Reproduce the independent review's coordinated second-station receipt forgery."""
     import os
 
     configured = os.environ.get("THAIWATER_REVIEW_EVIDENCE_ROOT")
     if configured is None:
-        pytest.skip("controlled private bodies are required; mandatory acceptance check")
+        pytest.fail("THAIWATER_REVIEW_EVIDENCE_ROOT is required for the controlled-input acceptance check")
     evidence_root = Path(configured)
     root = Path(__file__).resolve().parents[1]
     module = _governing_module(root)
@@ -77,7 +83,7 @@ def test_each_station_acquisition_is_verified_when_body_path_is_reused() -> None
         root / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
     )
     agencies = module.station_agencies(
-        root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
+        retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
     )
     first_station = rows[0]["station_id"]
     second_station = next(row["station_id"] for row in rows if row["station_id"] != first_station)
@@ -119,7 +125,7 @@ def test_governing_body_verification_requires_each_acquisition_receipt(tmp_path:
         module.verify_bodies(rows[:1], tmp_path)
 
 
-def test_retained_source_bodies_preserve_archive_member_identity() -> None:
+def test_retained_source_bodies_preserve_archive_member_identity(retained_evidence_root: Path) -> None:
     import hashlib
     import json
 
@@ -138,4 +144,9 @@ def test_retained_source_bodies_preserve_archive_member_identity() -> None:
     assert {member["archive_member"]: member["sha256"] for member in provenance["members"]} == expected
     for member in provenance["members"]:
         assert member["retained_path"] == f"recordings/{member['archive_member']}"
-        assert hashlib.sha256((root / member["retained_path"]).read_bytes()).hexdigest() == member["sha256"]
+        assert (
+            hashlib.sha256(
+                (retained_evidence_root / "maintenance/catalogue/th_thaiwater" / member["retained_path"]).read_bytes()
+            ).hexdigest()
+            == member["sha256"]
+        )

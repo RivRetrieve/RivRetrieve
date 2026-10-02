@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import pytest
 
 from rivretrieve._internal.boundary_probes import (
     FIRST_WALL_CLOCK_TIME,
@@ -25,9 +26,15 @@ from rivretrieve._internal.window_planning import plan_windows
 _PROVIDER = ProviderId("th_thaiwater")
 _PRODUCTS = (ProductId("discharge_reported"), ProductId("stage_reported"))
 _DECLARED = load_manifest((_PROVIDER,))
-_RECORDING = read_recording(
-    Path(__file__).parent / "test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json"
-)
+
+
+@pytest.fixture
+def recording(retained_evidence_root: Path) -> RecordingEnvelope:
+    return read_recording(
+        retained_evidence_root / "tests/test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json"
+    )
+
+
 assert isinstance(declaration.observations, LiveStages)
 _STAGES = declaration.observations.stages
 
@@ -51,11 +58,11 @@ def _run(product: ProductId, replay: ReplayTransport) -> pl.DataFrame:
     return _STAGES.parse(fetched.value[0], _STAGES.config).rows
 
 
-def _probe(product: ProductId) -> LiveBoundaryProbe:
+def _probe(product: ProductId, recording: RecordingEnvelope) -> LiveBoundaryProbe:
     return LiveBoundaryProbe(
         provider_id=_PROVIDER,
         product_id=product,
-        recordings=(_RECORDING,),
+        recordings=(recording,),
         assertions={
             READING_COUNT: 288,
             FIRST_WALL_CLOCK_TIME: WallClockExpectation("2026-08-01T00:00:00", "unknown"),
@@ -65,12 +72,12 @@ def _probe(product: ProductId) -> LiveBoundaryProbe:
     )
 
 
-def test_each_thaiwater_product_has_an_exact_live_replay_probe() -> None:
-    run_manifest_boundary_probes(_DECLARED, tuple(_probe(product) for product in _PRODUCTS))
+def test_each_thaiwater_product_has_an_exact_live_replay_probe(recording) -> None:
+    run_manifest_boundary_probes(_DECLARED, tuple(_probe(product, recording) for product in _PRODUCTS))
 
 
-def test_one_graph_response_coalesces_both_products() -> None:
-    replay = ReplayTransport((_RECORDING,))
+def test_one_graph_response_coalesces_both_products(recording) -> None:
+    replay = ReplayTransport((recording,))
     rendered = plan_windows(_fetch_window(), _STAGES.window_declarations.products[_PRODUCTS[0]])
     fetched = _STAGES.fetch(
         ("1373273",),
@@ -109,9 +116,11 @@ class _CountingReplay(ReplayTransport):
         return super().send(request)
 
 
-def test_historical_366_date_response_remains_parseable_without_claiming_current_window_policy() -> None:
+def test_historical_366_date_response_remains_parseable_without_claiming_current_window_policy(
+    retained_evidence_root: Path,
+) -> None:
     recording = read_recording(
-        Path(__file__).parent / "test_data/th_thaiwater_1373273_2025-01-01_2026-01-01.recording.json"
+        retained_evidence_root / "tests/test_data/th_thaiwater_1373273_2025-01-01_2026-01-01.recording.json"
     )
     replay = _CountingReplay((recording,))
     fetch_window = _make_fetch_window(

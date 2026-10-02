@@ -88,8 +88,8 @@ def test_bosnia_provenance_binds_baseline_to_actual_acquisitions() -> None:
         assert availability.transformation.external_inputs[0].fact == pair.source_fact
 
 
-def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path) -> None:
-    verify_provenance_recordings(_provenance(), Path.cwd())
+def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path, retained_evidence_root: Path) -> None:
+    verify_provenance_recordings(_provenance(), retained_evidence_root)
     evidence = Path("tests/test_data/ba_fhmzbih_terms_absence.html")
     for source in _provenance().source_records:
         for entry in source.evidence:
@@ -97,13 +97,15 @@ def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path) ->
                 capture = Path(entry.recording.repository_path)
                 target_capture = tmp_path / capture
                 target_capture.parent.mkdir(parents=True, exist_ok=True)
-                target_capture.write_bytes(capture.read_bytes())
+                target_capture.write_bytes((retained_evidence_root / capture).read_bytes())
     target = tmp_path / evidence
-    target.write_bytes(evidence.read_bytes() + b"x")
+    target.write_bytes((retained_evidence_root / evidence).read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="ba_fhmzbih_terms_absence digest mismatch"):
         verify_provenance_recordings(_provenance(), tmp_path)
     native = tmp_path / "native.parquet"
-    shutil.copy2("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet", native)
+    shutil.copy2(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet", native
+    )
     native.write_bytes(native.read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
         main(
@@ -113,7 +115,9 @@ def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path) ->
                 "--workbook-access-ledger",
                 str(_LEDGER),
                 "--series-recording",
-                "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+                str(retained_evidence_root / "tests/test_data/ba_fhmzbih_metadata_index.recording.json"),
+                "--evidence-root",
+                str(retained_evidence_root),
                 "--out",
                 str(tmp_path / "out"),
             ]

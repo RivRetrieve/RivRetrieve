@@ -305,23 +305,24 @@ def validate_ledger(ledger: dict, sites: dict[str, str], native_digest: str) -> 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--catalogue-root",
-        "--research-root",
-        dest="catalogue_root",
+        "--retained-evidence-root",
         type=Path,
-        default=Path(__file__).resolve().parents[1],
+        required=True,
+        help="External retained inputs in repository-relative layout",
     )
+    parser.add_argument("--baseline-native", type=Path, required=True)
     parser.add_argument(
-        "--baseline-native",
+        "--workbook-access-ledger",
         type=Path,
-        default=Path(__file__).resolve().parents[4]
-        / "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+        default=Path(__file__).resolve().parents[1] / "inventory/baseline_workbook_access.json",
+        help="Reviewed workbook ledger maintained with verifier code",
     )
     parser.add_argument(
         "--evidence-root", type=Path, help="Controlled private Bosnia corpus; absence never triggers acquisition"
     )
     parser.add_argument("--certificate-out", type=Path, help="Derived accounting only; requires --evidence-root")
     args = parser.parse_args()
+    catalogue_root = args.retained_evidence_root.resolve() / "maintenance/catalogue/ba_fhmzbih"
     try:
         require(
             args.certificate_out is None or args.evidence_root is not None,
@@ -332,15 +333,15 @@ def main() -> None:
         sites = dict(native.select("metadata_station_no", "metadata_site_no").iter_rows())
         require(len(sites) == native.height == 60, "expected original60 native identities")
         documents = {
-            str(path.relative_to(args.catalogue_root)): json.loads(path.read_text())
+            str(path.relative_to(catalogue_root)): json.loads(path.read_text())
             for path in [
-                *sorted((args.catalogue_root / "recordings").glob("*.json")),
-                *sorted((args.catalogue_root / "evidence").rglob("*.json")),
+                *sorted((catalogue_root / "recordings").glob("*.json")),
+                *sorted((catalogue_root / "evidence").rglob("*.json")),
             ]
         }
         for document in documents.values():
             checked_response(document)
-        with (args.catalogue_root / "inventory/workbook_cases.csv").open() as handle:
+        with (catalogue_root / "inventory/workbook_cases.csv").open() as handle:
             cases = verify_workbook_cases(list(csv.DictReader(handle)), documents)
         layer_bytes = checked_response(documents["recordings/layer_20.recording.json"])
         if layer_bytes is None:
@@ -351,7 +352,7 @@ def main() -> None:
             len(layer) == len(recorded_sites) and recorded_sites == sites,
             "recorded metadata routing differs from native baseline",
         )
-        ledger_path = args.catalogue_root / "inventory/baseline_workbook_access.json"
+        ledger_path = args.workbook_access_ledger
         ledger = json.loads(ledger_path.read_text())
         validate_ledger(ledger, sites, hashlib.sha256(native_bytes).hexdigest())
         if args.evidence_root is None:

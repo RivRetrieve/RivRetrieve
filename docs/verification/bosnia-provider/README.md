@@ -5,6 +5,31 @@ and the [standalone vision](../../../planning/visions/2026-09-28-bosnia-provider
 This record separates fresh live checks, offline catalogue inspection and recorded
 source tests. No production code or catalogue artifact changed.
 
+## Current input and output locations
+
+The commands and file locations below record the historical verification run.
+Retained outputs and source material belong in the private
+[source archive](https://github.com/RivRetrieve/verification-evidence).
+Follow [verification evidence](../../maintenance/evidence.md) to select and
+retrieve exact inputs outside the checkout. Current script invocations require
+these explicit locations:
+
+```sh
+uv run python docs/verification/bosnia-provider/inspect_catalogue.py \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"
+
+uv run python docs/verification/bosnia-provider/check_sources.py \
+  --source-requests "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/docs/verification/bosnia-provider/source-requests.json" \
+  --out /path/to/external-output/authoritative
+
+uv run python docs/verification/bosnia-provider/check_workbooks.py \
+  --out /path/to/external-output/workbooks
+```
+
+The last two commands acquire fresh source bytes. They do not reproduce the
+historical acquisitions. Keep their stdout, stderr and downloaded bodies outside
+the checkout. The recorded tests also require `RIVRETRIEVE_TEST_EVIDENCE_ROOT`.
+
 ## Tested revision and environment
 
 - Implementation and catalogue revision: `c52581617c3a3074ce990cfafe289c129689f7c4`.

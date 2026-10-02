@@ -7,6 +7,11 @@ No production code or catalogue was changed.
 
 ## Reproduce
 
+For offline tests, set `RIVRETRIEVE_TEST_EVIDENCE_ROOT` to an external directory
+containing the exact archive inputs in repository-relative layout. Complete the
+[governing body check](../../../maintenance/catalogue/th_thaiwater/README.md) before
+negative provenance tests. Keep test output and temporary files outside the checkout.
+
 From the checkout root, execute both reader snippets in their documented order against
 the live API:
 
@@ -24,10 +29,11 @@ Each snippet made one fresh HTTP 200 call to `waterlevel_graph` for station `1`,
 `start_date=2024-05-30` and `end_date=2024-06-05`. `rr.to_utc` refused the stage result
 because its 432 rows have `time_zone="unknown"`.
 
-The recording was made the same day with the normal CLI:
+The recording was made the same day with the normal CLI. New recordings must use
+an external output directory, as shown here:
 
 ```bash
-uv run python -m rivretrieve._internal.record_observations --provider th_thaiwater --station 1 --product stage_reported --start 2024-06-01 --end 2024-06-03 --out-dir docs/verification/thailand-provider/recordings --name station-1-june-2024
+uv run python -m rivretrieve._internal.record_observations --provider th_thaiwater --station 1 --product stage_reported --start 2024-06-01 --end 2024-06-03 --out-dir /path/to/external-recordings --name station-1-june-2024
 ```
 
 Its 1,008 graph rows are identical to a direct request made at 10:46 UTC. The discharge

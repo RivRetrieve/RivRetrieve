@@ -1,6 +1,7 @@
 """Independent ThaiWater source requests retain bounded successes and failures."""
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -56,8 +57,7 @@ def test_shared_chunks_keep_precise_bounds_and_call_identity(failed):
 
 
 @pytest.mark.parametrize("failed_index", [0, 1])
-def test_public_failed_span_retains_sibling_rows(monkeypatch, failed_index):
-    from pathlib import Path
+def test_public_failed_span_retains_sibling_rows(retained_evidence_root: Path, monkeypatch, failed_index):
 
     import rivretrieve as rr
     from rivretrieve._internal import discovery
@@ -65,7 +65,7 @@ def test_public_failed_span_retains_sibling_rows(monkeypatch, failed_index):
 
     class Transport(ReplayTransport):
         def __init__(self):
-            data = Path(__file__).parent / "test_data"
+            data = retained_evidence_root / "tests/test_data"
             super().__init__(
                 [
                     data / "th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json",

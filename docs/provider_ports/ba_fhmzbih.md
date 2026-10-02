@@ -25,16 +25,21 @@ The source publishes Q in m³/s, H in cm, and WT in °C. It does not establish t
 
 ## Rebuild and acquisition account
 
-The catalogue generator takes the native table and reviewed workbook ledger as explicit build inputs. Runtime discovery loads only packaged catalogue artifacts; it does not open research paths or the private verification corpus.
+The catalogue generator takes an external retained native table, source recordings
+and the reviewed workbook ledger as explicit build inputs. Retrieve the exact inputs
+following the [maintenance instructions](../../maintenance/catalogue/ba_fhmzbih/README.md). Runtime discovery loads only packaged catalogue artifacts; it does not open research paths or the private verification corpus.
 
 ```console
 uv run python -m rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue \
-  --native src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet" \
   --workbook-access-ledger maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json \
-  --out src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue
+  --series-recording "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/tests/test_data/ba_fhmzbih_metadata_index.recording.json" \
+  --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --out /path/to/build-output
 ```
 
-The offline build keeps normal origin, native-byte and genuine public-recording checks. Workbook acquisitions identify the private source bodies through `MaterialIdentity` and exact request/date facts; they are not fake repository recording references. Rebuilding the reviewed public account is distinct from certifying all private bodies. The research verifier requires an explicit authorized evidence root for the latter. Missing private bodies must fail that source-certification mode. The complete corpus is not published or included in distribution artifacts.
+Set `RIVRETRIEVE_TEST_EVIDENCE_ROOT` to the verified external input tree.
+The offline build keeps normal origin, native-byte and genuine recorded-source checks. Workbook acquisitions identify the private source bodies through `MaterialIdentity` and exact request/date facts; they are not fake repository recording references. Rebuilding the reviewed public account is distinct from certifying all private bodies. The research verifier requires an explicit authorized evidence root for the latter. Missing private bodies must fail that source-certification mode. The complete corpus is not published or included in distribution artifacts.
 
 The publisher attribution establishes who supplied the material. It does not establish every original measurer, historical operator, or a dataset-author citation. Source terms remain verbatim in provenance. The licence and citation fields remain unset where not established; no redistribution or legal classification is inferred.
 
