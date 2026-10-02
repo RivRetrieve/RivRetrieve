@@ -1,9 +1,39 @@
 # Bosnia provider documentation verification
 
+Historical output files and `source-evidence.md` are archived with their original
+bytes under the `docs/verification/bosnia-provider/` member paths. Links labelled
+“archived” below name those retained members. Select and retrieve them through the
+[verification guide](../../maintenance/evidence.md); they are not in-tree inputs.
+
 Checked on 2026-09-28 (UTC) for [PR #296](https://github.com/RivRetrieve/RivRetrieve/pull/296)
 and the [standalone vision](../../../planning/visions/2026-09-28-bosnia-provider-documentation-review.md).
 This record separates fresh live checks, offline catalogue inspection and recorded
 source tests. No production code or catalogue artifact changed.
+
+## Current input and output locations
+
+The commands and file locations below record the historical verification run.
+Retained outputs and source material belong in the private
+[source archive](https://github.com/RivRetrieve/verification-evidence).
+Follow [verification evidence](../../maintenance/evidence.md) to select and
+retrieve exact inputs outside the checkout. Current script invocations require
+these explicit locations:
+
+```sh
+uv run python docs/verification/bosnia-provider/inspect_catalogue.py \
+  --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"
+
+uv run python docs/verification/bosnia-provider/check_sources.py \
+  --source-requests "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/docs/verification/bosnia-provider/source-requests.json" \
+  --out /path/to/external-output/authoritative
+
+uv run python docs/verification/bosnia-provider/check_workbooks.py \
+  --out /path/to/external-output/workbooks
+```
+
+The last two commands acquire fresh source bytes. They do not reproduce the
+historical acquisitions. Keep their stdout, stderr and downloaded bodies outside
+the checkout. The recorded tests also require `RIVRETRIEVE_TEST_EVIDENCE_ROOT`.
 
 ## Tested revision and environment
 
@@ -30,7 +60,7 @@ uv run python docs/verification/bosnia-provider/example.py > docs/verification/b
 
 [`example.py`](example.py) is exactly the provider page's sole Python block,
 executed in a fresh session in the documented order. It uses `cache="bypass"`.
-[`example-output.txt`](example-output.txt) retains the exact displayed output:
+`example-output.txt` (archived) retains the exact displayed output:
 69 discharge rows at station `2310`, HS Ključ on the Sana, for September 1–3,
 2026. The first row is a published blank; source timestamps are naive and
 returned with `time_zone="unknown"`. Source unit `m³/s` becomes returned unit
@@ -39,7 +69,7 @@ returned with `time_zone="unknown"`. Source unit `m³/s` becomes returned unit
 The two informational issues report that RivRetrieve has not established the
 licence and citation. They are not failed observation requests or measurement
 quality flags. The first final-form run took 4.70 seconds.
-[`example-stderr.txt`](example-stderr.txt) records openpyxl's warning that the
+`example-stderr.txt` (archived) records openpyxl's warning that the
 publisher workbook has no default style. It is separate from RivRetrieve's
 returned issues and did not prevent reading the timestamp/value cells.
 
@@ -57,10 +87,10 @@ uv run python docs/verification/bosnia-provider/check_quantities.py > docs/verif
 
 The workbook script fetches layer-20 metadata, resolves its published group for
 each station and downloads source bytes directly. It uses openpyxl independently
-of RivRetrieve's parser. [`workbook-output.txt`](workbook-output.txt) records URLs,
+of RivRetrieve's parser. `workbook-output.txt` (archived) records URLs,
 UTC access instants, HTTP statuses, SHA-256 digests, exact headers, full row counts,
 blank counts and first/last timestamps. All four requests returned HTTP 200.
-Raw workbooks and metadata remain locally under ignored `source-checks/`.
+Raw workbooks, metadata and this run's records are retained in the private source archive.
 
 | Fresh workbook | Source header | Full rows | Blank values | First label | Last label |
 |---|---|---:|---:|---|---|
@@ -76,7 +106,7 @@ water-temperature workbook has no rows there; it is an example of stale,
 shorter availability despite a yearly filename. These checks establish sample
 spans, not continuous coverage, a universal one-year minimum or a refresh schedule.
 
-[`quantity-output.txt`](quantity-output.txt) retains additional fresh public-API
+`quantity-output.txt` (archived) retains additional fresh public-API
 checks, each with cache bypass:
 
 - Discharge `2310`, September 1–3, 2026: 69 rows, six nulls, `m³/s` to `m3/s`.
@@ -95,7 +125,7 @@ These are supporting checks, not extra snippets on the reader page.
 uv run python docs/verification/bosnia-provider/inspect_catalogue.py > docs/verification/bosnia-provider/catalogue-output.txt 2>&1
 ```
 
-[`catalogue-output.txt`](catalogue-output.txt) establishes 60 locations and 180
+`catalogue-output.txt` (archived) establishes 60 locations and 180
 selectable series candidates: all three quantities at every station. The packaged
 availability table records discharge and stage as available at 60 each; water
 temperature is available at 12 and unknown at 48. These are acquisition-time
@@ -120,8 +150,8 @@ Code inspected at the tested revision:
 ## Authoritative institutional and terms evidence
 
 An independent source researcher fetched 12 official URLs on 2026-09-28; all
-returned HTTP 200. [`source-requests.json`](source-requests.json) retains exact
-access timestamps, final URLs and response digests. [`source-evidence.md`](source-evidence.md)
+returned HTTP 200. `source-requests.json` (archived) retains exact
+access timestamps, final URLs and response digests. `source-evidence.md` (archived)
 contains claim-to-source references, exact quotations, explicitly unofficial
 translations and scope limits. The implementation agent also re-fetched those
 URLs through the project environment:
@@ -130,8 +160,8 @@ URLs through the project environment:
 uv run python docs/verification/bosnia-provider/check_sources.py > docs/verification/bosnia-provider/source-checks.log 2>&1
 ```
 
-[`source-checks.log`](source-checks.log) records that second acquisition. Source
-HTML remains locally in ignored `source-checks/authoritative/`; the checked-in
+`source-checks.log` (archived) records that second acquisition. Source
+HTML is retained in the private source archive; the archived
 extracts and request manifests retain the substantive evidence.
 
 The main corrections to the original claims are:
@@ -159,14 +189,14 @@ uv run ruff format --check docs/verification/bosnia-provider/*.py
 git diff --check
 ```
 
-- [Focused tests](focused-tests.txt): **38 passed in 81.76s**, eight existing
+- Focused tests (archived): **38 passed in 81.76s**, eight existing
   openpyxl style warnings. Existing tests protect public routing, exact identities,
   units, clipping, receipts, blank rows, empty temperature, malformed headers,
   timestamp validation and source-failure isolation. Some tests also cover France.
   Recorded inputs and authored corruption controls do not prove live availability.
-- [Documentation tests](documentation-tests.txt): **28 passed in 8.20s**, with
+- Documentation tests (archived): **28 passed in 8.20s**, with
   one existing rdflib `ConjunctiveGraph` deprecation warning.
-- [Reference check](reference-check.txt): **Reference is current.**
+- Reference check (archived): **Reference is current.**
 - No new tests or expensive combinations were added. New test runtime impact is
   zero. The checks reuse established focused coverage.
 - Ruff lint and format checks passed for all five supporting Python scripts.

@@ -24,11 +24,11 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ba_fhmzbih import generate_catalogue
 from rivretrieve._internal.providers.ba_fhmzbih.origins import WorkbookAccessLedger
 
-_TEST_DATA_DIR = Path(__file__).parent / "test_data"
+_TEST_DATA_DIR = Path("tests/test_data")
 _METADATA_FIXTURE = _TEST_DATA_DIR / "ba_fhmzbih_metadata.json"
-_NATIVE_TABLE = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"
+_NATIVE_TABLE = Path("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 _LEDGER = Path(__file__).parents[1] / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
-_CATALOGUE_DIR = _NATIVE_TABLE.parent
+_CATALOGUE_DIR = Path(__file__).parents[1] / _NATIVE_TABLE.parent
 _CRS_EVIDENCE = _TEST_DATA_DIR / "ba_fhmzbih_crs_evidence_stations.json"
 _RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 12, 42, 3, tzinfo=UTC))
 _METADATA_COLUMNS = (
@@ -73,8 +73,8 @@ _EXPECTED_NATIVE_SCHEMA = pl.Schema(
 )
 
 
-def _fixture_payload() -> list[object]:
-    return json.loads(_METADATA_FIXTURE.read_text(encoding="utf-8"))
+def _fixture_payload(retained_evidence_root: Path) -> list[object]:
+    return json.loads((retained_evidence_root / _METADATA_FIXTURE).read_text(encoding="utf-8"))
 
 
 def _assert_materialization_issue(
@@ -113,8 +113,10 @@ def _access():
     return TypeAdapter(WorkbookAccessLedger).validate_json(_LEDGER.read_bytes())
 
 
-def _catalogue():
-    return generate_catalogue.build_catalogue(read_native_table(_NATIVE_TABLE), _origins(), _access())
+def _catalogue(retained_evidence_root: Path):
+    return generate_catalogue.build_catalogue(
+        read_native_table(retained_evidence_root / _NATIVE_TABLE), _origins(), _access()
+    )
 
 
 def _json_objects(values: pl.Series) -> list[dict[str, object]]:
@@ -145,8 +147,8 @@ def _frame_content_digest(frame: pl.DataFrame) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
-def test_native_build_has_exact_counts_dates_and_schemas() -> None:
-    catalogue = _catalogue()
+def test_native_build_has_exact_counts_dates_and_schemas(retained_evidence_root: Path) -> None:
+    catalogue = _catalogue(retained_evidence_root)
 
     assert (catalogue.stations.height, catalogue.products.height, catalogue.station_products.height) == (60, 3, 180)
     retained_product_ids = {
@@ -178,8 +180,8 @@ def test_native_build_has_exact_counts_dates_and_schemas() -> None:
     )
 
 
-def test_native_build_is_exact_source_projection_and_preserves_native_material() -> None:
-    native = read_native_table(_NATIVE_TABLE)
+def test_native_build_is_exact_source_projection_and_preserves_native_material(retained_evidence_root: Path) -> None:
+    native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     actual = generate_catalogue.build_catalogue(native, _origins(), _access()).stations
     expected = native.data.select(
         pl.lit("ba_fhmzbih").cast(pl.String).alias("provider_id"),
@@ -228,11 +230,11 @@ def test_native_build_is_exact_source_projection_and_preserves_native_material()
     }
 
 
-def test_publisher_capture_and_attestation_support_not_published_crs() -> None:
+def test_publisher_capture_and_attestation_support_not_published_crs(retained_evidence_root: Path) -> None:
     crs_origin = _origins()["crs"]
     assert crs_origin == NotPublished(Evidence("https://vodostaji.voda.ba/data/internet/stations/stations.json"))
     assert isinstance(crs_origin, NotPublished)
-    document = json.loads(_CRS_EVIDENCE.read_text(encoding="utf-8"))
+    document = json.loads((retained_evidence_root / _CRS_EVIDENCE).read_text(encoding="utf-8"))
     assert isinstance(document, list) and len(document) == 230
     keysets = {frozenset(row) for row in document}
     assert len(keysets) == 1 and len(next(iter(keysets))) == 24
@@ -273,16 +275,16 @@ def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
     )
 
 
-def test_native_build_enforces_origins_before_writing(tmp_path: Path) -> None:
+def test_native_build_enforces_origins_before_writing(retained_evidence_root: Path, tmp_path: Path) -> None:
     broken = dict(_origins())
     del broken["longitude"]
     with pytest.raises(FatalContractError, match=r"ba_fhmzbih\.longitude: canonical column has no origin declaration"):
-        generate_catalogue.build_catalogue(read_native_table(_NATIVE_TABLE), broken, _access())
+        generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / _NATIVE_TABLE), broken, _access())
     assert list(tmp_path.iterdir()) == []
 
 
-def test_native_build_rejects_empty_and_malformed_retrieval_timestamps() -> None:
-    native = read_native_table(_NATIVE_TABLE)
+def test_native_build_rejects_empty_and_malformed_retrieval_timestamps(retained_evidence_root: Path) -> None:
+    native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     with pytest.raises(FatalContractError, match="native table must not be empty"):
         generate_catalogue.build_catalogue(NativeTable(native.data.clear()), _origins(), _access())
     malformed = object.__new__(NativeTable)
@@ -295,8 +297,8 @@ def test_native_build_rejects_empty_and_malformed_retrieval_timestamps() -> None
         generate_catalogue.build_catalogue(malformed, _origins(), _access())
 
 
-def test_native_build_uses_workbook_dates_and_maximum_metadata_provider_date() -> None:
-    native = read_native_table(_NATIVE_TABLE)
+def test_native_build_uses_workbook_dates_and_maximum_metadata_provider_date(retained_evidence_root: Path) -> None:
+    native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     mixed = native.data.head(2).with_columns(
         pl.Series(
             "retrieved_at",
@@ -329,8 +331,8 @@ def test_native_build_uses_workbook_dates_and_maximum_metadata_provider_date() -
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
-def test_fixture_digest_is_pinned() -> None:
-    payload = _fixture_payload()
+def test_fixture_digest_is_pinned(retained_evidence_root: Path) -> None:
+    payload = _fixture_payload(retained_evidence_root)
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     assert hashlib.sha256(encoded).hexdigest() == "f607055b8abb079649aab739f7b54fd171de91f508efbae793bbd28bd1e933c1"
 
@@ -349,10 +351,11 @@ def test_refresh_rejects_non_list_envelope(
 
 
 def test_refresh_rejects_missing_required_field(
+    retained_evidence_root: Path,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    payload = copy.deepcopy(_fixture_payload())
+    payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
     del payload[0]["metadata_station_name"]  # type: ignore[index]
     _assert_materialization_issue(
         payload,
@@ -364,10 +367,11 @@ def test_refresh_rejects_missing_required_field(
 
 
 def test_refresh_rejects_non_object_row(
+    retained_evidence_root: Path,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    payload = copy.deepcopy(_fixture_payload())
+    payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
     payload.append("not-an-object")
     _assert_materialization_issue(
         payload,
@@ -380,11 +384,12 @@ def test_refresh_rejects_non_object_row(
 
 @pytest.mark.parametrize("invalid_id", [None, "", "nan", "none", "null"])
 def test_refresh_rejects_missing_or_blank_station_id(
+    retained_evidence_root: Path,
     invalid_id: str | None,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    payload = copy.deepcopy(_fixture_payload())
+    payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
     if invalid_id is None:
         del payload[0]["metadata_station_no"]  # type: ignore[index]
     else:
@@ -399,10 +404,11 @@ def test_refresh_rejects_missing_or_blank_station_id(
 
 
 def test_refresh_rejects_duplicate_station_id(
+    retained_evidence_root: Path,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    payload = copy.deepcopy(_fixture_payload())
+    payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
     payload[1]["metadata_station_no"] = "4510"  # type: ignore[index]
     _assert_materialization_issue(
         payload,
@@ -418,11 +424,12 @@ def test_refresh_rejects_duplicate_station_id(
     ["metadata_station_latitude", "metadata_station_longitude"],
 )
 def test_refresh_rejects_unparseable_coordinates(
+    retained_evidence_root: Path,
     coordinate: str,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    payload = copy.deepcopy(_fixture_payload())
+    payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
     payload[0][coordinate] = "not-a-coordinate"  # type: ignore[index]
     _assert_materialization_issue(
         payload,
@@ -434,11 +441,12 @@ def test_refresh_rejects_unparseable_coordinates(
 
 
 def test_live_refresh_enforces_minimum_after_parsing(
+    retained_evidence_root: Path,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _assert_materialization_issue(
-        _fixture_payload(),
+        _fixture_payload(retained_evidence_root),
         tmp_path,
         capsys,
         input_kind=generate_catalogue.RefreshInputKind.LIVE,
@@ -447,9 +455,9 @@ def test_live_refresh_enforces_minimum_after_parsing(
     )
 
 
-def test_fixture_refresh_preserves_stable_source_fields() -> None:
+def test_fixture_refresh_preserves_stable_source_fields(retained_evidence_root: Path) -> None:
     outcome = generate_catalogue.refresh_native_table(
-        _fixture_payload(),
+        _fixture_payload(retained_evidence_root),
         retrieved_at=_RETRIEVED_AT,
         input_kind=generate_catalogue.RefreshInputKind.FIXTURE,
     )
@@ -469,19 +477,21 @@ def test_fixture_refresh_preserves_stable_source_fields() -> None:
     assert not any(name.startswith("L1_") for name in native.columns)
 
 
-def test_fixture_refresh_frame_equals_committed_rows() -> None:
+def test_fixture_refresh_frame_equals_committed_rows(retained_evidence_root: Path) -> None:
     outcome = generate_catalogue.refresh_native_table(
-        _fixture_payload(),
+        _fixture_payload(retained_evidence_root),
         retrieved_at=_RETRIEVED_AT,
         input_kind=generate_catalogue.RefreshInputKind.FIXTURE,
     )
     assert outcome.issues == ()
-    committed = read_native_table(_NATIVE_TABLE).data.filter(pl.col("metadata_station_no").is_in(["4510", "4121"]))
+    committed = read_native_table(retained_evidence_root / _NATIVE_TABLE).data.filter(
+        pl.col("metadata_station_no").is_in(["4510", "4121"])
+    )
     pl_testing.assert_frame_equal(outcome.value.data, committed, check_exact=True)
 
 
-def test_committed_native_table_contract() -> None:
-    native = read_native_table(_NATIVE_TABLE)
+def test_committed_native_table_contract(retained_evidence_root: Path) -> None:
+    native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     frame = native.data
     assert frame.schema == _EXPECTED_NATIVE_SCHEMA
     assert frame.height == 60
@@ -501,8 +511,8 @@ def test_committed_native_table_contract() -> None:
     assert row_4121["metadata_station_carteasting"].item() == "6520724.16"
 
 
-def test_committed_native_table_digests() -> None:
-    native = read_native_table(_NATIVE_TABLE)
+def test_committed_native_table_digests(retained_evidence_root: Path) -> None:
+    native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     stable = native.data.select(_METADATA_COLUMNS).to_dicts()
     encoded = json.dumps(stable, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     assert hashlib.sha256(encoded).hexdigest() == "14ab47126fe40f16f23ddc66620fc8ae30910cd812c69806f867a851e659b23d"
@@ -512,8 +522,8 @@ def test_committed_native_table_digests() -> None:
     )
 
 
-def test_main_raises_returned_issue_without_writing(tmp_path: Path) -> None:
-    payload = copy.deepcopy(_fixture_payload())
+def test_main_raises_returned_issue_without_writing(retained_evidence_root: Path, tmp_path: Path) -> None:
+    payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
     del payload[0]["metadata_station_name"]  # type: ignore[index]
     payload_path = tmp_path / "defective.json"
     payload_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -597,6 +607,19 @@ def test_main_raises_returned_issue_without_writing(tmp_path: Path) -> None:
         (["--native", "native.parquet"], "--native requires --workbook-access-ledger"),
         (["--out", "catalogue"], "--out requires --native"),
         ([], "one of --native or --native-payload is required"),
+        (
+            [
+                "--native",
+                "native.parquet",
+                "--out",
+                "catalogue",
+                "--workbook-access-ledger",
+                "ledger.json",
+                "--series-recording",
+                "series.json",
+            ],
+            "--native requires --evidence-root",
+        ),
     ],
 )
 def test_main_rejects_incoherent_modes(
@@ -612,6 +635,7 @@ def test_main_rejects_incoherent_modes(
 
 
 def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
+    retained_evidence_root: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -627,11 +651,13 @@ def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
     second = tmp_path / "second"
     argv = [
         "--native",
-        str(_NATIVE_TABLE),
+        str(retained_evidence_root / _NATIVE_TABLE),
         "--workbook-access-ledger",
         str(_LEDGER),
+        "--evidence-root",
+        str(retained_evidence_root),
         "--series-recording",
-        str(_TEST_DATA_DIR / "ba_fhmzbih_metadata_index.recording.json"),
+        str((retained_evidence_root / _TEST_DATA_DIR) / "ba_fhmzbih_metadata_index.recording.json"),
         "--out",
     ]
     assert generate_catalogue.main([*argv, str(first)]) == 0
@@ -642,8 +668,8 @@ def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
         assert (first / artifact).read_bytes() == (_CATALOGUE_DIR / artifact).read_bytes()
 
 
-def test_public_artifact_exposes_evidenced_baseline() -> None:
-    artifact = _catalogue().public_artifact
+def test_public_artifact_exposes_evidenced_baseline(retained_evidence_root: Path) -> None:
+    artifact = _catalogue(retained_evidence_root).public_artifact
     assert artifact.stations.height == 60
     assert artifact.station_products.height == 180
     assert artifact.station_products.filter(pl.col("availability") == "available").height == 132
@@ -681,7 +707,7 @@ def test_workbook_ledger_rejects_inconsistent_pair(field, value) -> None:
 
 
 @pytest.mark.parametrize("mutation", ["duplicate", "missing", "extra", "site", "native_hash", "empty_status"])
-def test_workbook_build_rejects_unmatched_or_inconsistent_ledger(mutation) -> None:
+def test_workbook_build_rejects_unmatched_or_inconsistent_ledger(retained_evidence_root: Path, mutation) -> None:
     from pydantic import ValidationError
 
     document = json.loads(_LEDGER.read_bytes())
@@ -705,12 +731,14 @@ def test_workbook_build_rejects_unmatched_or_inconsistent_ledger(mutation) -> No
         )
     with pytest.raises((ValidationError, FatalContractError)):
         generate_catalogue.build_catalogue(
-            read_native_table(_NATIVE_TABLE), _origins(), TypeAdapter(WorkbookAccessLedger).validate_python(document)
+            read_native_table(retained_evidence_root / _NATIVE_TABLE),
+            _origins(),
+            TypeAdapter(WorkbookAccessLedger).validate_python(document),
         )
 
 
-def test_workbook_dates_reasons_and_unknown_published_bounds_are_preserved() -> None:
-    catalogue = _catalogue()
+def test_workbook_dates_reasons_and_unknown_published_bounds_are_preserved(retained_evidence_root: Path) -> None:
+    catalogue = _catalogue(retained_evidence_root)
     expected = _access()
     for pair in expected.pairs:
         row = catalogue.station_products.filter(
