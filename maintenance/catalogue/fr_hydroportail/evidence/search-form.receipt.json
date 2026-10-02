@@ -1,9 +1,0 @@
-{
-  "url": "https://hydro.eaufrance.fr/rechercher/entites-hydrometriques",
-  "params": null,
-  "status": 200,
-  "retrieved_at": "2026-09-21T09:11:14.597519+00:00",
-  "content_type": "text/html; charset=UTF-8",
-  "bytes": 227725,
-  "sha256": "e309c599a79cf6384aa8dacee2a8a0d2bd1e8cdf0f439d52863ee8d6ddf1b492"
-}

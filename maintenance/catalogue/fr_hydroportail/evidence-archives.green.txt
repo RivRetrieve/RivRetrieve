@@ -1,5 +1,0 @@
-1 file reformatted, 1 file left unchanged
-All checks passed!
-Verified 38 response hashes, request hashes, 32 recording bytes and identities (including empty envelopes), selector form, and overlapping observation arrays.
-..                                                                       [100%]
-2 passed in 0.87s

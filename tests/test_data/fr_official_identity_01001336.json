@@ -1,8 +1,0 @@
-{
-"type": "FeatureCollection",
-"numberMatched": 1,
-"name": "StationMesureEauxSurface",
-"features": [
-{ "type": "Feature", "properties": { "CdStationMesureEauxSurface": "01001336", "LbStationMesureEauxSurface": "L'HOGNEAU À GUSSIGNIES (59)", "DateCreationStationMesureEauxSurface": "1900-01-01", "DateMAJInfosStationMesureEauxSurface": "2011-09-20", "StStationMesure": "Validé", "NomStationMesureEauxSurface": "", "FinaliteStationMesureEauxSurface": "", "LocPreciseStationMesureEauxSurface": ".", "CarteLocStationMesureEauxSurface": "", "SchemaLocStationMesureEauxSurface": "", "AltitudePointCaracteritisque": "0", "SuperficieBassinVersantTopo": "", "SuperficieBassinVersantReel": "", "PremierMoisAnneeEtiage": "6", "PkPointTronconEntiteHydroPrincipale": "980.52", "DateArretActiviteStationMesureEauxSurface": "", "ComStationMesureEauxSurface": "", "ModeObtentionCoordStationMesureEauxSurface": "", "NatureStationMesureEauxSurface": "M", "ClasseDurete": "", "CdMasseDEau": "", "CdEntiteHydrographique": "E1820700", "CdTronconHydrographique": "E1820700", "CdCommune": "59277", "CdBassin": "", "DateDuJeuDeDonnee": "", "ProducteurDuJeu": "Agence de l'Eau Artois-Picardie", "CoordXStationMesureEauxSurface": "752609.33", "CoordYStationMesureEauxSurface": "7026734.16", "ProjStationMesureEauxSurface": "26", "NomEntiteHydrographique": "Hogneau", "TypeCEStationMesureEauxSurface": "", "TypEthStationMesureEauxSurface": "2", "CdIntervenant": "", "DurStationMesureEauxSurface": "" }, "geometry": { "type": "Point", "coordinates": [ 3.73798750540711, 50.336154971404909 ] } }
-]
-}

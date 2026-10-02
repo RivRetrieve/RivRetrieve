@@ -33,8 +33,8 @@ evidence does not promise continuous records or values in every requested period
 June 1–8, 2023 window. Its governing state is failed historical check, not two-window
 emptiness. No retry was used to change this account.
 
-The [machine-readable coverage account](fr_hubeau_coverage.json) and reviewed
-[governing ledger](../../maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz)
+The machine-readable coverage account in the [source archive](../maintenance/evidence.md)
+and reviewed [governing ledger](../../maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz)
 retain the counts and exact acquisition identities. Acquisition dates are mixed,
 not a simultaneous snapshot. The offline catalogue build takes that reviewed ledger
 as an explicit composition-root input. It does not open research files at runtime.

@@ -1,7 +1,0 @@
-GET /stationhydro/ajax/1232000101/series?hydro_series%5BstartAt%5D=30%2F05%2F2026&hydro_series%5BendAt%5D=04%2F06%2F2026&hydro_series%5BvariableType%5D=simple_and_interpolated_and_hourly_variable&hydro_series%5BsimpleAndInterpolatedAndHourlyVariable%5D=H&hydro_series%5BstatusData%5D=most_valid HTTP/1.1
-Host: hydro.eaufrance.fr
-User-Agent: RivRetrieve
-Accept-Encoding: gzip, deflate
-Accept: application/json
-Connection: keep-alive
-
