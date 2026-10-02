@@ -43,7 +43,7 @@ from rivretrieve._internal.transport import (
     TransportRequest,
     TransportResponse,
 )
-from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body, coordinates
+from tests.usgs_modern_recordings import ModernReplay, body, coordinates, manifest
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
@@ -66,14 +66,17 @@ class CountedReplay:
     All non-window request coordinates must still match the exact capture.
     """
 
-    def __init__(self, recording: str) -> None:
+    def __init__(self, recording: str, retained_evidence_root: Path) -> None:
+        self.retained_evidence_root = retained_evidence_root
         self.recording = recording
-        self.replay = ModernReplay(recording)
+        self.replay = ModernReplay(recording, evidence_root=retained_evidence_root)
         self.calls: list[TransportRequest] = []
 
     def send(self, request: TransportRequest) -> TransportResponse:
         self.calls.append(request)
-        if coordinates(request.url, request.params) == coordinates(MANIFEST[self.recording]["original_url"]):
+        if coordinates(request.url, request.params) == coordinates(
+            manifest(self.retained_evidence_root)[self.recording]["original_url"]
+        ):
             return self.replay.send(request)
         assert self.recording == _INSTANT
         assert request.method is HttpMethod.GET
@@ -84,11 +87,13 @@ class CountedReplay:
             "2010-05-30T05:00:00Z/2010-06-07T04:59:59Z",
         }
         params = {**request.params, "datetime": "2010-05-30T05:00:00Z/2010-06-04T04:59:59Z"}
-        assert coordinates(request.url, params) == coordinates(MANIFEST[_INSTANT]["original_url"])
+        assert coordinates(request.url, params) == coordinates(
+            manifest(self.retained_evidence_root)[_INSTANT]["original_url"]
+        )
         return TransportResponse(
-            body(_INSTANT),
+            body(_INSTANT, evidence_root=self.retained_evidence_root),
             200,
-            datetime.fromisoformat(MANIFEST[_INSTANT]["acquired_utc"]),
+            datetime.fromisoformat(manifest(self.retained_evidence_root)[_INSTANT]["acquired_utc"]),
             "application/json",
             request.url,
             request.params,
@@ -150,10 +155,10 @@ def _bytes(store: Path) -> dict[str, bytes]:
 
 
 def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, retained_evidence_root: Path
 ) -> None:
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    transport = CountedReplay(_DAILY)
+    transport = CountedReplay(_DAILY, retained_evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     selection = rr.pick(
         rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"), station="07374000"
@@ -187,8 +192,10 @@ def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
     assert not rr.cache_status("usgs_nwis").exists
 
 
-def test_padded_acquisition_reuses_rows_outside_the_initial_result_window(tmp_path: Path) -> None:
-    transport = CountedReplay(_INSTANT)
+def test_padded_acquisition_reuses_rows_outside_the_initial_result_window(
+    tmp_path: Path, retained_evidence_root: Path
+) -> None:
+    transport = CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root)
     store = tmp_path / "store"
     first = _drive(store, transport, end=_MIDPOINT - timedelta(microseconds=1))
     acquired = _drive(store, transport)
@@ -213,11 +220,17 @@ def test_padded_acquisition_reuses_rows_outside_the_initial_result_window(tmp_pa
     assert_frame_equal(extended.canonical_rows.sort("time"), expected_extended.canonical_rows.sort("time"))
 
 
-def test_failed_reacquisition_retains_held_success_with_original_vintage(tmp_path: Path) -> None:
+def test_failed_reacquisition_retains_held_success_with_original_vintage(
+    tmp_path: Path, retained_evidence_root: Path
+) -> None:
     store = tmp_path / "store"
-    held = _drive(store, CountedReplay(_INSTANT), end=_MIDPOINT - timedelta(microseconds=1))
+    held = _drive(
+        store,
+        CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root),
+        end=_MIDPOINT - timedelta(microseconds=1),
+    )
     before = {key: value for key, value in _bytes(store).items() if key.endswith(".parquet")}
-    expected = _drive(store, CountedReplay(_INSTANT), cache="bypass")
+    expected = _drive(store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root), cache="bypass")
     partial = _drive(store, RefusedTransport(), cache="refresh")
     assert_frame_equal(partial.canonical_rows, expected.canonical_rows)
     assert partial.provenance.served_intervals
@@ -232,9 +245,11 @@ def test_failed_reacquisition_retains_held_success_with_original_vintage(tmp_pat
 
 
 @pytest.mark.parametrize("remaining", [8, 0])
-def test_refresh_replaces_with_fewer_parse_rows_and_empty_answers_are_covered(tmp_path: Path, remaining: int) -> None:
+def test_refresh_replaces_with_fewer_parse_rows_and_empty_answers_are_covered(
+    tmp_path: Path, remaining: int, retained_evidence_root: Path
+) -> None:
     store = tmp_path / "store"
-    replay = CountedReplay(_INSTANT)
+    replay = CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root)
     first = _drive(store, replay, control=ParseOutputControl(10))
     assert first.canonical_rows.height == 10
     refreshed = _drive(store, replay, cache="refresh", control=ParseOutputControl(remaining))
@@ -245,15 +260,21 @@ def test_refresh_replaces_with_fewer_parse_rows_and_empty_answers_are_covered(tm
     assert StoreReader().status(StoreRoot(store), _PROVIDER).coverage
 
 
-def test_served_intervals_retain_separate_retrieval_instants(tmp_path: Path) -> None:
+def test_served_intervals_retain_separate_retrieval_instants(tmp_path: Path, retained_evidence_root: Path) -> None:
     class LaterReplay(CountedReplay):
         def send(self, request):
             response = super().send(request)
             return replace(response, retrieved_at=response.retrieved_at + timedelta(days=1))
 
     store = StoreRoot(tmp_path / "store")
-    _drive(store, CountedReplay(_INSTANT), end=_MIDPOINT - timedelta(microseconds=1))
-    _drive(store, LaterReplay(_INSTANT), start=_MIDPOINT, cache="refresh")
+    _drive(
+        store,
+        CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root),
+        end=_MIDPOINT - timedelta(microseconds=1),
+    )
+    _drive(
+        store, LaterReplay(_INSTANT, retained_evidence_root=retained_evidence_root), start=_MIDPOINT, cache="refresh"
+    )
     status = StoreReader().status(store, _PROVIDER)
     # Include the earlier portion that the later padded acquisition did not replace.
     result = _drive(store, RefusedTransport(), start=_START - timedelta(days=1))
@@ -264,33 +285,33 @@ def test_served_intervals_retain_separate_retrieval_instants(tmp_path: Path) -> 
     assert "freshness" not in result.provenance.model_dump_json()
 
 
-def test_unknown_revision_refuses_before_transport(tmp_path: Path) -> None:
+def test_unknown_revision_refuses_before_transport(tmp_path: Path, retained_evidence_root: Path) -> None:
     store = tmp_path / "store"
-    _drive(store, CountedReplay(_INSTANT))
+    _drive(store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root))
     path = store / "manifest.json"
     document = json.loads(path.read_text())
     document["format_version"] = 99
     path.write_text(json.dumps(document))
-    replay = CountedReplay(_INSTANT)
+    replay = CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root)
     with pytest.raises(ObservationStoreRefusedError, match="unsupported format revision 99"):
         _drive(store, replay)
     assert replay.calls == []
 
 
-def test_interrupted_publication_refuses_before_source_call(tmp_path: Path) -> None:
+def test_interrupted_publication_refuses_before_source_call(tmp_path: Path, retained_evidence_root: Path) -> None:
     store = tmp_path / "store"
-    _drive(store, CountedReplay(_INSTANT))
+    _drive(store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root))
     store.rename(tmp_path / ".store.backup-interrupted")
-    transport = CountedReplay(_INSTANT)
+    transport = CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root)
     with pytest.raises(ObservationStoreRefusedError, match="interrupted store publication"):
         _drive(store, transport)
     assert transport.calls == []
     assert not store.exists()
 
 
-def test_failed_refresh_does_not_replace_held_concrete_values(tmp_path: Path) -> None:
+def test_failed_refresh_does_not_replace_held_concrete_values(tmp_path: Path, retained_evidence_root: Path) -> None:
     store = tmp_path / "store"
-    held = _drive(store, CountedReplay(_INSTANT))
+    held = _drive(store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root))
     before = {key: value for key, value in _bytes(store).items() if key.endswith(".parquet")}
     result = _drive(store, RefusedTransport(), cache="refresh")
     assert_frame_equal(result.canonical_rows, held.canonical_rows)
@@ -303,7 +324,9 @@ def test_failed_refresh_does_not_replace_held_concrete_values(tmp_path: Path) ->
 
 
 @pytest.mark.parametrize("defect", ["zone", "product"])
-def test_invalid_parse_rows_even_in_padding_do_not_modify_store(tmp_path: Path, defect: str) -> None:
+def test_invalid_parse_rows_even_in_padding_do_not_modify_store(
+    tmp_path: Path, defect: str, retained_evidence_root: Path
+) -> None:
     from rivretrieve._internal.issues import FatalContractError
 
     class InvalidParseRows(ParseOutputControl):
@@ -319,12 +342,14 @@ def test_invalid_parse_rows_even_in_padding_do_not_modify_store(tmp_path: Path, 
 
     store = tmp_path / "store"
     with pytest.raises((ValueError, FatalContractError)):
-        _drive(store, CountedReplay(_INSTANT), control=InvalidParseRows(10))
+        _drive(
+            store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root), control=InvalidParseRows(10)
+        )
     assert not store.exists()
 
 
 def test_successful_series_is_written_before_public_issue_policy_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, retained_evidence_root: Path
 ) -> None:
     from rivretrieve._internal.issues import IssuePolicyError
 
@@ -335,7 +360,9 @@ def test_successful_series_is_written_before_public_issue_policy_raises(
             return super().send(request)
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: OneSeriesFails(_DAILY))
+    monkeypatch.setattr(
+        discovery, "HttpClient", lambda: OneSeriesFails(_DAILY, retained_evidence_root=retained_evidence_root)
+    )
     selection = rr.pick(
         rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"),
         station=["07374000", "09380000"],
@@ -347,7 +374,9 @@ def test_successful_series_is_written_before_public_issue_policy_raises(
     assert tuple(definitions[item.series_id].station_id for item in status.coverage) == ("07374000",)
 
 
-def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_coverage(tmp_path: Path) -> None:
+def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_coverage(
+    tmp_path: Path, retained_evidence_root: Path
+) -> None:
     """Engine WithIssues contract, not a claim that this source returned the authored issue."""
     from rivretrieve._internal.issues import Issue
 
@@ -372,7 +401,7 @@ def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_cover
             )
 
     store = tmp_path / "store"
-    transport = CountedReplay(_INSTANT)
+    transport = CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root)
     result = _drive(store, transport, control=ParseIssueControl(10))
     assert not result.canonical_rows.is_empty()
     assert len(transport.calls) == 1
@@ -382,10 +411,14 @@ def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_cover
     assert any(item.status is OutcomeStatus.FAILED for item in manifest.outcomes)
 
 
-def test_unsupported_refetch_retains_covered_native_success_with_its_vintage(tmp_path):
+def test_unsupported_refetch_retains_covered_native_success_with_its_vintage(tmp_path, retained_evidence_root: Path):
     store = tmp_path / "store"
-    held = _drive(store, CountedReplay(_INSTANT), end=_MIDPOINT - timedelta(microseconds=1))
-    document = json.loads(body(_INSTANT))
+    held = _drive(
+        store,
+        CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root),
+        end=_MIDPOINT - timedelta(microseconds=1),
+    )
+    document = json.loads(body(_INSTANT, evidence_root=retained_evidence_root))
     # Authored corrupt numeric cell exercises the real parser boundary; it is not agency evidence.
     document["features"][0]["properties"]["value"] = "not-a-number"
     malformed = json.dumps(document).encode()
@@ -394,8 +427,8 @@ def test_unsupported_refetch_retains_covered_native_success_with_its_vintage(tmp
         def send(self, request):
             return replace(super().send(request), content=malformed)
 
-    expected = _drive(store, CountedReplay(_INSTANT), cache="bypass")
-    result = _drive(store, AuthoredMalformed(_INSTANT), cache="refresh")
+    expected = _drive(store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root), cache="bypass")
+    result = _drive(store, AuthoredMalformed(_INSTANT, retained_evidence_root=retained_evidence_root), cache="refresh")
     assert_frame_equal(result.canonical_rows, expected.canonical_rows)
     assert any(item.status is OutcomeStatus.UNSUPPORTED for item in result.outcomes)
     assert result.provenance.served_intervals

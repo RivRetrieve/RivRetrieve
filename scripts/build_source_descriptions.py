@@ -21,6 +21,9 @@ from rivretrieve._internal.catalogues.source_descriptions import (
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path("src/rivretrieve/_internal/providers"))
+    parser.add_argument(
+        "--evidence-root", type=Path, required=True, help="External retained inputs in repository-relative layout"
+    )
     args = parser.parse_args()
     for directory in sorted(args.root.glob("*/catalogue")):
         provider = directory.parent.name
@@ -44,7 +47,15 @@ def main():
                 f"rivretrieve._internal.providers.{provider}.catalogue_series"
             ).describe_catalogue
             if provider == "no_nve":
-                descriptions = builder(artifact, native=pl.read_parquet(directory / "native.parquet"))
+                descriptions = builder(
+                    artifact,
+                    native=pl.read_parquet(
+                        args.evidence_root
+                        / "src/rivretrieve/_internal/providers"
+                        / provider
+                        / "catalogue/native.parquet"
+                    ),
+                )
             elif provider in ("br_ana", "usgs_nwis"):
                 descriptions = builder(artifact, config=config)
             else:
@@ -60,7 +71,9 @@ def main():
             from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import PRODUCT_DEFINITIONS
 
             claims = catalogue_claims(
-                pl.read_parquet(directory / "native.parquet"),
+                pl.read_parquet(
+                    args.evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
+                ),
                 {item.series_key: item.product_id for item in PRODUCT_DEFINITIONS},
             )
         claims.write_parquet(directory / "series_claims.parquet", compression="zstd", statistics=True)

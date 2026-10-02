@@ -112,7 +112,9 @@ def test_physical_predicates_do_not_rewrite_acquired_catalogue_inventory():
     assert precise == broad
 
 
-def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_legacy_aliases():
+def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_legacy_aliases(
+    retained_evidence_root: Path,
+):
     import rivretrieve as rr
 
     selection = rr.find(
@@ -127,13 +129,15 @@ def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_lega
     assert all(item.identity.description is None for item in restored.series)
     assert all(item.identity.namespace == "USGS.WaterData.time_series_id" for item in restored.series)
     assert not any(inventory.catalogue_claims for inventory in restored.inventories)
-    legacy = pl.read_parquet("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
+    legacy = pl.read_parquet(
+        retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet"
+    )
     claims = legacy.filter((pl.col("station_id") == "02196000") & (pl.col("product_id") == "discharge_daily_mean"))
     assert set(claims.select("published_id", "description").iter_rows()) == {("126801", ""), ("126805", "[(2)]")}
     assert set(claims["namespace"]) == {"NWIS.ts_id"}
 
 
-def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary():
+def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary(retained_evidence_root: Path):
     import polars as pl
 
     from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
@@ -141,7 +145,7 @@ def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary():
     artifact = load_packaged_catalogue_artifact(BASE / "usgs_nwis/catalogue")
     # Authored corruption of an independently retained historical claim carrier.
     claims = (
-        pl.read_parquet("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
+        pl.read_parquet(retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
         .head(1)
         .with_columns(
             pl.lit(
@@ -162,7 +166,7 @@ def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary():
         )
 
 
-def test_changed_catalogue_claims_change_snapshot_identity_at_same_check_date():
+def test_changed_catalogue_claims_change_snapshot_identity_at_same_check_date(retained_evidence_root: Path):
     from dataclasses import replace
 
     import polars as pl
@@ -172,7 +176,9 @@ def test_changed_catalogue_claims_change_snapshot_identity_at_same_check_date():
     # not by attaching old numeric claims to modern publisher series IDs.
     artifact = replace(
         artifact,
-        catalogue_claims=pl.read_parquet("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet"),
+        catalogue_claims=pl.read_parquet(
+            retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet"
+        ),
     )
     scope = SeriesScope(station_ids=("02196000",), product_ids=("discharge_daily_mean",))
     _, original = catalogue_series(artifact, scope=scope)

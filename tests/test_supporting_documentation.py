@@ -39,12 +39,12 @@ def test_catalogue_evidence_markdown():
     assert len(scope["graph"]) > 0
 
 
-def test_architecture_markdown_exact_receipt(monkeypatch, tmp_path):
+def test_architecture_markdown_exact_receipt(monkeypatch, tmp_path, retained_evidence_root: Path):
     import rivretrieve._internal.discovery as discovery
-    from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
+    from tests.usgs_modern_recordings import ModernReplay, body, manifest
 
     name = "daily-07374000-discharge-mean"
-    replay = ModernReplay(name)
+    replay = ModernReplay(name, evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     result = execute("docs/architecture.md")["result"]
@@ -65,9 +65,11 @@ def test_architecture_markdown_exact_receipt(monkeypatch, tmp_path):
     assert not result.issues
     assert len(replay.calls) == 1
     assert replay.calls[0].params["datetime"] == "2023-12-30/2024-01-09"
-    assert result.receipts.entries[0].content == body(name)
+    assert result.receipts.entries[0].content == body(name, evidence_root=retained_evidence_root)
     assert result.receipts.entries[0].authorship.value == "publisher_payload"
-    assert result.receipts.entries[0].origin.retrieved_at == datetime.fromisoformat(MANIFEST[name]["acquired_utc"])
+    assert result.receipts.entries[0].origin.retrieved_at == datetime.fromisoformat(
+        manifest(retained_evidence_root)[name]["acquired_utc"]
+    )
 
 
 def test_physical_product_markdown():

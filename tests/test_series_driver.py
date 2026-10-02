@@ -1,6 +1,7 @@
 """Modern publisher rows with authored stage controls for shared driver contracts."""
 
 from datetime import datetime
+from pathlib import Path
 
 import polars.testing as pt
 import pytest
@@ -14,7 +15,7 @@ from rivretrieve._internal.store import StoreRoot
 from tests.usgs_modern_recordings import ModernReplay
 
 
-def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path):
+def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path, retained_evidence_root: Path):
     stages = declaration.observations.stages
 
     class RepeatedPayloads:
@@ -37,7 +38,7 @@ def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path):
             WindowEndpoint.from_datetime(datetime(2024, 1, 1)), WindowEndpoint.from_datetime(datetime(2024, 1, 7))
         ),
     )
-    replay = ModernReplay("daily-07374000-discharge-mean")
+    replay = ModernReplay("daily-07374000-discharge-mean", evidence_root=retained_evidence_root)
 
     def run():
         return drive(
@@ -57,7 +58,7 @@ def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path):
     assert len(replay.calls) == calls
 
 
-def test_partial_success_only_covers_its_reported_interval(tmp_path):
+def test_partial_success_only_covers_its_reported_interval(tmp_path, retained_evidence_root: Path):
     from dataclasses import replace
 
     from rivretrieve._internal.source_series import SeriesWindow
@@ -86,7 +87,7 @@ def test_partial_success_only_covers_its_reported_interval(tmp_path):
             WindowEndpoint.from_datetime(datetime(2024, 1, 1)), WindowEndpoint.from_datetime(datetime(2024, 1, 7))
         ),
     )
-    replay = ModernReplay("daily-07374000-discharge-mean")
+    replay = ModernReplay("daily-07374000-discharge-mean", evidence_root=retained_evidence_root)
     store = StoreRoot(tmp_path / "store")
     result = drive(
         request,
@@ -100,7 +101,7 @@ def test_partial_success_only_covers_its_reported_interval(tmp_path):
     assert StoreReader().status(store, ProviderId("usgs_nwis")).coverage[0].interval.end == datetime(2024, 1, 1, 12)
 
 
-def test_driver_refuses_converted_rows_outside_fact_defined_window(monkeypatch, tmp_path):
+def test_driver_refuses_converted_rows_outside_fact_defined_window(monkeypatch, tmp_path, retained_evidence_root: Path):
     import polars as pl
     import pytest
 
@@ -122,7 +123,7 @@ def test_driver_refuses_converted_rows_outside_fact_defined_window(monkeypatch, 
             WindowEndpoint.from_datetime(datetime(2024, 1, 1)), WindowEndpoint.from_datetime(datetime(2024, 1, 7))
         ),
     )
-    replay = ModernReplay("daily-07374000-discharge-mean")
+    replay = ModernReplay("daily-07374000-discharge-mean", evidence_root=retained_evidence_root)
     with pytest.raises(FatalContractError, match="outside.*requested|outside.*Requested"):
         drive(
             request,
@@ -132,7 +133,7 @@ def test_driver_refuses_converted_rows_outside_fact_defined_window(monkeypatch, 
         )
 
 
-def test_reuse_filters_rows_by_their_actual_fact_segment(tmp_path):
+def test_reuse_filters_rows_by_their_actual_fact_segment(tmp_path, retained_evidence_root: Path):
     from dataclasses import replace
 
     import polars as pl
@@ -223,7 +224,7 @@ def test_reuse_filters_rows_by_their_actual_fact_segment(tmp_path):
             WindowEndpoint.from_datetime(datetime(2024, 1, 1)), WindowEndpoint.from_datetime(datetime(2024, 1, 7))
         ),
     )
-    replay = ModernReplay("daily-07374000-discharge-mean")
+    replay = ModernReplay("daily-07374000-discharge-mean", evidence_root=retained_evidence_root)
 
     def run(req, provider, cache):
         return drive(
@@ -308,7 +309,9 @@ def test_explicit_failed_unknown_facts_do_not_satisfy_cache_reuse(tmp_path):
         "duplicate_unsuccessful_id",
     ],
 )
-def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(tmp_path, monkeypatch, defect):
+def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(
+    tmp_path, monkeypatch, defect, retained_evidence_root: Path
+):
     from dataclasses import replace
 
     import rivretrieve._internal.driver as driver_module
@@ -383,7 +386,7 @@ def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(tmp_pa
             WindowEndpoint.from_datetime(datetime(2024, 1, 7, 23, 59, 59, 999999)),
         ),
     )
-    replay = ModernReplay("daily-07374000-discharge-mean")
+    replay = ModernReplay("daily-07374000-discharge-mean", evidence_root=retained_evidence_root)
     with pytest.raises(FatalContractError, match="outcome|Outcome"):
         drive(
             request,
@@ -411,7 +414,9 @@ def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(tmp_pa
         "unsuccessful_overlap",
     ],
 )
-def test_driver_preserves_independent_rows_and_nonconflicting_payload_outcomes(tmp_path, case):
+def test_driver_preserves_independent_rows_and_nonconflicting_payload_outcomes(
+    tmp_path, case, retained_evidence_root: Path
+):
     from dataclasses import replace
 
     import polars as pl
@@ -506,7 +511,7 @@ def test_driver_preserves_independent_rows_and_nonconflicting_payload_outcomes(t
             WindowEndpoint.from_datetime(datetime(2024, 1, 7, 23, 59, 59, 999999)),
         ),
     )
-    replay = ModernReplay("daily-07374000-discharge-mean")
+    replay = ModernReplay("daily-07374000-discharge-mean", evidence_root=retained_evidence_root)
     store = StoreRoot(tmp_path / "store")
     result = drive(
         request,

@@ -26,7 +26,6 @@ from rivretrieve._internal.transport import AuthenticatedTransport, HttpMethod, 
 _STATION = "109.42.0"
 _PRODUCT = "discharge_daily_mean"
 _SECRET = "credential-secret-sentinel"
-_DATA = Path(__file__).parent / "test_data"
 
 
 def _register_no_nve(
@@ -86,13 +85,17 @@ def _register_no_nve(
     )
 
 
-def _recording():
-    return read_recording(_DATA / "no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
+def _recording(retained_evidence_root: Path):
+    return read_recording(
+        retained_evidence_root
+        / "tests/test_data"
+        / "no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
+    )
 
 
 class _CapturingReplay:
-    def __init__(self) -> None:
-        self.replay = ReplayTransport((_recording(),))
+    def __init__(self, retained_evidence_root: Path) -> None:
+        self.replay = ReplayTransport((_recording(retained_evidence_root),))
         self.headers: list[dict[str, str]] = []
 
     def send(self, request: TransportRequest) -> TransportResponse:
@@ -138,6 +141,7 @@ def test_missing_credential_fails_before_transport_construction_or_request(
 
 
 def test_dotenv_credential_reaches_nve_header_and_never_reaches_result(
+    retained_evidence_root: Path,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
@@ -146,7 +150,7 @@ def test_dotenv_credential_reaches_nve_header_and_never_reaches_result(
     monkeypatch.delenv("NVE_API_KEY", raising=False)
     (tmp_path / ".env").write_text(f"NVE_API_KEY={_SECRET}\n", encoding="utf-8")
     selection = _register_no_nve(monkeypatch, stub_packaged_catalogue_artifact)
-    transport = _CapturingReplay()
+    transport = _CapturingReplay(retained_evidence_root)
     recordings: list[RecordingTransport] = []
 
     def recorded_authentication(base, credentials):
@@ -176,6 +180,7 @@ def test_dotenv_credential_reaches_nve_header_and_never_reaches_result(
 
 
 def test_process_environment_wins_over_dotenv(
+    retained_evidence_root: Path,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
@@ -184,7 +189,7 @@ def test_process_environment_wins_over_dotenv(
     monkeypatch.setenv("NVE_API_KEY", "environment-value")
     (tmp_path / ".env").write_text("NVE_API_KEY=file-value\n", encoding="utf-8")
     selection = _register_no_nve(monkeypatch, stub_packaged_catalogue_artifact)
-    transport = _CapturingReplay()
+    transport = _CapturingReplay(retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
     rr.fetch(selection, start="2024-01-02", end="2024-01-02", on_issue="ignore")
@@ -493,7 +498,9 @@ def _register_exchange(monkeypatch, artifact_factory, series=None, origin="https
     return rr.pick(rr.find(provider="no_nve"), variant="2")
 
 
-def test_public_declared_exchange_composes_and_sanitizes(monkeypatch, tmp_path, stub_packaged_catalogue_artifact):
+def test_public_declared_exchange_composes_and_sanitizes(
+    retained_evidence_root: Path, monkeypatch, tmp_path, stub_packaged_catalogue_artifact
+):
     from rivretrieve._internal.transport import HttpClient
 
     monkeypatch.chdir(tmp_path)
@@ -506,7 +513,7 @@ def test_public_declared_exchange_composes_and_sanitizes(monkeypatch, tmp_path, 
         calls.append((request.url, dict(request.headers)))
         if request.url.endswith("/token"):
             return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
-        return _recording().content, 200, "application/json"
+        return _recording(retained_evidence_root).content, 200, "application/json"
 
     monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender, sleeper=lambda seconds: None))
     result = rr.fetch(selection, start="2024-01-02", end="2024-01-02", receipts=True, on_issue="ignore")
@@ -538,6 +545,7 @@ def _exchange_environment(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("elapsed, exchanges", [(3299, 1), (3300, 2), (3601, 2)])
 def test_public_exchange_reuses_and_refreshes_across_stations(
+    retained_evidence_root: Path,
     monkeypatch,
     tmp_path,
     stub_packaged_catalogue_artifact,
@@ -563,9 +571,13 @@ def test_public_exchange_reuses_and_refreshes_across_stations(
             return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
         station = request.params["StationId"]
         recording = (
-            _recording()
+            _recording(retained_evidence_root)
             if station == _STATION
-            else read_recording(_DATA / "no_nve_12.210.0_1003_1440_2025-07-08_2025-07-14.recording.json")
+            else read_recording(
+                retained_evidence_root
+                / "tests/test_data"
+                / "no_nve_12.210.0_1003_1440_2025-07-08_2025-07-14.recording.json"
+            )
         )
         clock.value = 100.0 + elapsed
         return recording.content, recording.status_code, recording.content_type
@@ -593,6 +605,7 @@ def test_public_exchange_reuses_and_refreshes_across_stations(
 
 
 def test_public_exchange_failure_does_not_cancel_independent_station(
+    retained_evidence_root: Path,
     monkeypatch,
     tmp_path,
     stub_packaged_catalogue_artifact,
@@ -614,7 +627,7 @@ def test_public_exchange_failure_does_not_cancel_independent_station(
         if request.url.endswith("/token"):
             return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
         return (
-            _recording().content,
+            _recording(retained_evidence_root).content,
             200,
             "application/json",
         )
@@ -703,6 +716,7 @@ def test_public_exchange_secret_echo_is_not_retained(
 
 @pytest.mark.parametrize("origin", ["http://hydapi.nve.no", "https://hydapi.nve.no:444", "https://sub.hydapi.nve.no"])
 def test_public_exchange_exact_origin_never_forwards_credentials(
+    retained_evidence_root: Path,
     monkeypatch,
     tmp_path,
     stub_packaged_catalogue_artifact,
@@ -716,7 +730,7 @@ def test_public_exchange_exact_origin_never_forwards_credentials(
 
     def sender(request, timeout_seconds):
         calls.append(request)
-        return _recording().content, 200, "application/json"
+        return _recording(retained_evidence_root).content, 200, "application/json"
 
     monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender))
     result = rr.fetch(selection, start="2024-01-02", end="2024-01-02", on_issue="ignore")
@@ -822,6 +836,7 @@ def test_public_exchange_issue_exception_is_sanitized(
 
 
 def test_public_exchange_cache_contains_only_observations(
+    retained_evidence_root: Path,
     monkeypatch,
     tmp_path,
     stub_packaged_catalogue_artifact,
@@ -837,7 +852,7 @@ def test_public_exchange_cache_contains_only_observations(
         calls.append(request.url)
         if request.url.endswith("/token"):
             return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
-        return _recording().content, 200, "application/json"
+        return _recording(retained_evidence_root).content, 200, "application/json"
 
     monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender, sleeper=lambda _: None))
     refreshed = rr.fetch(selection, start="2024-01-02", end="2024-01-02", cache="refresh", on_issue="ignore")

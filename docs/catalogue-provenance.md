@@ -4,18 +4,19 @@ This document owns the maintenance conventions for packaged provider catalogues.
 [domain glossary](../CONTEXT.md) defines origins, native tables and catalogue descriptors;
 [`catalogue_origins.py`](../src/rivretrieve/_internal/catalogue_origins.py) enforces the
 origin contract. Each certified canonical catalogue is a reproducible, network-free build
-from a committed native table and its declarations.
+from a verified native table in the private source archive and its declarations.
 
 ## Evidence ownership
 
-Catalogue evidence has four complementary homes:
+Catalogue evidence and its interpretation have complementary homes:
 
 - `src/rivretrieve/_internal/providers/<provider>/catalogue/provenance.json` binds packaged facts to
-  source records, the committed native table, and five digest-bound public evidence relations.
-- Provider generators, acquisition manifests, receipts, and tests hold machine-verifiable request,
-  digest, schema, count, and semantic-frame checks.
-- [`provider_ports/`](provider_ports/) holds provider-specific rationale, source limitations, and
-  capture evidence that is needed for human audit but is not represented by the structured records.
+  source records, the retained native table, and five digest-bound public evidence relations.
+- Provider generators and tests check requests, digests, schemas, counts and semantic frames
+  against acquisition manifests and receipts supplied from the private source archive.
+- [`provider_ports/`](provider_ports/) holds provider-specific rationale and source limitations.
+- The private [source archive](maintenance/evidence.md) retains native tables, source
+  recordings and acquisition context used by the checks.
 - The generated Croissant descriptor beside each catalogue exposes its tables, issuing bodies,
   verbatim terms, file identities and [deliberate absences](catalogue-absence.md#absence) to machines.
   `rivretrieve.describe(provider)` reads this packaged document without network access.
@@ -28,26 +29,26 @@ provenance relationships retain acquisition inputs and separate corroborating ev
 
 A native-table acquisition record must identify every exact non-secret request, its UTC retrieval
 instant, accepted row and station counts, deterministic canonicalization and ordering, SHA-256
-evidence, and an exact semantic-frame comparison between the committed table and a fresh
+evidence, and an exact semantic-frame comparison between the retained table and a fresh
 materialization. The normal route is a live provider refresh. A complete response supplied by an
 orchestrator outside a network-disabled executor is also acceptable with the same record.
 
 A fixture may materialize a native table only when it is verified content-identical to a complete live
 payload and the repository records the URL, retrieval instant, canonicalization, and digest. A
 recovered historical import is permitted only when publisher routes cannot reproduce the complete
-committed payload. Its record must bind the exact third-party materialization and commit, establish
+retained payload. Its record must bind the exact third-party materialization and commit, establish
 raw-byte identity and a defensible provenance lower bound, cross-check identifiers against an
 independent live source, and quantify coverage and agreement against every available publisher route.
 A partial or coarser publisher route does not alone justify recovery; the provider notes must explain
-why the complete committed payload cannot be reproduced.
+why the complete retained payload cannot be reproduced.
 
 ## Retained catalogue inputs
 
-[`maintenance/catalogue/`](../maintenance/catalogue/) holds the source ledgers,
-selected real source cases, and offline integrity verifiers used by catalogue maintenance.
-Source evidence bytes retain their original digests. Case indexes are derived claims,
-not publisher payloads. Completed surveys and acquisition experiments are recoverable
-from Git history rather than maintained alongside these inputs.
+[`maintenance/catalogue/`](../maintenance/catalogue/) holds maintenance instructions,
+authored interpretation and offline integrity verifiers. The private
+[source archive](maintenance/evidence.md) holds retained source material, selected real source cases and native tables.
+Reviewed declarations and authored ledgers keep their code-repository roles. Source evidence bytes retain their original
+digests. Case indexes are derived claims, not publisher payloads.
 
 - [Bosnia workbook evidence](../maintenance/catalogue/ba_fhmzbih/README.md)
 - [Brazil inventory evidence](../maintenance/catalogue/br_ana/README.md)
@@ -55,14 +56,13 @@ from Git history rather than maintained alongside these inputs.
 - [HydroPortail native acquisition and coverage](../maintenance/catalogue/fr_hydroportail/COVERAGE.md)
 - [Thailand availability evidence](../maintenance/catalogue/th_thaiwater/README.md)
 
-These inputs remain repository-only and are excluded from distributions. Public
-verification does not certify unavailable private bodies. Private corpus verification
-requires an explicitly supplied local corpus; missing bodies fail rather than triggering
-network acquisition. Provider maintenance commands remain in the provider notes.
+These inputs stay outside source checkouts and distributions. Verification requires
+an explicitly supplied local input directory; missing bodies fail rather than
+triggering network acquisition. Provider maintenance commands remain in the provider notes.
 
 ## Row-level withholding
 
-A committed native table and complete column origins do not by themselves establish every row-level
+A retained native table and complete column origins do not by themselves establish every row-level
 acquisition fact. Each structured `withheld_facts` group records a reason. When a group withholds
 station or station-product rows, its explicit `catalogue_rows` locators identify the rows removed
 during materialization. Packaged artefacts already contain that withholding and are loaded with
@@ -94,7 +94,7 @@ legacy uncertified catalogue values.
 ## Provider maintenance
 
 After changing provider catalogue code or tests, run that provider's network-free build from its
-committed native table and origins, then commit the resulting canonical artefacts with the change.
+verified archived native table and origins, then commit the resulting canonical artefacts with the change.
 Never substitute a live or fixture-backed canonical build.
 
 The descriptor is a build output; do not edit it by hand. Rebuild it whenever its tables,

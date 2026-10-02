@@ -22,10 +22,10 @@ from tests._catalogue import catalogue_path, catalogue_reader
 from tests._provenance import legacy_provenance
 
 
-def test_brazil_inventory_and_adopted_candidates_are_certified() -> None:
+def test_brazil_inventory_and_adopted_candidates_are_certified(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.br_ana.capture import read_capture_record
 
-    capture = read_capture_record(Path(__file__).parent / "test_data/br_ana_inventory/capture.json")
+    capture = read_capture_record(retained_evidence_root / "tests/test_data/br_ana_inventory/capture.json")
     artifact = load_packaged_catalogue_artifact(catalogue_path("br_ana"), on_issue="raise")
     assert artifact.stations.height == capture.fluviometric_station_count
     assert set(artifact.products["product_id"]) == {
@@ -151,7 +151,7 @@ def test_acquisition_provenance_v2_rejects_legacy_and_mixed_withheld_shapes() ->
         AcquisitionProvenance.model_validate(mixed)
 
 
-def test_deferred_public_terms_are_traced_without_republishing_catalogue_values() -> None:
+def test_deferred_public_terms_are_traced_without_republishing_catalogue_values(retained_evidence_root: Path) -> None:
     expected = {
         "br_ana": {"license"},
         "no_nve": {"license", "citation"},
@@ -178,14 +178,14 @@ def test_deferred_public_terms_are_traced_without_republishing_catalogue_values(
         assert {statement.kind for statement in statements} == kinds
         assert all(statement.verification_status == "verified_public_recording" for statement in statements)
         if provider_id == "no_nve":
-            verify_provenance_recordings(legacy_provenance(provenance), Path.cwd())
+            verify_provenance_recordings(legacy_provenance(provenance), retained_evidence_root)
         else:
             terms_source = next(
                 source for source in provenance.header.source_records if source.source_id == "br_ana.terms"
             )
             for item in terms_source.evidence:
                 assert (
-                    hashlib.sha256((Path.cwd() / item.recording.repository_path).read_bytes()).hexdigest()
+                    hashlib.sha256((retained_evidence_root / item.recording.repository_path).read_bytes()).hexdigest()
                     == item.recording.sha256
                 )
         # ANA compressed inventory recordings are verified by its capture materialization tests;

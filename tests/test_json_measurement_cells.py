@@ -14,7 +14,6 @@ from rivretrieve._internal import discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests._recorded_payload import recorded_payload
 
-DATA = Path(__file__).parent / "test_data"
 CASES = (
     (
         "daily",
@@ -85,7 +84,7 @@ def _measurement_content(content, field, mutation):
 
 @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
 @pytest.mark.parametrize("mutation", ["original", "null", "missing", "true", "false"])
-def test_france_parser_measurement_cells_keep_absence_distinct_from_null(case, mutation):
+def test_france_parser_measurement_cells_keep_absence_distinct_from_null(retained_evidence_root: Path, case, mutation):
     route, station, _predicates, start, end, filenames, field, _count = case
     provider = "fr_hydroportail" if route == "hydroportail" else "fr_hubeau"
     config = import_module(f"rivretrieve._internal.providers.{provider}.config").config()
@@ -96,7 +95,7 @@ def test_france_parser_measurement_cells_keep_absence_distinct_from_null(case, m
         "hydroportail": "discharge_instantaneous",
     }[route]
     for filename in filenames:
-        recording = read_recording(DATA / filename)
+        recording = read_recording(retained_evidence_root / "tests/test_data" / filename)
         payload = recorded_payload(recording, station, product, config, start, end)
         baseline = parse(payload, config)
         result = parse(replace(payload, content=_measurement_content(payload.content, field, mutation)), config)
@@ -120,11 +119,13 @@ def test_france_parser_measurement_cells_keep_absence_distinct_from_null(case, m
 @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
 @pytest.mark.parametrize("mutation", ["original", "null", "missing"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_path, monkeypatch, case, mutation):
+def test_public_france_measurement_cells_keep_absence_distinct_from_null(
+    retained_evidence_root: Path, tmp_path, monkeypatch, case, mutation
+):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     route, station, predicates, start, end, filenames, field, count = case
     provider = "fr_hydroportail" if route == "hydroportail" else "fr_hubeau"
-    recordings = tuple(read_recording(DATA / filename) for filename in filenames)
+    recordings = tuple(read_recording(retained_evidence_root / "tests/test_data" / filename) for filename in filenames)
     replay = MeasurementReplay(recordings, field, mutation)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(provider=provider, station=station, **predicates)
@@ -160,9 +161,15 @@ def test_public_france_measurement_cells_keep_absence_distinct_from_null(tmp_pat
 
 @pytest.mark.parametrize("mutation", ["missing", "true", "false"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
-def test_bad_daily_measurement_does_not_discard_independent_recorded_statistic(monkeypatch, mutation):
-    mean = read_recording(DATA / "fr_hubeau_1011000101_QmnJ_padded.recording.json")
-    maximum = read_recording(DATA / "fr_hubeau_1011000101_QIXnJ_padded.recording.json")
+def test_bad_daily_measurement_does_not_discard_independent_recorded_statistic(
+    retained_evidence_root: Path, monkeypatch, mutation
+):
+    mean = read_recording(
+        retained_evidence_root / "tests/test_data" / "fr_hubeau_1011000101_QmnJ_padded.recording.json"
+    )
+    maximum = read_recording(
+        retained_evidence_root / "tests/test_data" / "fr_hubeau_1011000101_QIXnJ_padded.recording.json"
+    )
     replay = MeasurementReplay((mean, maximum), "resultat_obs_elab", mutation, selected_content=mean.content)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily")

@@ -11,7 +11,7 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal import discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
-from tests.usgs_modern_recordings import MANIFEST, ModernReplay, body
+from tests.usgs_modern_recordings import ModernReplay, body, manifest
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
@@ -20,10 +20,10 @@ CURRENT = "0df18b246e8f48ec8e6547a92070e94a"
 ENDED = "4d186669708e4dc18f84d271efb953a1"
 
 
-def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, tmp_path):
+def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    content = body(RECORDING)
-    replay = ModernReplay(RECORDING)
+    content = body(RECORDING, evidence_root=retained_evidence_root)
+    replay = ModernReplay(RECORDING, evidence_root=retained_evidence_root)
     calls = []
 
     class Counting:
@@ -81,7 +81,9 @@ def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, 
     pt.assert_frame_equal(pl.read_parquet(standalone), result.data)
 
 
-def test_authored_unknown_explicit_series_remains_unresolved_not_successful_empty(monkeypatch):
+def test_authored_unknown_explicit_series_remains_unresolved_not_successful_empty(
+    monkeypatch, retained_evidence_root: Path
+):
     """Authored empty response for an unknown ID; not a recorded publisher availability claim."""
     from rivretrieve._internal.transport import TransportResponse
 
@@ -94,7 +96,7 @@ def test_authored_unknown_explicit_series_remains_unresolved_not_successful_empt
             return TransportResponse(
                 b'{"type":"FeatureCollection","features":[],"links":[]}',
                 200,
-                datetime.fromisoformat(MANIFEST[RECORDING]["acquired_utc"]),
+                datetime.fromisoformat(manifest(retained_evidence_root)[RECORDING]["acquired_utc"]),
                 "application/json",
                 request.url,
                 request.params,
@@ -114,11 +116,13 @@ def test_authored_unknown_explicit_series_remains_unresolved_not_successful_empt
     assert any(item.code == "source.inventory_unresolved" for item in result.issues)
 
 
-def test_narrowed_public_request_does_not_persist_unrelated_catalogue_claims(monkeypatch, tmp_path):
+def test_narrowed_public_request_does_not_persist_unrelated_catalogue_claims(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     import rivretrieve._internal.driver as driver
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(RECORDING))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(RECORDING, evidence_root=retained_evidence_root))
     selection = rr.pick(
         rr.find(
             provider="usgs_nwis",
@@ -146,10 +150,14 @@ def test_narrowed_public_request_does_not_persist_unrelated_catalogue_claims(mon
     assert inspected
 
 
-def test_known_explicit_series_across_access_routes_reuse_independently(monkeypatch, tmp_path):
+def test_known_explicit_series_across_access_routes_reuse_independently(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     recordings = (RECORDING, "daily-07374000-stage-mean")
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(*recordings))
+    monkeypatch.setattr(
+        discovery, "HttpClient", lambda: ModernReplay(*recordings, evidence_root=retained_evidence_root)
+    )
     selection = rr.find(provider="usgs_nwis", station="07374000", frequency="daily", statistic="mean")
     broad = rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="refresh", on_issue="raise")
     assert broad.data["series_id"].n_unique() == 2
@@ -159,12 +167,14 @@ def test_known_explicit_series_across_access_routes_reuse_independently(monkeypa
     pt.assert_frame_equal(reused.data, broad.data)
 
 
-def test_usgs_subset_cache_cannot_satisfy_all_and_refresh_preserves_peer(monkeypatch, tmp_path):
+def test_usgs_subset_cache_cannot_satisfy_all_and_refresh_preserves_peer(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     recordings = tuple(f"daily-02196000-2000-{name}" for name in ("all", "current", "ended"))
-    replay = ModernReplay(*recordings)
+    replay = ModernReplay(*recordings, evidence_root=retained_evidence_root)
     calls = []
 
     class Counting:
@@ -205,11 +215,11 @@ def test_usgs_subset_cache_cannot_satisfy_all_and_refresh_preserves_peer(monkeyp
     pt.assert_frame_equal(restored.data, narrow.data)
 
 
-def test_recorded_ended_series_successful_empty_is_reusable(monkeypatch, tmp_path):
+def test_recorded_ended_series_successful_empty_is_reusable(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     name = "daily-02196000-ended-empty"
-    content = body(name)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(name))
+    content = body(name, evidence_root=retained_evidence_root)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(name, evidence_root=retained_evidence_root))
     selection = rr.pick(
         rr.find(provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"),
         variant=ENDED,
@@ -225,8 +235,10 @@ def test_recorded_ended_series_successful_empty_is_reusable(monkeypatch, tmp_pat
     assert reused.provenance.served_intervals
 
 
-def test_nve_cached_explicit_subset_does_not_freeze_later_all_known_versions(monkeypatch, tmp_path):
-    data = Path(__file__).parent / "test_data"
+def test_nve_cached_explicit_subset_does_not_freeze_later_all_known_versions(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
+    data = retained_evidence_root / "tests" / "test_data"
     recordings = tuple(
         read_recording(data / f"no_nve_109.42.0_1001_1440_version-{version}_engine_2024-01-02.recording.json")
         for version in (1, 2, 3)
@@ -252,8 +264,10 @@ def test_nve_cached_explicit_subset_does_not_freeze_later_all_known_versions(mon
 
 
 @pytest.mark.parametrize("variants", [("2",), ("1", "2", "3")])
-def test_nve_explicit_versions_reuse_independent_acquired_inventories(monkeypatch, tmp_path, variants):
-    data = Path(__file__).parent / "test_data"
+def test_nve_explicit_versions_reuse_independent_acquired_inventories(
+    monkeypatch, tmp_path, variants, retained_evidence_root: Path
+):
+    data = retained_evidence_root / "tests" / "test_data"
     recordings = tuple(
         read_recording(data / f"no_nve_109.42.0_1001_1440_version-{version}_engine_2024-01-02.recording.json")
         for version in (1, 2, 3)
@@ -314,10 +328,12 @@ def test_nve_explicit_versions_reuse_independent_acquired_inventories(monkeypatc
     assert attempted == []
 
 
-def test_cached_success_does_not_inherit_failure_for_an_unrequested_window(monkeypatch, tmp_path):
+def test_cached_success_does_not_inherit_failure_for_an_unrequested_window(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
 
-    data = Path(__file__).parent / "test_data"
+    data = retained_evidence_root / "tests" / "test_data"
     recording = read_recording(data / "no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
@@ -342,11 +358,13 @@ def test_cached_success_does_not_inherit_failure_for_an_unrequested_window(monke
     assert restored.provenance.calls_made == healthy.provenance.calls_made
 
 
-def test_public_authenticated_source_provenance_excludes_request_headers(monkeypatch, tmp_path):
+def test_public_authenticated_source_provenance_excludes_request_headers(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     from tests.test_br_ana_public_daily import _authenticated_replay
 
     monkeypatch.chdir(tmp_path)
-    _authenticated_replay(monkeypatch, "stage_daily_mean_consistido")
+    _authenticated_replay(retained_evidence_root, monkeypatch, "stage_daily_mean_consistido")
     selection = rr.pick(
         rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean"),
         variant="consistido",
@@ -359,9 +377,14 @@ def test_public_authenticated_source_provenance_excludes_request_headers(monkeyp
     )
 
 
-def test_mixed_nve_finite_variant_cannot_silently_drop_unknown_selector(monkeypatch, tmp_path):
+def test_mixed_nve_finite_variant_cannot_silently_drop_unknown_selector(
+    monkeypatch, tmp_path, retained_evidence_root: Path
+):
     recording = read_recording(
-        Path(__file__).parent / "test_data" / "no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
+        retained_evidence_root
+        / "tests"
+        / "test_data"
+        / "no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))

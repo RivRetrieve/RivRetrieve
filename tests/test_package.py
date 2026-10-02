@@ -214,9 +214,11 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         assert "metadata" not in artifact.provider_info
 
 
-def test_usgs_legacy_calendar_period_claims_remain_independent_evidence() -> None:
+def test_usgs_legacy_calendar_period_claims_remain_independent_evidence(retained_evidence_root: Path) -> None:
     root = Path(__file__).parents[1]
-    legacy = pl.read_parquet(root / "research/usgs-modern-coverage/legacy-catalogue/station_products.parquet")
+    legacy = pl.read_parquet(
+        retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/station_products.parquet"
+    )
     modern = pl.read_parquet(root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/station_products.parquet")
     assert legacy.height == modern.height == 157_548
     for column in ("published_record_start_date", "published_record_end_date"):

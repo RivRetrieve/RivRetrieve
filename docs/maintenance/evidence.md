@@ -26,10 +26,12 @@ or provide an independent backup.
 
 ## Verify source claims
 
-Provider interpretation, reviewed declarations, governing ledgers and source-claim
-verifiers remain in RivRetrieve. Existing tests and catalogue builds still read
-their current local inputs. Archive publication alone does not change those
-bindings or authorize removal of active fixtures, recordings or native tables.
+Provider interpretation, reviewed declarations and source-claim verifiers remain
+in RivRetrieve. Retained source material and required historical test inputs live
+in the private archive. Tests and catalogue tools receive verified local inputs
+explicitly. Packaged catalogues remain in RivRetrieve and work without archive access.
+Historical provenance paths identify the original acquisitions; they do not locate
+files in the current checkout.
 
 Use the provider's instructions:
 
@@ -47,12 +49,15 @@ Use the provider's instructions:
 - [Brazil](../../maintenance/catalogue/br_ana/README.md): digest-bound supporting
   inputs and retained recordings used by the offline rebuild.
 
-For the Canada HYDAT `NO_DAYS` checks, retrieve the exact retained input group
-following the private archive instructions. Set `RIVRETRIEVE_TEST_EVIDENCE_ROOT`
-to an external directory with inputs in their repository-relative layout. The
-Canada group has 18 files under `tests/test_data/ca_eccc_hydat_no_days/`. It
-contains both the sparse SQLite row witnesses and the separate publisher recordings;
-the reconstructed test database is not a complete publisher artifact. Run:
+For retained-input tests, set `RIVRETRIEVE_TEST_EVIDENCE_ROOT` to a verified
+directory outside source checkouts. Preserve the inputs' repository-relative
+layout under that directory. Tests read it through the `retained_evidence_root`
+fixture. There is no checkout fallback or automatic download.
+
+For example, the Canada HYDAT `NO_DAYS` group contains sparse SQLite row
+witnesses and separate publisher recordings under
+`tests/test_data/ca_eccc_hydat_no_days/`. The reconstructed test database is not a
+complete publisher artifact. After retrieving the selected group, run:
 
 ```sh
 uv run pytest tests/test_ca_eccc_no_days_evidence.py -q --tb=no -p no:cacheprovider

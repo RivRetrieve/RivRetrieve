@@ -35,8 +35,10 @@ def test_describe_rejects_unknown_provider(provider: str) -> None:
         rr.describe(provider)
 
 
-def test_recorded_usgs_fetch_carries_exact_verified_source_words(monkeypatch: pytest.MonkeyPatch) -> None:
-    replay = ModernReplay("continuous-07374000-2010-discharge")
+def test_recorded_usgs_fetch_carries_exact_verified_source_words(
+    monkeypatch: pytest.MonkeyPatch, retained_evidence_root: Path
+) -> None:
+    replay = ModernReplay("continuous-07374000-2010-discharge", evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "_credentialed_transport", lambda provider_id, values: replay)
     result = rr.fetch(
         rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", temporal_support="instantaneous"),

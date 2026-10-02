@@ -85,11 +85,13 @@ existing station-identity origins, restricts native rows to canonical station
 identities, and records absence for providers without an eligible field.
 
 ```bash
-uv run python scripts/build_drainage_areas.py
-uv run python scripts/build_drainage_areas.py --check
+uv run python scripts/build_drainage_areas.py --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT"
+uv run python scripts/build_drainage_areas.py --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" --check
 ```
 
-Run the builder after changing relevant native inputs or field declarations.
+Retrieve the verified native inputs outside the checkout as described in the
+[evidence guide](maintenance/evidence.md). Run the builder after changing relevant
+native inputs or field declarations.
 The check and tests compare every projected scalar with the native input,
 including formatted strings and nulls. No command refreshes a catalogue.
 
@@ -101,8 +103,8 @@ repository record establishes eligibility, but not a unit.
 Field eligibility is recorded in `AREA_FIELDS` in the builder. Existing evidence
 includes the [Czech drainage-area entry](https://github.com/RivRetrieve/RivRetrieve/blob/05b5cf7f16863a254d86073b9a2066b93456f923/docs/milestone-tracker.md), the
 [recorded Polish catalogue description](https://github.com/RivRetrieve/RivRetrieve/blob/9b89e3e55154371be8afa293dbd7716948d1431e/docs/milestone-tracker.md),
-the retained [French station schema](../tests/test_data/fr_hubeau_temperature_openapi.json),
-and the [Norwegian schema](../tests/test_data/no_nve_swagger.json).
+the French station schema and Norwegian schema retained in the private
+[source archive](maintenance/evidence.md).
 [USGS field documentation](provider_ports/usgs_nwis.md) establishes the gross-field
 unit, while [Brazil's field notes](provider_ports/br_ana.md) leave its area unit
 unstated. Source vocabulary and packaged values establish the explicit

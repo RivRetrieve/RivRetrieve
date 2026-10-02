@@ -3,6 +3,7 @@
 import json
 import warnings
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from polars.testing import assert_frame_equal
@@ -11,7 +12,6 @@ import rivretrieve as rr
 from rivretrieve._internal import discovery
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
-from tests.test_json_measurement_cells import DATA
 from tests.test_live_numeric_values import BAD, TOKENS
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
@@ -45,10 +45,15 @@ class NumericReplay(ReplayTransport):
     [("large_exponent", policy) for policy in ("raise", "warn", "ignore")]
     + [(mutation, "raise") for mutation in ("zero", "finite", "null")],
 )
-def test_public_numeric_representation_preserves_sibling_receipts_and_coverage(tmp_path, monkeypatch, mutation, policy):
+def test_public_numeric_representation_preserves_sibling_receipts_and_coverage(
+    retained_evidence_root: Path, tmp_path, monkeypatch, mutation, policy
+):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     recordings = tuple(
-        read_recording(DATA / f"fr_hubeau_1011000101_{field}_padded.recording.json") for field in ("QmnJ", "QIXnJ")
+        read_recording(
+            retained_evidence_root / "tests/test_data" / f"fr_hubeau_1011000101_{field}_padded.recording.json"
+        )
+        for field in ("QmnJ", "QIXnJ")
     )
     replay = NumericReplay(recordings, mutation)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)

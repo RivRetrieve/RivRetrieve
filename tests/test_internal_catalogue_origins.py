@@ -347,11 +347,13 @@ def test_poland_declarations_match_canonical_schema_order_and_values() -> None:
     } == STATION_CATALOGUE_ORIGINS
 
 
-def test_committed_poland_origins_pass_validation_and_enforcement() -> None:
+def test_committed_poland_origins_pass_validation_and_enforcement(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.pl_imgw.generate_catalogue import build_stations
     from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
 
-    native = read_native_table(Path("src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet"))
+    native = read_native_table(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet"
+    )
     assert native.data.schema == pl.Schema(
         {
             "gauge_id": pl.String,
@@ -383,11 +385,11 @@ def test_japan_declarations_match_canonical_schema_order_and_values() -> None:
     } == STATION_CATALOGUE_ORIGINS
 
 
-def test_committed_japan_origins_and_build_pass_gate() -> None:
+def test_committed_japan_origins_and_build_pass_gate(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.jp_mlit.generate_catalogue import build_catalogue
     from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
 
-    native_table = read_native_table(JAPAN_NATIVE_PATH)
+    native_table = read_native_table(retained_evidence_root / JAPAN_NATIVE_PATH)
     catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
     assert (
         validate_catalogue_origins(ProviderId("jp_mlit"), STATION_CATALOGUE_ORIGINS, native_table, catalogue.stations)
@@ -419,9 +421,9 @@ def test_france_declarations_match_schema_order_and_endpoint_values() -> None:
     assert TEMPERATURE_CRS_EVIDENCE_URL != FRANCE_CRS_EVIDENCE_URL
 
 
-def test_france_endpoint_declarations_validate_complete_native_partitions() -> None:
+def test_france_endpoint_declarations_validate_complete_native_partitions(retained_evidence_root: Path) -> None:
     native = read_native_table(
-        Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
+        retained_evidence_root / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
     )
     hydro = type(native)(native.data.filter(pl.col("source_endpoint") == "hydrometrie/referentiel/stations"))
     temperature = type(native)(native.data.filter(pl.col("source_endpoint") == "temperature/station"))
@@ -468,11 +470,13 @@ def test_bosnia_declarations_match_canonical_schema_order_and_values() -> None:
     assert "EPSG:4326" not in repr(STATION_CATALOGUE_ORIGINS)
 
 
-def test_committed_bosnia_origins_pass_validation_and_enforcement() -> None:
+def test_committed_bosnia_origins_pass_validation_and_enforcement(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue import build_stations
     from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
 
-    native_table = read_native_table(Path("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"))
+    native_table = read_native_table(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet"
+    )
     stations = build_stations(native_table)
     assert validate_catalogue_origins(ProviderId("ba_fhmzbih"), STATION_CATALOGUE_ORIGINS, native_table, stations) == []
     enforce_catalogue_origins(ProviderId("ba_fhmzbih"), STATION_CATALOGUE_ORIGINS, native_table, stations)
@@ -508,9 +512,9 @@ def test_usgs_declarations_match_canonical_schema_order_and_values() -> None:
     } == USGS_STATION_CATALOGUE_ORIGINS
 
 
-def test_thailand_declarations_match_schema_and_committed_coordinate_evidence() -> None:
+def test_thailand_declarations_match_schema_and_committed_coordinate_evidence(retained_evidence_root: Path) -> None:
     parser = _CanonicalLinkParser()
-    capture_bytes = THAI_COORDINATE_EVIDENCE_PATH.read_bytes()
+    capture_bytes = (retained_evidence_root / THAI_COORDINATE_EVIDENCE_PATH).read_bytes()
     capture = capture_bytes.decode("utf-8")
     parser.feed(capture)
 
@@ -531,8 +535,8 @@ def test_thailand_declarations_match_schema_and_committed_coordinate_evidence() 
     assert parser.canonical_urls == [THAI_CRS_EVIDENCE_URL]
 
 
-def test_committed_thailand_origins_pass_validation() -> None:
-    native_table = read_native_table(THAI_NATIVE_PATH)
+def test_committed_thailand_origins_pass_validation(retained_evidence_root: Path) -> None:
+    native_table = read_native_table(retained_evidence_root / THAI_NATIVE_PATH)
     stations = build_thai_stations(native_table)
 
     assert validate_catalogue_origins(ProviderId("th_thaiwater"), THAI_STATION_ORIGINS, native_table, stations) == []
@@ -553,13 +557,15 @@ def test_czech_declarations_match_canonical_schema_order_and_values() -> None:
     } == CZECH_ORIGINS
 
 
-def test_committed_czech_origins_pass_validation() -> None:
+def test_committed_czech_origins_pass_validation(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.cz_chmi.generate_catalogue import build_stations as build_czech_stations
     from rivretrieve._internal.providers.cz_chmi.origins import (
         STATION_CATALOGUE_ORIGINS as CZECH_ORIGINS,
     )
 
-    native_table = read_native_table(Path("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet"))
+    native_table = read_native_table(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet"
+    )
     stations = build_czech_stations(native_table)
 
     assert validate_catalogue_origins(ProviderId("cz_chmi"), CZECH_ORIGINS, native_table, stations) == []
@@ -576,8 +582,8 @@ def test_canada_declarations_match_canonical_schema_order_and_values() -> None:
     } == CANADA_ORIGINS
 
 
-def test_committed_canada_origins_pass_validation() -> None:
-    native_table = read_native_table(CANADA_NATIVE_PATH)
+def test_committed_canada_origins_pass_validation(retained_evidence_root: Path) -> None:
+    native_table = read_native_table(retained_evidence_root / CANADA_NATIVE_PATH)
     station_input = native_table.data.select(
         "id",
         "STATION_NUMBER",
@@ -622,11 +628,13 @@ def test_dws_declarations_match_canonical_schema_order_and_values() -> None:
     )
 
 
-def test_committed_dws_origins_and_build_pass_gate() -> None:
+def test_committed_dws_origins_and_build_pass_gate(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.generate_catalogue import build_catalogue
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
-    native_table = read_native_table(Path("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet"))
+    native_table = read_native_table(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet"
+    )
     catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
 
     assert (
@@ -636,8 +644,8 @@ def test_committed_dws_origins_and_build_pass_gate() -> None:
     enforce_catalogue_origins(ProviderId("za_dws"), STATION_CATALOGUE_ORIGINS, native_table, catalogue.stations)
 
 
-def _native_and_stations():
-    native_table = read_native_table(NATIVE_PATH)
+def _native_and_stations(retained_evidence_root: Path):
+    native_table = read_native_table(retained_evidence_root / NATIVE_PATH)
     return native_table, build_stations(native_table)
 
 
@@ -649,10 +657,10 @@ def _assert_single_issue(exc_info: pytest.ExceptionInfo[FatalContractError], cod
     assert issue.details == {"canonical_column": column}
 
 
-def test_origin_gate_rejects_undeclared_canonical_column() -> None:
+def test_origin_gate_rejects_undeclared_canonical_column(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     del declarations["longitude"]
-    native_table, stations = _native_and_stations()
+    native_table, stations = _native_and_stations(retained_evidence_root)
 
     with pytest.raises(
         FatalContractError,
@@ -663,10 +671,10 @@ def test_origin_gate_rejects_undeclared_canonical_column() -> None:
     _assert_single_issue(exc_info, "catalogue_origin.undeclared_column", "longitude")
 
 
-def test_origin_gate_rejects_absent_native_column() -> None:
+def test_origin_gate_rejects_absent_native_column(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["latitude"] = Field(NativeColumn("absent_column"))
-    native_table, stations = _native_and_stations()
+    native_table, stations = _native_and_stations(retained_evidence_root)
 
     with pytest.raises(
         FatalContractError,
@@ -677,9 +685,9 @@ def test_origin_gate_rejects_absent_native_column() -> None:
     _assert_single_issue(exc_info, "catalogue_origin.absent_native_column", "latitude")
 
 
-def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row() -> None:
+def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
-    native_table, stations = _native_and_stations()
+    native_table, stations = _native_and_stations(retained_evidence_root)
     first_station_id = stations["station_id"].item(0)
     broken_stations = stations.with_columns(
         pl.when(pl.col("station_id") == first_station_id).then(None).otherwise(pl.col("latitude")).alias("latitude")
@@ -694,10 +702,10 @@ def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row() -> None:
     _assert_single_issue(exc_info, "catalogue_origin.unpropagated_value", "latitude")
 
 
-def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable() -> None:
+def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["station_id"] = NotPublished(Evidence("https://api.meteo.lt/"))
-    native_table, stations = _native_and_stations()
+    native_table, stations = _native_and_stations(retained_evidence_root)
     broken_stations = stations.with_columns(pl.lit(None).cast(pl.Float64).alias("latitude"))
 
     with pytest.raises(
@@ -714,10 +722,10 @@ def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable() -> 
     assert exc_info.value.issues[1].code == "catalogue_origin.not_published_marker_mismatch"
 
 
-def test_origin_gate_rejects_malformed_not_published_declaration() -> None:
+def test_origin_gate_rejects_malformed_not_published_declaration(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["crs"] = {"not_published": True}
-    native_table, stations = _native_and_stations()
+    native_table, stations = _native_and_stations(retained_evidence_root)
 
     with pytest.raises(
         FatalContractError,
@@ -728,12 +736,12 @@ def test_origin_gate_rejects_malformed_not_published_declaration() -> None:
     _assert_single_issue(exc_info, "catalogue_origin.missing_evidence", "crs")
 
 
-def test_origin_gate_rejects_documented_declaration_with_absent_evidence() -> None:
+def test_origin_gate_rejects_documented_declaration_with_absent_evidence(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     malformed = object.__new__(Documented)
     object.__setattr__(malformed, "value", DocumentedValue("EPSG:4326"))
     declarations["crs"] = malformed
-    native_table, stations = _native_and_stations()
+    native_table, stations = _native_and_stations(retained_evidence_root)
 
     with pytest.raises(
         FatalContractError,
@@ -744,13 +752,13 @@ def test_origin_gate_rejects_documented_declaration_with_absent_evidence() -> No
     _assert_single_issue(exc_info, "catalogue_origin.missing_evidence", "crs")
 
 
-def test_origin_gate_rejects_documented_value_drift_from_builder_output() -> None:
+def test_origin_gate_rejects_documented_value_drift_from_builder_output(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["crs"] = Documented(
         DocumentedValue("EPSG:9999"),
         Evidence("https://api.meteo.lt/"),
     )
-    native_table, stations = _native_and_stations()
+    native_table, stations = _native_and_stations(retained_evidence_root)
 
     with pytest.raises(
         FatalContractError,
@@ -761,17 +769,19 @@ def test_origin_gate_rejects_documented_value_drift_from_builder_output() -> Non
     _assert_single_issue(exc_info, "catalogue_origin.documented_value_mismatch", "crs")
 
 
-def test_committed_lithuania_origins_pass_validation() -> None:
-    native_table, stations = _native_and_stations()
+def test_committed_lithuania_origins_pass_validation(retained_evidence_root: Path) -> None:
+    native_table, stations = _native_and_stations(retained_evidence_root)
 
     assert validate_catalogue_origins(ProviderId("lt_lhmt"), LT_STATION_ORIGINS, native_table, stations) == []
 
 
-def test_committed_swiss_origins_pass_validation() -> None:
+def test_committed_swiss_origins_pass_validation(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.generate_catalogue import build_stations
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
-    native_table = read_native_table(Path("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet"))
+    native_table = read_native_table(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet"
+    )
 
     assert (
         validate_catalogue_origins(
@@ -781,7 +791,7 @@ def test_committed_swiss_origins_pass_validation() -> None:
     )
 
 
-def test_hydroportail_native_station_origins_pass_gate():
+def test_hydroportail_native_station_origins_pass_gate(retained_evidence_root: Path):
     from rivretrieve._internal.providers.fr_hydroportail.generate_catalogue import build_stations
     from rivretrieve._internal.providers.fr_hydroportail.origins import STATION_CATALOGUE_ORIGINS
 
@@ -792,7 +802,9 @@ def test_hydroportail_native_station_origins_pass_gate():
         "longitude": Field(NativeColumn("x")),
         "crs": Documented(DocumentedValue("EPSG:4326"), Evidence("https://hydro.eaufrance.fr/build/8529.fdb00780.js")),
     } == STATION_CATALOGUE_ORIGINS
-    native = read_native_table(Path("src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet"))
+    native = read_native_table(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet"
+    )
     stations = build_stations(native)
     assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
     assert validate_catalogue_origins(ProviderId("fr_hydroportail"), STATION_CATALOGUE_ORIGINS, native, stations) == []

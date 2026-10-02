@@ -142,16 +142,16 @@ def test_jp_mlit_packaged_source_coordinates_are_adopted() -> None:
         assert row.select("latitude", "longitude").row(0) == coordinates
 
 
-def test_brazil_verification_evidence_is_available() -> None:
-    evidence = Path(__file__).parent / "recordings" / "br_ana"
+def test_brazil_verification_evidence_is_available(retained_evidence_root: Path) -> None:
+    evidence = retained_evidence_root / "tests/recordings/br_ana"
     assert (evidence / "daily-public-live-verification.json").is_file()
     assert (evidence / "public-live-verification.json").is_file()
     assert (evidence / "daily-independent-expectations.json").is_file()
     assert (evidence / "detailed-candidate-field-summary.json").is_file()
 
 
-def test_active_catalogue_fixtures_remain_available() -> None:
-    fixture_dir = Path(__file__).parent / "test_data"
+def test_active_catalogue_fixtures_remain_available(retained_evidence_root: Path) -> None:
+    fixture_dir = retained_evidence_root / "tests/test_data"
     for fixture_name in (
         "br_ana_metadata.json",
         "jp_mlit_metadata.json",

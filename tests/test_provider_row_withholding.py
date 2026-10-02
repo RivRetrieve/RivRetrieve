@@ -45,9 +45,11 @@ def test_bosnia_loader_admits_acquired_baseline_without_withholding() -> None:
     assert artifact.acquisition_provenance.header.withheld_facts == ()
 
 
-def test_france_loader_admits_all_evidenced_baseline_pairs() -> None:
+def test_france_loader_admits_all_evidenced_baseline_pairs(retained_evidence_root: Path) -> None:
     artifact = load_packaged_catalogue_artifact(france.catalogue)
-    native = pl.read_parquet(france.catalogue / "native.parquet")
+    native = pl.read_parquet(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
+    )
     assert set(artifact.stations["station_id"]) == set(native["code_station"])
     expected = {
         (row["code_station"], product)

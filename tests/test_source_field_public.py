@@ -14,11 +14,13 @@ from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHe
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
-DATA = Path(__file__).parent / "test_data"
 
-
-def test_public_authenticated_flux_normal_padding_cache_and_receipts(monkeypatch, tmp_path):
-    recording = read_recording(DATA / "ch_foen_2135_flux_engine_2020-01-01.recording.json")
+def test_public_authenticated_flux_normal_padding_cache_and_receipts(
+    retained_evidence_root: Path, monkeypatch, tmp_path
+):
+    recording = read_recording(
+        retained_evidence_root / "tests/test_data" / "ch_foen_2135_flux_engine_2020-01-01.recording.json"
+    )
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
 
     def transport():
@@ -81,10 +83,10 @@ def test_public_authenticated_flux_normal_padding_cache_and_receipts(monkeypatch
     ],
 )
 def test_named_source_selection_cache_and_bundle(
-    monkeypatch, tmp_path, provider, station, quantity, variant, recordings, start, end
+    retained_evidence_root: Path, monkeypatch, tmp_path, provider, station, quantity, variant, recordings, start, end
 ):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    captures = tuple(read_recording(DATA / name) for name in recordings)
+    captures = tuple(read_recording(retained_evidence_root / "tests/test_data" / name) for name in recordings)
     calls = []
 
     class CountedReplay(ReplayTransport):
@@ -130,8 +132,12 @@ def test_published_instantaneous_support_has_one_cross_provider_predicate():
 
 
 @pytest.mark.parametrize("code,quantity,expected", [("QIXnJ", "discharge", 0.823), ("HIXnJ", "stage", 0.449)])
-def test_french_daily_maxima_keep_distinct_published_physics(monkeypatch, code, quantity, expected):
-    recording = read_recording(DATA / f"fr_hubeau_1011000101_{code}_padded.recording.json")
+def test_french_daily_maxima_keep_distinct_published_physics(
+    retained_evidence_root: Path, monkeypatch, code, quantity, expected
+):
+    recording = read_recording(
+        retained_evidence_root / "tests/test_data" / f"fr_hubeau_1011000101_{code}_padded.recording.json"
+    )
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selected = rr.find(
         provider="fr_hubeau", station="1011000101", quantity=quantity, frequency="daily", statistic="max"

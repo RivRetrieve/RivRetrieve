@@ -82,13 +82,15 @@ def test_boundaries_must_match_country_not_sovereign_and_must_include_supported_
         module["draw"](world.loc[world["ADM0_A3"] != "USA"], stations, tmp_path / "missing.png")
 
 
-def test_usgs_supported_station_counts_preserve_native_scope_and_exact_approved_gaps():
+def test_usgs_supported_station_counts_preserve_native_scope_and_exact_approved_gaps(retained_evidence_root: Path):
     import json
 
     catalogue = ROOT / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue"
-    evidence = ROOT / "research/usgs-modern-coverage"
+    evidence = retained_evidence_root / "research/usgs-modern-coverage"
     stations = pl.read_parquet(catalogue / "stations.parquet")
-    native = pl.read_parquet(catalogue / "native.parquet")
+    native = pl.read_parquet(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"
+    )
     legacy = pl.read_parquet(evidence / "legacy-catalogue/station_products.parquet").filter(
         pl.col("availability") == "available"
     )

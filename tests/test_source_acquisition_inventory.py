@@ -16,17 +16,21 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from rivretrieve._internal.source_series import EvidenceFact, SeriesScope
 from rivretrieve._internal.store import StoreRoot
 
-_DATA = Path(__file__).parent / "test_data"
-
 
 @pytest.mark.parametrize(
     "control", ["unchanged", "unknown-member", "different-facts", "unestablished-metadata-facts", "failure"]
 )
-def test_acquisition_reconciliation_does_not_hide_unsettled_observations(tmp_path, control):
+def test_acquisition_reconciliation_does_not_hide_unsettled_observations(
+    retained_evidence_root: Path, tmp_path, control
+):
     stages = declaration.observations.stages
-    metadata = read_recording(_DATA / "no_nve_109.42.0_1001_series.recording.json")
+    metadata = read_recording(retained_evidence_root / "tests/test_data" / "no_nve_109.42.0_1001_series.recording.json")
     observations = tuple(
-        read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
+        read_recording(
+            retained_evidence_root
+            / "tests/test_data"
+            / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json"
+        )
         for v in (1, 2, 3)
     )
     replay = ReplayTransport((metadata, *observations))

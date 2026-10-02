@@ -12,11 +12,13 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
-_DATA = Path(__file__).parent / "test_data"
 
-
-def test_public_swiss_litre_series_preserves_identity_unit_and_unknown_time(monkeypatch, tmp_path):
-    recording = read_recording(_DATA / "ch_foen_2251_rest_engine_2026-09-19.recording.json")
+def test_public_swiss_litre_series_preserves_identity_unit_and_unknown_time(
+    retained_evidence_root: Path, monkeypatch, tmp_path
+):
+    recording = read_recording(
+        retained_evidence_root / "tests/test_data" / "ch_foen_2251_rest_engine_2026-09-19.recording.json"
+    )
     monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
@@ -38,14 +40,20 @@ def test_public_swiss_litre_series_preserves_identity_unit_and_unknown_time(monk
     )
 
 
-def test_public_nve_all_versions_include_null_series_without_upstream_selection(monkeypatch, tmp_path):
+def test_public_nve_all_versions_include_null_series_without_upstream_selection(
+    retained_evidence_root: Path, monkeypatch, tmp_path
+):
     recordings = tuple(
-        read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
+        read_recording(
+            retained_evidence_root
+            / "tests/test_data"
+            / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json"
+        )
         for v in (1, 2, 3)
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
-    metadata = read_recording(_DATA / "no_nve_109.42.0_1001_series.recording.json")
+    metadata = read_recording(retained_evidence_root / "tests/test_data" / "no_nve_109.42.0_1001_series.recording.json")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((*recordings, metadata)))
     selection = rr.find(
         provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
@@ -65,12 +73,14 @@ def test_public_nve_all_versions_include_null_series_without_upstream_selection(
     assert "protocol-only-nve-key" not in repr(result)
 
 
-def test_public_ana_physical_daily_scope_returns_both_consistencies_and_narrows(monkeypatch, tmp_path):
+def test_public_ana_physical_daily_scope_returns_both_consistencies_and_narrows(
+    retained_evidence_root: Path, monkeypatch, tmp_path
+):
     # Token response is protocol-only test input; every observation byte is a real recording.
     from tests.test_br_ana_public_daily import _authenticated_replay
 
     monkeypatch.chdir(tmp_path)
-    transport = _authenticated_replay(monkeypatch, "stage_daily_mean_bruto")
+    transport = _authenticated_replay(retained_evidence_root, monkeypatch, "stage_daily_mean_bruto")
     selection = rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean")
     assert {item.variant for item in selection.series} == {"bruto", "consistido"}
     result = rr.fetch(selection, start="2020-01-10", end="2020-01-20", receipts=True, on_issue="ignore")
@@ -85,8 +95,12 @@ def test_public_ana_physical_daily_scope_returns_both_consistencies_and_narrows(
     assert narrowed.provenance.calls_made == result.provenance.calls_made
 
 
-def test_public_explicit_swiss_field_does_not_diagnose_unrequested_sibling(monkeypatch, tmp_path):
-    recording = read_recording(_DATA / "ch_foen_2251_rest_engine_2026-09-19.recording.json")
+def test_public_explicit_swiss_field_does_not_diagnose_unrequested_sibling(
+    retained_evidence_root: Path, monkeypatch, tmp_path
+):
+    recording = read_recording(
+        retained_evidence_root / "tests/test_data" / "ch_foen_2251_rest_engine_2026-09-19.recording.json"
+    )
     monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
@@ -96,9 +110,15 @@ def test_public_explicit_swiss_field_does_not_diagnose_unrequested_sibling(monke
     assert not any(issue.severity in ("warning", "error") for issue in result.issues)
 
 
-def test_public_nve_failed_explicit_version_survives_physical_predicate(monkeypatch, tmp_path):
+def test_public_nve_failed_explicit_version_survives_physical_predicate(
+    retained_evidence_root: Path, monkeypatch, tmp_path
+):
     recordings = tuple(
-        read_recording(_DATA / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json")
+        read_recording(
+            retained_evidence_root
+            / "tests/test_data"
+            / f"no_nve_109.42.0_1001_1440_version-{v}_engine_2024-01-02.recording.json"
+        )
         for v in (1, 99999)
     )
     monkeypatch.chdir(tmp_path)
@@ -125,7 +145,9 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(monkeypa
 
 
 @pytest.mark.parametrize("provider", ["ch_foen", "no_nve", "br_ana"])
-def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, monkeypatch, tmp_path):
+def test_public_explicit_series_cache_and_bundle_preserve_identity(
+    retained_evidence_root: Path, provider, monkeypatch, tmp_path
+):
     from rivretrieve._internal.observations import ReceiptAuthorship
 
     monkeypatch.chdir(tmp_path)
@@ -133,20 +155,26 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
     if provider == "br_ana":
         from tests.test_br_ana_public_daily import _authenticated_replay
 
-        _authenticated_replay(monkeypatch, "stage_daily_mean_consistido")
+        _authenticated_replay(retained_evidence_root, monkeypatch, "stage_daily_mean_consistido")
         selection = rr.pick(
             rr.find(provider=provider, station="15400000", quantity="stage", frequency="daily", statistic="mean"),
             variant="consistido",
         )
         start, end = "2020-01-10", "2020-01-20"
     elif provider == "ch_foen":
-        recording = read_recording(_DATA / "ch_foen_2251_rest_engine_2026-09-19.recording.json")
+        recording = read_recording(
+            retained_evidence_root / "tests/test_data" / "ch_foen_2251_rest_engine_2026-09-19.recording.json"
+        )
         monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
         monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
         selection = rr.pick(rr.find(provider=provider, station="2251", quantity="discharge"), variant="flow_ls")
         start, end = "2026-09-19T00:00:00", "2026-09-19T03:00:00"
     else:
-        recording = read_recording(_DATA / "no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
+        recording = read_recording(
+            retained_evidence_root
+            / "tests/test_data"
+            / "no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json"
+        )
         monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
         monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
         selection = rr.pick(

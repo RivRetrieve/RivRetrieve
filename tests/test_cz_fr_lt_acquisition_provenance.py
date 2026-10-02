@@ -20,6 +20,7 @@ from tests._provenance import legacy_provenance
     ],
 )
 def test_provider_provenance_is_packaged_and_terms_are_verified(
+    retained_evidence_root: Path,
     provider_id: str,
     issuer: str,
     terms_file: str,
@@ -37,8 +38,8 @@ def test_provider_provenance_is_packaged_and_terms_are_verified(
         fact for item in provenance.withheld_facts for fact in item.facts
     }
 
-    verify_provenance_recordings(provenance, Path.cwd())
-    assert (Path("tests/test_data") / terms_file).is_file()
+    verify_provenance_recordings(provenance, retained_evidence_root)
+    assert ((retained_evidence_root / "tests/test_data") / terms_file).is_file()
 
 
 @pytest.mark.parametrize(
@@ -50,13 +51,14 @@ def test_provider_provenance_is_packaged_and_terms_are_verified(
     ],
 )
 def test_production_provenance_rejects_changed_recording(
+    retained_evidence_root: Path,
     tmp_path: Path,
     provider_id: str,
     terms_file: str,
 ) -> None:
     evidence_dir = tmp_path / "tests/test_data"
     evidence_dir.mkdir(parents=True)
-    shutil.copy2(Path("tests/test_data") / terms_file, evidence_dir / terms_file)
+    shutil.copy2((retained_evidence_root / "tests/test_data") / terms_file, evidence_dir / terms_file)
     (evidence_dir / terms_file).write_bytes((evidence_dir / terms_file).read_bytes() + b"changed")
     provenance = rr.find(provider=provider_id).acquisition_provenance[0]
     assert provenance is not None
@@ -68,6 +70,7 @@ def test_production_provenance_rejects_changed_recording(
 
 @pytest.mark.parametrize("provider_id", ["cz_chmi", "fr_hubeau", "lt_lhmt"])
 def test_native_cli_invokes_shared_recording_verifier(
+    retained_evidence_root: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     provider_id: str,
@@ -75,15 +78,16 @@ def test_native_cli_invokes_shared_recording_verifier(
     from importlib import import_module
 
     generator = import_module(f"rivretrieve._internal.providers.{provider_id}.generate_catalogue")
-    native = Path(f"src/rivretrieve/_internal/providers/{provider_id}/catalogue/native.parquet")
+    native = retained_evidence_root / f"src/rivretrieve/_internal/providers/{provider_id}/catalogue/native.parquet"
     calls: list[str] = []
 
     def record_call(provenance: object, repository_root: Path) -> None:
-        del provenance, repository_root
+        del provenance
+        assert repository_root == retained_evidence_root
         calls.append(provider_id)
 
     monkeypatch.setattr(generator, "verify_provenance_recordings", record_call)
-    args = ["--native", str(native), "--out", str(tmp_path)]
+    args = ["--native", str(native), "--out", str(tmp_path), "--evidence-root", str(retained_evidence_root)]
     if provider_id == "fr_hubeau":
         args += [
             "--availability-ledger",
@@ -96,16 +100,25 @@ def test_native_cli_invokes_shared_recording_verifier(
 
 
 @pytest.mark.parametrize("provider_id", ["cz_chmi", "fr_hubeau", "lt_lhmt"])
-def test_native_cli_rejects_raw_byte_substitution(tmp_path: Path, provider_id: str) -> None:
+def test_native_cli_rejects_raw_byte_substitution(
+    tmp_path: Path, provider_id: str, retained_evidence_root: Path
+) -> None:
     from importlib import import_module
 
     generator = import_module(f"rivretrieve._internal.providers.{provider_id}.generate_catalogue")
-    source = Path(f"src/rivretrieve/_internal/providers/{provider_id}/catalogue/native.parquet")
+    source = retained_evidence_root / f"src/rivretrieve/_internal/providers/{provider_id}/catalogue/native.parquet"
     changed = tmp_path / "native.parquet"
     changed.write_bytes(source.read_bytes() + b"changed")
 
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
-        args = ["--native", str(changed), "--out", str(tmp_path / "out")]
+        args = [
+            "--native",
+            str(changed),
+            "--out",
+            str(tmp_path / "out"),
+            "--evidence-root",
+            str(retained_evidence_root),
+        ]
         if provider_id == "fr_hubeau":
             args += [
                 "--native-capture",
@@ -159,7 +172,7 @@ def test_lithuania_runtime_provenance_names_the_exact_monthly_route() -> None:
     )
 
 
-def test_france_temperature_openapi_is_bound_without_instantaneous_inference() -> None:
+def test_france_temperature_openapi_is_bound_without_instantaneous_inference(retained_evidence_root: Path) -> None:
     provenance = rr.find(provider="fr_hubeau").acquisition_provenance[0]
     assert provenance is not None
     provenance = legacy_provenance(provenance)
@@ -171,7 +184,7 @@ def test_france_temperature_openapi_is_bound_without_instantaneous_inference() -
     assert binding.facts == ("source.product.temperature_api_semantics",)
     assert binding.acquisition_id == "temperature_semantics_openapi_2026_09_02"
     assert document == "tests/test_data/fr_hubeau_temperature_openapi.json"
-    text = Path(document).read_text(encoding="utf-8")
+    text = (retained_evidence_root / document).read_text(encoding="utf-8")
     assert "API Hub'Eau - Température des cours d'eau en continu" in text
     assert (
         '"date_mesure_temp":{"type":"string","format":"date-time","example":"2016-12-01","description":"Date de la mesure"'
