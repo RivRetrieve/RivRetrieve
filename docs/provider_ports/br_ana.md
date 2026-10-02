@@ -80,19 +80,24 @@ open-data statement is surfaced verbatim. No citation request was established.
 
 ## Offline reproduction and maintenance
 
-Native input, compressed recordings and private acquisition reports are repository build
-inputs, excluded from both distributions. The capture attestation identifies exact requests,
+Native input, compressed recordings and acquisition reports are retained in the
+private source archive. Retrieve them outside the checkout in their repository-relative
+layout before running the offline build. The capture attestation identifies exact requests,
 retrieval instants, recording and payload digests, counts and the revision-pinned native file.
 The public provenance and Croissant descriptor are generated from exact emitted bytes.
+`EVIDENCE_ROOT` names the retrieved inputs; `PRIVATE_OUTPUT` names a separate
+external working directory. Neither path is stored as a new source identity.
+`--repository-root` remains an alias for the required `--evidence-root` option;
+there is no current-directory input default.
 
 ```bash
 uv run python src/rivretrieve/_internal/providers/br_ana/generate_catalogue.py \
-  --materialize-record tests/test_data/br_ana_inventory/capture.json \
-  --repository-root . --native-out /tmp/ana-native.parquet
+  --materialize-record "$EVIDENCE_ROOT/tests/test_data/br_ana_inventory/capture.json" \
+  --evidence-root "$EVIDENCE_ROOT" --native-out "$PRIVATE_OUTPUT/ana-native.parquet"
 uv run python src/rivretrieve/_internal/providers/br_ana/generate_catalogue.py \
-  --native /tmp/ana-native.parquet \
-  --capture-record tests/test_data/br_ana_inventory/capture.json \
-  --out /tmp/ana-catalogue
+  --native "$PRIVATE_OUTPUT/ana-native.parquet" \
+  --evidence-root "$EVIDENCE_ROOT" \
+  --out "$PRIVATE_OUTPUT/ana-catalogue"
 ```
 
 Maintainer refresh uses the shared secure credential exchange. Run from the working directory
@@ -106,7 +111,7 @@ uv run python scripts/acquire_ana_inventory.py --out <new-acquisition-directory>
 
 A new capture requires reconciliation, fresh native materialization, a pinned input commit and
 reviewed attestation before publishing. Do not point an old attestation at a new response.
-The original acquisition scripts and outcome reports are retained under
+The original acquisition scripts and outcome reports are retained in the archive under
 `maintenance/catalogue/br_ana/inventory/` as historical evidence, not alternate generators.
 Source-row occurrences bind every repeated station to all its acquired files and row indices.
 
@@ -179,11 +184,11 @@ The retained recording digest is
 This one empty-valued request does not establish permanent or national unavailability.
 No water-temperature product is exposed. `Temperatura_Interna` is a distinct nonnull
 field with both strings and nulls in the same response. It is never substituted for water temperature.
-The exact recording and derived field census are retained under `tests/recordings/br_ana/`.
+The exact recording and derived field census are retained in the archive under `tests/recordings/br_ana/`.
 
 The archived implementation and invented payloads remain recoverable at main commit
 `33e063a`, under `reference/legacy_observations/br_ana/`; their original-path inventory
 is that subtree's README. The subtree was removed only after verified daily and telemetry replacement,
-including root-owned live public calls for all six products. Retained source evidence lives in
-`tests/recordings/br_ana/` and the unchanged inventory capture inputs. These paths are
+including root-owned live public calls for all six products. Retained source evidence lives in the private archive, using the
+`tests/recordings/br_ana/` layout and the unchanged inventory capture input identities. These paths are
 excluded from both distributions; only generated public catalogue evidence is packaged.

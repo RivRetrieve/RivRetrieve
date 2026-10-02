@@ -2,7 +2,6 @@
 
 import lzma
 from datetime import timedelta
-from pathlib import Path
 
 import polars as pl
 import pytest
@@ -19,40 +18,39 @@ from rivretrieve._internal.providers.br_ana.capture import (
 )
 from rivretrieve._internal.recordings import read_recording
 
-ROOT = Path(__file__).resolve().parents[1]
-CAPTURE = ROOT / "tests/test_data/br_ana_inventory/capture.json"
+
+@pytest.fixture(scope="module")
+def capture(retained_evidence_root):
+    return read_capture_record(retained_evidence_root / "tests/test_data/br_ana_inventory/capture.json")
 
 
 @pytest.fixture(scope="module")
-def capture():
-    return read_capture_record(CAPTURE)
-
-
-@pytest.fixture(scope="module")
-def recordings(capture, tmp_path_factory):
+def recordings(retained_evidence_root, capture, tmp_path_factory):
     directory = tmp_path_factory.mktemp("ana-capture-recordings")
     result = []
     for index, response in enumerate(capture.responses):
         path = directory / f"{index}.recording.json"
-        path.write_bytes(lzma.decompress((ROOT / response.repository_path).read_bytes()))
+        path.write_bytes(lzma.decompress((retained_evidence_root / response.repository_path).read_bytes()))
         result.append(read_recording(path))
     return tuple(result)
 
 
 @pytest.fixture(scope="module")
-def native(capture):
-    return read_native_table(ROOT / capture.native_table.repository_path)
+def native(retained_evidence_root, capture):
+    return read_native_table(retained_evidence_root / capture.native_table.repository_path)
 
 
-def test_capture_reproduces_committed_native_exactly(capture, native):
-    rebuilt = materialize_captured_native_table(capture, ROOT)
+def test_capture_reproduces_committed_native_exactly(retained_evidence_root, capture, native):
+    rebuilt = materialize_captured_native_table(capture, retained_evidence_root)
     assert_frame_equal(rebuilt.data, native.data)
     assert rebuilt.data.height == 40747
     assert rebuilt.data.filter(pl.col("Tipo_Estacao") == "Fluviometrica").height == 17914
     assert rebuilt.data.filter(pl.col("Tipo_Estacao") == "Pluviometrica").height == 22833
     assert len(capture.responses) == 36
     assert sum(response.row_count for response in capture.responses) == 78836
-    verify_native_identity(capture, (ROOT / capture.native_table.repository_path).read_bytes(), rebuilt)
+    verify_native_identity(
+        capture, (retained_evidence_root / capture.native_table.repository_path).read_bytes(), rebuilt
+    )
 
 
 @pytest.mark.parametrize(
@@ -114,8 +112,8 @@ def test_fresh_materialization_semantic_digest_is_attested(capture, recordings):
         verify_materialization(altered, recordings)
 
 
-def test_native_byte_and_semantic_identity_are_independent(capture, native):
-    content = (ROOT / capture.native_table.repository_path).read_bytes()
+def test_native_byte_and_semantic_identity_are_independent(retained_evidence_root, capture, native):
+    content = (retained_evidence_root / capture.native_table.repository_path).read_bytes()
     with pytest.raises(FatalContractError, match="native byte identity mismatch"):
         verify_native_identity(capture, content + b"changed", native)
     altered = NativeTable(native.data.with_columns(pl.lit("changed").alias("Estacao_Nome")))
@@ -174,11 +172,11 @@ def test_supporting_acquisition_evidence_digest_is_verified(capture, tmp_path):
         materialize_captured_native_table(capture, tmp_path)
 
 
-def test_original_failed_uf_attempts_remain_distinct_from_successful_retries(capture):
+def test_original_failed_uf_attempts_remain_distinct_from_successful_retries(retained_evidence_root, capture):
     import json
 
-    first_path = ROOT / "maintenance/catalogue/br_ana/inventory/inventory-ufs.json.results.json"
-    retry_path = ROOT / "maintenance/catalogue/br_ana/inventory/inventory-ufs-retry.json.results.json"
+    first_path = retained_evidence_root / "maintenance/catalogue/br_ana/inventory/inventory-ufs.json.results.json"
+    retry_path = retained_evidence_root / "maintenance/catalogue/br_ana/inventory/inventory-ufs-retry.json.results.json"
     first = json.loads(first_path.read_bytes())
     retry = json.loads(retry_path.read_bytes())
     failed = {item["name"] for item in first if "failure" in item}
@@ -187,5 +185,5 @@ def test_original_failed_uf_attempts_remain_distinct_from_successful_retries(cap
     assert {item["name"] for item in retry} == failed
     assert {item["http_status"] for item in retry} == {200}
     paths = {item.repository_path for item in capture.supporting_evidence}
-    assert str(first_path.relative_to(ROOT)) in paths
-    assert str(retry_path.relative_to(ROOT)) in paths
+    assert str(first_path.relative_to(retained_evidence_root)) in paths
+    assert str(retry_path.relative_to(retained_evidence_root)) in paths

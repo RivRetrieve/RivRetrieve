@@ -4,7 +4,6 @@ import json
 import lzma
 from dataclasses import replace
 from datetime import timedelta
-from pathlib import Path
 
 import polars as pl
 import pytest
@@ -18,13 +17,17 @@ from rivretrieve._internal.providers.br_ana.inventory import (
 )
 from rivretrieve._internal.recordings import read_recording
 
-FIXTURE = Path(__file__).parent / "test_data/br_ana_inventory/inventory_UF_AC.recording.json"
-
 
 @pytest.fixture
-def recording(tmp_path):
+def recording(retained_evidence_root, tmp_path):
     path = tmp_path / "ac.recording.json"
-    path.write_bytes(lzma.decompress(FIXTURE.with_suffix(".json.xz").read_bytes()))
+    path.write_bytes(
+        lzma.decompress(
+            (retained_evidence_root / "tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json")
+            .with_suffix(".json.xz")
+            .read_bytes()
+        )
+    )
     return read_recording(path)
 
 
@@ -127,12 +130,19 @@ def test_source_order_does_not_change_native_table(recording):
     )
 
 
-def test_full_domestic_acquisition(tmp_path):
+def test_full_domestic_acquisition(retained_evidence_root, tmp_path):
     recordings = []
     expected_frames = []
     for uf in BRAZILIAN_UNITS:
         path = tmp_path / f"inventory_UF_{uf}.recording.json"
-        path.write_bytes(lzma.decompress((FIXTURE.parent / (path.name + ".xz")).read_bytes()))
+        path.write_bytes(
+            lzma.decompress(
+                (
+                    (retained_evidence_root / "tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json").parent
+                    / (path.name + ".xz")
+                ).read_bytes()
+            )
+        )
         recording = read_recording(path)
         recordings.append(recording)
         rows = json.loads(recording.content)["items"]
@@ -160,8 +170,14 @@ def test_unestablished_station_type_fails(recording, value):
         materialize_inventory((altered,), expected_units=("AC",))
 
 
-def test_recording_digest_tampering_fails(tmp_path):
-    document = json.loads(lzma.decompress(FIXTURE.with_suffix(".json.xz").read_bytes()))
+def test_recording_digest_tampering_fails(retained_evidence_root, tmp_path):
+    document = json.loads(
+        lzma.decompress(
+            (retained_evidence_root / "tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json")
+            .with_suffix(".json.xz")
+            .read_bytes()
+        )
+    )
     document["response"]["sha256"] = "0" * 64
     path = tmp_path / "changed.recording.json"
     path.write_text(json.dumps(document))
@@ -211,9 +227,16 @@ def test_basin_overlap_conflict_fails(recording):
         materialize_inventory((recording, basin), expected_units=("AC",), expected_basins=(1,))
 
 
-def test_retained_basin9_preserves_foreign_population(tmp_path):
+def test_retained_basin9_preserves_foreign_population(retained_evidence_root, tmp_path):
     path = tmp_path / "basin9.recording.json"
-    path.write_bytes(lzma.decompress((FIXTURE.parent / "population_inventory_basin9.recording.json.xz").read_bytes()))
+    path.write_bytes(
+        lzma.decompress(
+            (
+                (retained_evidence_root / "tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json").parent
+                / "population_inventory_basin9.recording.json.xz"
+            ).read_bytes()
+        )
+    )
     recording = read_recording(path)
     result = materialize_inventory((recording,), expected_units=(), expected_basins=(9,))
     rows = json.loads(recording.content)["items"]
@@ -229,7 +252,7 @@ def test_retained_basin9_preserves_foreign_population(tmp_path):
     assert result.responses[0].uf is None
 
 
-def test_full_acquired_population_union(tmp_path):
+def test_full_acquired_population_union(retained_evidence_root, tmp_path):
     names: list[str] = [f"inventory_UF_{uf}.recording.json" for uf in BRAZILIAN_UNITS]
     names += [f"population_inventory_basin{basin}.recording.json" for basin in range(1, 10)]
     recordings = []
@@ -237,7 +260,14 @@ def test_full_acquired_population_union(tmp_path):
     earliest = {}
     for name in names:
         path = tmp_path / name
-        path.write_bytes(lzma.decompress((FIXTURE.parent / (name + ".xz")).read_bytes()))
+        path.write_bytes(
+            lzma.decompress(
+                (
+                    (retained_evidence_root / "tests/test_data/br_ana_inventory/inventory_UF_AC.recording.json").parent
+                    / (name + ".xz")
+                ).read_bytes()
+            )
+        )
         recording = read_recording(path)
         recordings.append(recording)
         for row in json.loads(recording.content)["items"]:

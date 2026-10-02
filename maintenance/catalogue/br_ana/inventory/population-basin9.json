@@ -1,9 +1,0 @@
-[
-  {
-    "name": "population_inventory_basin9",
-    "endpoint": "HidroInventarioEstacoes",
-    "parameters": {
-      "Código da Bacia": 9
-    }
-  }
-]

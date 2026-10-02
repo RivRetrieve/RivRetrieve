@@ -258,7 +258,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     source.add_argument("--materialize-record", type=Path)
     parser.add_argument("--capture-record", type=Path)
     parser.add_argument("--native-out", type=Path)
-    parser.add_argument("--repository-root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--evidence-root",
+        "--repository-root",
+        dest="evidence_root",
+        type=Path,
+        required=True,
+        help="External retained inputs in repository-relative layout",
+    )
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
     if args.materialize_record is not None:
@@ -271,7 +278,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.native_out is None or args.out is not None or args.capture_record is not None:
             parser.error("--materialize-record requires --native-out and cannot use --out or --capture-record")
         capture = read_capture_record(args.materialize_record)
-        native = materialize_captured_native_table(capture, args.repository_root)
+        native = materialize_captured_native_table(capture, args.evidence_root)
         write_native_table(native, args.native_out)
         return 0
     if args.out is None or args.native_out is not None:
@@ -280,7 +287,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from rivretrieve._internal.providers.br_ana.capture import read_capture_record, verify_native_identity
     from rivretrieve._internal.providers.br_ana.origins import STATION_CATALOGUE_ORIGINS, build_acquisition_provenance
 
-    capture_path = args.capture_record or Path("tests/test_data/br_ana_inventory/capture.json")
+    capture_path = args.capture_record or args.evidence_root / "tests/test_data/br_ana_inventory/capture.json"
     capture = read_capture_record(capture_path)
     native = read_native_table(
         args.native,
@@ -292,13 +299,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     from rivretrieve._internal.providers.br_ana.origins import with_observation_products
     from rivretrieve._internal.recordings import read_recording
 
-    evidence_root = args.repository_root / "tests/recordings/br_ana"
+    evidence_root = args.evidence_root / "tests/recordings/br_ana"
     recording_path = evidence_root / "telemetry_15400000_2024-01-04_DIAS_30.recording.json"
     telemetry = parse_adopted_telemetry_evidence(
         (evidence_root / "manual-page11-acquisition.json").read_bytes(),
         (evidence_root / "manual-page11-derived.txt").read_bytes(),
         read_recording(recording_path),
-        str(recording_path.relative_to(args.repository_root)),
+        str(recording_path.relative_to(args.evidence_root)),
     )
     from rivretrieve._internal.providers.br_ana.capture import parse_conventional_daily_evidence
 
@@ -318,7 +325,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         },
         tuple(
-            (str(path.relative_to(args.repository_root)), read_recording(path))
+            (str(path.relative_to(args.evidence_root)), read_recording(path))
             for path in (
                 evidence_root / f"{endpoint}_15400000_{start}_{stop}.recording.json"
                 for endpoint in ("HidroSerieCotas", "HidroSerieVazao")
@@ -330,7 +337,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         ),
         tuple(
-            (str(path.relative_to(args.repository_root)), read_recording(path))
+            (str(path.relative_to(args.evidence_root)), read_recording(path))
             for path in sorted((evidence_root / "correspondence").glob("*.recording.json"))
         ),
     )
