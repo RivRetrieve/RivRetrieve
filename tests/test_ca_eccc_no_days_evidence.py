@@ -16,13 +16,16 @@ from rivretrieve._internal.recordings import ReplayTransport, UnmatchedRequestEr
 from rivretrieve._internal.transport import TransportRequest
 from tests.store.test_ca_eccc_streaming import _compile_rows, _representative_hydat
 
-_DATA = Path(__file__).parent / "test_data" / "ca_eccc_hydat_no_days"
+
+@pytest.fixture(scope="module")
+def no_days_evidence_root(retained_evidence_root: Path) -> Path:
+    return retained_evidence_root / "tests" / "test_data" / "ca_eccc_hydat_no_days"
 
 
-def _decoded_sparse_rows(tmp_path: Path):
+def _decoded_sparse_rows(tmp_path: Path, evidence_root: Path):
     database = tmp_path / "Hydat.sqlite3"
     _representative_hydat(database)
-    witnesses = json.loads((_DATA / "sqlite_rows_07HF001.json").read_text())
+    witnesses = json.loads((evidence_root / "sqlite_rows_07HF001.json").read_text())
     connection = sqlite3.connect(database)
     connection.execute("DELETE FROM DLY_LEVELS")
     columns = tuple(witnesses[0])
@@ -38,8 +41,10 @@ def _decoded_sparse_rows(tmp_path: Path):
 
 
 @pytest.mark.parametrize("period", ("2013-03", "2014-05"))
-def test_official_daily_csv_replay_matches_sparse_hydat_cells(tmp_path: Path, period: str) -> None:
-    recording = read_recording(_DATA / f"07HF001_level_{period}.recording.json")
+def test_official_daily_csv_replay_matches_sparse_hydat_cells(
+    tmp_path: Path, period: str, no_days_evidence_root: Path
+) -> None:
+    recording = read_recording(no_days_evidence_root / f"07HF001_level_{period}.recording.json")
     request = TransportRequest(
         recording.request.method,
         recording.request.url,
@@ -48,7 +53,7 @@ def test_official_daily_csv_replay_matches_sparse_hydat_cells(tmp_path: Path, pe
     )
     response = ReplayTransport((recording,)).send(request)
     official = tuple(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
-    all_sparse = _decoded_sparse_rows(tmp_path)
+    all_sparse = _decoded_sparse_rows(tmp_path, no_days_evidence_root)
     decoded = all_sparse.filter(
         (all_sparse["product"] == "stage_daily_mean") & (all_sparse["time"].dt.strftime("%Y-%m") == period)
     )
@@ -67,7 +72,7 @@ def test_official_daily_csv_replay_matches_sparse_hydat_cells(tmp_path: Path, pe
         ReplayTransport((recording,)).send(replace(request, url=request.url + "&unexpected=1"))
 
 
-def test_committed_definition_and_guideline_are_exact_untouched_publisher_bytes() -> None:
+def test_retained_definition_and_guideline_are_exact_untouched_publisher_bytes(no_days_evidence_root: Path) -> None:
     expected = {
         "HYDAT_Definition_EN.pdf": (51748, "b3ab1954bf5aeedb026cebe939764fcfbda0266fb267cb6a7315544c9be8e1ee"),
         "WebService_Guidelines_HistoricalDailyData.pdf": (
@@ -76,16 +81,18 @@ def test_committed_definition_and_guideline_are_exact_untouched_publisher_bytes(
         ),
     }
     for name, (size, digest) in expected.items():
-        content = (_DATA / name).read_bytes()
+        content = (no_days_evidence_root / name).read_bytes()
         assert len(content) == size
         assert hashlib.sha256(content).hexdigest() == digest
 
 
-def test_hydat_no_days_evidence_uses_portable_source_identities() -> None:
-    audit = json.loads((_DATA / "audit_result.json").read_text())
+def test_hydat_no_days_evidence_uses_portable_source_identities(no_days_evidence_root: Path) -> None:
+    audit = json.loads((no_days_evidence_root / "audit_result.json").read_text())
     assert audit["source_database"] == "Hydat.sqlite3 (sole SQLite member of source_zip_url)"
     assert audit["source_zip"] == ("https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/Hydat_sqlite3_20260717.zip")
     forbidden = (b"/Users/", b"/home/", b"/private/tmp/")
-    evidence_files = tuple(path for path in _DATA.iterdir() if path.suffix in {".json", ".md", ".sql", ".csv"})
+    evidence_files = tuple(
+        path for path in no_days_evidence_root.iterdir() if path.suffix in {".json", ".md", ".sql", ".csv"}
+    )
     assert evidence_files
     assert all(marker not in path.read_bytes() for path in evidence_files for marker in forbidden)

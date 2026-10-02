@@ -47,6 +47,21 @@ Use the provider's instructions:
 - [Brazil](../../maintenance/catalogue/br_ana/README.md): digest-bound supporting
   inputs and retained recordings used by the offline rebuild.
 
+For the Canada HYDAT `NO_DAYS` checks, retrieve the exact retained input group
+following the private archive instructions. Set `RIVRETRIEVE_TEST_EVIDENCE_ROOT`
+to an external directory with inputs in their repository-relative layout. The
+Canada group has 18 files under `tests/test_data/ca_eccc_hydat_no_days/`. It
+contains both the sparse SQLite row witnesses and the separate publisher recordings;
+the reconstructed test database is not a complete publisher artifact. Run:
+
+```sh
+uv run pytest tests/test_ca_eccc_no_days_evidence.py -q --tb=no -p no:cacheprovider
+```
+
+Missing inputs block these checks. The tests do not download inputs or use archive
+credentials. Keep full failure details private; assertion output can contain source
+values. The private archive records the exact collection and member selections.
+
 Other provider checks and retained-input limits are recorded in the private
 archive and provider maintenance notes under `docs/provider_ports/`.
 

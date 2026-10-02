@@ -4,7 +4,7 @@
 
 Publisher: https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/HYDAT_Definition_EN.pdf
 
-The exact retained definition is `tests/test_data/ca_eccc_hydat_no_days/HYDAT_Definition_EN.pdf`
+The exact retained definition is `HYDAT_Definition_EN.pdf` in the private source archive
 (SHA-256 `b3ab1954bf5aeedb026cebe939764fcfbda0266fb267cb6a7315544c9be8e1ee`).
 Pages 4–5 define DLY_FLOWS daily flow values in m^3/s and DLY_LEVELS daily water levels
 in m. Their symbol definitions refer to daily mean values. These establish quantity,
