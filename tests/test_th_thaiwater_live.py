@@ -72,10 +72,12 @@ def _probe(product: ProductId, recording: RecordingEnvelope) -> LiveBoundaryProb
     )
 
 
+@pytest.mark.recorded("tests/test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json")
 def test_each_thaiwater_product_has_an_exact_live_replay_probe(recording) -> None:
     run_manifest_boundary_probes(_DECLARED, tuple(_probe(product, recording) for product in _PRODUCTS))
 
 
+@pytest.mark.recorded("tests/test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json")
 def test_one_graph_response_coalesces_both_products(recording) -> None:
     replay = ReplayTransport((recording,))
     rendered = plan_windows(_fetch_window(), _STAGES.window_declarations.products[_PRODUCTS[0]])
@@ -116,6 +118,7 @@ class _CountingReplay(ReplayTransport):
         return super().send(request)
 
 
+@pytest.mark.recorded("tests/test_data/th_thaiwater_1373273_2025-01-01_2026-01-01.recording.json")
 def test_historical_366_date_response_remains_parseable_without_claiming_current_window_policy(
     retained_evidence_root: Path,
 ) -> None:

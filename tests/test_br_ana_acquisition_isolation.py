@@ -54,6 +54,7 @@ def test_independent_chunks_keep_precise_bounds(product, failed):
 
 
 @pytest.mark.parametrize("failed_month", ["2024-01", "2024-02"])
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_daily_driver_retains_healthy_month_and_failed_call(retained_evidence_root, failed_month):
 
     from rivretrieve._internal.driver import drive
@@ -138,6 +139,7 @@ def test_unbounded_rendering_is_a_fatal_contract_error():
 
 
 @pytest.mark.parametrize("malformed", [False, True])
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_equal_ana_responses_keep_acquisition_identity_and_call_linkage(retained_evidence_root, malformed):
     from dataclasses import replace
 

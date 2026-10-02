@@ -2,9 +2,10 @@
 
 import html
 import re
-import subprocess
-import sys
+import runpy
+import shutil
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -36,18 +37,47 @@ ENUMS = (
 )
 
 
+@pytest.fixture(scope="session")
+def documentation_workspace():
+    checks = ROOT / ".worktrees" / "documentation-checks"
+    checks.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix="reference-", dir=checks) as temporary:
+        yield Path(temporary)
+
+
 @pytest.fixture(scope="module")
-def reference(tmp_path_factory):
+def reference(tmp_path_factory, documentation_workspace):
+    from mkdocs.commands.build import build
+    from mkdocs.config import load_config
+
     # One strict build exercises the configured handler and snippet inclusion for
     # all field/state contracts, rather than testing the directive text alone.
     site = tmp_path_factory.mktemp("reference-site")
-    subprocess.run(
-        [sys.executable, "-m", "mkdocs", "build", "--strict", "--site-dir", str(site)],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
+    docs = documentation_workspace / "docs"
+    shutil.copytree(
+        ROOT / "docs",
+        docs,
+        ignore=lambda directory, names: {
+            name
+            for name in names
+            if name == "__pycache__"
+            or Path(directory) / name in (ROOT / "docs/index.md", ROOT / "docs/assets/stations_map.html")
+        },
     )
+    outputs = [ROOT / "docs/index.md", ROOT / "docs/assets/stations_map.html"]
+    before = {path: path.read_bytes() if path.exists() else None for path in outputs}
+    config = load_config(str(ROOT / "mkdocs.yml"), strict=True, site_dir=str(site), docs_dir=str(docs))
+    hook = config.hooks["docs/hooks.py"]
+    with pytest.MonkeyPatch.context() as patch:
+        patch.chdir(ROOT)
+        patch.setattr(hook, "INDEX_MD_PATH", docs / "index.md")
+        patch.setattr(hook, "STATIONS_MAP_PATH", docs / "assets/stations_map.html")
+        generator = runpy.run_path(str(ROOT / "docs/scripts/generate_station_map.py"))
+        generator["build_map"](hook.STATIONS_MAP_PATH)
+        try:
+            build(config)
+        finally:
+            assert {path: path.read_bytes() if path.exists() else None for path in outputs} == before
     return (site / "reference/index.html").read_text()
 
 

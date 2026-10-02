@@ -90,6 +90,10 @@ def test_bad_coordinate_is_not_silently_discarded() -> None:
         build_stations(native)
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/test_data/br_ana_inventory/capture.json",
+)
 def test_attested_inventory_build_has_only_evidenced_station_facts(retained_evidence_root, tmp_path: Path) -> None:
     from rivretrieve._internal.catalogues.native import read_native_table
     from rivretrieve._internal.providers.br_ana.capture import read_capture_record, verify_native_identity

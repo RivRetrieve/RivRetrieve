@@ -189,6 +189,7 @@ def test_public_product_shorthand_is_refused_instead_of_misclassifying_physical_
         rr.pick(selection, product="discharge_daily_mean")
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_explicit_catalogue_identity_routes_only_its_source_access(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ) -> None:

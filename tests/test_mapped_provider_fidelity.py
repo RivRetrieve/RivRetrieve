@@ -40,6 +40,20 @@ CASES = (
 )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+    "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2026-07-30_2026-08-04.recording.json",
+)
 @pytest.mark.parametrize(("provider", "station", "recordings", "start", "end"), CASES)
 def test_public_discovery_retrieval_and_bundle_have_identical_facts(
     retained_evidence_root: Path, monkeypatch, provider, station, recordings, start, end
@@ -83,6 +97,20 @@ def test_daily_means_retain_support_without_inventing_interval_anchor():
                 assert facts.label_time == "00:00"
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+    "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2026-07-30_2026-08-04.recording.json",
+)
 @pytest.mark.parametrize(("provider", "station", "recordings", "start", "end"), CASES)
 def test_explicit_series_cache_refresh_preserves_siblings_facts_and_native_values(
     retained_evidence_root: Path, monkeypatch, tmp_path, provider, station, recordings, start, end
@@ -122,6 +150,34 @@ def test_explicit_series_cache_refresh_preserves_siblings_facts_and_native_value
     assert len(calls) > count
 
 
+@pytest.mark.recorded(
+    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
+    "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+    "tests/test_data/cz_meta2.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_hydrometrie.html",
+    "tests/test_data/fr_hubeau_openapi_v2.json",
+    "tests/test_data/fr_hydroportail_H_padded.recording.json",
+    "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
+    "tests/test_data/fr_hydroportail_variants/REPORT.md",
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+    "tests/test_data/lt_lhmt_terms_licence.html",
+    "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
+    "tests/test_data/th_thaiwater_official_evidence_manifest-2026-09-02.json",
+)
 def test_all_mapped_builtin_facts_have_publisher_evidence_and_content_identity(retained_evidence_root: Path):
     from importlib import import_module
 
@@ -140,6 +196,7 @@ def test_all_mapped_builtin_facts_have_publisher_evidence_and_content_identity(r
             assert all("config.py" not in citation for citation in facts.quantity.evidence)
 
 
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 @pytest.mark.parametrize("repetition", ("equal", "conflicting", "disjoint"))
 def test_czech_repeated_code_is_identified_unsupported_without_losing_siblings(
     retained_evidence_root: Path, repetition
@@ -208,6 +265,20 @@ def test_product_tables_project_source_facts_without_independent_scientific_clai
             assert product["unit"] == admission(facts).target_unit
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+    "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2026-07-30_2026-08-04.recording.json",
+)
 @pytest.mark.parametrize(("provider", "station", "recordings", "start", "end"), CASES)
 def test_unestablished_singleton_variant_never_substitutes_known_series(
     retained_evidence_root: Path, monkeypatch, provider, station, recordings, start, end

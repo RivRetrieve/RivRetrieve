@@ -20,8 +20,6 @@ from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import AvailabilityDtype
 from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _registry
 
-pytest_plugins = ("tests._distribution",)
-
 
 @pytest.fixture(scope="session")
 def retained_evidence_root() -> Path:
@@ -29,6 +27,17 @@ def retained_evidence_root() -> Path:
     from tests._evidence import resolve_retained_evidence_root
 
     return resolve_retained_evidence_root(os.environ.get("RIVRETRIEVE_TEST_EVIDENCE_ROOT"))
+
+
+@pytest.fixture(scope="session")
+def thaiwater_review_evidence_root() -> Path:
+    """Receive the verified governing root from the restricted archive coordinator."""
+    from tests._evidence import resolve_retained_evidence_root
+
+    configured = os.environ.get("THAIWATER_REVIEW_EVIDENCE_ROOT")
+    if not configured:
+        pytest.fail("The reviewed archive test command must supply ThaiWater governing inputs.", pytrace=False)
+    return resolve_retained_evidence_root(configured)
 
 
 def _packaged_provenance(provider_id: str) -> CatalogueEvidence | None:

@@ -38,6 +38,11 @@ def source(retained_evidence_root, request):
     return receipt, body
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz",
+    "maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz",
+    full_verification=("fr_hubeau",),
+)
 def test_actual_body_accepts_exact_receipt(verifier, source):
     receipt, body = source
     result = verifier.check_source(
@@ -46,6 +51,11 @@ def test_actual_body_accepts_exact_receipt(verifier, source):
     assert result.count == 0
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz",
+    "maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz",
+    full_verification=("fr_hubeau",),
+)
 @pytest.mark.parametrize("mutation", ["station", "product", "window"])
 def test_actual_body_rejects_wrong_request(verifier, source, mutation):
     receipt, body = source
@@ -81,10 +91,18 @@ def native(retained_evidence_root):
     )
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet",
+    full_verification=("fr_hubeau",),
+)
 def test_public_consistency_is_not_body_certification(verifier, document, native):
     assert verifier.verify_public(native, document) == document["summary"]
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet",
+    full_verification=("fr_hubeau",),
+)
 @pytest.mark.parametrize(
     "mutation",
     ["summary", "station", "duplicate", "missing", "product", "unavailable", "failed_as_empty", "old_witness_window"],
@@ -133,6 +151,11 @@ def retained_bundles(retained_evidence_root, verifier):
     }
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz",
+    "maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz",
+    full_verification=("fr_hubeau",),
+)
 @pytest.mark.parametrize("mutation", [None, "count", "hash", "bytes", "date", "url", "status", "reference"])
 def test_private_primary_uses_actual_bytes_and_receipt(
     retained_evidence_root, verifier, document, retained_bundles, mutation
@@ -162,6 +185,11 @@ def test_private_primary_uses_actual_bytes_and_receipt(
             verifier.verify_private([row], retained_evidence_root, retained_bundles)
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz",
+    "maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz",
+    full_verification=("fr_hubeau",),
+)
 def test_history_empty_envelope_is_not_a_positive_witness(retained_evidence_root, verifier, document, retained_bundles):
     from copy import deepcopy
 
@@ -183,6 +211,11 @@ def test_history_empty_envelope_is_not_a_positive_witness(retained_evidence_root
         verifier.verify_private([row], retained_evidence_root, retained_bundles)
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz",
+    "maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz",
+    full_verification=("fr_hubeau",),
+)
 def test_history_failure_cannot_be_restored_as_empty(retained_evidence_root, verifier, document, retained_bundles):
     from copy import deepcopy
 
@@ -216,6 +249,10 @@ def test_official_public_index_structure(verifier, mutation):
             verifier.verify_official_public(changed)
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet",
+    full_verification=("fr_hubeau",),
+)
 def test_public_primary_failure_is_not_available(verifier, document, native):
     from copy import deepcopy
 
@@ -225,6 +262,11 @@ def test_public_primary_failure_is_not_available(verifier, document, native):
         verifier.verify_public(native, changed)
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/evidence/hubeau_counts.tar.xz",
+    "maintenance/catalogue/fr_hubeau/evidence/hydroportail_history.tar.xz",
+    full_verification=("fr_hubeau",),
+)
 @pytest.mark.parametrize("field,value", [("metric", "Q"), ("unit", "m"), ("code", "OTHER"), ("statuses", "validated")])
 def test_empty_envelope_mismatch_fails_without_rows(verifier, retained_bundles, field, value):
     import json
@@ -240,6 +282,10 @@ def test_empty_envelope_mismatch_fails_without_rows(verifier, retained_bundles, 
         )
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet",
+    full_verification=("fr_hubeau",),
+)
 @pytest.mark.parametrize("mutation", ["reference", "receipt_id", "material_filename"])
 def test_public_acquisition_reference_is_bound(verifier, document, native, mutation):
     from copy import deepcopy

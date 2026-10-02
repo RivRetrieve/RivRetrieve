@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 from tarfile import open as open_tar
 from tempfile import TemporaryDirectory
@@ -120,7 +121,23 @@ def test_distributions_exclude_local_files(distribution: str) -> None:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("distribution exclusion marker\n")
         dist = workspace / "dist"
-        _run(["uv", "build", "--offline", "--force-pep517", "--" + distribution, "--out-dir", str(dist)], source)
+        # Reuse the locked backend, not offline registry resolution. Payload
+        # exclusion assertions below still inspect the actual PEP 517 artifact.
+        _run(
+            [
+                "uv",
+                "build",
+                "--offline",
+                "--force-pep517",
+                "--no-build-isolation",
+                "--python",
+                sys.executable,
+                "--" + distribution,
+                "--out-dir",
+                str(dist),
+            ],
+            source,
+        )
         if distribution == "wheel":
             with ZipFile(next(dist.glob("*.whl"))) as wheel:
                 _assert_payload(wheel.namelist())

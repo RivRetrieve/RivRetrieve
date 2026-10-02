@@ -40,6 +40,14 @@ def test_france_public_evidence_and_descriptor_fit_normalized_budget() -> None:
     assert sizes["croissant.json"] <= 262_144, sizes
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
+    "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
+    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+    "tests/test_data/fr_hubeau_hydrometrie.html",
+    "tests/test_data/fr_hubeau_temperature_openapi.json",
+    "tests/test_data/fr_hubeau_terms_licence.html",
+)
 def test_real_france_generator_does_not_render_national_acquisition_graph(
     retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

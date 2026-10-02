@@ -42,30 +42,74 @@ Use the provider's instructions:
   catalogue table.
 - [HydroPortail](../../maintenance/catalogue/fr_hydroportail/README.md): native
   inventory rebuild and the limits of historical source witnesses.
-- [ThaiWater](../../maintenance/catalogue/th_thaiwater/README.md): run the complete
-  genuine-input verifier before negative provenance regressions. Set
-  `THAIWATER_REVIEW_EVIDENCE_ROOT` to the same verified directory. A skipped test or
-  an exception from missing files does not establish acceptance.
+- [ThaiWater](../../maintenance/catalogue/th_thaiwater/README.md): complete
+  genuine-input verification must precede negative provenance regressions. The
+  archive coordinator supplies the verified governing inputs after that positive
+  check passes. A skipped test or an exception from missing files does not establish
+  acceptance.
 - [Brazil](../../maintenance/catalogue/br_ana/README.md): digest-bound supporting
   inputs and retained recordings used by the offline rebuild.
 
-For retained-input tests, set `RIVRETRIEVE_TEST_EVIDENCE_ROOT` to a verified
-directory outside source checkouts. Preserve the inputs' repository-relative
-layout under that directory. Tests read it through the `retained_evidence_root`
-fixture. There is no checkout fallback or automatic download.
+## Run tests
 
-For example, the Canada HYDAT `NO_DAYS` group contains sparse SQLite row
-witnesses and separate publisher recordings under
-`tests/test_data/ca_eccc_hydat_no_days/`. The reconstructed test database is not a
-complete publisher artifact. After retrieving the selected group, run:
+Run source-independent checks from the RivRetrieve checkout without archive access:
 
 ```sh
-uv run pytest tests/test_ca_eccc_no_days_evidence.py -q --tb=no -p no:cacheprovider
+uv run pytest --logic-only
 ```
 
-Missing inputs block these checks. The tests do not download inputs or use archive
-credentials. Keep full failure details private; assertion output can contain source
-values. The private archive records the exact collection and member selections.
+Collection does not open private inputs. This route includes synthetic controls,
+packaged-catalogue checks and public declarations. It does not establish acceptance
+of genuine source inputs.
+
+For retained-input tests, run the private archive coordinator from a clean,
+reviewed archive checkout. Authenticate with existing GitHub access. Both full
+commit IDs must identify independently reviewed code. Follow the archive README
+for restricted storage and execution prerequisites.
+
+For example, the Canada HYDAT `NO_DAYS` checks use sparse SQLite row witnesses and
+separate publisher recordings. The reconstructed database is not a complete
+publisher artifact. Run those checks with:
+
+```sh
+uv run --isolated --locked python -B verify.py \
+  --reviewed-archive-sha "$REVIEWED_ARCHIVE_SHA" \
+  --code-checkout /path/to/reviewed-rivretrieve \
+  --reviewed-code-sha "$REVIEWED_CODE_SHA" \
+  --output "$NEW_PRIVATE_ACCEPTANCE_DIRECTORY" \
+  --tests -- tests/test_ca_eccc_no_days_evidence.py
+```
+
+Use `--tests -- tests` for the whole test suite. Without `--tests`, the coordinator
+runs its full governing checks and fixed regression group. Selected tests declare
+the consumer paths they need; the private archive maps those paths to exact
+collection members. The coordinator acquires and verifies the selected inputs,
+runs required complete positive verifiers, then runs exactly the collected tests.
+No per-provider downloads or manual path configuration are needed. Missing access,
+missing material, changed bytes, changed test selection and skipped requested
+checks fail the controlled run.
+
+Tests receive one repository-relative working copy through `retained_evidence_root`.
+`RIVRETRIEVE_TEST_EVIDENCE_ROOT` and `THAIWATER_REVIEW_EVIDENCE_ROOT` are internal
+coordinator handoffs, not proof of archive membership or normal developer setup.
+Tests do not acquire evidence or receive archive credentials. Detailed output,
+receipts, caches and temporary files remain in restricted storage. Review the safe
+summary before sharing it.
+
+Test purposes remain distinct:
+
+| Selection | What a passing check establishes |
+| --- | --- |
+| `--logic-only` | Source-independent behavior against synthetic controls or public package inputs |
+| `-m recorded` | Parser or retrieval behavior against genuine retained recordings |
+| `-m derived` | An offline rebuild or check of derived inputs, not the existence of original responses |
+| `-m governing` | The specific catalogue or governing-source assertions in the selected checks |
+| `-m live` | An observation of a live service, when such a check exists |
+
+Pass `-m` selections after `--` in the archive command. Tests may have more than one
+purpose. A recording replay is not a live observation. Selecting a governing
+regression does not itself certify every source body; its declared full-positive
+prerequisites run first. Historical coverage gaps remain recorded in the archive.
 
 Other provider checks and retained-input limits are recorded in the private
 archive and provider maintenance notes under `docs/provider_ports/`.

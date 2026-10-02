@@ -51,6 +51,10 @@ class CountedReplay(ReplayTransport):
         return super().send(request)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2026-09-09_2026-09-12.recording.json",
+)
 @pytest.mark.parametrize("cache", ["bypass", "reuse", "refresh"])
 def test_public_365_date_request_splits_the_padded_source_window(
     recordings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cache: CacheMode
@@ -68,6 +72,10 @@ def test_public_365_date_request_splits_the_padded_source_window(
     assert not any(issue.severity == "error" for issue in result.issues)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2026-09-09_2026-09-12.recording.json",
+)
 def test_each_product_has_an_independently_authored_public_multi_window_boundary_probe(
     recordings,
     monkeypatch: pytest.MonkeyPatch,
@@ -101,6 +109,10 @@ def test_each_product_has_an_independently_authored_public_multi_window_boundary
     run_boundary_probes(tuple((_PROVIDER, product) for product in _PRODUCTS), probes)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2026-09-09_2026-09-12.recording.json",
+)
 def test_public_multi_window_reuse_and_refresh_preserve_complete_requested_coverage(
     recordings,
     tmp_path: Path,
@@ -159,6 +171,11 @@ def test_declared_source_cap_splits_engine_padding_across_the_leap_date() -> Non
     # No response or measurements are invented for the second source window.
 
 
+@pytest.mark.recorded(
+    "tests/test_data/th_thaiwater_1373273_2025-01-01_2026-01-01.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json",
+    "tests/test_data/th_thaiwater_1373273_2026-09-09_2026-09-12.recording.json",
+)
 def test_retained_source_recordings_match_their_capture_manifest(retained_evidence_root: Path) -> None:
     import hashlib
     import json

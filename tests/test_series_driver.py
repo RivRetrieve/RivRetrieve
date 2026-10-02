@@ -15,6 +15,7 @@ from rivretrieve._internal.store import StoreRoot
 from tests.usgs_modern_recordings import ModernReplay
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path, retained_evidence_root: Path):
     stages = declaration.observations.stages
 
@@ -58,6 +59,7 @@ def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path, reta
     assert len(replay.calls) == calls
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_partial_success_only_covers_its_reported_interval(tmp_path, retained_evidence_root: Path):
     from dataclasses import replace
 
@@ -101,6 +103,7 @@ def test_partial_success_only_covers_its_reported_interval(tmp_path, retained_ev
     assert StoreReader().status(store, ProviderId("usgs_nwis")).coverage[0].interval.end == datetime(2024, 1, 1, 12)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_driver_refuses_converted_rows_outside_fact_defined_window(monkeypatch, tmp_path, retained_evidence_root: Path):
     import polars as pl
     import pytest
@@ -133,6 +136,7 @@ def test_driver_refuses_converted_rows_outside_fact_defined_window(monkeypatch, 
         )
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_reuse_filters_rows_by_their_actual_fact_segment(tmp_path, retained_evidence_root: Path):
     from dataclasses import replace
 
@@ -309,6 +313,7 @@ def test_explicit_failed_unknown_facts_do_not_satisfy_cache_reuse(tmp_path):
         "duplicate_unsuccessful_id",
     ],
 )
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(
     tmp_path, monkeypatch, defect, retained_evidence_root: Path
 ):
@@ -414,6 +419,7 @@ def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(
         "unsuccessful_overlap",
     ],
 )
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_driver_preserves_independent_rows_and_nonconflicting_payload_outcomes(
     tmp_path, case, retained_evidence_root: Path
 ):

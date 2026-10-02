@@ -44,6 +44,7 @@ def _no_values(*args, **kwargs):
 
 
 @pytest.mark.parametrize("name", _BUNDLES)
+@pytest.mark.derived("tests/test_data/french_combined_artifacts.tar.xz")
 def test_combined_bundle_refused_before_values(name, monkeypatch, artifacts):
     path = artifacts / name
     content = path.read_bytes()
@@ -54,6 +55,7 @@ def test_combined_bundle_refused_before_values(name, monkeypatch, artifacts):
 
 
 @pytest.mark.parametrize("operation", ("status", "reuse", "refresh"))
+@pytest.mark.derived("tests/test_data/french_combined_artifacts.tar.xz")
 def test_combined_store_refused_before_values_or_network(operation, tmp_path, monkeypatch, artifacts):
     cache = tmp_path / "cache"
     shutil.copytree(artifacts / "store", cache / "fr_hubeau/store")
@@ -81,6 +83,7 @@ def test_combined_store_refused_before_values_or_network(operation, tmp_path, mo
     assert _files(cache) == before
 
 
+@pytest.mark.derived("tests/test_data/french_combined_artifacts.tar.xz")
 def test_fixture_bytes_match_baseline_attestation(artifacts):
     import hashlib
 
@@ -92,6 +95,7 @@ def test_fixture_bytes_match_baseline_attestation(artifacts):
         assert hashlib.sha256(content).hexdigest() == attestation["files"]["cache/fr_hubeau/store/" + name]["sha256"]
 
 
+@pytest.mark.recorded("tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json")
 def test_service_specific_daily_store_and_bundles_round_trip(retained_evidence_root, tmp_path, monkeypatch):
     from io import BytesIO
     from zipfile import ZipFile
@@ -136,6 +140,7 @@ def test_service_specific_daily_store_and_bundles_round_trip(retained_evidence_r
     assert_frame_equal(repeated.data, result.data)
 
 
+@pytest.mark.derived("tests/test_data/french_combined_artifacts.tar.xz")
 def test_context_only_empty_bundle_has_no_direct_french_identity(artifacts):
     from io import BytesIO
     from zipfile import ZipFile
@@ -164,6 +169,7 @@ def test_current_context_only_empty_bundle_round_trip():
 
 
 @pytest.mark.parametrize("operation", ("status", "reuse", "refresh"))
+@pytest.mark.derived("tests/test_data/french_combined_artifacts.tar.xz")
 def test_current_store_revision_still_refuses_retired_publication_service(operation, tmp_path, monkeypatch, artifacts):
     cache = tmp_path / "cache"
     target = cache / "fr_hubeau/store"

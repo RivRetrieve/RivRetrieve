@@ -36,6 +36,7 @@ def test_canada_documentation_selection_matches_packaged_catalogue():
     ]
 
 
+@pytest.mark.recorded("docs/verification/canada-provider/sources/INDEX.json")
 def test_canada_source_references_and_index_link(
     retained_evidence_root: Path,
 ):

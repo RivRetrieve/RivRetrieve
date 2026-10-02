@@ -82,6 +82,7 @@ def test_recording_transport_reports_the_wrapped_credential_scope() -> None:
     assert RecordingTransport(HttpClient()).can_authenticate(f"{_ORIGIN}/api/v1/Observations") is False
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_series_1.200.0_1000.recording.json")
 def test_credentialed_recording_keeps_the_header_name_and_never_the_value(
     tmp_path: Path, retained_evidence_root: Path
 ) -> None:
@@ -122,6 +123,10 @@ def test_credentialed_recording_keeps_the_header_name_and_never_the_value(
     assert observation.request.parameters["ReferenceTime"] == "1900-01-01T00:00:00Z/1900-01-07T23:59:59.999999Z"
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_1.200.0_1000_1440_1900-01-01_1900-01-07.recording.json",
+    "tests/test_data/no_nve_series_1.200.0_1000.recording.json",
+)
 def test_recording_main_resolves_declared_exchange_below_recorder(tmp_path, monkeypatch, retained_evidence_root: Path):
     from dataclasses import replace
 
@@ -259,6 +264,7 @@ def test_recording_main_preflights_declared_credentials(tmp_path, monkeypatch, m
 
 
 @pytest.mark.parametrize("stations", [("1.200.0",), ("0.protocol", "1.200.0")])
+@pytest.mark.recorded("tests/test_data/no_nve_1.200.0_1000_1440_1900-01-01_1900-01-07.recording.json")
 def test_recording_main_reports_rejected_exchange_and_preserves_safe_partial_recordings(
     retained_evidence_root: Path,
     tmp_path,
@@ -335,6 +341,7 @@ def test_recording_main_reports_rejected_exchange_and_preserves_safe_partial_rec
     assert "no source exchange was issued" not in captured.out
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_12.210.0_1003_1440_2025-07-08_2025-07-14.recording.json")
 def test_recording_main_retains_not_found_response_without_error_exit(
     tmp_path, monkeypatch, retained_evidence_root: Path
 ):
@@ -380,6 +387,7 @@ def test_recording_main_retains_not_found_response_without_error_exit(
 
 
 @pytest.mark.parametrize("current_inventory", ["published", "empty"])
+@pytest.mark.recorded("tests/test_data/no_nve_series_1.200.0_1000.recording.json")
 def test_recorder_routes_catalogue_owned_versions_through_real_provider_fetch(
     tmp_path, current_inventory, retained_evidence_root: Path
 ):

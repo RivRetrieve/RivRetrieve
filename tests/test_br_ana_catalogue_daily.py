@@ -57,6 +57,7 @@ def daily_inputs(retained_evidence_root):
     )
 
 
+@pytest.mark.governing("tests/recordings/br_ana")
 def test_daily_documentation_and_variants_are_established_from_original_recordings(retained_evidence_root):
     daily = parse_conventional_daily_evidence(*daily_inputs(retained_evidence_root))
     assert daily.available_pairs == frozenset(("15400000", product) for product in DAILY_PRODUCTS)
@@ -67,6 +68,7 @@ def test_daily_documentation_and_variants_are_established_from_original_recordin
 
 
 @pytest.mark.parametrize("name", DOCUMENTS)
+@pytest.mark.governing("tests/recordings/br_ana")
 def test_source_definition_gate_rejects_changed_reviewed_material(retained_evidence_root, name):
     documents, recordings, comparisons = daily_inputs(retained_evidence_root)
     documents[name] += b"changed"
@@ -74,12 +76,14 @@ def test_source_definition_gate_rejects_changed_reviewed_material(retained_evide
         parse_conventional_daily_evidence(documents, recordings, comparisons)
 
 
+@pytest.mark.governing("tests/recordings/br_ana")
 def test_source_correspondence_gate_requires_the_actual_originals(retained_evidence_root):
     documents, recordings, comparisons = daily_inputs(retained_evidence_root)
     with pytest.raises(FatalContractError, match="incomplete"):
         parse_conventional_daily_evidence(documents, recordings, comparisons[:-1])
 
 
+@pytest.mark.governing("tests/recordings/br_ana")
 def test_daily_evidence_does_not_promote_instantaneous_rows_or_another_consistency(retained_evidence_root):
     documents, recordings, comparisons = daily_inputs(retained_evidence_root)
     january = tuple(item for item in recordings if "Cotas_15400000_2024-01" in item[0])
@@ -106,6 +110,11 @@ def catalogue_inputs(retained_evidence_root):
     return capture, native, telemetry, daily, provenance, catalogue
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana",
+    "tests/test_data/br_ana_inventory",
+)
 def test_six_products_preserve_native_population_and_telemetry(catalogue_inputs):
     capture, native, telemetry, _, provenance, catalogue = catalogue_inputs
     assert set(catalogue.products["product_id"]) == DAILY_PRODUCTS | {"stage_instantaneous", "discharge_instantaneous"}
@@ -131,6 +140,11 @@ def test_six_products_preserve_native_population_and_telemetry(catalogue_inputs)
     assert normalized.facts.filter(pl.col("locator_role") == "availability").height == catalogue.station_products.height
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana",
+    "tests/test_data/br_ana_inventory",
+)
 def test_exact_variant_availability_has_only_its_own_recordings(catalogue_inputs):
     _, _, _, daily, provenance, _ = catalogue_inputs
     bindings = {b.facts[0]: b for b in provenance.fact_bindings}
@@ -147,6 +161,11 @@ def test_exact_variant_availability_has_only_its_own_recordings(catalogue_inputs
         assert not any("adopted" in ref.fact for ref in refs)
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana",
+    "tests/test_data/br_ana_inventory",
+)
 def test_six_product_packaged_artifact_rebuild_is_byte_identical(catalogue_inputs, tmp_path):
     from rivretrieve._internal.providers.br_ana.generate_catalogue import write_catalogue
 
@@ -157,6 +176,11 @@ def test_six_product_packaged_artifact_rebuild_is_byte_identical(catalogue_input
         assert path.read_bytes() == (packaged / path.name).read_bytes(), path.name
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana",
+    "tests/test_data/br_ana_inventory",
+)
 def test_daily_catalogue_labels_do_not_claim_interval_anchors(catalogue_inputs):
     from rivretrieve._internal.providers.br_ana.catalogue_series import describe_catalogue
     from rivretrieve._internal.providers.br_ana.config import config

@@ -61,6 +61,16 @@ class _DerivativeTransport:
         return response
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 @pytest.mark.parametrize(
     "defect",
     [
@@ -109,6 +119,16 @@ def test_public_html_derivative_retains_identified_outcome_and_siblings(retained
         assert issue.details["series_id"] == outcomes[0].series_id
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 @pytest.mark.parametrize("policy", ["warn", "raise"])
 def test_public_html_unsupported_obeys_issue_policy(retained_evidence_root, monkeypatch, policy):
     monkeypatch.setattr(
@@ -124,6 +144,16 @@ def test_public_html_unsupported_obeys_issue_policy(retained_evidence_root, monk
         )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_exact_html_and_dat_have_only_dat_outcomes(retained_evidence_root, monkeypatch):
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(_recording_paths(retained_evidence_root)))
     result = rr.fetch(
@@ -141,6 +171,16 @@ def test_exact_html_and_dat_have_only_dat_outcomes(retained_evidence_root, monke
     ]
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 @pytest.mark.parametrize("defect", ["coordinates", "tags", "kind"])
 def test_internal_payload_defects_remain_fatal(retained_evidence_root, defect):
     from rivretrieve._internal.engine import SourceCoordinates
@@ -161,6 +201,16 @@ def test_internal_payload_defects_remain_fatal(retained_evidence_root, defect):
         parse(payload, config())
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 @pytest.mark.parametrize("defect", ["wrong-unit", "no-data-marker"])
 def test_html_boundary_provenance_survives_without_receipts(retained_evidence_root, monkeypatch, defect):
     transport = _DerivativeTransport(defect, _recording_paths(retained_evidence_root))
@@ -180,6 +230,16 @@ def test_html_boundary_provenance_survives_without_receipts(retained_evidence_ro
     ]
 
 
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 @pytest.mark.parametrize("defect", ["wrong-unit", "no-data-marker"])
 def test_html_outcome_controls_explicit_series_cache_coverage(retained_evidence_root, monkeypatch, tmp_path, defect):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))

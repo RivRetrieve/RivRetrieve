@@ -18,6 +18,7 @@ DATA = Path("tests/test_data") / "pl_imgw_date_fields"
 SOURCE = (" 149220010", "NOWOSIELCE", "Pielnica (22618)", "1992", "07", "16", "137", ".170", "99.9", "")
 
 
+@pytest.mark.recorded("tests/test_data/pl_imgw_date_fields")
 def test_date_evidence_retains_exact_publisher_bytes(retained_evidence_root: Path):
     for name in ("codz_1992_07.zip", "hydrologia_info_ogolne.txt", "CODZ_publiczne_format.txt"):
         metadata = json.loads(((retained_evidence_root / DATA) / (name + ".metadata.json")).read_text())

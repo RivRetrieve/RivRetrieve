@@ -347,6 +347,7 @@ def test_poland_declarations_match_canonical_schema_order_and_values() -> None:
     } == STATION_CATALOGUE_ORIGINS
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet")
 def test_committed_poland_origins_pass_validation_and_enforcement(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.pl_imgw.generate_catalogue import build_stations
     from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
@@ -385,6 +386,7 @@ def test_japan_declarations_match_canonical_schema_order_and_values() -> None:
     } == STATION_CATALOGUE_ORIGINS
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_committed_japan_origins_and_build_pass_gate(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.jp_mlit.generate_catalogue import build_catalogue
     from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
@@ -421,6 +423,7 @@ def test_france_declarations_match_schema_order_and_endpoint_values() -> None:
     assert TEMPERATURE_CRS_EVIDENCE_URL != FRANCE_CRS_EVIDENCE_URL
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
 def test_france_endpoint_declarations_validate_complete_native_partitions(retained_evidence_root: Path) -> None:
     native = read_native_table(
         retained_evidence_root / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
@@ -470,6 +473,7 @@ def test_bosnia_declarations_match_canonical_schema_order_and_values() -> None:
     assert "EPSG:4326" not in repr(STATION_CATALOGUE_ORIGINS)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_committed_bosnia_origins_pass_validation_and_enforcement(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue import build_stations
     from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
@@ -512,6 +516,7 @@ def test_usgs_declarations_match_canonical_schema_order_and_values() -> None:
     } == USGS_STATION_CATALOGUE_ORIGINS
 
 
+@pytest.mark.recorded("tests/test_data/th_thaiwater_coordinate_standard.html")
 def test_thailand_declarations_match_schema_and_committed_coordinate_evidence(retained_evidence_root: Path) -> None:
     parser = _CanonicalLinkParser()
     capture_bytes = (retained_evidence_root / THAI_COORDINATE_EVIDENCE_PATH).read_bytes()
@@ -535,6 +540,7 @@ def test_thailand_declarations_match_schema_and_committed_coordinate_evidence(re
     assert parser.canonical_urls == [THAI_CRS_EVIDENCE_URL]
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_committed_thailand_origins_pass_validation(retained_evidence_root: Path) -> None:
     native_table = read_native_table(retained_evidence_root / THAI_NATIVE_PATH)
     stations = build_thai_stations(native_table)
@@ -557,6 +563,7 @@ def test_czech_declarations_match_canonical_schema_order_and_values() -> None:
     } == CZECH_ORIGINS
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
 def test_committed_czech_origins_pass_validation(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.cz_chmi.generate_catalogue import build_stations as build_czech_stations
     from rivretrieve._internal.providers.cz_chmi.origins import (
@@ -582,6 +589,7 @@ def test_canada_declarations_match_canonical_schema_order_and_values() -> None:
     } == CANADA_ORIGINS
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 def test_committed_canada_origins_pass_validation(retained_evidence_root: Path) -> None:
     native_table = read_native_table(retained_evidence_root / CANADA_NATIVE_PATH)
     station_input = native_table.data.select(
@@ -628,6 +636,7 @@ def test_dws_declarations_match_canonical_schema_order_and_values() -> None:
     )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_committed_dws_origins_and_build_pass_gate(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.generate_catalogue import build_catalogue
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
@@ -657,6 +666,7 @@ def _assert_single_issue(exc_info: pytest.ExceptionInfo[FatalContractError], cod
     assert issue.details == {"canonical_column": column}
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_origin_gate_rejects_undeclared_canonical_column(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     del declarations["longitude"]
@@ -671,6 +681,7 @@ def test_origin_gate_rejects_undeclared_canonical_column(retained_evidence_root:
     _assert_single_issue(exc_info, "catalogue_origin.undeclared_column", "longitude")
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_origin_gate_rejects_absent_native_column(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["latitude"] = Field(NativeColumn("absent_column"))
@@ -685,6 +696,7 @@ def test_origin_gate_rejects_absent_native_column(retained_evidence_root: Path) 
     _assert_single_issue(exc_info, "catalogue_origin.absent_native_column", "latitude")
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     native_table, stations = _native_and_stations(retained_evidence_root)
@@ -702,6 +714,7 @@ def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row(retained_e
     _assert_single_issue(exc_info, "catalogue_origin.unpropagated_value", "latitude")
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["station_id"] = NotPublished(Evidence("https://api.meteo.lt/"))
@@ -722,6 +735,7 @@ def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable(retai
     assert exc_info.value.issues[1].code == "catalogue_origin.not_published_marker_mismatch"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_origin_gate_rejects_malformed_not_published_declaration(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["crs"] = {"not_published": True}
@@ -736,6 +750,7 @@ def test_origin_gate_rejects_malformed_not_published_declaration(retained_eviden
     _assert_single_issue(exc_info, "catalogue_origin.missing_evidence", "crs")
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_origin_gate_rejects_documented_declaration_with_absent_evidence(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     malformed = object.__new__(Documented)
@@ -752,6 +767,7 @@ def test_origin_gate_rejects_documented_declaration_with_absent_evidence(retaine
     _assert_single_issue(exc_info, "catalogue_origin.missing_evidence", "crs")
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_origin_gate_rejects_documented_value_drift_from_builder_output(retained_evidence_root: Path) -> None:
     declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
     declarations["crs"] = Documented(
@@ -769,12 +785,14 @@ def test_origin_gate_rejects_documented_value_drift_from_builder_output(retained
     _assert_single_issue(exc_info, "catalogue_origin.documented_value_mismatch", "crs")
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_committed_lithuania_origins_pass_validation(retained_evidence_root: Path) -> None:
     native_table, stations = _native_and_stations(retained_evidence_root)
 
     assert validate_catalogue_origins(ProviderId("lt_lhmt"), LT_STATION_ORIGINS, native_table, stations) == []
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
 def test_committed_swiss_origins_pass_validation(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.generate_catalogue import build_stations
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
@@ -791,6 +809,7 @@ def test_committed_swiss_origins_pass_validation(retained_evidence_root: Path) -
     )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet")
 def test_hydroportail_native_station_origins_pass_gate(retained_evidence_root: Path):
     from rivretrieve._internal.providers.fr_hydroportail.generate_catalogue import build_stations
     from rivretrieve._internal.providers.fr_hydroportail.origins import STATION_CATALOGUE_ORIGINS

@@ -39,6 +39,13 @@ def inputs(retained_evidence_root):
     return capture, native, telemetry, provenance
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana/manual-page11-acquisition.json",
+    "tests/recordings/br_ana/manual-page11-derived.txt",
+    "tests/test_data/br_ana_inventory/capture.json",
+)
+@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
 def test_real_unacquired_availability_survives_provenance_normalization_and_artifact(inputs, tmp_path):
     capture, native, telemetry, provenance = inputs
     catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, provenance, telemetry)
@@ -65,6 +72,13 @@ def test_real_unacquired_availability_survives_provenance_normalization_and_arti
 
 
 @pytest.mark.parametrize("marker", [AbsenceMarkerValue.NULL])
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana/manual-page11-acquisition.json",
+    "tests/recordings/br_ana/manual-page11-derived.txt",
+    "tests/test_data/br_ana_inventory/capture.json",
+)
+@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
 def test_unknown_availability_rejects_wrong_marker(inputs, marker):
     _, _, _, provenance = inputs
     bindings = list(provenance.fact_bindings)
@@ -91,6 +105,13 @@ def test_unknown_availability_rejects_wrong_marker(inputs, marker):
         "station_product:15400000:stage_instantaneous.unit",
     ],
 )
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana/manual-page11-acquisition.json",
+    "tests/recordings/br_ana/manual-page11-derived.txt",
+    "tests/test_data/br_ana_inventory/capture.json",
+)
+@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
 def test_marker_whitelist_does_not_expand_to_arbitrary_or_misspelled_facts(inputs, name):
     _, _, _, provenance = inputs
     bindings = list(provenance.fact_bindings)
@@ -114,6 +135,13 @@ def catalogue(inputs):
     return build_catalogue(native, STATION_CATALOGUE_ORIGINS, provenance, telemetry)
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana/manual-page11-acquisition.json",
+    "tests/recordings/br_ana/manual-page11-derived.txt",
+    "tests/test_data/br_ana_inventory/capture.json",
+)
+@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
 def test_row_markers_use_one_carrier_index_not_per_pair_scans(catalogue, inputs, monkeypatch):
     from rivretrieve._internal.catalogues.artifact import _validate_absence_marker_values
 
@@ -147,6 +175,13 @@ def test_row_markers_use_one_carrier_index_not_per_pair_scans(catalogue, inputs,
 
 
 @pytest.mark.parametrize("normalized", [False, True])
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana/manual-page11-acquisition.json",
+    "tests/recordings/br_ana/manual-page11-derived.txt",
+    "tests/test_data/br_ana_inventory/capture.json",
+)
+@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
 def test_absence_marker_rejects_foreign_pair_and_nonunknown_carrier(catalogue, inputs, normalized):
     from rivretrieve._internal.catalogues.artifact import (
         CorruptCatalogArtifactError,
@@ -179,6 +214,13 @@ def test_absence_marker_rejects_foreign_pair_and_nonunknown_carrier(catalogue, i
         )
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana/manual-page11-acquisition.json",
+    "tests/recordings/br_ana/manual-page11-derived.txt",
+    "tests/test_data/br_ana_inventory/capture.json",
+)
+@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
 def test_normalized_marker_validation_rejects_mismatched_type(catalogue, inputs):
     from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 
@@ -204,6 +246,11 @@ def test_normalized_marker_validation_rejects_mismatched_type(catalogue, inputs)
         )
 
 
+@pytest.mark.derived(
+    "tests/recordings/br_ana/manual-page11-acquisition.json",
+    "tests/recordings/br_ana/manual-page11-derived.txt",
+)
+@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
 def test_manual_derived_excerpt_is_verified_not_pretended_publisher_recording(retained_evidence_root):
     from rivretrieve._internal.issues import FatalContractError
 
@@ -221,6 +268,13 @@ def test_manual_derived_excerpt_is_verified_not_pretended_publisher_recording(re
     assert evidence.documentation.material.sha256 == "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3"
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
+    "tests/recordings/br_ana/manual-page11-acquisition.json",
+    "tests/recordings/br_ana/manual-page11-derived.txt",
+    "tests/test_data/br_ana_inventory/capture.json",
+)
+@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
 def test_each_candidate_links_only_containing_inventory_and_its_own_observation_evidence(inputs):
     capture, native, telemetry, provenance = inputs
     bindings = {b.facts[0]: b for b in provenance.fact_bindings if b.facts[0].startswith("station_product:")}

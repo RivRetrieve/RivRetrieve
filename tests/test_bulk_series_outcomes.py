@@ -14,7 +14,13 @@ from tests.test_ca_eccc_boundary_probe import _compiled_derived_store
 from tests.test_pl_imgw_boundary_probe import _compiled_store
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "pl_imgw"])
+@pytest.mark.parametrize(
+    "provider",
+    [
+        pytest.param("ca_eccc", marks=pytest.mark.derived("tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip")),
+        pytest.param("pl_imgw", marks=pytest.mark.recorded("tests/test_data/pl_imgw_codz_2022_01.recording.json")),
+    ],
+)
 @pytest.mark.parametrize("scenario", ["success", "empty", "explicit", "mixed"])
 def test_public_compiled_queries_report_success_empty_and_unsettled_explicit_identity(
     tmp_path: Path,

@@ -14,9 +14,33 @@ from tests._provenance import legacy_provenance
 @pytest.mark.parametrize(
     ("provider_id", "issuer", "terms_file"),
     [
-        ("cz_chmi", "Czech Hydrometeorological Institute", "cz_chmi_terms_licence.html"),
-        ("fr_hubeau", "Hub’Eau", "fr_hubeau_terms_licence.html"),
-        ("lt_lhmt", "Lithuanian Hydrometeorological Service", "lt_lhmt_terms_licence.html"),
+        pytest.param(
+            "cz_chmi",
+            "Czech Hydrometeorological Institute",
+            "cz_chmi_terms_licence.html",
+            marks=pytest.mark.governing(
+                "tests/test_data/cz_chmi_terms_licence.html",
+                "tests/test_data/cz_meta2.json",
+            ),
+        ),
+        pytest.param(
+            "fr_hubeau",
+            "Hub’Eau",
+            "fr_hubeau_terms_licence.html",
+            marks=pytest.mark.governing(
+                "tests/test_data/fr_hubeau_hydrometrie.html",
+                "tests/test_data/fr_hubeau_temperature_openapi.json",
+                "tests/test_data/fr_hubeau_terms_licence.html",
+            ),
+        ),
+        pytest.param(
+            "lt_lhmt",
+            "Lithuanian Hydrometeorological Service",
+            "lt_lhmt_terms_licence.html",
+            marks=pytest.mark.governing(
+                "tests/test_data/lt_lhmt_terms_licence.html",
+            ),
+        ),
     ],
 )
 def test_provider_provenance_is_packaged_and_terms_are_verified(
@@ -45,9 +69,28 @@ def test_provider_provenance_is_packaged_and_terms_are_verified(
 @pytest.mark.parametrize(
     ("provider_id", "terms_file"),
     [
-        ("cz_chmi", "cz_chmi_terms_licence.html"),
-        ("fr_hubeau", "fr_hubeau_terms_licence.html"),
-        ("lt_lhmt", "lt_lhmt_terms_licence.html"),
+        pytest.param(
+            "cz_chmi",
+            "cz_chmi_terms_licence.html",
+            marks=pytest.mark.governing(
+                "tests/test_data/cz_chmi_terms_licence.html",
+            ),
+        ),
+        pytest.param(
+            "fr_hubeau",
+            "fr_hubeau_terms_licence.html",
+            marks=pytest.mark.governing(
+                "tests/test_data/fr_hubeau_terms_licence.html",
+                full_verification=("fr_hubeau",),
+            ),
+        ),
+        pytest.param(
+            "lt_lhmt",
+            "lt_lhmt_terms_licence.html",
+            marks=pytest.mark.governing(
+                "tests/test_data/lt_lhmt_terms_licence.html",
+            ),
+        ),
     ],
 )
 def test_production_provenance_rejects_changed_recording(
@@ -68,7 +111,29 @@ def test_production_provenance_rejects_changed_recording(
         verify_provenance_recordings(provenance, tmp_path)
 
 
-@pytest.mark.parametrize("provider_id", ["cz_chmi", "fr_hubeau", "lt_lhmt"])
+@pytest.mark.parametrize(
+    "provider_id",
+    [
+        pytest.param(
+            "cz_chmi",
+            marks=pytest.mark.derived(
+                "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
+            ),
+        ),
+        pytest.param(
+            "fr_hubeau",
+            marks=pytest.mark.derived(
+                "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+            ),
+        ),
+        pytest.param(
+            "lt_lhmt",
+            marks=pytest.mark.derived(
+                "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+            ),
+        ),
+    ],
+)
 def test_native_cli_invokes_shared_recording_verifier(
     retained_evidence_root: Path,
     tmp_path: Path,
@@ -99,7 +164,33 @@ def test_native_cli_invokes_shared_recording_verifier(
     assert calls == [provider_id]
 
 
-@pytest.mark.parametrize("provider_id", ["cz_chmi", "fr_hubeau", "lt_lhmt"])
+@pytest.mark.parametrize(
+    "provider_id",
+    [
+        pytest.param(
+            "cz_chmi",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
+                "tests/test_data/cz_chmi_terms_licence.html",
+                "tests/test_data/cz_meta2.json",
+            ),
+        ),
+        pytest.param(
+            "fr_hubeau",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+                full_verification=("fr_hubeau",),
+            ),
+        ),
+        pytest.param(
+            "lt_lhmt",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+                "tests/test_data/lt_lhmt_terms_licence.html",
+            ),
+        ),
+    ],
+)
 def test_native_cli_rejects_raw_byte_substitution(
     tmp_path: Path, provider_id: str, retained_evidence_root: Path
 ) -> None:
@@ -172,6 +263,7 @@ def test_lithuania_runtime_provenance_names_the_exact_monthly_route() -> None:
     )
 
 
+@pytest.mark.recorded("tests/test_data/fr_hubeau_temperature_openapi.json")
 def test_france_temperature_openapi_is_bound_without_instantaneous_inference(retained_evidence_root: Path) -> None:
     provenance = rr.find(provider="fr_hubeau").acquisition_provenance[0]
     assert provenance is not None

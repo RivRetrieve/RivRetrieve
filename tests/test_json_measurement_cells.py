@@ -84,6 +84,15 @@ def _measurement_content(content, field, mutation):
 
 @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
 @pytest.mark.parametrize("mutation", ["original", "null", "missing", "true", "false"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
+)
 def test_france_parser_measurement_cells_keep_absence_distinct_from_null(retained_evidence_root: Path, case, mutation):
     route, station, _predicates, start, end, filenames, field, _count = case
     provider = "fr_hydroportail" if route == "hydroportail" else "fr_hubeau"
@@ -119,6 +128,15 @@ def test_france_parser_measurement_cells_keep_absence_distinct_from_null(retaine
 @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
 @pytest.mark.parametrize("mutation", ["original", "null", "missing"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
+    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
+)
 def test_public_france_measurement_cells_keep_absence_distinct_from_null(
     retained_evidence_root: Path, tmp_path, monkeypatch, case, mutation
 ):
@@ -161,6 +179,10 @@ def test_public_france_measurement_cells_keep_absence_distinct_from_null(
 
 @pytest.mark.parametrize("mutation", ["missing", "true", "false"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+)
 def test_bad_daily_measurement_does_not_discard_independent_recorded_statistic(
     retained_evidence_root: Path, monkeypatch, mutation
 ):

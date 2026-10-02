@@ -12,6 +12,7 @@ import pytest
 from tests.usgs_modern_recordings import body, manifest
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_every_retained_source_body_has_exact_hash_and_acquisition_manifest(retained_evidence_root):
     hashes = dict(
         line.split("  ", 1)[::-1]
@@ -48,6 +49,7 @@ def test_every_retained_source_body_has_exact_hash_and_acquisition_manifest(reta
     assert all(item["final_url"] is None for item in historical)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 @pytest.mark.parametrize(
     "parameter,legacy_file,name",
     [
@@ -86,6 +88,7 @@ def test_bounded_2010_observations_match_legacy_published_instants_and_numbers(
     # A finite value comparison neither aliases the independent IDs nor proves all history.
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_present_null_publisher_recording_is_not_an_empty_answer(retained_evidence_root):
     from dataclasses import replace
 
@@ -114,6 +117,7 @@ def test_present_null_publisher_recording_is_not_an_empty_answer(retained_eviden
     assert all(f["properties"]["qualifier"] == ["DISCONTINUED"] for f in source["features"])
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_shared_documentation_bytes_keep_independent_historical_acquisitions(retained_evidence_root):
     historical = json.loads(
         ((retained_evidence_root / "tests/test_data/usgs_modern") / "historical-manifest.json").read_text()

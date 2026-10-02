@@ -33,6 +33,11 @@ def test_canada_provenance_separates_geomet_from_hydat() -> None:
     }
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
+    "tests/test_data/ca_eccc_terms_citation.html",
+    "tests/test_data/ca_eccc_terms_licence.html",
+)
 def test_canada_terms_recordings_and_native_bytes_are_verified(retained_evidence_root: Path, tmp_path: Path) -> None:
     verify_provenance_recordings(build_acquisition_provenance(), retained_evidence_root)
     evidence = Path("tests/test_data/ca_eccc_terms_licence.html")
@@ -169,6 +174,11 @@ def test_canada_real_loader_rejects_runtime_lineage_for_a_packaged_product(tmp_p
         load_packaged_catalogue_artifact(mutated, on_issue="raise")
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
+    "tests/test_data/ca_eccc_terms_citation.html",
+    "tests/test_data/ca_eccc_terms_licence.html",
+)
 def test_canada_real_recording_rejects_an_empty_quotation(retained_evidence_root: Path, tmp_path: Path) -> None:
     del tmp_path
     provenance = build_acquisition_provenance()

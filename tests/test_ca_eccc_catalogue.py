@@ -156,6 +156,8 @@ def test_station_builder_raises_once_with_complete_issue_inventory() -> None:
     ]
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
+@pytest.mark.recorded("tests/test_data/ca_eccc_metadata.json")
 def test_retained_fixture_refresh_preserves_exact_native_values(
     retained_evidence_root: Path,
 ) -> None:
@@ -173,6 +175,7 @@ def test_retained_fixture_refresh_preserves_exact_native_values(
     pl_testing.assert_frame_equal(outcome.value.data, committed, check_exact=True)
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_metadata.json")
 def test_live_refresh_pages_to_number_matched_and_accepts_terminal_short_page(
     retained_evidence_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -205,6 +208,7 @@ def test_live_refresh_returns_named_request_issue(monkeypatch: pytest.MonkeyPatc
     assert [issue.code for issue in outcome.issues] == ["refresh_request_failed"]
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_metadata.json")
 @pytest.mark.parametrize(
     ("pages", "expected_code"),
     [
@@ -244,6 +248,7 @@ def test_live_refresh_rejects_invalid_pagination(
     assert [issue.code for issue in outcome.issues] == [expected_code]
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_metadata.json")
 def test_live_refresh_rejects_duplicate_feature(retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     first, second = _features(retained_evidence_root)[:2]
 
@@ -258,6 +263,7 @@ def test_live_refresh_rejects_duplicate_feature(retained_evidence_root: Path, mo
     assert [issue.code for issue in outcome.issues] == ["refresh_duplicate_feature"]
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_metadata.json")
 def test_live_refresh_rejects_duplicate_page(retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     page = _page(_features(retained_evidence_root)[:2], 4)
     monkeypatch.setattr(generate_catalogue, "_request_station_page", lambda *, offset, limit: page)
@@ -269,6 +275,7 @@ def test_live_refresh_rejects_duplicate_page(retained_evidence_root: Path, monke
     assert [issue.code for issue in outcome.issues] == ["refresh_duplicate_page"]
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_metadata.json")
 def test_live_refresh_rejects_missing_page(retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pages = {0: _page(_features(retained_evidence_root)[:2], 3)}
     monkeypatch.setattr(generate_catalogue, "_request_station_page", lambda *, offset, limit: pages[offset])
@@ -280,6 +287,7 @@ def test_live_refresh_rejects_missing_page(retained_evidence_root: Path, monkeyp
     assert [issue.code for issue in outcome.issues] == ["refresh_missing_page"]
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_metadata.json")
 @pytest.mark.parametrize(
     ("number_matched", "expected_code"),
     [(4, "refresh_count_underflow"), (2, "refresh_count_overflow")],
@@ -294,6 +302,7 @@ def test_complete_fixture_rejects_count_underflow_or_overflow(
     assert [issue.code for issue in outcome.issues] == [expected_code]
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_metadata.json")
 @pytest.mark.parametrize(
     ("feature", "reason"),
     [
@@ -334,6 +343,7 @@ def test_refresh_returns_named_issue_for_each_invalid_feature_reason(
     assert outcome.issues[0].details["reason"] == reason
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_metadata.json")
 def test_live_refresh_applies_provider_calibrated_minimum(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -364,6 +374,7 @@ def test_cli_refresh_boundary_raises_on_returned_error_issue(monkeypatch: pytest
     assert [issue.code for issue in exc_info.value.issues] == ["refresh_premature_empty_page"]
 
 
+@pytest.mark.recorded("tests/test_data/ca_eccc_metadata.json")
 def test_cli_refresh_reports_digest_of_written_native_table(
     retained_evidence_root: Path, capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
@@ -385,6 +396,7 @@ def test_cli_refresh_reports_digest_of_written_native_table(
     assert capsys.readouterr().out == f"ca_eccc native table content SHA-256: {digest}\n"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 def test_retained_native_table_has_exact_schema_population_and_id_digest(
     retained_evidence_root: Path,
 ) -> None:
@@ -404,6 +416,7 @@ def test_retained_native_table_has_exact_schema_population_and_id_digest(
     assert native["id"].equals(native["STATION_NUMBER"])
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 def test_retained_native_table_has_attested_whole_table_content_digest(
     retained_evidence_root: Path,
 ) -> None:
@@ -414,6 +427,7 @@ def test_retained_native_table_has_attested_whole_table_content_digest(
     )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 def test_retained_native_coordinates_are_inside_declared_collection_bbox(
     retained_evidence_root: Path,
 ) -> None:
@@ -423,6 +437,7 @@ def test_retained_native_coordinates_are_inside_declared_collection_bbox(
     assert native["geometry.coordinates[1]"].is_between(42, 84).fill_null(False).all()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 @pytest.mark.parametrize(
     ("station_id", "name", "longitude", "latitude", "effective_area"),
     [
@@ -451,6 +466,7 @@ def test_retained_native_table_pins_representative_rows(
     assert row["DRAINAGE_AREA_EFFECT"] == effective_area
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 def test_retained_native_first_middle_and_last_ids_are_pinned(
     retained_evidence_root: Path,
 ) -> None:
@@ -460,6 +476,7 @@ def test_retained_native_first_middle_and_last_ids_are_pinned(
     assert ids.item(-1) == "11AF005"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 def test_native_build_counts_crs_and_dates(
     retained_evidence_root: Path,
 ) -> None:
@@ -476,6 +493,7 @@ def test_native_build_counts_crs_and_dates(
     assert set(catalogue.products["native_id"]) == {"DLY_FLOWS", "DLY_LEVELS"}
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 def test_build_catalogue_is_gated_on_origins(
     retained_evidence_root: Path,
 ) -> None:
@@ -486,6 +504,7 @@ def test_build_catalogue_is_gated_on_origins(
         generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), broken)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 def test_mixed_retrieval_dates_flow_to_rows_and_provider_version(
     retained_evidence_root: Path,
 ) -> None:
@@ -524,6 +543,11 @@ def test_cli_rejects_cross_mode_combinations(argv: list[str]) -> None:
     assert exc_info.value.code != 0
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
+    "tests/test_data/ca_eccc_terms_citation.html",
+    "tests/test_data/ca_eccc_terms_licence.html",
+)
 def test_native_build_is_network_free_and_byte_deterministic(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

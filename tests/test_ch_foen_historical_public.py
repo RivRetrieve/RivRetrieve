@@ -53,6 +53,10 @@ def expected_flow(archive, *, clipped=True):
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/ch_foen_2018_flux_january2024_full.recording.json",
+    "tests/test_data/ch_foen_2018_historical_rest.json",
+)
 def test_public_historical_archive_without_personal_credentials(
     rest, archive, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):

@@ -142,6 +142,7 @@ INVALID_VALUES = [
 ]
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 @pytest.mark.parametrize("value,numeric_token", INVALID_VALUES)
 def test_invalid_measurement_parser_preserves_identified_sibling(recording, value, numeric_token):
     content = _content(recording, value, numeric_token=numeric_token)
@@ -161,6 +162,7 @@ def test_invalid_measurement_parser_preserves_identified_sibling(recording, valu
 
 # Exercise policy/cache composition for absent, wrong-type and overflow states.
 # Every original source representation remains in the parser matrix above.
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 @pytest.mark.parametrize(
     "value,numeric_token",
     [
@@ -215,6 +217,7 @@ def test_unrepresentable_measurement_is_isolated_and_cannot_authorize_coverage(
     assert {coverage["series_id"] for coverage in manifest["coverage"]} == {healthy}
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 @pytest.mark.parametrize(
     "value,expected",
     [

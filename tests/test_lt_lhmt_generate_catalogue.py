@@ -80,6 +80,7 @@ def _fake_urlopen_calls(
     return calls
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_lt_lhmt_generator_uses_committed_native_table_without_network(
     retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,
@@ -94,11 +95,13 @@ def test_lt_lhmt_generator_uses_committed_native_table_without_network(
     assert catalogue.stations.height == 97
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_lt_lhmt_generator_station_count_matches_fixture(retained_evidence_root) -> None:
     catalogue = _build_committed_catalogue(retained_evidence_root)
     assert catalogue.stations.height == 97
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_lt_lhmt_generator_products_are_two(retained_evidence_root) -> None:
     catalogue = _build_committed_catalogue(retained_evidence_root)
     assert catalogue.products.height == 2
@@ -106,29 +109,34 @@ def test_lt_lhmt_generator_products_are_two(retained_evidence_root) -> None:
     assert product_ids == {"discharge_daily_mean", "stage_daily_mean"}
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_lt_lhmt_generator_station_products_count(retained_evidence_root) -> None:
     catalogue = _build_committed_catalogue(retained_evidence_root)
     assert catalogue.station_products.height == 97 * 2
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_lt_lhmt_generator_station_products_availability_unknown(retained_evidence_root) -> None:
     catalogue = _build_committed_catalogue(retained_evidence_root)
     availability_values = set(catalogue.station_products["availability"].cast(str).to_list())
     assert availability_values == {"unknown"}
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_lt_lhmt_generator_first_station_sorted(retained_evidence_root) -> None:
     catalogue = _build_committed_catalogue(retained_evidence_root)
     station_ids = catalogue.stations["station_id"].to_list()
     assert station_ids == sorted(station_ids)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_lt_lhmt_generator_station_has_required_common_fields(retained_evidence_root) -> None:
     catalogue = _build_committed_catalogue(retained_evidence_root)
     assert catalogue.stations.columns == ["provider_id", "station_id", "latitude", "longitude", "crs"]
     assert catalogue.stations["crs"].unique().to_list() == ["EPSG:4326"]
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_build_catalogue_is_gated_on_origins(retained_evidence_root) -> None:
     broken = dict(STATION_CATALOGUE_ORIGINS)
     del broken["longitude"]
@@ -140,6 +148,7 @@ def test_build_catalogue_is_gated_on_origins(retained_evidence_root) -> None:
         generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), broken)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_lt_lhmt_generator_provider_info_fields(retained_evidence_root) -> None:
     catalogue = _build_committed_catalogue(retained_evidence_root)
     info = catalogue.provider_info
@@ -151,6 +160,7 @@ def test_lt_lhmt_generator_provider_info_fields(retained_evidence_root) -> None:
     assert info["live_station_products"] is False
 
 
+@pytest.mark.recorded("tests/test_data/lithuania_metadata_stations.json")
 def test_lt_lhmt_fixture_matches_attested_digest(retained_evidence_root) -> None:
     payload = _fixture_payload(retained_evidence_root)
     canonical = json.dumps(
@@ -163,6 +173,7 @@ def test_lt_lhmt_fixture_matches_attested_digest(retained_evidence_root) -> None
     assert hashlib.sha256(canonical).hexdigest() == ATTESTED_DIGEST
 
 
+@pytest.mark.recorded("tests/test_data/lithuania_metadata_stations.json")
 def test_refresh_native_table_from_fixture_preserves_exact_source_data(
     retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,
@@ -185,6 +196,7 @@ def test_refresh_native_table_from_fixture_preserves_exact_source_data(
     )
 
 
+@pytest.mark.recorded("tests/test_data/lithuania_metadata_stations.json")
 def test_refresh_native_table_from_live_exercises_transport_seam_offline(
     retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,
@@ -198,6 +210,7 @@ def test_refresh_native_table_from_live_exercises_transport_seam_offline(
     assert outcome.issues == ()
 
 
+@pytest.mark.recorded("tests/test_data/lithuania_metadata_stations.json")
 def test_native_live_cli_branch_writes_expected_table_offline(
     retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,
@@ -241,6 +254,7 @@ def test_live_refresh_transport_failure_is_fatal_and_silent(
     assert captured.err == ""
 
 
+@pytest.mark.recorded("tests/test_data/lithuania_metadata_stations.json")
 def test_absent_station_is_not_carried_forward(retained_evidence_root, tmp_path: Path) -> None:
     reduced_payload = _fixture_payload(retained_evidence_root)[:-1]
     reduced_fixture = tmp_path / "reduced.json"
@@ -255,6 +269,10 @@ def test_absent_station_is_not_carried_forward(retained_evidence_root, tmp_path:
     assert set(outcome.value.data["code"].to_list()) == {station["code"] for station in reduced_payload}
 
 
+@pytest.mark.recorded(
+    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+    "tests/test_data/lithuania_metadata_stations.json",
+)
 def test_committed_native_table_matches_attested_fixture(retained_evidence_root) -> None:
     table = read_native_table(retained_evidence_root / NATIVE_PATH)
 
@@ -271,6 +289,7 @@ def test_committed_native_table_matches_attested_fixture(retained_evidence_root)
     assert table.data["retrieved_at"].item(0) == ATTESTED_DATETIME
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version(retained_evidence_root) -> None:
     source = read_native_table(retained_evidence_root / NATIVE_PATH).data.head(2)
     station_ids = source["code"].to_list()
@@ -293,6 +312,10 @@ def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version(ret
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+    "tests/test_data/lt_lhmt_terms_licence.html",
+)
 def test_canonical_cli_writes_only_five_canonical_artifacts(retained_evidence_root, tmp_path: Path) -> None:
     result = generate_catalogue.main(
         [
@@ -355,6 +378,10 @@ def test_cli_rejects_cross_mode_combinations(argv: list[str]) -> None:
     assert exc_info.value.code != 0
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+    "tests/test_data/lt_lhmt_terms_licence.html",
+)
 def test_native_build_is_network_free_and_byte_deterministic(
     retained_evidence_root,
     monkeypatch: pytest.MonkeyPatch,

@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import pytest
 
 from rivretrieve._internal.boundary_probes import (
     FIRST_WALL_CLOCK_TIME,
@@ -118,6 +119,17 @@ def _probe(retained_evidence_root, product_id: ProductId) -> LiveBoundaryProbe:
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_1.200.0_1000_0_2025-07-08_2025-07-14.recording.json",
+    "tests/test_data/no_nve_1.200.0_1000_1440_2025-07-08_2025-07-14.recording.json",
+    "tests/test_data/no_nve_1.200.0_1000_60_2025-07-08_2025-07-14.recording.json",
+    "tests/test_data/no_nve_1.200.0_1001_0_2025-07-08_2025-07-14.recording.json",
+    "tests/test_data/no_nve_1.200.0_1001_1440_2025-07-08_2025-07-14.recording.json",
+    "tests/test_data/no_nve_1.200.0_1001_60_2025-07-08_2025-07-14.recording.json",
+    "tests/test_data/no_nve_1.200.0_1003_0_2025-07-08_2025-07-14.recording.json",
+    "tests/test_data/no_nve_1.200.0_1003_1440_2025-07-08_2025-07-14.recording.json",
+    "tests/test_data/no_nve_1.200.0_1003_60_2025-07-08_2025-07-14.recording.json",
+)
 def test_every_norwegian_product_has_an_exact_live_replay_probe(retained_evidence_root) -> None:
     results = run_manifest_boundary_probes(
         _DECLARED, tuple(_probe(retained_evidence_root, product) for product in _EXPECTED)

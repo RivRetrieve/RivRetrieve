@@ -18,6 +18,7 @@ from rivretrieve._internal.store.validation import ObservationStoreRefusedError,
 
 @pytest.mark.parametrize("quantity", ["discharge", "stage", "temperature"])
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+@pytest.mark.derived("tests/test_data/boundary_stores/pl_imgw_retired_mean")
 def test_retired_compiled_products_refused_before_read_and_left_intact(
     retained_evidence_root: Path, tmp_path, monkeypatch, quantity, policy
 ):

@@ -142,6 +142,7 @@ def test_jp_mlit_packaged_source_coordinates_are_adopted() -> None:
         assert row.select("latitude", "longitude").row(0) == coordinates
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_brazil_verification_evidence_is_available(retained_evidence_root: Path) -> None:
     evidence = retained_evidence_root / "tests/recordings/br_ana"
     assert (evidence / "daily-public-live-verification.json").is_file()
@@ -150,6 +151,12 @@ def test_brazil_verification_evidence_is_available(retained_evidence_root: Path)
     assert (evidence / "detailed-candidate-field-summary.json").is_file()
 
 
+@pytest.mark.recorded(
+    "tests/test_data/br_ana_metadata.json",
+    "tests/test_data/jp_mlit_metadata.json",
+    "tests/test_data/no_nve_metadata.json",
+    "tests/test_data/th_thaiwater_metadata.json",
+)
 def test_active_catalogue_fixtures_remain_available(retained_evidence_root: Path) -> None:
     fixture_dir = retained_evidence_root / "tests/test_data"
     for fixture_name in (

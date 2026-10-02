@@ -44,6 +44,12 @@ def test_south_africa_provenance_exposes_unsigned_dms_transformation() -> None:
     )
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
+    "tests/test_data/za_dws_terms_licence-1.html",
+    "tests/test_data/za_dws_terms_licence-4.html",
+    "tests/test_data/za_dws_terms_licence-5.html",
+)
 def test_south_africa_cli_rejects_native_byte_substitution(retained_evidence_root: Path, tmp_path: Path) -> None:
     native = tmp_path / "native.parquet"
     native.write_bytes(

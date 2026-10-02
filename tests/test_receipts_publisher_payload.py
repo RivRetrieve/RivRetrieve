@@ -13,6 +13,7 @@ from tests.usgs_modern_recordings import ModernReplay, body, manifest
 _RECORDING = "daily-07374000-discharge-mean"
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_usgs_fetch_receipt_is_untouched_publisher_payload(
     monkeypatch: pytest.MonkeyPatch, retained_evidence_root: Path
 ) -> None:

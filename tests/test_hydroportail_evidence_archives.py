@@ -12,6 +12,7 @@ MANIFEST = json.loads((EVIDENCE / "evidence-archives.json").read_text())
 
 
 @pytest.mark.parametrize("identity", MANIFEST["archives"], ids=lambda item: item["path"])
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_variants")
 def test_evidence_archive_preserves_original_members(retained_evidence_root, identity):
     path = retained_evidence_root / "tests/test_data/fr_hydroportail_variants" / identity["path"]
     content = path.read_bytes()

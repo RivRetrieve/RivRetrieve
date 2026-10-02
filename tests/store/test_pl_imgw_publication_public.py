@@ -334,6 +334,7 @@ def test_public_download_propagates_unexpected_previous_store_validation_failure
     assert not tuple(Path(root).parent.glob("publisher-artifact.download*"))
 
 
+@pytest.mark.recorded("tests/test_data/pl_imgw_date_fields/codz_1992_07.zip")
 def test_public_exact_archive_compiles_blank_calendar_cell_without_losing_source(
     retained_evidence_root: Path, public_imgw, monkeypatch
 ):

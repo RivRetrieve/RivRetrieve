@@ -18,6 +18,11 @@ def _governing_module(root: Path):
     return module
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/th_thaiwater/evidence/graph_receipts.csv",
+    "maintenance/catalogue/th_thaiwater/recordings",
+    full_verification=("th_thaiwater",),
+)
 def test_source_body_rejects_false_positive_even_when_derived_facts_agree(
     retained_evidence_root: Path, tmp_path: Path
 ) -> None:
@@ -53,6 +58,7 @@ def test_source_body_rejects_false_positive_even_when_derived_facts_agree(
         module.verify_bodies([row], tmp_path)
 
 
+@pytest.mark.governing("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_governing_ledger_preserves_every_baseline_pair_and_agency(retained_evidence_root: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     module = _governing_module(root)
@@ -69,14 +75,14 @@ def test_governing_ledger_preserves_every_baseline_pair_and_agency(retained_evid
     assert sum(row["availability"] == "unknown" for row in rows) == 554
 
 
-def test_each_station_acquisition_is_verified_when_body_path_is_reused(retained_evidence_root: Path) -> None:
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet", full_verification=("th_thaiwater",)
+)
+def test_each_station_acquisition_is_verified_when_body_path_is_reused(
+    retained_evidence_root: Path, thaiwater_review_evidence_root: Path
+) -> None:
     """Reproduce the independent review's coordinated second-station receipt forgery."""
-    import os
-
-    configured = os.environ.get("THAIWATER_REVIEW_EVIDENCE_ROOT")
-    if configured is None:
-        pytest.fail("THAIWATER_REVIEW_EVIDENCE_ROOT is required for the controlled-input acceptance check")
-    evidence_root = Path(configured)
+    evidence_root = thaiwater_review_evidence_root
     root = Path(__file__).resolve().parents[1]
     module = _governing_module(root)
     rows = module.read_ledger(
@@ -125,6 +131,7 @@ def test_governing_body_verification_requires_each_acquisition_receipt(tmp_path:
         module.verify_bodies(rows[:1], tmp_path)
 
 
+@pytest.mark.governing("maintenance/catalogue/th_thaiwater/recordings")
 def test_retained_source_bodies_preserve_archive_member_identity(retained_evidence_root: Path) -> None:
     import hashlib
     import json

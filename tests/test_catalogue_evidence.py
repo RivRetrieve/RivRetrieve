@@ -844,9 +844,64 @@ def _assert_bulk_source_history_preserved(retained_evidence_root: Path, provider
 
 
 @pytest.mark.parametrize(
-    "provider", tuple(provider for provider in BUILTIN_PROVIDER_IDS if provider not in {"br_ana", "fr_hydroportail"})
+    "provider",
+    [
+        pytest.param(
+            "ba_fhmzbih",
+            marks=pytest.mark.recorded(
+                "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
+                "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
+                "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
+                "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
+            ),
+        ),
+        pytest.param(
+            "ca_eccc",
+            marks=pytest.mark.derived(
+                "tests/test_data/catalogue_provenance_original_v2/ca_eccc.json",
+            ),
+        ),
+        pytest.param(
+            "ch_foen",
+            marks=pytest.mark.recorded(
+                "tests/test_data/ch_foen_terms_existenz.html",
+            ),
+        ),
+        "cz_chmi",
+        pytest.param(
+            "fr_hubeau",
+            marks=pytest.mark.derived(
+                "tests/test_data/french_combined_catalogue",
+            ),
+        ),
+        "jp_mlit",
+        "lt_lhmt",
+        "no_nve",
+        pytest.param(
+            "pl_imgw",
+            marks=pytest.mark.derived(
+                "tests/test_data/catalogue_provenance_original_v2/pl_imgw.json",
+            ),
+        ),
+        "th_thaiwater",
+        pytest.param(
+            "usgs_nwis",
+            marks=pytest.mark.recorded(
+                "research/usgs-modern-coverage",
+                "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+            ),
+        ),
+        pytest.param(
+            "za_dws",
+            marks=pytest.mark.derived(
+                "tests/test_data/catalogue_provenance_original_v2/za_dws.json",
+            ),
+        ),
+    ],
 )
-def test_all_ordered_source_assertions_match_pinned_original_revision(retained_evidence_root: Path, provider):
+def test_all_ordered_source_assertions_match_pinned_original_revision(request: pytest.FixtureRequest, provider):
+    if provider in ("ba_fhmzbih", "ca_eccc", "ch_foen", "fr_hubeau", "pl_imgw", "usgs_nwis", "za_dws"):
+        retained_evidence_root = request.getfixturevalue("retained_evidence_root")
     oracle = json.loads((Path(__file__).parent / "test_data/catalogue_provenance_ordered_v2.json").read_text())
     assert oracle["revision"] == "6f0edf6a455735cb1f8c858a1a9f35d4245cf209"
     # This expected digest comes from original v2 Git bytes, not a v3 self-roundtrip.

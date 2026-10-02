@@ -41,6 +41,10 @@ def _snapshot(path):
     return {str(item.relative_to(path)): item.read_bytes() for item in path.rglob("*") if item.is_file()}
 
 
+@pytest.mark.derived(
+    "tests/test_data/boundary_stores/fr_hubeau_retired_facts",
+    "tests/test_data/bundles/fr_hubeau_retired_facts_v1.bundle",
+)
 def test_retired_artifacts_are_exact_actual_baseline_outputs(retained_evidence_root):
     attestation = json.loads((retained_evidence_root / OLD_STORE / "attestation.json").read_text())
     assert attestation["producer_revision"] == "0954c479032dc33685342f6c97ecf6adb981499d"
@@ -58,6 +62,7 @@ def test_retired_artifacts_are_exact_actual_baseline_outputs(retained_evidence_r
 
 @pytest.mark.parametrize("mode", ["reuse", "refresh"])
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+@pytest.mark.derived("tests/test_data/boundary_stores/fr_hubeau_retired_facts")
 def test_public_fetch_refuses_actual_old_facts_cache_without_deleting_it(
     retained_evidence_root, monkeypatch, tmp_path, mode, policy
 ):
@@ -78,6 +83,7 @@ def test_public_fetch_refuses_actual_old_facts_cache_without_deleting_it(
     assert _snapshot(path) == before
 
 
+@pytest.mark.derived("tests/test_data/bundles/fr_hubeau_retired_facts_v1.bundle")
 def test_old_bundle_refusal_preserves_original_bytes_and_precedes_scientific_decode(retained_evidence_root):
     original = (retained_evidence_root / OLD_BUNDLE).read_bytes()
     with pytest.raises(ValueError, match="Unsupported source-series bundle format version"):
@@ -85,6 +91,8 @@ def test_old_bundle_refusal_preserves_original_bytes_and_precedes_scientific_dec
     assert (retained_evidence_root / OLD_BUNDLE).read_bytes() == original
 
 
+@pytest.mark.derived("tests/test_data/boundary_stores/fr_hubeau_retired_facts")
+@pytest.mark.recorded("tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json")
 def test_explicit_bypass_and_cleanup_refetch_produce_only_current_facts(retained_evidence_root, monkeypatch, tmp_path):
     path = _copy_cache(retained_evidence_root, monkeypatch, tmp_path)
     before = _snapshot(path)

@@ -105,6 +105,7 @@ def test_public_daily_requires_credentials_before_transport(product: str) -> Non
     assert raised.value.missing_by_provider == {"br_ana": ("ANA_IDENTIFICADOR", "ANA_SENHA")}
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize("product", _PRODUCTS)
 def test_public_daily_authenticated_receipt_and_cache_roundtrip(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch, product: str
@@ -183,6 +184,7 @@ def test_public_daily_credential_rejection_is_safe(monkeypatch: pytest.MonkeyPat
         assert secret not in repr(result) + caplog.text
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_daily_subset_cache_cannot_answer_all_and_refresh_preserves_sibling(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -212,6 +214,7 @@ def test_daily_subset_cache_cannot_answer_all_and_refresh_preserves_sibling(
     assert restored.inventories == held.inventories
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_unobserved_daily_sibling_is_unresolved_not_successful_coverage(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch
 ) -> None:

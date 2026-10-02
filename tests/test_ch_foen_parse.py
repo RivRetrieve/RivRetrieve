@@ -2,6 +2,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from rivretrieve._internal.engine import (
     Payload,
     SourceCallOrigin,
@@ -41,6 +43,7 @@ def payload(retained_evidence_root: Path, path):
     )
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json")
 def test_rest_parser_maps_all_three_products_utc_without_quality_inference(retained_evidence_root: Path):
     result = parse(payload(retained_evidence_root, "ch_foen_2135_rest_2026-09-01.recording.json"), config())
     assert result.rows.columns == [
@@ -63,6 +66,7 @@ def test_rest_parser_maps_all_three_products_utc_without_quality_inference(retai
     assert all("quality" not in issue.code for issue in result.issues)
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json")
 def test_flux_parser_maps_all_products_and_keeps_exclusive_stop_out(retained_evidence_root: Path):
     result = parse(payload(retained_evidence_root, "ch_foen_2135_flux_2020-01-01.recording.json"), config())
     assert dict(result.rows.group_by("product_id").len().iter_rows()) == {
@@ -73,6 +77,7 @@ def test_flux_parser_maps_all_products_and_keeps_exclusive_stop_out(retained_evi
     assert result.rows["time"].max() == datetime(2020, 1, 1, 0, 50)
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json")
 def test_parser_does_not_relabel_flow_ls_as_m3s(retained_evidence_root: Path):
     document = {"payload": {"timestamp": [0], "2135|flow_ls": [1000.0]}}
     p = payload(retained_evidence_root, "ch_foen_2135_rest_2026-09-01.recording.json")
@@ -89,6 +94,7 @@ def test_parser_does_not_relabel_flow_ls_as_m3s(retained_evidence_root: Path):
     assert result.rows["value"].to_list() == [1000.0]
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json")
 def test_stage_preserves_distinct_height_fields_without_fallback_or_coalescing(retained_evidence_root: Path):
     base = payload(retained_evidence_root, "ch_foen_2135_rest_2026-09-01.recording.json")
     fallback = {"payload": {"timestamp": [0], "2135|height": [501.0]}}

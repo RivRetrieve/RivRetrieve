@@ -5,6 +5,7 @@ from pathlib import Path
 
 import polars as pl
 import polars.testing as pl_testing
+import pytest
 
 from rivretrieve._internal.engine import (
     Payload,
@@ -48,6 +49,7 @@ def payload(retained_evidence_root: Path, path, station, product, config, start,
     )
 
 
+@pytest.mark.recorded("tests/recordings/br_ana/HidroSerieCotas_15400000_2020-01-01_2020-01-31.recording.json")
 def test_ana_one_daily_response_preserves_both_published_consistencies(retained_evidence_root: Path):
     config = ana_config()
     response = payload(
@@ -69,6 +71,7 @@ def test_ana_one_daily_response_preserves_both_published_consistencies(retained_
     assert all(item.facts[0].day_definition.value is None for item in parsed.series)
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_103.3.0_1003_60_2025-07-08_2025-07-14.recording.json")
 def test_nve_real_hourly_instantaneous_temperature_is_not_a_mean(retained_evidence_root: Path):
     config = nve_config()
     response = payload(
@@ -90,6 +93,7 @@ def test_nve_real_hourly_instantaneous_temperature_is_not_a_mean(retained_eviden
     assert facts.source_unit.value == "°C"
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json")
 def test_swiss_flow_ls_is_admitted_with_native_litre_unit(retained_evidence_root: Path):
     config = ch_config()
     response = payload(
@@ -112,6 +116,10 @@ def test_swiss_flow_ls_is_admitted_with_native_litre_unit(retained_evidence_root
     pl_testing.assert_frame_equal(parsed.rows.select("value"), pl.DataFrame({"value": [2.64, 2.64, 2.64, 2.73]}))
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-omitted_2024-01-01_2024-01-03.recording.json",
+)
 def test_nve_explicit_version_is_sent_instead_of_upstream_default(retained_evidence_root: Path):
     from dataclasses import replace
 
@@ -151,6 +159,7 @@ def test_nve_explicit_version_is_sent_instead_of_upstream_default(retained_evide
     assert parsed.rows["value"].null_count() == 2
 
 
+@pytest.mark.recorded("tests/recordings/br_ana/HidroSerieCotas_15400000_2020-01-01_2020-01-31.recording.json")
 def test_ana_unrepresentable_consistency_preserves_its_representable_sibling(retained_evidence_root: Path):
     import json
     from dataclasses import replace
@@ -177,6 +186,12 @@ def test_ana_unrepresentable_consistency_preserves_its_representable_sibling(ret
     assert result.issues
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_nve_all_known_versions_are_requested_separately_with_null_series_preserved(retained_evidence_root: Path):
     from rivretrieve._internal.engine import RenderedWindow
     from rivretrieve._internal.providers.no_nve.fetch import fetch
@@ -232,6 +247,10 @@ def test_swiss_stage_reference_is_not_inferred_from_field_name():
     assert above.series_id != unspecified.series_id
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-99999_2024-01-01_2024-01-03.recording.json",
+)
 def test_nve_one_failed_explicit_version_does_not_discard_successful_sibling(retained_evidence_root: Path):
     from rivretrieve._internal.driver import _SourceResponseTransport
     from rivretrieve._internal.engine import RenderedWindow
@@ -282,6 +301,7 @@ def test_nve_one_failed_explicit_version_does_not_discard_successful_sibling(ret
     assert failed.request.params["VersionNumber"] == 99999
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json")
 def test_swiss_missing_sibling_field_has_unresolved_outcome_not_empty_success(retained_evidence_root: Path):
     config = ch_config()
     response = payload(
@@ -301,6 +321,7 @@ def test_swiss_missing_sibling_field_has_unresolved_outcome_not_empty_success(re
     }
 
 
+@pytest.mark.recorded("tests/recordings/br_ana/HidroSerieCotas_15400000_2024-01-01_2024-01-31.recording.json")
 def test_ana_unobserved_requested_consistency_remains_unresolved(retained_evidence_root: Path):
     config = ana_config()
     response = payload(
@@ -320,6 +341,10 @@ def test_ana_unobserved_requested_consistency_remains_unresolved(retained_eviden
     assert result.rows["product_id"].unique().to_list() == ["stage_daily_mean_bruto"]
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+)
 def test_nve_blank_unit_is_isolated_before_fact_validation(retained_evidence_root: Path):
     import json
     from dataclasses import replace

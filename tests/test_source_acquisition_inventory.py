@@ -20,6 +20,12 @@ from rivretrieve._internal.store import StoreRoot
 @pytest.mark.parametrize(
     "control", ["unchanged", "unknown-member", "different-facts", "unestablished-metadata-facts", "failure"]
 )
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_acquisition_reconciliation_does_not_hide_unsettled_observations(
     retained_evidence_root: Path, tmp_path, control
 ):

@@ -20,6 +20,7 @@ CURRENT = "0df18b246e8f48ec8e6547a92070e94a"
 ENDED = "4d186669708e4dc18f84d271efb953a1"
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     content = body(RECORDING, evidence_root=retained_evidence_root)
@@ -81,6 +82,7 @@ def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, 
     pt.assert_frame_equal(pl.read_parquet(standalone), result.data)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_authored_unknown_explicit_series_remains_unresolved_not_successful_empty(
     monkeypatch, retained_evidence_root: Path
 ):
@@ -116,6 +118,7 @@ def test_authored_unknown_explicit_series_remains_unresolved_not_successful_empt
     assert any(item.code == "source.inventory_unresolved" for item in result.issues)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_narrowed_public_request_does_not_persist_unrelated_catalogue_claims(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -150,6 +153,7 @@ def test_narrowed_public_request_does_not_persist_unrelated_catalogue_claims(
     assert inspected
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_known_explicit_series_across_access_routes_reuse_independently(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -167,6 +171,7 @@ def test_known_explicit_series_across_access_routes_reuse_independently(
     pt.assert_frame_equal(reused.data, broad.data)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_usgs_subset_cache_cannot_satisfy_all_and_refresh_preserves_peer(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -215,6 +220,7 @@ def test_usgs_subset_cache_cannot_satisfy_all_and_refresh_preserves_peer(
     pt.assert_frame_equal(restored.data, narrow.data)
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_recorded_ended_series_successful_empty_is_reusable(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     name = "daily-02196000-ended-empty"
@@ -235,6 +241,11 @@ def test_recorded_ended_series_successful_empty_is_reusable(monkeypatch, tmp_pat
     assert reused.provenance.served_intervals
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_engine_2024-01-02.recording.json",
+)
 def test_nve_cached_explicit_subset_does_not_freeze_later_all_known_versions(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -263,6 +274,11 @@ def test_nve_cached_explicit_subset_does_not_freeze_later_all_known_versions(
     }
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_engine_2024-01-02.recording.json",
+)
 @pytest.mark.parametrize("variants", [("2",), ("1", "2", "3")])
 def test_nve_explicit_versions_reuse_independent_acquired_inventories(
     monkeypatch, tmp_path, variants, retained_evidence_root: Path
@@ -328,6 +344,7 @@ def test_nve_explicit_versions_reuse_independent_acquired_inventories(
     assert attempted == []
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_cached_success_does_not_inherit_failure_for_an_unrequested_window(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -358,6 +375,7 @@ def test_cached_success_does_not_inherit_failure_for_an_unrequested_window(
     assert restored.provenance.calls_made == healthy.provenance.calls_made
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_public_authenticated_source_provenance_excludes_request_headers(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -377,6 +395,7 @@ def test_public_authenticated_source_provenance_excludes_request_headers(
     )
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_mixed_nve_finite_variant_cannot_silently_drop_unknown_selector(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):

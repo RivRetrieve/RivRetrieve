@@ -30,6 +30,7 @@ def _evidence() -> GraphAvailabilityEvidence:
     return GraphAvailabilityEvidence(LEDGER_PATH.read_bytes())
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_thailand_provenance_maps_every_row_to_its_exact_native_agency(
     retained_evidence_root: Path,
 ) -> None:
@@ -190,6 +191,10 @@ def test_reviewed_ledger_rejects_identity_hash_date_and_status_tampering(field: 
         GraphAvailabilityEvidence(altered)
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
+    full_verification=("th_thaiwater",),
+)
 def test_native_agency_disagreement_with_reviewed_acquisition_fails(
     retained_evidence_root: Path,
 ) -> None:
@@ -206,6 +211,10 @@ def test_native_agency_disagreement_with_reviewed_acquisition_fails(
         build_acquisition_provenance(NativeTable(altered), _evidence())
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
+    full_verification=("th_thaiwater",),
+)
 def test_thailand_cli_rejects_native_byte_substitution(retained_evidence_root: Path, tmp_path: Path) -> None:
     native = tmp_path / "native.parquet"
     native.write_bytes(
@@ -229,6 +238,10 @@ def test_thailand_cli_rejects_native_byte_substitution(retained_evidence_root: P
         )
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
+    full_verification=("th_thaiwater",),
+)
 def test_thailand_cli_invokes_recording_verification(
     retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -253,6 +266,7 @@ def test_thailand_cli_invokes_recording_verification(
         )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_thailand_station_carrier_has_exact_multi_agency_lineage(
     retained_evidence_root: Path,
 ) -> None:
@@ -271,6 +285,11 @@ def test_thailand_station_carrier_has_exact_multi_agency_lineage(
     assert referenced_sources == {"th_agency_8", "th_agency_9", "th_agency_12", "th_agency_91"}
 
 
+@pytest.mark.recorded(
+    "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
+    "tests/test_data/th_thaiwater_official_evidence_manifest-2026-09-02.json",
+    "tests/test_data/th_thaiwater_official_water_wl-2026-09-02.html",
+)
 def test_retained_thaiwater_official_evidence_matches_capture_manifest(retained_evidence_root: Path) -> None:
     data = retained_evidence_root / "tests/test_data"
     manifest = json.loads((data / "th_thaiwater_official_evidence_manifest-2026-09-02.json").read_text())
@@ -293,6 +312,7 @@ def test_retained_thaiwater_official_evidence_matches_capture_manifest(retained_
     assert "(ม.3/วิ.)".encode() in bundle
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_platform_identity_does_not_claim_the_agency_supplied_measurements(
     retained_evidence_root: Path,
 ) -> None:

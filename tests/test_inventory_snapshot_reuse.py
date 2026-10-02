@@ -60,6 +60,7 @@ def test_newest_complete_inventory_with_uncovered_late_member_prevents_older_sna
 
 @pytest.mark.parametrize("policy", ["raise", "ignore"])
 @pytest.mark.parametrize("contamination", ["issue", "provenance"])
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_public_healthy_subset_reuse_excludes_unrelated_stored_failure_and_source_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, policy: str, contamination: str, retained_evidence_root: Path
 ) -> None:

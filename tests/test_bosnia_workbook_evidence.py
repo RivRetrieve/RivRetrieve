@@ -15,6 +15,11 @@ RETAINED_CATALOGUE = Path("maintenance/catalogue/ba_fhmzbih")
 
 
 @pytest.mark.parametrize("alter_reading_too", [False, True])
+@pytest.mark.governing(
+    "maintenance/catalogue/ba_fhmzbih",
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    full_verification=("ba_fhmzbih",),
+)
 def test_verifier_rejects_false_positive_over_unchanged_blank_source(
     retained_evidence_root, tmp_path, monkeypatch, capsys, alter_reading_too
 ):
@@ -69,6 +74,11 @@ def run_verifier(monkeypatch, retained_evidence_root, catalogue_root=None, *argu
     namespace["main"]()
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/ba_fhmzbih",
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    full_verification=("ba_fhmzbih",),
+)
 def test_public_verification_does_not_claim_private_source_certification(retained_evidence_root, monkeypatch, capsys):
     run_verifier(monkeypatch, retained_evidence_root, None)
     output = capsys.readouterr().out
@@ -76,6 +86,11 @@ def test_public_verification_does_not_claim_private_source_certification(retaine
     assert "NOT certified" in output
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/ba_fhmzbih",
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    full_verification=("ba_fhmzbih",),
+)
 def test_explicit_missing_private_corpus_fails_not_skips(retained_evidence_root, tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as raised:
         run_verifier(monkeypatch, retained_evidence_root, None, "--evidence-root", str(tmp_path / "absent"))
@@ -84,6 +99,11 @@ def test_explicit_missing_private_corpus_fails_not_skips(retained_evidence_root,
 
 
 @pytest.mark.parametrize("mutation", ["digest", "body_absent", "identity", "ledger_route", "ledger_omission"])
+@pytest.mark.governing(
+    "maintenance/catalogue/ba_fhmzbih",
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    full_verification=("ba_fhmzbih",),
+)
 def test_source_and_ledger_corruption_fails(retained_evidence_root, tmp_path, monkeypatch, mutation):
     target = tmp_path / "catalogue"
     shutil.copytree(retained_evidence_root / RETAINED_CATALOGUE, target / RETAINED_CATALOGUE)
@@ -113,6 +133,7 @@ def test_source_and_ledger_corruption_fails(retained_evidence_root, tmp_path, mo
     assert raised.value.code == 1
 
 
+@pytest.mark.recorded("maintenance/catalogue/ba_fhmzbih/evidence/1010_water_temperature_reported.evidence.json")
 def test_recorded_empty_workbook_has_no_numerical_witness(retained_evidence_root):
     namespace = runpy.run_path(str(CATALOGUE / "scripts/verify_evidence.py"))
     document = json.loads(
@@ -128,6 +149,11 @@ def test_recorded_empty_workbook_has_no_numerical_witness(retained_evidence_root
 
 
 @pytest.mark.parametrize("mutation", ["unit", "parameter", "url", "availability", "accounting"])
+@pytest.mark.governing(
+    "maintenance/catalogue/ba_fhmzbih",
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    full_verification=("ba_fhmzbih",),
+)
 def test_baseline_ledger_rejects_false_source_claims(retained_evidence_root, tmp_path, monkeypatch, mutation):
     target = tmp_path / "catalogue"
     shutil.copytree(retained_evidence_root / RETAINED_CATALOGUE, target / RETAINED_CATALOGUE)
@@ -154,6 +180,11 @@ def test_baseline_ledger_rejects_false_source_claims(retained_evidence_root, tmp
     assert raised.value.code == 1
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/ba_fhmzbih",
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    full_verification=("ba_fhmzbih",),
+)
 def test_certificate_requires_private_source_bodies(retained_evidence_root, tmp_path, monkeypatch, capsys):
     certificate = tmp_path / "certificate.json"
     with pytest.raises(SystemExit) as raised:
@@ -163,6 +194,11 @@ def test_certificate_requires_private_source_bodies(retained_evidence_root, tmp_
     assert not certificate.exists()
 
 
+@pytest.mark.governing(
+    "maintenance/catalogue/ba_fhmzbih",
+    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
+    full_verification=("ba_fhmzbih",),
+)
 def test_public_cases_cannot_be_omitted(retained_evidence_root, tmp_path, monkeypatch, capsys):
     target = tmp_path / "catalogue"
     shutil.copytree(retained_evidence_root / RETAINED_CATALOGUE, target / RETAINED_CATALOGUE)

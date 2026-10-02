@@ -5,6 +5,8 @@ import shutil
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+import pytest
+
 from rivretrieve._internal.providers.pl_imgw.bulk import ImgwCompileRequest, compile_imgw
 from rivretrieve._internal.store import StoreRoot
 
@@ -12,6 +14,7 @@ DATA = Path("tests/test_data") / "pl_imgw_annual"
 URL = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/2024/codz_2024.zip"
 
 
+@pytest.mark.recorded("tests/test_data/pl_imgw_annual")
 def test_exact_annual_archive_compiles_without_losing_native_cells(
     retained_evidence_root: Path, tmp_path: Path, monkeypatch
 ) -> None:
@@ -95,6 +98,7 @@ def test_exact_annual_archive_compiles_without_losing_native_cells(
             assert raw.filter(pl.col("time") == datetime(2023, 11, 1))["value"].item() == 113.0
 
 
+@pytest.mark.recorded("tests/test_data/pl_imgw_annual")
 def test_annual_definitions_are_exact_publisher_bytes(retained_evidence_root: Path) -> None:
     import json
 
@@ -108,6 +112,7 @@ def test_annual_definitions_are_exact_publisher_bytes(retained_evidence_root: Pa
     assert "Od roku 2024 braki w danych są oznaczane zawsze jako NULL." in definitions
 
 
+@pytest.mark.recorded("tests/test_data/pl_imgw_annual")
 def test_yearbook_method_scope_is_not_an_archive_wide_mean_definition(retained_evidence_root: Path) -> None:
     from pypdf import PdfReader
 

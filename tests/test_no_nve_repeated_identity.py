@@ -36,6 +36,12 @@ def _repeated(content, kind, reverse=False):
     return json.dumps(document).encode()
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 @pytest.mark.parametrize("kind", ["equal", "conflicting", "disjoint", "different-facts"])
 def test_repeated_identity_refuses_every_block_independently_of_order(retained_evidence_root, kind):
     acquired = _recorded_fetch(_ObservedTransport(_recordings(retained_evidence_root)))
@@ -70,6 +76,12 @@ def test_repeated_identity_refuses_every_block_independently_of_order(retained_e
     assert results[0].series == results[1].series
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 @pytest.mark.parametrize("kind", ["equal", "conflicting", "disjoint", "different-facts"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_repeated_identity_never_certifies_cache_and_preserves_receipts(
@@ -137,6 +149,12 @@ def test_public_repeated_identity_never_certifies_cache_and_preserves_receipts(
     assert not any(item.series_id == ambiguous_id for item in cached.outcomes)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_supported_nonmatching_facts_are_not_retained_as_failures(retained_evidence_root, monkeypatch):
     recordings = tuple(

@@ -18,6 +18,7 @@ from tests.usgs_modern_recordings import ModernReplay
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_precise_refresh_preserves_same_series_sibling_fact_rows(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     broad = rr.find(provider="usgs_nwis", station="07374000", quantity="discharge")

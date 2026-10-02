@@ -45,6 +45,10 @@ def _window(start: datetime = datetime(2023, 1, 1), end: datetime = datetime(202
     return _make_fetch_window(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(end))
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+)
 def test_fetch_coalesces_five_products_into_exactly_two_annual_calls(retained_evidence_root) -> None:
     replay = ReplayTransport([(retained_evidence_root / _DQ), (retained_evidence_root / _HQ)])
     rendered = MappingProxyType({product: (RenderedWindow("2023", None, _window()),) for product in _PRODUCTS})
@@ -70,6 +74,10 @@ def test_fetch_coalesces_five_products_into_exactly_two_annual_calls(retained_ev
         (_DQ.name, _PRODUCTS[:3], [365, 365, 365], datetime(2023, 1, 1), datetime(2023, 12, 31)),
         (_HQ.name, _PRODUCTS[3:], [8760, 8760], datetime(2023, 1, 1), datetime(2023, 12, 31, 23)),
     ],
+)
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
 )
 def test_parse_official_annual_recordings(
     retained_evidence_root,
@@ -101,6 +109,10 @@ def test_parse_official_annual_recordings(
         assert series["time_zone"].unique().to_list() == ["+00:00"]
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+)
 def test_official_recording_literals_and_shared_conversion(retained_evidence_root) -> None:
     daily = parse(
         fetch(
@@ -136,6 +148,7 @@ def test_official_recording_literals_and_shared_conversion(retained_evidence_roo
     ]
 
 
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_real_driver_path_clips_and_returns_one_receipt_for_coalesced_daily_call(retained_evidence_root) -> None:
     assert isinstance(declaration.observations, LiveStages)
     request = ObservationRequest(
@@ -159,6 +172,10 @@ def test_real_driver_path_clips_and_returns_one_receipt_for_coalesced_daily_call
     assert stage["value"][0] == pytest.approx(0.13)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
+    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
+)
 def test_coalesced_receipts_preserve_exact_publisher_bytes_origin_order_and_opt_out(retained_evidence_root) -> None:
     assert isinstance(declaration.observations, LiveStages)
     request = ObservationRequest(
@@ -217,6 +234,7 @@ def test_coalesced_receipts_preserve_exact_publisher_bytes_origin_order_and_opt_
     assert omitted.receipts.entries == ()
 
 
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_parse_preserves_source_null_as_missing_value(retained_evidence_root) -> None:
     fetched = fetch(
         (_STATION,),
@@ -234,6 +252,7 @@ def test_parse_preserves_source_null_as_missing_value(retained_evidence_root) ->
     assert parsed["value"][0] is None
 
 
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_parse_rejects_non_utc_and_does_not_invent_quality(retained_evidence_root) -> None:
     recording = read_recording(retained_evidence_root / _DQ)
     content = recording.content.replace(b"2023-01-01T00:00:00Z", b"2023-01-01T00:00:00+01:00", 1)
@@ -255,6 +274,7 @@ def test_parse_rejects_non_utc_and_does_not_invent_quality(retained_evidence_roo
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json")
 def test_public_selection_routes_to_czech_live_engine(retained_evidence_root, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport([(retained_evidence_root / _HQ)]))
     selection = rr.find(
@@ -271,6 +291,7 @@ def test_public_selection_routes_to_czech_live_engine(retained_evidence_root, mo
 
 
 @pytest.mark.parametrize("malformed_id", [{"malformed": "HD"}, ["HD"]])
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_malformed_external_identity_retains_supported_siblings(retained_evidence_root, malformed_id):
     from dataclasses import replace
 
@@ -298,6 +319,7 @@ def test_malformed_external_identity_retains_supported_siblings(retained_evidenc
 
 
 @pytest.mark.parametrize("timestamp", ["2023-01-01T00:00:00+01:00Z", "2023-01-01T00:00:00+00:00Z"])
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_double_zone_external_timestamp_retains_supported_siblings(retained_evidence_root, timestamp):
     from dataclasses import replace
 
@@ -323,6 +345,7 @@ def test_double_zone_external_timestamp_retains_supported_siblings(retained_evid
     assert len(result.issues) == 1
 
 
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_invalid_internal_request_tag_remains_fatal(retained_evidence_root):
     from dataclasses import replace
 

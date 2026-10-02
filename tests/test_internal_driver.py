@@ -1776,6 +1776,7 @@ def test_payload_origin_enrichment_refuses_each_ambiguous_base_field_even_withou
         )
 
 
+@pytest.mark.derived("tests/test_data/ca_eccc_02GA010_2020_01_derived_input.zip")
 @pytest.mark.parametrize("restriction", ["selected", "no-match"])
 def test_compiled_query_keeps_inventory_definitions_and_fact_filtered_receipts(
     tmp_path, restriction, retained_evidence_root: Path

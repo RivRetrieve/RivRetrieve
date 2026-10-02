@@ -161,6 +161,7 @@ def test_refresh_is_deterministic_across_mapping_and_index_order(monkeypatch: py
     pl_testing.assert_frame_equal(first.value.data, second.value.data, check_exact=True)
 
 
+@pytest.mark.derived("tests/test_data/za_dws_metadata.json")
 def test_fixture_refresh_has_no_issues(retained_evidence_root: Path) -> None:
     assert (
         generator.refresh_native_table_from_fixture(
@@ -170,6 +171,7 @@ def test_fixture_refresh_has_no_issues(retained_evidence_root: Path) -> None:
     )
 
 
+@pytest.mark.derived("tests/test_data/za_dws_metadata.json")
 def test_fixture_refresh_height(retained_evidence_root: Path) -> None:
     assert (
         generator.refresh_native_table_from_fixture(
@@ -179,6 +181,7 @@ def test_fixture_refresh_height(retained_evidence_root: Path) -> None:
     )
 
 
+@pytest.mark.derived("tests/test_data/za_dws_metadata.json")
 def test_fixture_refresh_exact_schema(retained_evidence_root: Path) -> None:
     outcome = generator.refresh_native_table_from_fixture(
         (retained_evidence_root / _METADATA_FIXTURE), retrieved_at=ATTESTED_RETRIEVED_AT
@@ -186,6 +189,7 @@ def test_fixture_refresh_exact_schema(retained_evidence_root: Path) -> None:
     assert outcome.value.data.schema == generator.NATIVE_SCHEMA
 
 
+@pytest.mark.derived("tests/test_data/za_dws_metadata.json")
 def test_fixture_refresh_a1h001_triple(retained_evidence_root: Path) -> None:
     data = generator.refresh_native_table_from_fixture(
         (retained_evidence_root / _METADATA_FIXTURE), retrieved_at=ATTESTED_RETRIEVED_AT
@@ -195,6 +199,10 @@ def test_fixture_refresh_a1h001_triple(retained_evidence_root: Path) -> None:
     ).row(0) == ("A1H001", "25:26:44", "25:51:14")
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
+    "tests/test_data/za_dws_metadata.json",
+)
 def test_fixture_refresh_equals_committed_subset(retained_evidence_root: Path) -> None:
     actual = generator.refresh_native_table_from_fixture(
         (retained_evidence_root / _METADATA_FIXTURE), retrieved_at=ATTESTED_RETRIEVED_AT
@@ -207,6 +215,7 @@ def test_fixture_refresh_equals_committed_subset(retained_evidence_root: Path) -
     pl_testing.assert_frame_equal(actual, expected, check_exact=True)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_committed_native_table_contract(retained_evidence_root: Path) -> None:
     data = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     assert data.schema == generator.NATIVE_SCHEMA
@@ -215,6 +224,7 @@ def test_committed_native_table_contract(retained_evidence_root: Path) -> None:
     assert generator.native_table_content_sha256(NativeTable(data)) == NATIVE_CONTENT_SHA256
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_committed_native_table_pdf_counts_and_instants(retained_evidence_root: Path) -> None:
     data = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     assert dict(data.group_by("WMA source-file identity").len().iter_rows()) == dict(
@@ -227,6 +237,7 @@ def test_committed_native_table_pdf_counts_and_instants(retained_evidence_root: 
     assert dict(data.select("WMA source-file identity", "retrieved_at").unique().iter_rows()) == expected
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_committed_native_table_defect_decomposition(retained_evidence_root: Path) -> None:
     data = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     suffix = {"A2H090Q", "B6H018M01"}
@@ -243,6 +254,7 @@ def test_committed_native_table_defect_decomposition(retained_evidence_root: Pat
         ("B6H018M01", ("Pipeline from Blyde Dam", "24:32:05", "30:47:47", None, "0")),
     ],
 )
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_committed_native_representative_rows(
     retained_evidence_root: Path, station: str, expected: tuple[object, ...]
 ) -> None:
@@ -256,6 +268,7 @@ def test_committed_native_representative_rows(
     )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_committed_native_preserves_dms_sixty_tokens(retained_evidence_root: Path) -> None:
     data = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     assert data.select(pl.col("Latitude (dd:mm:ss)").str.ends_with(":60").sum()).item() == 20
@@ -263,6 +276,7 @@ def test_committed_native_preserves_dms_sixty_tokens(retained_evidence_root: Pat
     assert data.filter(pl.col("Station") == "B7H000")["Longitude (dd:mm:ss)"][0] == "31:49:60"
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_all_committed_native_dms_values_are_exact_unsigned_source_tokens(retained_evidence_root: Path) -> None:
     before = read_native_table(retained_evidence_root / _NATIVE_TABLE).data
     pattern = r"^\d{2}:\d{2}:\d{2}$"
@@ -298,6 +312,7 @@ def test_unsigned_dms_conversion_failure_names_station() -> None:
         generator.convert_unsigned_dms_coordinates("not-dms", "25:00:00", station_id="BROKEN")
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_native_build_rejects_empty_or_non_exact_native_table(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
@@ -308,6 +323,7 @@ def test_native_build_rejects_empty_or_non_exact_native_table(retained_evidence_
         generator.build_catalogue(NativeTable(malformed), STATION_CATALOGUE_ORIGINS)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_native_build_counts_ids_crs_and_dates(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
@@ -328,6 +344,7 @@ def test_native_build_counts_ids_crs_and_dates(retained_evidence_root: Path) -> 
     assert "station" in str(catalogue.provider_info["bulk_observations"])
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_catalogue_date_is_only_the_maximum_native_retrieval_date(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
@@ -410,6 +427,7 @@ def test_cli_error_issues_do_not_write(monkeypatch: pytest.MonkeyPatch, tmp_path
     assert not output.exists()
 
 
+@pytest.mark.derived("tests/test_data/za_dws_metadata.json")
 def test_cli_success_writes_native_table(retained_evidence_root: Path, tmp_path: Path) -> None:
     output = tmp_path / "native.parquet"
     assert (
@@ -671,6 +689,7 @@ def _provider_content_sha256(provider_info: dict[str, object]) -> str:
     ).hexdigest()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_native_build_matches_independent_exact_full_projections(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
@@ -683,6 +702,7 @@ def test_native_build_matches_independent_exact_full_projections(retained_eviden
     assert actual.provider_info == _expected_provider_info(native)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
 def test_committed_canonical_artifacts_have_pinned_complete_content(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.za_dws.origins import STATION_CATALOGUE_ORIGINS
 
@@ -736,6 +756,12 @@ def test_cli_rejects_every_cross_mode_combination(argv: list[str]) -> None:
     assert exc_info.value.code != 0
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
+    "tests/test_data/za_dws_terms_licence-1.html",
+    "tests/test_data/za_dws_terms_licence-4.html",
+    "tests/test_data/za_dws_terms_licence-5.html",
+)
 def test_canonical_cli_writes_versioned_native_built_artifacts(retained_evidence_root: Path, tmp_path: Path) -> None:
     assert (
         generator.main(
@@ -762,6 +788,12 @@ def test_canonical_cli_writes_versioned_native_built_artifacts(retained_evidence
     }
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
+    "tests/test_data/za_dws_terms_licence-1.html",
+    "tests/test_data/za_dws_terms_licence-4.html",
+    "tests/test_data/za_dws_terms_licence-5.html",
+)
 def test_native_build_is_network_free_and_byte_deterministic(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

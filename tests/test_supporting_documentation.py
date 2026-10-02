@@ -39,6 +39,7 @@ def test_catalogue_evidence_markdown():
     assert len(scope["graph"]) > 0
 
 
+@pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_architecture_markdown_exact_receipt(monkeypatch, tmp_path, retained_evidence_root: Path):
     import rivretrieve._internal.discovery as discovery
     from tests.usgs_modern_recordings import ModernReplay, body, manifest

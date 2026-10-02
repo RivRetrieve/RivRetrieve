@@ -43,6 +43,7 @@ class MonthlyTransport:
         )
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 @pytest.mark.parametrize(
     ("start", "end", "rows", "months"),
     [
@@ -104,6 +105,7 @@ def fetch(chosen=None, **kwargs):
     )
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 @pytest.mark.parametrize("failed", [("2023-05",), ("2023-06",), ("2023-07",), ("2023-05", "2023-06", "2023-07")])
 def test_requested_month_failures_have_precise_outcomes(recording, monkeypatch, failed):
     transport = MonthlyTransport(recording)
@@ -133,6 +135,7 @@ def test_requested_month_failures_have_precise_outcomes(recording, monkeypatch, 
     assert not any(item.status.value == "empty" for item in result.outcomes)
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 @pytest.mark.parametrize("receipts", [False, True])
 def test_call_evidence_independent_of_receipts(recording, monkeypatch, receipts):
     transport = MonthlyTransport(recording)
@@ -160,6 +163,7 @@ def test_call_evidence_independent_of_receipts(recording, monkeypatch, receipts)
         assert result.receipts.entries[0].content == transport.recording.content
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 @pytest.mark.parametrize(
     ("quantity", "field", "factor"), [("discharge", "waterDischarge", 1), ("stage", "waterLevel", 0.01)]
 )
@@ -184,6 +188,7 @@ def test_empty_null_and_failed_months_are_distinct(recording, monkeypatch, quant
     assert result.data["time_zone"].unique().to_list() == ["+00:00"]
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 @pytest.mark.parametrize("failure", [401, 403, 500, b"not JSON", TransportFailureReason.RETRY_EXHAUSTED])
 def test_non_absence_failures_keep_diagnostics_and_sibling_rows(recording, monkeypatch, failure):
     transport = MonthlyTransport(recording, {"2023-05": failure})
@@ -200,6 +205,7 @@ def test_non_absence_failures_keep_diagnostics_and_sibling_rows(recording, monke
         assert "timeout" in result.issues[0].message
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_requested_failure_obeys_warning_and_raise_policy(recording, monkeypatch):
     from rivretrieve._internal.issues import IssuePolicyError
 
@@ -212,6 +218,7 @@ def test_requested_failure_obeys_warning_and_raise_policy(recording, monkeypatch
         fetch(start="2023-05-03", end="2023-06-28", on_issue="raise")
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_explicit_series_partial_cache_retries_failed_month(recording, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     transport = MonthlyTransport(recording)
@@ -239,6 +246,7 @@ def test_explicit_series_partial_cache_retries_failed_month(recording, monkeypat
     pt.assert_frame_equal(recovered.data, again.data)
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_failed_refresh_keeps_held_month_and_original_vintage(recording, monkeypatch, tmp_path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     transport = MonthlyTransport(recording)
@@ -273,6 +281,7 @@ def test_failed_refresh_keeps_held_month_and_original_vintage(recording, monkeyp
     pt.assert_frame_equal(refreshed.data, held.data)
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 @pytest.mark.parametrize("policy", ["ignore", "warn", "raise"])
 def test_internal_parse_contract_failure_is_fatal(recording, monkeypatch, policy):
     from dataclasses import replace
@@ -302,6 +311,7 @@ def test_internal_parse_contract_failure_is_fatal(recording, monkeypatch, policy
         fetch(start="2023-06-03", end="2023-06-28", on_issue=policy)
 
 
+@pytest.mark.recorded("tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json")
 def test_malformed_requested_month_preserves_sibling_months(recording, monkeypatch):
     transport = MonthlyTransport(recording)
     transport.responses = {

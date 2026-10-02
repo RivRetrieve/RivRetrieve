@@ -63,6 +63,10 @@ def test_public_discovery_keeps_overlapping_station_identity_separate():
         ),
     ],
 )
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
+)
 def test_public_fetch_receipts_and_exports_preserve_service(
     retained_evidence_root, monkeypatch, provider, station, predicates, start, end, recording_name, host
 ):
@@ -88,6 +92,7 @@ def test_public_fetch_receipts_and_exports_preserve_service(
     assert restored.receipts == result.receipts
 
 
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_station_Q_padded.recording.json")
 def test_hydroportail_failure_preserves_independent_raw_series(retained_evidence_root, monkeypatch):
 
     import rivretrieve as rr

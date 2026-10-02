@@ -18,6 +18,12 @@ LABEL_HASH = "ab41e52a4af9b0cec642de98c68cd445f4a9b269f705da45dc43bd5664494823"
 UI_HASH = "72571d0bd095d5cf616a1378e799aa5e8f6818330fcca2f5691891463a92cda6"
 
 
+@pytest.mark.recorded(
+    "tests/test_data/fr_hydroportail_unit_definition_4210.e6896d9b.identity.json",
+    "tests/test_data/fr_hydroportail_unit_definition_4210.e6896d9b.js",
+    "tests/test_data/fr_hydroportail_unit_definition_5621.4ab47ec9.identity.json",
+    "tests/test_data/fr_hydroportail_unit_definition_5621.4ab47ec9.js",
+)
 def test_publisher_q_unit_code_definition_is_exact_and_context_qualified(retained_evidence_root):
     label = (retained_evidence_root / DATA / f"{LABEL_ASSET}.js").read_bytes()
     ui = (retained_evidence_root / DATA / f"{UI_ASSET}.js").read_bytes()
@@ -34,6 +40,7 @@ def test_publisher_q_unit_code_definition_is_exact_and_context_qualified(retaine
         assert manifest["interpretation_authorship"] == "RivRetrieve analysis, not a publisher sentence"
 
 
+@pytest.mark.recorded("tests/test_data/fr_hydroportail_station_Q_padded.recording.json")
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_hydroportail_q_preserves_raw_code_and_uses_cited_rate_definition(
     retained_evidence_root, monkeypatch, tmp_path

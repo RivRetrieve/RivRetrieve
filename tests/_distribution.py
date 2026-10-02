@@ -52,8 +52,12 @@ def _build_and_install(workspace: Path, *, from_sdist: bool) -> InstalledDistrib
     dist = workspace / "dist"
     source = repository
     sdist = None
+    # Use the backend installed from the lock. Isolated build dependency resolution
+    # needs registry metadata that a fresh locked sync need not cache. The built
+    # package is still installed and verified in a separate offline environment.
+    build = ["uv", "build", "--offline", "--force-pep517", "--no-build-isolation", "--python", sys.executable]
     if from_sdist:
-        run(["uv", "build", "--offline", "--force-pep517", "--sdist", "--out-dir", str(dist)], cwd=source)
+        run([*build, "--sdist", "--out-dir", str(dist)], cwd=source)
         archives = tuple(dist.glob("rivretrieve-*.tar.gz"))
         assert len(archives) == 1
         sdist = archives[0]
@@ -63,7 +67,7 @@ def _build_and_install(workspace: Path, *, from_sdist: bool) -> InstalledDistrib
         sources = tuple(extracted.iterdir())
         assert len(sources) == 1
         source = sources[0]
-    run(["uv", "build", "--offline", "--force-pep517", "--wheel", "--out-dir", str(dist)], cwd=source)
+    run([*build, "--wheel", "--out-dir", str(dist)], cwd=source)
     wheels = tuple(dist.glob("rivretrieve-*.whl"))
     assert len(wheels) == 1
 

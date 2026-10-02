@@ -180,6 +180,19 @@ Start with the [documentation index](docs/README.md).
 - [Public API and software reference](docs/reference.md).
 - [Architecture](docs/architecture.md): responsibilities, a traced request and contracts.
 
+## Development tests
+
+Run source-independent checks without archive access:
+
+```sh
+uv run pytest --logic-only
+```
+
+Checks that replay retained recordings or verify source inputs use the reviewed
+[private archive test command](docs/maintenance/evidence.md#run-tests).
+It selects and verifies the required inputs automatically. Archive access and
+reviewed code are required; runtime package users need neither.
+
 ## Data rights
 
 All data rights remain with the original providers. Credit the providers of data you use and

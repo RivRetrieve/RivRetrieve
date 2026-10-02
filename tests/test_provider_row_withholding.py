@@ -45,6 +45,7 @@ def test_bosnia_loader_admits_acquired_baseline_without_withholding() -> None:
     assert artifact.acquisition_provenance.header.withheld_facts == ()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
 def test_france_loader_admits_all_evidenced_baseline_pairs(retained_evidence_root: Path) -> None:
     artifact = load_packaged_catalogue_artifact(france.catalogue)
     native = pl.read_parquet(

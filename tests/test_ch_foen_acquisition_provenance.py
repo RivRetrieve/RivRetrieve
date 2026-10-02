@@ -31,6 +31,16 @@ def test_swiss_provenance_separates_bafu_from_existenz() -> None:
     }
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
+    "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
+    "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
+    "tests/test_data/ch_foen_bafu_current_hydrological_data.html",
+    "tests/test_data/ch_foen_bafu_hydrology_data_service.html",
+    "tests/test_data/ch_foen_parameters_2026-09-02.recording.json",
+    "tests/test_data/ch_foen_terms_bafu.html",
+    "tests/test_data/ch_foen_terms_existenz.html",
+)
 def test_swiss_terms_recordings_and_native_bytes_are_verified(retained_evidence_root: Path, tmp_path: Path) -> None:
     verify_provenance_recordings(build_acquisition_provenance(), retained_evidence_root)
     for name in (

@@ -3,6 +3,8 @@
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from rivretrieve._internal.engine import RenderedWindow, WindowEndpoint, _make_fetch_window
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.no_nve.config import config
@@ -14,6 +16,12 @@ from rivretrieve._internal.source_series import SeriesScope
 _DATA = Path("tests/test_data")
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_recorded_current_inventory_finds_versions_outside_acquired_subset(retained_evidence_root):
     """The deliberately partial catalogue input is authored; publisher bytes are exact."""
     product = ProductId("discharge_daily_mean")
@@ -113,6 +121,12 @@ def _recordings(retained_evidence_root):
     )
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_current_metadata_does_not_erase_historical_acquired_version(retained_evidence_root):
     transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="missing-historical")
     acquired = _recorded_fetch(transport)
@@ -122,6 +136,12 @@ def test_current_metadata_does_not_erase_historical_acquired_version(retained_ev
     assert acquired.issues
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_metadata_failure_keeps_independent_known_versions_without_complete_inventory(retained_evidence_root):
     transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="failure")
     acquired = _recorded_fetch(transport)
@@ -132,6 +152,12 @@ def test_metadata_failure_keeps_independent_known_versions_without_complete_inve
     assert acquired.calls[0].status_code == 503
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_explicit_identity_never_widens_or_requires_metadata(retained_evidence_root):
     from rivretrieve._internal.source_series import RestrictionKind
 
@@ -148,6 +174,12 @@ def test_explicit_identity_never_widens_or_requires_metadata(retained_evidence_r
     assert not any(request.url.endswith("/Series") for request in transport.requests)
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_malformed_metadata_member_does_not_drop_valid_version(retained_evidence_root):
     transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="malformed-member")
     acquired = _recorded_fetch(transport, known=())
@@ -156,6 +188,12 @@ def test_malformed_metadata_member_does_not_drop_valid_version(retained_evidence
     assert acquired.issues
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_wrong_station_metadata_never_becomes_a_version_selector(retained_evidence_root):
     transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="wrong-station")
     acquired = _recorded_fetch(transport, known=())
@@ -163,6 +201,12 @@ def test_wrong_station_metadata_never_becomes_a_version_selector(retained_eviden
     assert "station or parameter" in acquired.inventories[0].reason
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_current_empty_inventory_is_not_unidentified_empty_observations(retained_evidence_root):
     transport = _ObservedTransport(_recordings(retained_evidence_root), metadata="empty")
     acquired = _recorded_fetch(transport, known=())
@@ -172,6 +216,12 @@ def test_current_empty_inventory_is_not_unidentified_empty_observations(retained
     assert acquired.issues == ()
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_current_complete_inventory_can_settle_no_physical_match(retained_evidence_root):
     from rivretrieve._internal.source_series import PhysicalPredicate
 
@@ -189,6 +239,12 @@ def test_current_complete_inventory_can_settle_no_physical_match(retained_eviden
     assert not acquired.issues
 
 
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-3_2024-01-01_2024-01-03.recording.json",
+    "tests/test_data/no_nve_109.42.0_1001_series.recording.json",
+)
 def test_unknown_admission_metadata_is_not_established_physical_absence(retained_evidence_root):
     from rivretrieve._internal.source_series import PhysicalPredicate
 

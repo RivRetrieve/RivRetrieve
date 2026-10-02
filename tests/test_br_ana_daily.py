@@ -118,6 +118,7 @@ def test_daily_semantics_and_engine_month_declaration(product: str) -> None:
     assert window.stop_convention == StopConvention.INCLUSIVE
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize("product", _PRODUCTS)
 @pytest.mark.parametrize("month", ("2020-01", "2023-02", "2023-12", "2024-01", "2024-02"))
 def test_midmonth_exact_replay_preserves_modern_interior_values(
@@ -152,6 +153,7 @@ def test_midmonth_exact_replay_preserves_modern_interior_values(
     assert result.receipts.entries[0].origin.request_parameters == recording.request.parameters
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize("product", ("stage_daily_mean_consistido", "discharge_daily_mean_consistido"))
 def test_absent_variant_is_not_replaced_by_bruto(retained_evidence_root, product: str) -> None:
     result = _run(retained_evidence_root, product, "2024-01-10", "2024-01-20", ("2024-01",))
@@ -159,6 +161,7 @@ def test_absent_variant_is_not_replaced_by_bruto(retained_evidence_root, product
     assert any(issue.code == "source.unresolved_inventory" for issue in result.issues)
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize("product", ("stage_daily_mean_bruto", "discharge_daily_mean_bruto"))
 def test_month_transition_uses_both_exact_recordings(retained_evidence_root, product: str) -> None:
     result = _run(
@@ -175,6 +178,7 @@ def test_month_transition_uses_both_exact_recordings(retained_evidence_root, pro
     assert not result.canonical_rows.is_duplicated().any()
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize("product", ("stage_daily_mean_bruto", "discharge_daily_mean_consistido"))
 def test_repeated_exact_variant_preserves_multiplicity(retained_evidence_root, product: str) -> None:
     # Adversarial repeated real monthly row, never an invented observation fixture.
@@ -189,6 +193,7 @@ def test_repeated_exact_variant_preserves_multiplicity(retained_evidence_root, p
     pl_testing.assert_frame_equal(repeated, pl.concat([original, original]).sort("time", maintain_order=True))
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize(
     ("field", "bad"),
     [
@@ -214,6 +219,7 @@ def test_adversarial_modified_recording_rejects_invalid_identity_or_value(
     assert any(issue.code.startswith("source.unsupported") for issue in result.issues)
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize(("field", "bad"), [("Cota_30", "1"), ("Cota_30_Status", "1")])
 def test_adversarial_nonempty_slot_outside_calendar_month_is_rejected(
     retained_evidence_root, field: str, bad: str
@@ -227,6 +233,7 @@ def test_adversarial_nonempty_slot_outside_calendar_month_is_rejected(
     assert any(issue.code.startswith("source.unsupported") for issue in result.issues)
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize("blank", [None, ""])
 def test_adversarial_published_blank_is_null_not_zero(retained_evidence_root, blank: object) -> None:
     payload = _payload(retained_evidence_root, "stage_daily_mean_bruto")
@@ -237,6 +244,7 @@ def test_adversarial_published_blank_is_null_not_zero(retained_evidence_root, bl
     assert result.filter(pl.col("time") == datetime(2024, 1, 15)).item(0, "value") is None
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize("field", ["Mediadiaria", "nivelconsistencia", "Data_Hora_Dado", "Cota_15", "Cota_15_Status"])
 def test_adversarial_missing_daily_fields_fail_loud(retained_evidence_root, field: str) -> None:
     payload = _payload(retained_evidence_root, "stage_daily_mean_bruto")
@@ -248,6 +256,7 @@ def test_adversarial_missing_daily_fields_fail_loud(retained_evidence_root, fiel
     assert any(issue.code.startswith("source.unsupported") for issue in result.issues)
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_daily_status_does_not_select_or_discard_a_published_value(retained_evidence_root) -> None:
     # Adversarial status-only mutation of the original recording. Numeric values stay untouched.
     payload = _payload(retained_evidence_root, "stage_daily_mean_bruto")
@@ -260,6 +269,7 @@ def test_daily_status_does_not_select_or_discard_a_published_value(retained_evid
     assert any(issue.details is not None and issue.details.get("source_status") == "3" for issue in changed.issues)
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize(
     ("product", "month", "first", "last"),
     [
@@ -307,6 +317,7 @@ def test_independent_daily_boundary_probe(
     harness.run()
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize(
     ("product", "values"),
     [
@@ -337,6 +348,7 @@ def test_real_leap_day_slots_are_native_labels_not_march_rollover(
     pl_testing.assert_frame_equal(actual, expected)
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize("product", _PRODUCTS)
 def test_real_year_transition_preserves_each_variant_without_fallback(retained_evidence_root, product: str) -> None:
     result = _run(
@@ -374,6 +386,7 @@ def test_real_year_transition_preserves_each_variant_without_fallback(retained_e
     assert len(result.receipts.entries) == 2
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize("product", _PRODUCTS)
 def test_real_nonleap_february_has_no_march_rollover(retained_evidence_root, product: str) -> None:
     payload = _payload(retained_evidence_root, product, "2023-02")
@@ -398,6 +411,7 @@ def test_real_nonleap_february_has_no_march_rollover(retained_evidence_root, pro
     pl_testing.assert_frame_equal(rows, expected)
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 @pytest.mark.parametrize(
     ("product", "count", "first", "last"),
     [
@@ -417,6 +431,7 @@ def test_independent_year_boundary_no_variant_fallback(
     assert result.canonical_rows.item(-1, "time") == datetime.fromisoformat(last)
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_real_null_daily_status_does_not_discard_published_value(retained_evidence_root) -> None:
     result = _run(retained_evidence_root, "stage_daily_mean_bruto", "2023-12-31", "2024-01-01", ("2023-12", "2024-01"))
     assert result.canonical_rows.filter(pl.col("time") == datetime(2023, 12, 31)).item(0, "value") == 7.595
@@ -426,6 +441,7 @@ def test_real_null_daily_status_does_not_discard_published_value(retained_eviden
     )
 
 
+@pytest.mark.recorded("tests/recordings/br_ana")
 def test_daily_label_is_not_an_established_interval_anchor(retained_evidence_root) -> None:
     parsed = parse(_payload(retained_evidence_root, "stage_daily_mean_bruto", "2020-01"), config())
     assert {item.variant for item in parsed.series} == {"bruto", "consistido"}

@@ -4,6 +4,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 import polars as pl
+import pytest
 
 import rivretrieve
 from rivretrieve import __version__, to_utc
@@ -214,6 +215,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         assert "metadata" not in artifact.provider_info
 
 
+@pytest.mark.derived("research/usgs-modern-coverage/legacy-catalogue/station_products.parquet")
 def test_usgs_legacy_calendar_period_claims_remain_independent_evidence(retained_evidence_root: Path) -> None:
     root = Path(__file__).parents[1]
     legacy = pl.read_parquet(

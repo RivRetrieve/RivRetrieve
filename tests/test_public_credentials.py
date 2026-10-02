@@ -140,6 +140,7 @@ def test_missing_credential_fails_before_transport_construction_or_request(
     assert _ForbiddenTransport.calls == 0
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_dotenv_credential_reaches_nve_header_and_never_reaches_result(
     retained_evidence_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -179,6 +180,7 @@ def test_dotenv_credential_reaches_nve_header_and_never_reaches_result(
     assert _SECRET.encode() not in b"".join(entry.content for entry in result.receipts.entries)
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_process_environment_wins_over_dotenv(
     retained_evidence_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -498,6 +500,7 @@ def _register_exchange(monkeypatch, artifact_factory, series=None, origin="https
     return rr.pick(rr.find(provider="no_nve"), variant="2")
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_public_declared_exchange_composes_and_sanitizes(
     retained_evidence_root: Path, monkeypatch, tmp_path, stub_packaged_catalogue_artifact
 ):
@@ -544,6 +547,10 @@ def _exchange_environment(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("elapsed, exchanges", [(3299, 1), (3300, 2), (3601, 2)])
+@pytest.mark.recorded(
+    "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
+    "tests/test_data/no_nve_12.210.0_1003_1440_2025-07-08_2025-07-14.recording.json",
+)
 def test_public_exchange_reuses_and_refreshes_across_stations(
     retained_evidence_root: Path,
     monkeypatch,
@@ -604,6 +611,7 @@ def test_public_exchange_reuses_and_refreshes_across_stations(
         assert secret not in repr((result, recordings, captures))
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_public_exchange_failure_does_not_cancel_independent_station(
     retained_evidence_root: Path,
     monkeypatch,
@@ -715,6 +723,7 @@ def test_public_exchange_secret_echo_is_not_retained(
 
 
 @pytest.mark.parametrize("origin", ["http://hydapi.nve.no", "https://hydapi.nve.no:444", "https://sub.hydapi.nve.no"])
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_public_exchange_exact_origin_never_forwards_credentials(
     retained_evidence_root: Path,
     monkeypatch,
@@ -835,6 +844,7 @@ def test_public_exchange_issue_exception_is_sanitized(
     assert raised.value.__context__ is None
 
 
+@pytest.mark.recorded("tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json")
 def test_public_exchange_cache_contains_only_observations(
     retained_evidence_root: Path,
     monkeypatch,

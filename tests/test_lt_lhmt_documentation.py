@@ -5,6 +5,8 @@ import re
 from contextlib import redirect_stdout
 from pathlib import Path
 
+import pytest
+
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport
@@ -13,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = Path("docs/verification/lithuania-provider")
 
 
+@pytest.mark.recorded("docs/verification/lithuania-provider/recordings")
 def test_lithuania_page_examples_match_recorded_responses(retained_evidence_root, monkeypatch, tmp_path):
     page = (ROOT / "docs/providers/lt_lhmt.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.S)

@@ -63,6 +63,7 @@ def run(store, payloads):
 
 
 @pytest.mark.parametrize("failed_first", [False, True])
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_overlapping_failure_fallback_is_order_independent(retained_evidence_root, tmp_path, failed_first):
     payload = single_payload(retained_evidence_root)
     held = run(tmp_path / "store", (payload,))
@@ -76,6 +77,7 @@ def test_overlapping_failure_fallback_is_order_independent(retained_evidence_roo
     assert any(item.status is OutcomeStatus.UNSUPPORTED for item in result.outcomes)
 
 
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_equal_failed_bytes_and_timestamps_keep_distinct_calls_and_inventories(retained_evidence_root, tmp_path):
     payload = replace(single_payload(retained_evidence_root), content=b"{}")
     result = run(
@@ -111,6 +113,7 @@ def test_unknown_series_failed_request_keeps_call_and_interval(tmp_path):
 
 @pytest.mark.parametrize("failed_first", [False, True])
 @pytest.mark.parametrize("failure_kind", ["unknown", "partial"])
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_failed_overlap_returned_rows_agree_with_persisted_replacement(
     retained_evidence_root, tmp_path, failed_first, failure_kind
 ):
@@ -158,6 +161,7 @@ def test_failed_overlap_returned_rows_agree_with_persisted_replacement(
 
 
 @pytest.mark.parametrize("overlap", [False, True])
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_snapshot_contributions_keep_distinct_key_groups_and_acquisition_vintages(
     retained_evidence_root, tmp_path, monkeypatch, overlap
 ):
@@ -197,6 +201,7 @@ def test_snapshot_contributions_keep_distinct_key_groups_and_acquisition_vintage
 
 
 @pytest.mark.parametrize("defect", ["mixed_failure", "unknown_offset"])
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_incompatible_axis_evidence_is_fatal_before_cache_mutation(
     retained_evidence_root, tmp_path, monkeypatch, defect
 ):
@@ -245,6 +250,7 @@ def test_incompatible_axis_evidence_is_fatal_before_cache_mutation(
     assert {path.relative_to(store): path.read_bytes() for path in store.rglob("*") if path.is_file()} == before
 
 
+@pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_fresh_successful_payloads_cannot_mix_axes_for_one_series_fact(retained_evidence_root, tmp_path, monkeypatch):
     from rivretrieve._internal.issues import FatalContractError
     from rivretrieve._internal.time_axis import TimeAxis

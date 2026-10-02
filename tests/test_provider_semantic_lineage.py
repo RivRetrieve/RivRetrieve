@@ -43,6 +43,7 @@ def _recording_for_fact(provenance, fact, acquisition_id, retained_evidence_root
     "fact",
     ["source.product.native_identity", "source.product.daily_mean_semantics", "source.product.hourly_mean_semantics"],
 )
+@pytest.mark.recorded("tests/test_data/cz_meta2.json")
 def test_chmi_product_facts_resolve_to_publisher_dictionary(fact, retained_evidence_root: Path):
     provenance = chmi_provenance()
     recording, content = _recording_for_fact(
@@ -71,6 +72,7 @@ def test_chmi_product_facts_resolve_to_publisher_dictionary(fact, retained_evide
         "source.product.historical_time_zone",
     ],
 )
+@pytest.mark.recorded("tests/test_data/lt_lhmt_terms_licence.html")
 def test_lhmt_product_and_crs_facts_resolve_to_api_documentation(fact, retained_evidence_root: Path):
     provenance = lhmt_provenance()
     recording, content = _recording_for_fact(provenance, fact, "terms_capture_2026_08_21", retained_evidence_root)

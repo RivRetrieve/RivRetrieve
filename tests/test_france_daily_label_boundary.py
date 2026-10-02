@@ -17,6 +17,10 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+)
 def test_daily_nonmidnight_label_preserves_valid_daily_max(retained_evidence_root, monkeypatch, tmp_path, policy):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     recordings = tuple(

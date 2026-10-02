@@ -89,6 +89,7 @@ class _TextParser(HTMLParser):
         self.parts.append(data)
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_api_docs.html")
 def test_publisher_crs_evidence_names_hydro_but_no_reference_system(retained_evidence_root: Path) -> None:
     # The documentation fixture retains source text except the explicitly redacted archive credential.
     capture = (retained_evidence_root / CRS_EVIDENCE_PATH).read_bytes()
@@ -180,6 +181,7 @@ class _FixtureResponse(io.BytesIO):
     status = 200
 
 
+@pytest.mark.recorded("tests/test_data/switzerland_metadata_locations.json")
 def test_swiss_fixture_matches_attested_complete_response(retained_evidence_root: Path) -> None:
     response = _fixture_response(retained_evidence_root)
     canonical = json.dumps(response, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
@@ -191,6 +193,7 @@ def test_swiss_fixture_matches_attested_complete_response(retained_evidence_root
     assert set(response) == {"source", "apiurl", "opendata", "license", "payload"}
 
 
+@pytest.mark.recorded("tests/test_data/switzerland_metadata_locations.json")
 def test_refresh_native_table_has_exact_ordered_schema_and_preserves_source(retained_evidence_root: Path) -> None:
     outcome = generate_catalogue.refresh_native_table(
         _fixture_response(retained_evidence_root), retrieved_at=ATTESTED_RETRIEVED_AT
@@ -201,6 +204,7 @@ def test_refresh_native_table_has_exact_ordered_schema_and_preserves_source(reta
     pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(retained_evidence_root), check_exact=True)
 
 
+@pytest.mark.recorded("tests/test_data/switzerland_metadata_locations.json")
 def test_refresh_native_table_normalizes_only_integer_details_id(retained_evidence_root: Path) -> None:
     response = _fixture_response(retained_evidence_root)
     payload_value = response["payload"]
@@ -230,6 +234,7 @@ def test_refresh_native_table_normalizes_only_integer_details_id(retained_eviden
     assert table.filter(pl.col("payload_key") == "2071").select("details.id").item() == "2071"
 
 
+@pytest.mark.recorded("tests/test_data/switzerland_metadata_locations.json")
 def test_refresh_native_table_stamps_all_rows_with_attested_retrieval_instant(retained_evidence_root: Path) -> None:
     table = generate_catalogue.refresh_native_table(
         _fixture_response(retained_evidence_root), retrieved_at=ATTESTED_RETRIEVED_AT
@@ -240,6 +245,7 @@ def test_refresh_native_table_stamps_all_rows_with_attested_retrieval_instant(re
     assert table["retrieved_at"].item(0) == ATTESTED_DATETIME
 
 
+@pytest.mark.recorded("tests/test_data/switzerland_metadata_locations.json")
 def test_refresh_native_table_from_fixture_is_network_free(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -256,6 +262,7 @@ def test_refresh_native_table_from_fixture_is_network_free(
     pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(retained_evidence_root), check_exact=True)
 
 
+@pytest.mark.recorded("tests/test_data/switzerland_metadata_locations.json")
 def test_refresh_native_table_from_live_exercises_transport_seam_offline(
     retained_evidence_root: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -274,6 +281,7 @@ def test_refresh_native_table_from_live_exercises_transport_seam_offline(
     pl_testing.assert_frame_equal(outcome.value.data, _expected_native_frame(retained_evidence_root), check_exact=True)
 
 
+@pytest.mark.recorded("tests/test_data/switzerland_metadata_locations.json")
 def test_live_refresh_rejects_implausibly_small_station_count(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -287,6 +295,7 @@ def test_live_refresh_rejects_implausibly_small_station_count(
         generate_catalogue.refresh_native_table_from_live(retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
+@pytest.mark.recorded("tests/test_data/switzerland_metadata_locations.json")
 def test_fixture_refresh_has_no_exact_station_count_invariant(retained_evidence_root: Path, tmp_path: Path) -> None:
     response = _fixture_response(retained_evidence_root)
     payload = response["payload"]
@@ -311,6 +320,7 @@ def test_fixture_refresh_has_no_exact_station_count_invariant(retained_evidence_
         ),
     ],
 )
+@pytest.mark.recorded("tests/test_data/switzerland_metadata_locations.json")
 def test_refresh_native_table_rejects_each_absent_required_field(
     retained_evidence_root: Path, scope: str, field: str
 ) -> None:
@@ -335,6 +345,7 @@ def test_refresh_native_table_rejects_each_absent_required_field(
     ("scope", "field"),
     [("station", "id"), ("details", "chx"), ("details", "chy"), ("details", "lat"), ("details", "lon")],
 )
+@pytest.mark.recorded("tests/test_data/switzerland_metadata_locations.json")
 def test_refresh_native_table_rejects_boolean_numeric_fields(
     retained_evidence_root: Path, scope: str, field: str
 ) -> None:
@@ -355,6 +366,17 @@ def test_refresh_native_table_rejects_boolean_numeric_fields(
         generate_catalogue.refresh_native_table(response, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
+    "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
+    "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
+    "tests/test_data/ch_foen_bafu_current_hydrological_data.html",
+    "tests/test_data/ch_foen_bafu_hydrology_data_service.html",
+    "tests/test_data/ch_foen_parameters_2026-09-02.recording.json",
+    "tests/test_data/ch_foen_terms_bafu.html",
+    "tests/test_data/ch_foen_terms_existenz.html",
+    "tests/test_data/switzerland_metadata_locations.json",
+)
 def test_native_output_cli_writes_expected_table(retained_evidence_root: Path, tmp_path: Path) -> None:
     output_path = tmp_path / "native.parquet"
 
@@ -376,6 +398,10 @@ def test_native_output_cli_writes_expected_table(retained_evidence_root: Path, t
     )
 
 
+@pytest.mark.derived(
+    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
+    "tests/test_data/switzerland_metadata_locations.json",
+)
 def test_committed_native_table_matches_attested_rematerialization(retained_evidence_root: Path) -> None:
     committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
 
@@ -383,6 +409,7 @@ def test_committed_native_table_matches_attested_rematerialization(retained_evid
     pl_testing.assert_frame_equal(committed, _expected_native_frame(retained_evidence_root), check_exact=True)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
 def test_committed_native_table_has_pinned_full_content(retained_evidence_root: Path) -> None:
     committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
 
@@ -404,6 +431,7 @@ def test_swiss_origins_match_canonical_schema_order_and_values() -> None:
     } == STATION_CATALOGUE_ORIGINS
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
 def test_native_build_has_exact_projection_counts_dates_and_schemas(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
@@ -463,6 +491,7 @@ def test_native_build_has_exact_projection_counts_dates_and_schemas(retained_evi
     )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
 def test_native_build_uses_top_level_name_and_exact_native_coordinates(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
@@ -502,6 +531,7 @@ def test_native_build_uses_top_level_name_and_exact_native_coordinates(retained_
     assert actual["station_id"].to_list() == ["canonical-A", "canonical-B"]
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
 def test_native_build_enforces_every_origin_declaration(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
@@ -515,6 +545,7 @@ def test_native_build_enforces_every_origin_declaration(retained_evidence_root: 
         generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), declarations)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
 def test_native_build_uses_per_station_retrieval_dates_and_maximum_provider_date(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
@@ -543,6 +574,7 @@ def test_native_build_uses_per_station_retrieval_dates_and_maximum_provider_date
         (lambda rows: rows[1].__setitem__("name", rows[0]["name"]), r"duplicate station identity"),
     ],
 )
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
 def test_native_build_rejects_bad_station_rows(retained_evidence_root: Path, mutation, message: str) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
@@ -557,6 +589,7 @@ def test_native_build_rejects_bad_station_rows(retained_evidence_root: Path, mut
 
 
 @pytest.mark.parametrize("payload_key", [None, ""])
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
 def test_native_build_rejects_invalid_payload_key(retained_evidence_root: Path, payload_key: object) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
@@ -578,6 +611,7 @@ def test_native_build_rejects_empty_table() -> None:
         generate_catalogue.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
 def test_native_build_rejects_null_retrieved_at_with_row_identity(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
@@ -591,6 +625,7 @@ def test_native_build_rejects_null_retrieved_at_with_row_identity(retained_evide
         generate_catalogue.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
 def test_native_build_rejects_inconsistent_document_metadata(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
@@ -644,6 +679,16 @@ def test_cli_source_modes_are_mutually_exclusive(tmp_path: Path) -> None:
     assert exc_info.value.code != 0
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
+    "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
+    "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
+    "tests/test_data/ch_foen_bafu_current_hydrological_data.html",
+    "tests/test_data/ch_foen_bafu_hydrology_data_service.html",
+    "tests/test_data/ch_foen_parameters_2026-09-02.recording.json",
+    "tests/test_data/ch_foen_terms_bafu.html",
+    "tests/test_data/ch_foen_terms_existenz.html",
+)
 def test_native_build_matches_committed_catalogue_byte_for_byte(
     retained_evidence_root: Path,
     tmp_path: Path,

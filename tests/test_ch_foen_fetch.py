@@ -3,6 +3,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 import polars as pl
+import pytest
 
 from rivretrieve._internal.engine import (
     RenderedWindow,
@@ -26,6 +27,7 @@ def window(a, b):
     )
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json")
 def test_recent_request_replays_exact_anonymous_rest_envelope_and_coalesces_fields(retained_evidence_root: Path):
     replay = ReplayTransport(
         (read_recording((retained_evidence_root / DATA) / "ch_foen_2135_rest_2026-09-01.recording.json"),)
@@ -45,6 +47,7 @@ def test_recent_request_replays_exact_anonymous_rest_envelope_and_coalesces_fiel
     assert result.value[0].origin.request_parameters["parameters"] == "flow,flow_ls,height_abs,height,temperature"
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json")
 def test_old_request_replays_exact_flux_body_and_preserves_query_origin(retained_evidence_root: Path):
     recording = read_recording((retained_evidence_root / DATA) / "ch_foen_2135_flux_2020-01-01.recording.json")
     replay = AuthenticatedTransport(
@@ -65,6 +68,7 @@ def test_old_request_replays_exact_flux_body_and_preserves_query_origin(retained
     assert payload.origin.request_parameters == {"org": "api.existenz.ch"}
 
 
+@pytest.mark.recorded("tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json")
 def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(
     retained_evidence_root: Path, monkeypatch
 ) -> None:

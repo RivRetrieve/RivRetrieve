@@ -253,6 +253,7 @@ class _FixtureResponse:
         return self._content
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_fixture_digest_and_independent_contract(retained_evidence_root: Path) -> None:
     payload = _fixture_payload(retained_evidence_root)
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
@@ -272,6 +273,7 @@ def test_fixture_digest_and_independent_contract(retained_evidence_root: Path) -
     assert rows[2]["station"]["tele_station_name"]["jp"] == " "
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_refresh_fixture_is_network_free_and_exact(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -295,6 +297,7 @@ def test_refresh_fixture_is_network_free_and_exact(
     )
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_native_identity_and_colliding_fields_remain_distinct(retained_evidence_root: Path) -> None:
     source_rows = _fixture_rows(retained_evidence_root)
     table = generate_catalogue.refresh_native_table(
@@ -312,6 +315,7 @@ def test_native_identity_and_colliding_fields_remain_distinct(retained_evidence_
         assert stored["station.tele_station_oldcode"] == row["station"]["tele_station_oldcode"]
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_language_maps_flatten_without_stringification(retained_evidence_root: Path) -> None:
     table = generate_catalogue.refresh_native_table(
         _fixture_payload(retained_evidence_root), retrieved_at=ATTESTED_RETRIEVED_AT
@@ -338,6 +342,7 @@ def test_language_maps_flatten_without_stringification(retained_evidence_root: P
             assert stored[column] == expected
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_unexpected_language_key_names_map_and_key(retained_evidence_root: Path) -> None:
     payload = _two_row_payload(retained_evidence_root)
     rows = cast("list[dict[str, Any]]", cast("dict[str, Any]", payload["waterlevel_data"])["data"])
@@ -356,6 +361,7 @@ def test_unexpected_language_key_names_map_and_key(retained_evidence_root: Path)
         ("invalid_data", "ThaiWater payload field 'waterlevel_data.data' must be a list"),
     ],
 )
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_envelope_guards(retained_evidence_root: Path, mutation: str, expected: str) -> None:
     payload = _two_row_payload(retained_evidence_root)
     if mutation == "missing_envelope":
@@ -370,6 +376,7 @@ def test_envelope_guards(retained_evidence_root: Path, mutation: str, expected: 
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_non_object_row_guard(retained_evidence_root: Path) -> None:
     payload = _two_row_payload(retained_evidence_root)
     cast("dict[str, Any]", payload["waterlevel_data"])["data"][1] = []
@@ -378,6 +385,7 @@ def test_non_object_row_guard(retained_evidence_root: Path) -> None:
 
 
 @pytest.mark.parametrize("kind", ["missing", "invalid"])
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_nested_object_guards(retained_evidence_root: Path, kind: str) -> None:
     payload = _two_row_payload(retained_evidence_root)
     row = cast("dict[str, Any]", payload["waterlevel_data"])["data"][1]
@@ -391,6 +399,7 @@ def test_nested_object_guards(retained_evidence_root: Path, kind: str) -> None:
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_required_leaf_guard(retained_evidence_root: Path) -> None:
     payload = _two_row_payload(retained_evidence_root)
     row = cast("dict[str, Any]", payload["waterlevel_data"])["data"][1]
@@ -401,6 +410,7 @@ def test_required_leaf_guard(retained_evidence_root: Path) -> None:
 
 
 @pytest.mark.parametrize("invalid", ["123", True])
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_station_id_requires_exact_integer(retained_evidence_root: Path, invalid: object) -> None:
     payload = _two_row_payload(retained_evidence_root)
     row = cast("dict[str, Any]", payload["waterlevel_data"])["data"][1]
@@ -410,6 +420,7 @@ def test_station_id_requires_exact_integer(retained_evidence_root: Path, invalid
         generate_catalogue.refresh_native_table(payload, retrieved_at=ATTESTED_RETRIEVED_AT)
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_duplicate_station_id_guard(retained_evidence_root: Path) -> None:
     payload = _two_row_payload(retained_evidence_root)
     rows = cast("list[dict[str, Any]]", cast("dict[str, Any]", payload["waterlevel_data"])["data"])
@@ -420,6 +431,7 @@ def test_duplicate_station_id_guard(retained_evidence_root: Path) -> None:
 
 
 @pytest.mark.parametrize("invalid", ["not numeric", True])
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_numeric_family_rejects_nonnumeric_and_boolean(retained_evidence_root: Path, invalid: object) -> None:
     payload = _two_row_payload(retained_evidence_root)
     row = cast("dict[str, Any]", payload["waterlevel_data"])["data"][1]
@@ -444,6 +456,7 @@ def test_numeric_family_rejects_nonnumeric_and_boolean(retained_evidence_root: P
         ("station.tele_station_name.jp", 2),
     ],
 )
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_permitted_absence_projects_to_null(retained_evidence_root: Path, path: str, source_index: int) -> None:
     payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
     all_rows = cast("list[dict[str, Any]]", cast("dict[str, Any]", payload["waterlevel_data"])["data"])
@@ -455,6 +468,7 @@ def test_permitted_absence_projects_to_null(retained_evidence_root: Path, path: 
     assert table.filter(pl.col("station.id") == station_id)[path].item() is None
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_complete_native_table_shape_census_and_membership(retained_evidence_root: Path) -> None:
     committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
     native_ids = set(committed["station.id"].to_list())
@@ -510,6 +524,7 @@ def test_complete_native_table_shape_census_and_membership(retained_evidence_roo
     assert 825 - 754 == 71
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_complete_native_table_station_type_census(retained_evidence_root: Path) -> None:
     committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
 
@@ -517,6 +532,7 @@ def test_complete_native_table_station_type_census(retained_evidence_root: Path)
     assert committed.group_by("station_type").len().to_dicts() == [{"station_type": "tele_waterlevel", "len": 825}]
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_complete_native_table_has_pinned_full_content(retained_evidence_root: Path) -> None:
     assert (
         generate_catalogue.native_table_content_sha256(read_native_table(retained_evidence_root / NATIVE_PATH))
@@ -524,6 +540,7 @@ def test_complete_native_table_has_pinned_full_content(retained_evidence_root: P
     )
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_live_native_cli_uses_exact_transport_seam(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -605,6 +622,7 @@ def test_cli_contract_errors_precede_io(
     assert message in capsys.readouterr().err
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_native_cli_writes_only_native_and_preserves_canonical_sentinel(
     retained_evidence_root: Path, tmp_path: Path
 ) -> None:
@@ -628,6 +646,7 @@ def test_native_cli_writes_only_native_and_preserves_canonical_sentinel(
     assert sentinel.read_text(encoding="utf-8") == "sentinel"
 
 
+@pytest.mark.derived("tests/test_data/th_thaiwater_metadata.json")
 def test_native_cli_refuses_error_issues(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -662,6 +681,7 @@ def test_native_cli_refuses_error_issues(
     assert called is False
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_native_build_counts_and_identity_station_fields(retained_evidence_root: Path) -> None:
     catalogue = _build(retained_evidence_root)
     assert all(isinstance(product.semantics, UnknownTemporalSupport) for product in config().products.values())
@@ -705,6 +725,7 @@ def test_native_build_counts_and_identity_station_fields(retained_evidence_root:
         ("duplicate", "ThaiWater native table contains duplicate station.id 100"),
     ],
 )
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_native_build_contracts_fail_loud(retained_evidence_root: Path, mutation: str, message: str) -> None:
     base = (
         _committed_native_table(retained_evidence_root)
@@ -741,6 +762,7 @@ def test_native_build_contracts_fail_loud(retained_evidence_root: Path, mutation
         _build(retained_evidence_root, NativeTable(data))
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_native_build_rejects_non_string_station_id(retained_evidence_root: Path) -> None:
     data = (
         _committed_native_table(retained_evidence_root).data.head(2).with_columns(pl.col("station.id").cast(pl.Int64))
@@ -750,6 +772,7 @@ def test_native_build_rejects_non_string_station_id(retained_evidence_root: Path
         _build(retained_evidence_root, NativeTable(data))
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_generated_station_projection_matches_native_exactly(retained_evidence_root: Path) -> None:
     native = _committed_native_table(retained_evidence_root)
     generated = _build(retained_evidence_root, native)
@@ -758,6 +781,7 @@ def test_generated_station_projection_matches_native_exactly(retained_evidence_r
     pl_testing.assert_frame_equal(generated.stations, _expected_station_projection(native), check_exact=True)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_native_preserves_displaced_source_fields(retained_evidence_root: Path) -> None:
     native = _committed_native_table(retained_evidence_root).data
     displaced = native.select(
@@ -778,6 +802,7 @@ def test_native_preserves_displaced_source_fields(retained_evidence_root: Path) 
     assert displaced["station.tele_station_oldcode"].null_count() == 0
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_origin_enforcement_is_part_of_native_build(retained_evidence_root: Path) -> None:
     declarations = dict(STATION_CATALOGUE_ORIGINS)
     del declarations["longitude"]
@@ -788,6 +813,7 @@ def test_origin_enforcement_is_part_of_native_build(retained_evidence_root: Path
         )
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_station_product_check_uses_own_acquisition_date_and_provider_uses_native_date(
     retained_evidence_root: Path,
 ) -> None:
@@ -806,6 +832,12 @@ def test_station_product_check_uses_own_acquisition_date_and_provider_uses_nativ
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
+@pytest.mark.governing(
+    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
+    "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
+    "tests/test_data/th_thaiwater_official_water_wl-2026-09-02.html",
+    "tests/test_data/th_thaiwater_terms_licence-1.html",
+)
 def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -851,6 +883,7 @@ def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
     }
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_committed_catalogue_station_projection_matches_native(retained_evidence_root: Path) -> None:
     native = _committed_native_table(retained_evidence_root)
     committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
@@ -858,6 +891,7 @@ def test_committed_catalogue_station_projection_matches_native(retained_evidence
     pl_testing.assert_frame_equal(committed, _expected_station_projection(native), check_exact=True)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_committed_catalogue_ids_match_native_ids(retained_evidence_root: Path) -> None:
     native = _committed_native_table(retained_evidence_root).data
     committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
@@ -866,6 +900,7 @@ def test_committed_catalogue_ids_match_native_ids(retained_evidence_root: Path) 
     assert set(committed["station_id"]) == set(native["station.id"])
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_fresh_build_matches_all_committed_artefact_bytes(retained_evidence_root: Path, tmp_path: Path) -> None:
     generate_catalogue.write_catalogue(_build(retained_evidence_root), tmp_path)
 
@@ -888,6 +923,7 @@ def test_fresh_build_matches_all_committed_artefact_bytes(retained_evidence_root
         assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_governing_acquisitions_expose_all_baseline_pairs(retained_evidence_root: Path) -> None:
     catalogue = _build(retained_evidence_root)
     pairs = catalogue.station_products
@@ -902,6 +938,7 @@ def test_governing_acquisitions_expose_all_baseline_pairs(retained_evidence_root
     assert catalogue.acquisition_provenance.withheld_facts == ()
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_build_cli_requires_explicit_reviewed_availability_evidence(
     retained_evidence_root: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -910,6 +947,7 @@ def test_build_cli_requires_explicit_reviewed_availability_evidence(
     assert "--out requires --availability-evidence" in capsys.readouterr().err
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_each_governing_product_uses_the_official_graph_field(retained_evidence_root: Path) -> None:
     catalogue = _build(retained_evidence_root)
     fields = dict(catalogue.products.select("product_id", "native_id").iter_rows())
@@ -917,6 +955,7 @@ def test_each_governing_product_uses_the_official_graph_field(retained_evidence_
     assert all(fields[pair.product_id] == pair.native_field for pair in _availability_evidence().pairs)
 
 
+@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_provider_request_description_distinguishes_source_fields_from_public_calls(
     retained_evidence_root: Path,
 ) -> None:
