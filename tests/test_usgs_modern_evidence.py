@@ -9,33 +9,42 @@ import polars as pl
 import polars.testing as pt
 import pytest
 
-from tests.usgs_modern_recordings import DATA, MANIFEST, body
+from tests.usgs_modern_recordings import body, manifest
 
 
-def test_every_retained_source_body_has_exact_hash_and_acquisition_manifest():
+def test_every_retained_source_body_has_exact_hash_and_acquisition_manifest(retained_evidence_root):
     hashes = dict(
-        line.split("  ", 1)[::-1] for path in DATA.glob("*SHA256SUMS") for line in path.read_text().splitlines()
+        line.split("  ", 1)[::-1]
+        for path in (retained_evidence_root / "tests/test_data/usgs_modern").glob("*SHA256SUMS")
+        for line in path.read_text().splitlines()
     )
     records = [
-        *MANIFEST.values(),
-        *json.loads((DATA / "curated-manifest.json").read_text()),
-        *json.loads((DATA / "historical-manifest.json").read_text()),
+        *manifest(retained_evidence_root).values(),
+        *json.loads(((retained_evidence_root / "tests/test_data/usgs_modern") / "curated-manifest.json").read_text()),
+        *json.loads(
+            ((retained_evidence_root / "tests/test_data/usgs_modern") / "historical-manifest.json").read_text()
+        ),
     ]
     assert len(records) == 53
     assert len(hashes) == len({item["file"] for item in records}) == 47
     assert set(hashes) == {item["file"] for item in records}
     for item in records:
-        content = (DATA / item["file"]).read_bytes()
+        content = ((retained_evidence_root / "tests/test_data/usgs_modern") / item["file"]).read_bytes()
         assert hashlib.sha256(content).hexdigest() == item["sha256"] == hashes[item["file"]]
         assert len(content) == item["bytes"]
     for name, digest in hashes.items():
-        assert hashlib.sha256((DATA / name).read_bytes()).hexdigest() == digest
-    for item in MANIFEST.values():
+        assert (
+            hashlib.sha256(((retained_evidence_root / "tests/test_data/usgs_modern") / name).read_bytes()).hexdigest()
+            == digest
+        )
+    for item in manifest(retained_evidence_root).values():
         assert item["authorship"] == "publisher_response"
         assert datetime.fromisoformat(item["acquired_utc"]).utcoffset().total_seconds() == 0
         assert item["final_url"]
         assert item["request_headers"]["User-Agent"] == "RivRetrieve-source-evidence"
-    historical = json.loads((DATA / "historical-manifest.json").read_text())
+    historical = json.loads(
+        ((retained_evidence_root / "tests/test_data/usgs_modern") / "historical-manifest.json").read_text()
+    )
     assert all(item["final_url"] is None for item in historical)
 
 
@@ -46,8 +55,12 @@ def test_every_retained_source_body_has_exact_hash_and_acquisition_manifest():
         ("00065", "legacy-stage2010.body", "continuous-07374000-2010-stage"),
     ],
 )
-def test_bounded_2010_observations_match_legacy_published_instants_and_numbers(parameter, legacy_file, name):
-    legacy = json.loads((DATA / "prior-history" / legacy_file).read_bytes())
+def test_bounded_2010_observations_match_legacy_published_instants_and_numbers(
+    parameter, legacy_file, name, retained_evidence_root
+):
+    legacy = json.loads(
+        ((retained_evidence_root / "tests/test_data/usgs_modern") / "prior-history" / legacy_file).read_bytes()
+    )
     rows = [
         (datetime.fromisoformat(value["dateTime"]).astimezone(UTC), str(Decimal(value["value"])))
         for series in legacy["value"]["timeSeries"]
@@ -60,7 +73,7 @@ def test_bounded_2010_observations_match_legacy_published_instants_and_numbers(p
             datetime.fromisoformat(feature["properties"]["time"]).astimezone(UTC),
             str(Decimal(feature["properties"]["value"])),
         )
-        for feature in json.loads(body(name))["features"]
+        for feature in json.loads(body(name, evidence_root=retained_evidence_root))["features"]
     ]
     lower, upper = datetime(2010, 6, 1, 5, tzinfo=UTC), datetime(2010, 6, 2, 4, 59, 59, tzinfo=UTC)
     rows = [row for row in rows if lower <= row[0] <= upper]
@@ -73,7 +86,7 @@ def test_bounded_2010_observations_match_legacy_published_instants_and_numbers(p
     # A finite value comparison neither aliases the independent IDs nor proves all history.
 
 
-def test_present_null_publisher_recording_is_not_an_empty_answer():
+def test_present_null_publisher_recording_is_not_an_empty_answer(retained_evidence_root):
     from dataclasses import replace
 
     from rivretrieve._internal.engine import SourceCoordinates
@@ -81,7 +94,7 @@ def test_present_null_publisher_recording_is_not_an_empty_answer():
     from rivretrieve._internal.providers.usgs_nwis.parse import parse
     from tests.test_usgs_modern_parse import payload
 
-    original = body("daily-11465200-present-null")
+    original = body("daily-11465200-present-null", evidence_root=retained_evidence_root)
     base = payload({"type": "FeatureCollection", "features": []})
     coordinates = replace(base.source_coordinates.value, monitoring_location_id="USGS-11465200")
     result = parse(
@@ -101,8 +114,10 @@ def test_present_null_publisher_recording_is_not_an_empty_answer():
     assert all(f["properties"]["qualifier"] == ["DISCONTINUED"] for f in source["features"])
 
 
-def test_shared_documentation_bytes_keep_independent_historical_acquisitions():
-    historical = json.loads((DATA / "historical-manifest.json").read_text())
+def test_shared_documentation_bytes_keep_independent_historical_acquisitions(retained_evidence_root):
+    historical = json.loads(
+        ((retained_evidence_root / "tests/test_data/usgs_modern") / "historical-manifest.json").read_text()
+    )
     # This digest pins every pre-dedup acquisition field except its local body path.
     acquisitions = [{key: value for key, value in item.items() if key != "file"} for item in historical]
     assert (
@@ -112,7 +127,7 @@ def test_shared_documentation_bytes_keep_independent_historical_acquisitions():
     shared = [item for item in historical if item["file"].startswith("new/")]
     assert len(shared) == 6
     for item in shared:
-        current = next(record for record in MANIFEST.values() if record["file"] == item["file"])
+        current = next(record for record in manifest(retained_evidence_root).values() if record["file"] == item["file"])
         assert item["sha256"] == current["sha256"]
         assert item["acquired_utc"] != current["acquired_utc"]
         assert item["final_url"] is None

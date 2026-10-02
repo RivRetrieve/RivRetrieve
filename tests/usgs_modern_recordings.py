@@ -12,17 +12,20 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from rivretrieve._internal.transport import HttpMethod, TransportResponse
 
-DATA = Path(__file__).parent / "test_data" / "usgs_modern"
-MANIFEST = {
-    item["name"]: item
-    for path in sorted(DATA.glob("*-manifest.jsonl"))
-    for item in (json.loads(line) for line in path.read_text().splitlines())
-}
+
+def manifest(evidence_root: Path):
+    directory = evidence_root / "tests/test_data/usgs_modern"
+    paths = sorted(directory.glob("*-manifest.jsonl"))
+    if not paths:
+        raise FileNotFoundError("Retained USGS recording manifests are required")
+    return {
+        item["name"]: item for path in paths for item in (json.loads(line) for line in path.read_text().splitlines())
+    }
 
 
-def body(name):
-    entry = MANIFEST[name]
-    content = (DATA / entry["file"]).read_bytes()
+def body(name, evidence_root: Path):
+    entry = manifest(evidence_root)[name]
+    content = (evidence_root / "tests/test_data/usgs_modern" / entry["file"]).read_bytes()
     assert len(content) == entry["bytes"]
     assert hashlib.sha256(content).hexdigest() == entry["sha256"]
     return content
@@ -36,8 +39,10 @@ def coordinates(url, params=None):
 
 
 class ModernReplay:
-    def __init__(self, *names):
-        self.entries = {coordinates(MANIFEST[name]["original_url"]): name for name in names}
+    def __init__(self, *names, evidence_root: Path):
+        self.evidence_root = evidence_root
+        self.manifest = manifest(evidence_root)
+        self.entries = {coordinates(self.manifest[name]["original_url"]): name for name in names}
         self.calls = []
 
     def send(self, request):
@@ -46,9 +51,9 @@ class ModernReplay:
         key = coordinates(request.url, request.params)
         assert key in self.entries, f"No exact modern recording for {key}"
         name = self.entries[key]
-        entry = MANIFEST[name]
+        entry = self.manifest[name]
         return TransportResponse(
-            content=body(name),
+            content=body(name, self.evidence_root),
             status_code=entry["status"],
             retrieved_at=datetime.fromisoformat(entry["acquired_utc"]),
             content_type=entry["headers"].get("Content-Type"),

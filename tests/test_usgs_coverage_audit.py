@@ -77,8 +77,8 @@ def test_cached_receipt_must_match_request_and_hash(tmp_path):
 
 
 @pytest.mark.parametrize("station,agency", [("09489082", "USFS"), ("09527500", "CA574")])
-def test_frozen_non_usgs_identity_matches_publisher_evidence(station, agency):
-    directory = Path(__file__).parents[1] / "research/usgs-modern-coverage"
+def test_frozen_non_usgs_identity_matches_publisher_evidence(retained_evidence_root, station, agency):
+    directory = retained_evidence_root / "research/usgs-modern-coverage"
     native = audit.pl.read_parquet(directory / "baseline_stations.parquet")
     source = native.filter(audit.pl.col("site_no") == station).to_dicts()[0]
     assert source["agency_cd"] == agency
@@ -95,10 +95,12 @@ def test_frozen_non_usgs_identity_matches_publisher_evidence(station, agency):
     assert legacy["agencies"] == [agency]
 
 
-def test_frozen_full_denominator_and_receipt_hashes():
+def test_frozen_full_denominator_and_receipt_hashes(
+    retained_evidence_root,
+):
     import hashlib
 
-    directory = Path(__file__).parents[1] / "research/usgs-modern-coverage"
+    directory = retained_evidence_root / "research/usgs-modern-coverage"
     summary = json.loads((directory / "summary.json").read_text())
     assert summary["baseline_stations"] == 26258
     assert sum(summary["product_counts"].values()) == 26258 * 6
@@ -116,8 +118,10 @@ def test_frozen_full_denominator_and_receipt_hashes():
         assert hashlib.sha256(raw).hexdigest() == receipt["sha256"]
 
 
-def test_unknown_statistic_with_observations_is_not_missing():
-    directory = Path(__file__).parents[1] / "research/usgs-modern-coverage"
+def test_unknown_statistic_with_observations_is_not_missing(
+    retained_evidence_root,
+):
+    directory = retained_evidence_root / "research/usgs-modern-coverage"
     unresolved = json.loads((directory / "unresolved.json").read_text())
     assert len(unresolved) == 6
     for row in unresolved:
