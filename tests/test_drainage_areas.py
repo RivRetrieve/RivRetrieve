@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import socket
 import subprocess
+import sys
 from pathlib import Path
 
 import polars as pl
@@ -166,9 +167,7 @@ def test_nonbreaking_space_and_blank_are_values() -> None:
 def test_projection_build_is_current(retained_evidence_root: Path) -> None:
     result = subprocess.run(
         [
-            "uv",
-            "run",
-            "python",
+            sys.executable,
             "scripts/build_drainage_areas.py",
             "--check",
             "--evidence-root",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import inspect
 import subprocess
+import sys
 from dataclasses import FrozenInstanceError, fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -555,7 +556,7 @@ def test_row_schemas_reject_zoned_time_wrong_zone_dtype_and_null_zone(schema: Ca
 def test_fetch_window_is_rejected_where_requested_window_is_required() -> None:
     fixture = Path(__file__).parent / "typecheck" / "nominal_window_misuse.py"
     result = subprocess.run(
-        ["uv", "run", "ty", "check", str(fixture)],
+        [sys.executable, "-m", "ty", "check", str(fixture)],
         capture_output=True,
         text=True,
         check=False,
