@@ -20,6 +20,7 @@ CACHE_HTTP_CARVE_OUTS: dict[str, set[str]] = {}
 
 MAINTAINER_ROLES = {
     "generate_catalogue.py",
+    "rebuild_catalogue.py",
     "capture.py",
     "inventory.py",
     "catalogue_series.py",  # Build-time source-description evidence; never runtime discovery.
