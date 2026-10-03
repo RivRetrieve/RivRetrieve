@@ -11,7 +11,7 @@ contract. Refusal fixtures also include unsupported formats. Runtime validation 
 the typed source-series records and their references.
 
 The revision-5 contract below applies to stores produced by compiling a publisher
-artifact. The accumulated-store revision-7 section specifies live-provider parse output
+artifact. The accumulated-store revision-8 section specifies live-provider parse output
 and names its separately addressable manifest schema.
 
 This contract specifies data at rest. It does not specify or implement a store reader,
@@ -265,50 +265,72 @@ second pass streams contributing rows into the single file for that partition. A
 finalise a partition file or its manifest count while an unread adjacent archive can still contribute.
 The partition remains a calendar product/year partition.
 
-### Accumulated-store format revision 7
+### Accumulated-store format revision 8
 
 Compiled stores use revision `5`. Accumulated live-provider parse output uses revision
-`7`, described by `manifest.schema.json#accumulated`. Readers MUST check the revision
+`8`, described by `manifest.schema.json#accumulated`. Readers MUST check the revision
 before opening any Parquet file. Unsupported revisions are refused with the store path
 and an explicit operation: `download` for a compiled store or `clear_cache` for an
 accumulated store.
 
-The accumulated manifest contains exactly `format_version`, `provider_id`, `built_at`,
+The accumulated manifest requires `format_version`, `provider_id`, `built_at`,
 `coverage`, `partition_row_counts`, `series`, `inventories`, `outcomes`, `issues`, and
-`source_calls`. `built_at` is the UTC write instant with six fractional digits and `Z`.
+`source_calls`. Publication-service fields identify Hub’Eau and modern USGS stores
+where applicable. `built_at` is the UTC write instant with six fractional digits and `Z`.
 Coverage and partition counts MAY be empty: inventory and unsuccessful outcomes can be
 stored even when no successful interval or observation row exists.
 
 Each coverage record contains exactly `series_id`, `start`, `end`, `retrieved_at`,
-`outcome_id`, and `facts_ids`. Endpoints are closed, naive native wall-clock timestamps;
-the writer uses microsecond precision. `retrieved_at` is a UTC instant with six fractional
-digits and `Z`, or null when not established. `facts_ids` is a nonempty, unique list.
-Coverage MUST cite a `success` or `empty` outcome for the same series and retrieval
-instant, whose window contains the covered interval and whose facts include the covered
-facts. Coverage MUST NOT overlap for the same series and any shared fact segment.
+`outcome_id`, `facts_ids`, and `axis`. Endpoints are closed, timezone-naive timestamps
+with microsecond precision. `axis="native"` identifies source wall-clock labels;
+`axis="utc"` identifies UTC instants. These axes MUST NOT be treated as interchangeable.
+A UTC comparison uses each row's published fixed offset; stored labels remain unchanged.
+Unknown or named zones do not supply a fixed offset for this comparison.
 
-Coverage records successful requested intervals, not fetch padding. Calendar-date
+`retrieved_at` is a UTC instant with six fractional digits and `Z`, or null when not
+established. `facts_ids` is a nonempty, unique list. Coverage MUST cite a `success` or
+`empty` outcome with interval coverage for the same series, axis and retrieval instant.
+The outcome window must contain the covered interval and its facts must include the
+covered facts. Coverage MUST NOT overlap on the same axis for the same series and any
+shared fact segment.
+
+Coverage records established successful intervals, which can include exhaustively
+acquired padding beyond the initial returned window. It does not follow merely from
+fetching a payload or an individual page in a dependent cursor transaction. Calendar-date
 clipping expands daily intervals to the full native date axis used by convert. A
-successful empty source answer still records coverage. Coverage makes no freshness,
-expiry, or age claim.
+successful empty interval answer still records coverage. Coverage makes no freshness,
+expiry, observation-density or age claim.
 
 Partitions use `product=<id>/year=<native-year>`, one Parquet file per partition,
 station-id ordering, and the eight-column physical prefix specified above. No
 provider-native columns follow that prefix. `published_value` denotes a non-null native
 value and `published_null` a null value; `published_blank` is forbidden. Every row MUST
-fall within coverage for its series and facts. Duplicate rows remain distinct.
+be supported either by interval coverage for its series and facts on the declared axis,
+or by a successful observation-only outcome identifying its exact series, physical-fact,
+native timestamp and time-zone key. Duplicate rows remain distinct.
+
+Observation-only outcomes use `coverage="observations"` and list `observation_keys`.
+Each key holds a physical-fact ID, native wall-clock timestamp and time zone; one key
+can identify several published rows. These outcomes preserve acquisition calls and
+retrieval instants without establishing interval coverage, even for an empty snapshot.
+A later snapshot replaces only matching row keys. Rows absent from that snapshot remain
+held with their earlier acquisition evidence.
 
 Reuse checks both acquired inventory evidence and successful coverage for the requested
-source identities and physical facts. Coverage checks use the microsecond axis. If the
-requested scope is fully covered, held rows are served without source access. Otherwise
-the driver reacquires the full requested scope and interval for that station and internal
-product route, with fetch padding; it does not request only uncovered dates. Successful
-replacements affect only their concrete
-series, physical facts and requested interval. Padding cannot overwrite held rows.
-Refresh replaces those rows and coverage with the successful current answer, including
-an empty answer. Failed refreshes preserve held rows and successful coverage; their
-outcomes and issues can still be recorded. Inventory evidence remains separate from
-successful coverage. Matching facts never allow one source identity to cover another.
+source identities and physical facts. Coverage checks use the microsecond axis. For
+UTC coverage, a native-label request requires the envelope of all parser-accepted fixed
+offsets, from −23:59 through +23:59. This is a conservative coverage check, not an inferred
+station zone. Complete adjacent acquisition inventories can jointly establish scope.
+
+If the requested scope is fully covered, held rows are served without source access.
+Otherwise the driver reacquires the full requested scope and interval for that station
+and internal product route, with fetch padding; it does not request only uncovered dates.
+Other covered routes can still be reused. Successful interval replacements affect only
+their concrete series, physical facts and established intervals. A successful empty answer
+replaces the corresponding held rows too. Failed or unsupported acquisitions preserve
+held rows and successful coverage at their original retrieval instants; their outcomes
+and issues can still be recorded. Inventory evidence remains separate from successful
+coverage. Matching facts never allow one source identity to cover another.
 
 A provider store has one writer, guarded by a sibling write-lock directory. Writes stage
 a complete candidate beside the store, validate it, then replace its directory. Partition

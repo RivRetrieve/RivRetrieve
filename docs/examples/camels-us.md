@@ -38,6 +38,11 @@ print(result.issues)
 
 # Output:
 # ()
+
+print(sorted((outcome.station_id, outcome.status.value) for outcome in result.outcomes))
+
+# Output:
+# [('01013500', 'success'), ('01022500', 'success'), ('01030500', 'success')]
 ```
 
 USGS publishes these daily means; RivRetrieve does not calculate them from
@@ -61,7 +66,13 @@ print(source_series.select("station_id", "identity_namespace", "published_id").s
 
 Keep `series_id` in grouping and joins. A gauge can publish multiple matching
 series; selecting daily mean discharge does not choose a preferred one.
-This summary checks each series separately, including null values and returned dates.
+Check `result.outcomes` before summarising rows. The three successful outcomes above
+account for the requested gauges in this recording. Empty or failed gauges would
+not appear in a summary made only from `result.data`. Outcomes can also describe
+an unresolved request without a concrete `series_id`.
+
+This summary counts returned rows per source series, including null values and
+returned dates. It is not a completeness check for the requested gauges.
 
 ```python
 import polars as pl

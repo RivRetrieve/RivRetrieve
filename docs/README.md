@@ -1,40 +1,17 @@
 # Documentation
 
-## Getting started
+## Use RivRetrieve
 
-New here? Install RivRetrieve and run the [first retrieval](../README.md#install), then see what
-comes back in [returned data and issues](usage.md#retrieve-and-inspect-results).
-
-## Using RivRetrieve
-
-- [Usage](usage.md): finding stations, selecting series, retrieving them, time windows, issues,
-  credentials, cache and receipts.
-- [CAMELS-US example](examples/camels-us.md): how to extend the original CAMELS time series to recent daily streamflow for three gauges.
-- [Station metadata](station-metadata.md): offline station tables and source attributes for selected gauges.
-- [API reference](reference.md): the public functions, their arguments and the columns they return.
+- [Home](../README.md): installation, first retrieval and provider overview.
+- [Usage](usage.md): select source series, retrieve observations and interpret results.
+- [API reference](reference.md): generated signatures, constraints and returned interfaces.
+- [Station metadata](station-metadata.md): offline station names and source attributes.
+- [Station map](map.md): explore the packaged station catalogue.
+- [CAMELS-US example](examples/camels-us.md): inspect a multi-gauge extension of a study record.
 
 ## Providers
 
-RivRetrieve supports observation retrieval from national publication services. The
-[README](../README.md#river-data-and-where-to-find-them) lists them with their station counts.
-
-The data belong to those agencies, and they document their own networks far better than we could.
-These pages therefore cover only what you need in order to work with a provider through
-RivRetrieve, and link to the agency for everything else.
-
-Whatever the provider, RivRetrieve gives you the same things:
-
-- **Stations**: an identifier, a position where recorded, and the station’s catalogued products.
-- **Products**: a variable (discharge, stage or water temperature), a statistic (mean, maximum,
-  minimum or an instantaneous reading) and a time step (daily, hourly or irregular). Statistics
-  and time steps remain unknown where they are not established.
-- **Units**: discharge in m³/s, stage in m, and water temperature in °C.
-- **Times**: as the agency publishes them, each with its time zone, which is `unknown` when the
-  source meaning has not been established.
-- **Terms and citation**: these stay with the agency. Check them before using the data.
-
-A page for each provider, describing its network, what it measures and how to cite it, is being
-written:
+Provider pages explain their agencies and source-specific conditions:
 
 - [Bosnia and Herzegovina: AVP Sava](providers/ba_fhmzbih.md)
 - [Brazil: ANA](providers/br_ana.md)
@@ -50,62 +27,17 @@ written:
 - [Thailand: ThaiWater](providers/th_thaiwater.md)
 - [United States — USGS](providers/usgs_nwis.md)
 
-## How it works
+## Contribute and develop
 
-- [Architecture](architecture.md): responsibilities, a traced request, contracts and verification.
-- [Catalogue evidence](catalogue-evidence.md): what RivRetrieve records about where catalogue facts
-  came from, and how to inspect it.
-- [Catalogue absence](catalogue-absence.md): why a missing fact is not the same as a source saying
-  nothing.
+- [Contributing](contributing.md): discuss bugs, provider suggestions and proposed changes.
+- [Development](development-conventions.md): set up an agreed change and run checks.
+- [Architecture](architecture.md): responsibilities and the reasons for their boundaries.
+- [Choosing useful tests](maintenance/testing.md): select checks and independent expectations.
 
-## Maintaining the software
+## Maintained contracts
 
-- [Verification evidence](maintenance/evidence.md): shared collections, access, integrity checks and provider verification.
-- [Physical products and source series](product_dictionary.md): structured physical meaning and source identity.
-- [Catalogue provenance](catalogue-provenance.md): current catalogue maintenance conventions.
-- [Observation store layout](design/observation-store-layout.md): the current normative store specification.
-- [Development conventions](development-conventions.md).
-
-## Provider evidence records
-
-Provider port notes retain source research and acquisition history. Use the
-[API reference](reference.md#shipped-software-capabilities) for current software access:
-eleven live providers, Canada and Poland through bulk stores, and South Africa for
-catalogue discovery only.
-
-- [Evidenced inventory account](provider_ports/evidenced_coverage.md). Its recorded limitations
-  still apply: it does not establish countrywide inventory completeness or continuous observation
-  history.
-- [Provider port notes](provider_ports/): what was established about each source when it was
-  added.
-
-<details>
-<summary>Port notes, one per provider</summary>
-
-- [ba_fhmzbih](provider_ports/ba_fhmzbih.md)
-- [br_ana](provider_ports/br_ana.md)
-- [ca_eccc](provider_ports/ca_eccc.md)
-- [ch_foen](provider_ports/ch_foen.md)
-- [cz_chmi](provider_ports/cz_chmi.md)
-- [fr_hubeau and fr_hydroportail](provider_ports/fr_hubeau.md)
-- [jp_mlit](provider_ports/jp_mlit.md)
-- [lt_lhmt](provider_ports/lt_lhmt.md)
-- [no_nve](provider_ports/no_nve.md)
-- [pl_imgw](provider_ports/pl_imgw.md)
-- [th_thaiwater](provider_ports/th_thaiwater.md)
-- [usgs_nwis](provider_ports/usgs_nwis.md)
-- [za_dws](provider_ports/za_dws.md)
-
-</details>
-
-## Checking the docs locally
-
-No site build, credentials or bulk download is needed. From a source checkout, run:
-
-```bash
-uv run python scripts/generate_reference.py --check
-uv run --with rdflib pytest -q tests/test_documentation.py tests/test_supporting_documentation.py tests/test_reference_contracts.py
-```
-
-The tests replay committed source bytes through the public API. They do not test whether a
-provider's service is available today.
+- [Catalogue evidence](catalogue-evidence.md): the machine-readable evidence profile.
+- [Catalogue absence](catalogue-absence.md): meanings of unavailable catalogue facts.
+- [Catalogue provenance](catalogue-provenance.md): catalogue maintenance conventions.
+- [Observation stores](design/observation-store-layout.md): native storage contracts.
+- [Verification evidence](maintenance/evidence.md): access and controlled verification.

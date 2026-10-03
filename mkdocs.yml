@@ -98,27 +98,32 @@ extra_javascript:
 
 nav:
   - Home: index.md
-  - Interactive Map: map.md
-  - User Guide:
-      - Quickstart & Usage: usage.md
-      - CAMELS-US Example: examples/camels-us.md
-      - Station Metadata: station-metadata.md
-
+  - Usage: usage.md
+  - API Reference: reference.md
+  - Station Metadata: station-metadata.md
+  - Station Map: map.md
   - Providers:
-      - Hub'Eau (France): providers/fr_hubeau.md
-      - HydroPortail (France): providers/fr_hydroportail.md
-      - MLIT (Japan): providers/jp_mlit.md
-      - IMGW-PIB (Poland): providers/pl_imgw.md
-      - FOEN (Switzerland): providers/ch_foen.md
-  - Developer Notes:
+      - Bosnia and Herzegovina (AVP Sava): providers/ba_fhmzbih.md
+      - Brazil (ANA): providers/br_ana.md
+      - Canada (ECCC): providers/ca_eccc.md
+      - Czechia (CHMI): providers/cz_chmi.md
+      - France (Hub'Eau): providers/fr_hubeau.md
+      - France (HydroPortail): providers/fr_hydroportail.md
+      - Japan (MLIT): providers/jp_mlit.md
+      - Lithuania (LHMT): providers/lt_lhmt.md
+      - Norway (NVE): providers/no_nve.md
+      - Poland (IMGW-PIB): providers/pl_imgw.md
+      - Switzerland (FOEN): providers/ch_foen.md
+      - Thailand (ThaiWater): providers/th_thaiwater.md
+      - United States (USGS): providers/usgs_nwis.md
+  - Worked Example: examples/camels-us.md
+  - Contributing: contributing.md
+  - Development:
+      - Setup and Commands: development-conventions.md
       - Architecture: architecture.md
-      - API Reference: reference.md
-      - Product Dictionary: product_dictionary.md
+      - Choosing Useful Tests: maintenance/testing.md
+      - Observation Stores: design/observation-store-layout.md
       - Catalogue Evidence: catalogue-evidence.md
-      - Verification Evidence: maintenance/evidence.md
-      - Choosing Tests: maintenance/testing.md
       - Catalogue Absence: catalogue-absence.md
       - Catalogue Provenance: catalogue-provenance.md
-      - Observation Store Layout: design/observation-store-layout.md
-      - Development Conventions: development-conventions.md
-
+      - Verification Evidence: maintenance/evidence.md

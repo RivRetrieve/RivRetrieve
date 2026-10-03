@@ -75,7 +75,7 @@ pinned by `tests/test_provider_row_withholding.py`.
 
 `ORIGIN_GATE_ENROLLED_PROVIDERS` in `catalogue_origins.py` is the executable certification boundary.
 Every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS` has complete audited catalogue origin declarations.
-All thirteen providers are enrolled: ten live providers, Canada and Poland with bulk
+All fourteen providers are enrolled: eleven live providers, Canada and Poland with bulk
 stores, and South Africa with catalogue-only access. Certification concerns catalogue
 origins; it does not activate observation retrieval.
 
@@ -109,7 +109,7 @@ to verified source statements. Explicit withholding and absence markers remain i
 the runtime does not select an unrelated contributor's words to fill a scalar. Full
 per-source statements remain available in acquisition provenance and in the descriptor.
 
-Run the reference `mlcroissant` validator through the test suite for all thirteen outputs,
+Run the reference `mlcroissant` validator through the test suite for all fourteen outputs,
 including Brazil's inventory and separately identified source series. The validator is a development
 dependency; reading a descriptor from an installed wheel must not import it. Catalogue
 version and publication date come from the recorded catalogue date, and acquisition dates
