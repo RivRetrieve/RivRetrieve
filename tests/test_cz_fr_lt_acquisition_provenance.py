@@ -127,6 +127,7 @@ def test_production_provenance_rejects_changed_recording(
             marks=pytest.mark.derived(
                 "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
                 *catalogue_recording_paths("fr_hubeau"),
+                full_verification=("fr_hubeau",),
             ),
         ),
         pytest.param(
