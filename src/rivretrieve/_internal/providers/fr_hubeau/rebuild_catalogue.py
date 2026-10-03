@@ -47,6 +47,9 @@ def rebuild(
     from ``evidence_root``. Missing inputs or changed publisher receipts raise
     before publication. No network requests are made.
     """
+    evidence_root = evidence_root.resolve(strict=True)
+    output = output.resolve()
+    capture_output = capture_output.resolve()
     for destination in (output, capture_output):
         if any((parent / ".git").exists() for parent in (destination, *destination.parents)):
             raise ValueError("Outputs must be outside source checkouts")

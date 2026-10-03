@@ -1405,3 +1405,48 @@ def test_retained_station_responses_rebuild_exact_native_capture(
     approved = Path(__file__).parents[1] / CURRENT_NATIVE_PATH.parent
     for name in ("stations.parquet", "products.parquet", "station_products.parquet", "station_metadata.parquet"):
         pl_testing.assert_frame_equal(pl.read_parquet(output / name), pl.read_parquet(approved / name))
+
+
+@pytest.mark.parametrize("alias", ["relative", "symlink", "checkout"])
+def test_source_response_rebuild_resolves_output_containment(tmp_path, monkeypatch, alias):
+    from rivretrieve._internal.providers.fr_hubeau.rebuild_catalogue import rebuild
+    from tests.test_catalogue_build_provenance import _build
+
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    monkeypatch.chdir(tmp_path)
+    output = tmp_path / "new-output"
+    capture = tmp_path / "capture.json"
+    if alias == "relative":
+        output = Path("inputs/../inputs/new-output")
+    elif alias == "symlink":
+        link = tmp_path / "alias"
+        link.symlink_to(inputs, target_is_directory=True)
+        capture = link / "new-capture.json"
+    else:
+        checkout = tmp_path / "checkout"
+        checkout.mkdir()
+        (checkout / ".git").write_text("synthetic checkout marker")
+        output = Path("checkout/new-output")
+    with pytest.raises(ValueError, match="outside source checkouts|separate from retained evidence"):
+        rebuild(inputs, inputs / "ledger.json.xz", output, capture, "a" * 40, build_inputs=_build())
+    assert not output.exists()
+    assert not capture.exists()
+
+
+def test_source_response_rebuild_allows_new_external_output_paths(tmp_path):
+    from rivretrieve._internal.providers.fr_hubeau.rebuild_catalogue import rebuild
+    from tests.test_catalogue_build_provenance import _build
+
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    # The new output path passes containment, then the missing required input fails.
+    with pytest.raises(FileNotFoundError, match="hydrometry-stations"):
+        rebuild(
+            inputs,
+            inputs / "ledger.json.xz",
+            tmp_path / "new" / "catalogue",
+            tmp_path / "new" / "capture.json",
+            "a" * 40,
+            build_inputs=_build(),
+        )
