@@ -849,8 +849,8 @@ def _normalized_built_at(payload: bytes) -> bytes:
     return replaced
 
 
-def _catalogue_recording_paths(provider: str) -> tuple[str, ...]:
-    """Declare existing public recording identities without opening their retained bodies."""
+def _catalogue_recording_paths(provider: str, *, scopes: tuple[str, ...] = ()) -> tuple[str, ...]:
+    """Declare recordings through explicit retained scopes without opening their bodies."""
     header = json.loads(
         (ROOT / "src/rivretrieve/_internal/providers" / provider / "catalogue/provenance.json").read_text()
     )
@@ -860,8 +860,40 @@ def _catalogue_recording_paths(provider: str) -> tuple[str, ...]:
                 evidence["recording"]["repository_path"]
                 for source in header["source_records"]
                 for evidence in source["evidence"]
+                if not any(evidence["recording"]["repository_path"].startswith(scope + "/") for scope in scopes)
+            }
+            | set(scopes)
+        )
+    )
+
+
+def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeypatch):
+    monkeypatch.setitem(_catalogue_recording_paths.__globals__, "ROOT", tmp_path)
+    header = tmp_path / "src/rivretrieve/_internal/providers/synthetic/catalogue/provenance.json"
+    header.parent.mkdir(parents=True)
+    header.write_text(
+        json.dumps(
+            {
+                "source_records": [
+                    {
+                        "evidence": [
+                            {"recording": {"repository_path": path}}
+                            for path in (
+                                "evidence/selected/a",
+                                "evidence/selected/b",
+                                "evidence/selected-other/c",
+                                "other/d",
+                            )
+                        ]
+                    }
+                ]
             }
         )
+    )
+    assert _catalogue_recording_paths("synthetic", scopes=("evidence/selected",)) == (
+        "evidence/selected",
+        "evidence/selected-other/c",
+        "other/d",
     )
 
 
@@ -884,7 +916,9 @@ def _catalogue_recording_paths(provider: str) -> tuple[str, ...]:
         pytest.param(
             "br_ana",
             marks=pytest.mark.governing(
-                *_catalogue_recording_paths("br_ana"),
+                *_catalogue_recording_paths(
+                    "br_ana", scopes=("tests/test_data/br_ana_inventory", "tests/recordings/br_ana")
+                ),
                 "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
                 "tests/test_data/br_ana_inventory/capture.json",
                 "tests/recordings/br_ana",
@@ -925,7 +959,9 @@ def _catalogue_recording_paths(provider: str) -> tuple[str, ...]:
         pytest.param(
             "fr_hydroportail",
             marks=pytest.mark.governing(
-                *_catalogue_recording_paths("fr_hydroportail"),
+                *_catalogue_recording_paths(
+                    "fr_hydroportail", scopes=("maintenance/catalogue/fr_hydroportail/evidence",)
+                ),
                 "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
                 "maintenance/catalogue/fr_hydroportail/evidence",
                 full_verification=("fr_hubeau",),
@@ -958,7 +994,7 @@ def _catalogue_recording_paths(provider: str) -> tuple[str, ...]:
         pytest.param(
             "pl_imgw",
             marks=pytest.mark.governing(
-                *_catalogue_recording_paths("pl_imgw"),
+                *_catalogue_recording_paths("pl_imgw", scopes=("tests/test_data/pl_imgw_annual",)),
                 "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
                 "tests/test_data/pl_imgw_terms_regulations.html",
             ),
