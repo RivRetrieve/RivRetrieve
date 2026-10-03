@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
 import pytest
 
 from tests._distribution import InstalledDistribution
+from tests._provenance import historical_recording_locations, historical_source_provenance
 
 _CANONICAL_CATALOGUE_FILES = {
     "format.json",
@@ -22,6 +24,7 @@ _CANONICAL_CATALOGUE_FILES = {
     "products.parquet",
     "provider.json",
     "station_products.parquet",
+    "station_metadata.parquet",
     "stations.parquet",
 }
 
@@ -127,6 +130,8 @@ assert rivretrieve.as_frame(thailand).height == 1
 groups = thailand.acquisition_provenance[0].header.withheld_facts
 assert groups == ()
 """
+    verification += "\n" + inspect.getsource(historical_source_provenance)
+    verification += "\n" + inspect.getsource(historical_recording_locations)
     verification += "\nclosure_oracles = " + repr(_CLOSURE_ORACLES) + "\n" + _PROFILE_VERIFICATION
     direct_distribution.verify(verification)
 
@@ -295,13 +300,18 @@ def decode(value):
 def historical_closure_evidence(provider, evidence):
     # Project only verified additions out of the historical closure oracle. The
     # installed current relations above and current RDF ancestry below stay intact.
-    if provider not in {"ba_fhmzbih", "pl_imgw"}:
-        return evidence
     from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
     from rivretrieve._internal.catalogues.evidence import normalize_provenance
     from rivretrieve._internal.catalogues.evidence_encoding import reconstruct_provenance
 
-    model = reconstruct_provenance(evidence).model_dump(mode="json")
+    catalogue = artifact(provider)
+    projected = historical_source_provenance(
+        reconstruct_provenance(evidence),
+        pl.read_parquet(provider_root.joinpath(provider, "catalogue", "station_metadata.parquet")),
+    )
+    if provider not in {"ba_fhmzbih", "pl_imgw"}:
+        return normalize_provenance(projected, stations=catalogue.stations, station_products=catalogue.station_products)
+    model = projected.model_dump(mode="json")
     if provider == "ba_fhmzbih":
         (source,) = model["source_records"]
         assert source["source_id"] == "ba_avp_sava"
@@ -347,7 +357,6 @@ def historical_closure_evidence(provider, evidence):
         roster = next(item for item in model["fact_bindings"] if item["fact_group"] == "imgw_catalogue_inputs")
         assert "source.imgw.observation_archive_product_semantics" not in roster["facts"]
         roster["facts"].insert(1, "source.imgw.observation_archive_product_semantics")
-    catalogue = artifact(provider)
     return normalize_provenance(AcquisitionProvenance.model_validate(model), stations=catalogue.stations,
                                 station_products=catalogue.station_products)
 
@@ -420,7 +429,9 @@ for provider, oracle in closure_oracles.items():
             row = pairs.filter((pl.col("station_id") == pair.station_id) & (pl.col("product_id") == pair.product_id)).row(0, named=True)
             assert {key: row[key] for key in CanonicalPair.model_fields} == pair.model_dump()
         resolved = resolve_evidence(evidence, FactSelection(names=tuple(case["names"])), pair)
-        historical = resolve_evidence(historical_closure_evidence(provider, evidence), FactSelection(names=tuple(case["names"])), pair)
+        projected = historical_closure_evidence(provider, evidence)
+        historical = historical_recording_locations(
+            resolve_evidence(projected, FactSelection(names=tuple(case["names"])), pair), projected)
         semantic = {key: value for key, value in historical.items() if key != "@context"}
         assert hashlib.sha256(json.dumps(semantic, sort_keys=True, ensure_ascii=False).encode()).hexdigest() == case["sha256"]
         if provider == "pl_imgw":
@@ -476,7 +487,9 @@ def test_historical_french_closure_oracles_against_immutable_combined_evidence(r
     evidence = CatalogueEvidence.model_validate_json(json.dumps(manifest["catalogue_evidence"][0]))
     for case in _CLOSURE_ORACLES["fr_hubeau"]["historical_cases"]:
         pair = CanonicalPair(**case["pair"])
-        resolved = resolve_evidence(evidence, FactSelection(names=tuple(case["names"])), pair)
+        resolved = historical_recording_locations(
+            resolve_evidence(evidence, FactSelection(names=tuple(case["names"])), pair), evidence
+        )
         semantic = {key: value for key, value in resolved.items() if key != "@context"}
         assert (
             hashlib.sha256(json.dumps(semantic, sort_keys=True, ensure_ascii=False).encode()).hexdigest()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from tarfile import open as open_tar
@@ -38,15 +38,21 @@ def run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> 
 
 
 @pytest.fixture(scope="session")
-def distribution_workspace() -> Iterator[Path]:
+def distribution_workspace(record_testsuite_property) -> Iterator[Path]:
     repository = Path(__file__).resolve().parents[1]
     checks = repository / ".worktrees" / "distribution-checks"
     checks.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix="installed-", dir=checks) as temporary:
+        record_testsuite_property("distribution_workspace", temporary)
         yield Path(temporary)
 
 
-def _build_and_install(workspace: Path, *, from_sdist: bool) -> InstalledDistribution:
+def _build_and_install(
+    workspace: Path,
+    *,
+    from_sdist: bool,
+    record_testsuite_property: Callable[[str, object], None],
+) -> InstalledDistribution:
     repository = Path(__file__).resolve().parents[1]
     workspace.mkdir()
     dist = workspace / "dist"
@@ -67,6 +73,7 @@ def _build_and_install(workspace: Path, *, from_sdist: bool) -> InstalledDistrib
         sources = tuple(extracted.iterdir())
         assert len(sources) == 1
         source = sources[0]
+        record_testsuite_property("source_copy", str(source))
     run([*build, "--wheel", "--out-dir", str(dist)], cwd=source)
     wheels = tuple(dist.glob("rivretrieve-*.whl"))
     assert len(wheels) == 1
@@ -79,6 +86,7 @@ def _build_and_install(workspace: Path, *, from_sdist: bool) -> InstalledDistrib
     run(["uv", "pip", "install", "--offline", "--no-deps", "--python", str(python), str(wheels[0])], cwd=execution)
     sites = tuple((environment / "lib").glob("python*/site-packages"))
     assert len(sites) == 1
+    record_testsuite_property("installed_package", str(sites[0] / "rivretrieve"))
     # Reuse dependency directories without executing the project's editable .pth files.
     dependencies = list(
         dict.fromkeys(
@@ -94,13 +102,17 @@ def _build_and_install(workspace: Path, *, from_sdist: bool) -> InstalledDistrib
 
 
 @pytest.fixture(scope="session")
-def direct_distribution(distribution_workspace: Path) -> InstalledDistribution:
-    return _build_and_install(distribution_workspace / "wheel", from_sdist=False)
+def direct_distribution(distribution_workspace: Path, record_testsuite_property) -> InstalledDistribution:
+    return _build_and_install(
+        distribution_workspace / "wheel", from_sdist=False, record_testsuite_property=record_testsuite_property
+    )
 
 
 @pytest.fixture(scope="session")
-def sdist_distribution(distribution_workspace: Path) -> InstalledDistribution:
-    return _build_and_install(distribution_workspace / "sdist-wheel", from_sdist=True)
+def sdist_distribution(distribution_workspace: Path, record_testsuite_property) -> InstalledDistribution:
+    return _build_and_install(
+        distribution_workspace / "sdist-wheel", from_sdist=True, record_testsuite_property=record_testsuite_property
+    )
 
 
 @pytest.fixture

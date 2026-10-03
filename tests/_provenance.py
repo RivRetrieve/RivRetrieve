@@ -84,3 +84,139 @@ def remove_external_inputs(directory: Path, groups: tuple[str, ...]) -> None:
     write_evidence_table(
         directory, "provenance_external_inputs.parquet", inputs.filter(~pl.col("binding_id").is_in(ids.implode()))
     )
+
+
+def historical_source_provenance(provenance, metadata):
+    """Validate publication-only additions before projecting an immutable old oracle.
+
+    Source acquisitions, native identity, original facts and their ordering remain
+    untouched. This test-only projection is not suitable for current publication.
+    The function is self-contained so the installed-wheel proof can reuse it.
+    """
+    from importlib import import_module
+
+    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, CodeReference, ExternalFactReference
+    from rivretrieve._internal.station_metadata import source_metadata_frame
+
+    provenance = AcquisitionProvenance.model_validate(provenance.model_dump(mode="python"))
+    build = provenance.build_inputs
+    if build is None:
+        return provenance
+    provider = provenance.provider_id
+    origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
+    assert (
+        tuple((item.repository_path, item.symbol) for item in build.declarations)
+        == origins.CATALOGUE_BUILD_DECLARATIONS
+    )
+    assert build.build.repository_path == f"src/rivretrieve/_internal/providers/{provider}/generate_catalogue.py"
+    assert build.build.symbol == "write_catalogue"
+    declarations = {(item.repository_path, item.symbol): item for item in build.declarations}
+    (catalogue_declaration,) = tuple(
+        item for item in build.declarations if item.symbol in {"build_catalogue", "build_modern_catalogue"}
+    )
+    (origins_declaration,) = tuple(
+        item
+        for item in build.declarations
+        if item.symbol in {"build_acquisition_provenance", "build_modern_acquisition_provenance"}
+    )
+    (native_use,) = tuple(item for item in build.inputs if item.usage == "native_table")
+    assert provenance.native_table is not None
+    assert native_use.reference.sha256 == provenance.native_table.sha256
+    assert native_use.reference.byte_size == provenance.native_table.byte_size
+    direct_sources = {
+        fact: binding.source_id
+        for binding in provenance.fact_bindings
+        if binding.transformation is None
+        for fact in binding.facts
+    }
+    metadata_inputs = tuple(
+        ExternalFactReference(source_id=direct_sources[fact], fact=fact) for fact in native_use.facts
+    )
+    source_metadata_frame(metadata.select("provider_id", "station_id").unique(), metadata)
+    assert set(metadata["provider_id"]) == {provider}
+    expected_fields = {(field.attribute_role, field.source_field) for field in origins.STATION_METADATA_FIELDS}
+    actual_fields = set(
+        metadata.filter(metadata["source_field"].is_not_null()).select("attribute_role", "source_field").iter_rows()
+    )
+    assert actual_fields == expected_fields
+    metadata_facts = tuple(metadata["support_fact"].drop_nulls().unique(maintain_order=True))
+    assert set(metadata_facts) == {f"metadata.{role}.{field}" for role, field in expected_fields}
+    expected_metadata = []
+    for binding in provenance.fact_bindings:
+        transform = binding.transformation
+        if transform is None:
+            continue
+        if binding.fact_group in metadata_facts:
+            assert binding.facts == (binding.fact_group,)
+            assert transform.name == "project_station_metadata"
+            assert transform.kind == "derived_value" and transform.marker_value is None
+            assert transform.external_inputs == metadata_inputs
+            expected_location = ("src/rivretrieve/_internal/catalogues/station_metadata.py", "build_station_metadata")
+            expected_declaration = declarations[
+                (f"src/rivretrieve/_internal/providers/{provider}/origins.py", "STATION_METADATA_FIELDS")
+            ]
+            expected_metadata.append(binding.fact_group)
+        else:
+            assert not set(binding.facts) & set(metadata_facts)
+            assert not any(reference.fact in metadata_facts for reference in transform.external_inputs)
+            expected_location = getattr(origins, "TRANSFORMATION_IMPLEMENTATIONS", {}).get(
+                binding.fact_group, (catalogue_declaration.repository_path, catalogue_declaration.symbol)
+            )
+            expected_declaration = (
+                catalogue_declaration if transform.kind == "authored_constant" else origins_declaration
+            )
+        assert transform.declaration == expected_declaration
+        assert transform.executable == (
+            None
+            if transform.kind == "authored_constant"
+            else CodeReference(
+                repository=build.build.repository,
+                revision=build.build.revision,
+                repository_path=expected_location[0],
+                symbol=expected_location[1],
+            )
+        )
+    assert tuple(expected_metadata) == metadata_facts
+    payload = provenance.model_dump(mode="json")
+    if metadata_facts:
+        count = len(metadata_facts)
+        assert tuple(payload["fact_universe"][-count:]) == metadata_facts
+        assert tuple(binding["fact_group"] for binding in payload["fact_bindings"][-count:]) == metadata_facts
+        del payload["fact_universe"][-count:]
+        del payload["fact_bindings"][-count:]
+    assert not any(fact.startswith("metadata.") for fact in payload["fact_universe"])
+    payload.pop("build_inputs")
+    for binding in payload["fact_bindings"]:
+        if transform := binding.get("transformation"):
+            transform.pop("executable", None)
+            transform.pop("declaration", None)
+    projected = AcquisitionProvenance.model_validate(payload)
+    assert projected.source_records == provenance.source_records
+    assert projected.native_table == provenance.native_table
+    assert projected.withheld_facts == provenance.withheld_facts
+    return projected
+
+
+def historical_recording_locations(document, evidence):
+    """Restore only the old path presentation for pinned historical graph oracles.
+
+    The current graph keeps historical paths as properties, not download URLs.
+    Validate every restored value against its unchanged recording identity.
+    """
+    paths = {
+        f"recording/{source_index}/{recording_index}": entry.recording.repository_path
+        for source_index, source in enumerate(evidence.header.source_records)
+        for recording_index, entry in enumerate(source.evidence)
+    }
+    for node in document["@graph"]:
+        if not node["@id"].startswith("recording/"):
+            continue
+        path = paths[node["@id"]]
+        assert "contentUrl" not in node
+        assert node.pop("additionalProperty") == {
+            "@type": "sc:PropertyValue",
+            "name": "historical_repository_path",
+            "value": path,
+        }
+        node["contentUrl"] = path
+    return document

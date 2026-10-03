@@ -66,7 +66,10 @@ matching discoveries; it does not freeze retrieval to the catalogue's known memb
 
 ```python
 stations = rr.metadata(chosen_gauges)
-print(stations)
+print(stations.select("station_id", "station_name").rows())
+
+# Output:
+# [('07374000', 'Mississippi River at Baton Rouge, LA')]
 
 source_attributes = rr.metadata(chosen_gauges, view="source")
 ```

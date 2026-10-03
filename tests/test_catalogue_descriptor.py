@@ -26,6 +26,7 @@ from rivretrieve._internal.catalogues.evidence_encoding import encode_catalogue_
 from rivretrieve._internal.catalogues.evidence_graph import FactSelection, resolve_evidence
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA
 
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 SC = Namespace("https://schema.org/")
@@ -75,9 +76,16 @@ def _inputs(provider: str):
             for name in ("format.json", "source_series.json", "series_claims.parquet")
         },
     }
+    if provenance.header.build_inputs is not None:
+        files["station_metadata.parquet"] = (directory / "station_metadata.parquet").read_bytes()
     if provider == "usgs_nwis":
         files["monitoring_locations.json"] = (directory / "monitoring_locations.json").read_bytes()
     return provenance, origins, files
+
+
+def _station_metadata_notice(provider: str) -> str | None:
+    module = importlib.import_module(f"rivretrieve._internal.providers.{provider}.origins")
+    return getattr(module, "STATION_METADATA_NOTICE", None)
 
 
 def _record_sets(value: object) -> list[dict]:
@@ -105,7 +113,14 @@ def _deny_network(*args, **kwargs):
 def test_every_committed_descriptor_passes_reference_validator_without_network(provider: str, monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", _deny_network)
     dataset = mlc.Dataset(_path(provider) / "croissant.json")
-    assert len(dataset.metadata.record_sets) == 9
+    assert {record.id for record in dataset.metadata.record_sets} == {
+        "provider",
+        "products",
+        "stations",
+        "station_products",
+        "station_metadata",
+        *(f"provenance_{relation}" for relation in EVIDENCE_SCHEMAS),
+    }
     assert _descriptor(provider)["schemaVersion"] == PROFILE_URI
     descriptor = _descriptor(provider)
     for distribution in descriptor["distribution"]:
@@ -113,8 +128,22 @@ def test_every_committed_descriptor_passes_reference_validator_without_network(p
     for record in descriptor["recordSet"]:
         for field in record["field"]:
             assert "source" in field
-            if not record["@id"].startswith("provenance_"):
+            if record["@id"] in {"provider", "products", "stations", "station_products"}:
                 assert "subjectOf" in field or "rr:absence" in field
+        if record["@id"] == "station_metadata":
+            assert [field["@id"] for field in record["field"]] == [
+                f"station_metadata/{column}" for column in SOURCE_METADATA_SCHEMA
+            ]
+            for field in record["field"]:
+                assert field["source"] == {
+                    "fileObject": {"@id": "station_metadata.parquet"},
+                    "extract": {"column": field["@id"].partition("/")[2]},
+                }
+            assert _field(descriptor, "station_metadata/support_fact")["references"] == {
+                "fileObject": {"@id": "provenance_facts.parquet"},
+                "extract": {"column": "name"},
+            }
+            assert record.get("description") == _station_metadata_notice(provider)
 
 
 @pytest.mark.parametrize("provider", tuple(BUILTIN_PROVIDER_IDS))
@@ -398,7 +427,9 @@ def test_bosnia_record_sets_have_no_withheld_baseline_rows():
 @pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
 def test_descriptor_preserves_exact_bounded_contents(provider: str):
     evidence, origins, files = _inputs(provider)
-    descriptor = build_catalogue_descriptor(evidence, origins, files)
+    descriptor = build_catalogue_descriptor(
+        evidence, origins, files, station_metadata_notice=_station_metadata_notice(provider)
+    )
     assert descriptor == _descriptor(provider)
     serialized = json.dumps(descriptor)
     assert len(serialized.encode()) <= 262_144
@@ -445,7 +476,9 @@ def test_descriptor_rejects_unexpected_file_authority():
 
 def test_evidence_recordsets_declare_exact_keys_and_physical_foreign_keys():
     evidence, origins, files = _inputs("pl_imgw")
-    descriptor = build_catalogue_descriptor(evidence, origins, files)
+    descriptor = build_catalogue_descriptor(
+        evidence, origins, files, station_metadata_notice=_station_metadata_notice("pl_imgw")
+    )
     records = {record["@id"]: record for record in _record_sets(descriptor["recordSet"])}
     targets = {"fact_id": "facts", "binding_id": "bindings", "acquisition_key": "acquisitions"}
     keys = {
@@ -484,7 +517,9 @@ def test_descriptor_rejects_header_and_relation_byte_disagreement():
 @pytest.mark.parametrize("provider", tuple(BUILTIN_PROVIDER_IDS))
 def test_record_keys_expand_to_croissant_vocabulary(provider: str):
     evidence, origins, files = _inputs(provider)
-    descriptor = build_catalogue_descriptor(evidence, origins, files)
+    descriptor = build_catalogue_descriptor(
+        evidence, origins, files, station_metadata_notice=_station_metadata_notice(provider)
+    )
     graph = Graph().parse(data=json.dumps(descriptor), format="json-ld", publicID=BASE)
     croissant = Namespace("http://mlcommons.org/croissant/")
     assert not list(graph.triples((None, SC.key, None)))

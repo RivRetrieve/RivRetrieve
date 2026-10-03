@@ -63,6 +63,9 @@ def test_japan_source_and_fact_groups_are_externally_observable() -> None:
         "station_catalogue",
         "station_product_catalogue",
         "observation_acquisition",
+        "metadata.drainage_area.流域面積",
+        "metadata.river_name.河川名",
+        "metadata.station_name.観測所名",
     }
     observation = next(
         binding for binding in provenance.fact_bindings if binding.fact_group == "observation_acquisition"
