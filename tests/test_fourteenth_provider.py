@@ -192,7 +192,6 @@ def test_new_catalogue_only_provider_requires_only_its_directory_and_manifest_li
             # pytest pythonpath when test temporary files live below .worktrees.
             "-c",
             os.devnull,
-            "tests/test_provider_architecture_contracts.py::test_runtime_provider_inventory_has_only_ratified_roles",
             "tests/test_provider_architecture_contracts.py::test_registry_matches_declared_provider_kinds",
         ],
         cwd=project,

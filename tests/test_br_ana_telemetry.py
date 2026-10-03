@@ -24,13 +24,8 @@ from rivretrieve._internal.boundary_probes import (
 from rivretrieve._internal.driver import drive
 from rivretrieve._internal.engine import (
     ObservationRequest,
-    ProductWindowDeclarations,
     RequestedWindow,
-    StopConvention,
-    WindowDeclaration,
     WindowEndpoint,
-    WindowGranularity,
-    WindowRenderingVocabulary,
 )
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
@@ -183,30 +178,6 @@ def test_fixed_spans_match_recorded_native_values_and_preserve_nulls(
         call for call in result.provenance.calls_made if "request_parameters" in call and call["request_parameters"]
     ]
     assert [call["request_parameters"]["Data de Busca (yyyy-MM-dd)"] for call in calls] == list(anchors)
-
-
-@pytest.mark.parametrize("product", _PRODUCTS)
-@pytest.mark.recorded("tests/recordings/br_ana")
-def test_original_capped_span_reproduces_real_overlapping_rows(retained_evidence_root, product: ProductId) -> None:
-    class CappedStages(_Stages):
-        window_declarations = ProductWindowDeclarations(
-            {
-                product: WindowDeclaration(
-                    WindowGranularity("capped-span"),
-                    WindowRenderingVocabulary.DATE,
-                    StopConvention.INCLUSIVE,
-                    30,
-                )
-            }
-        )
-
-    result = drive(
-        _request(product, "2023-12-05", "2024-01-02"),
-        CappedStages(),
-        provenance=ObservationProvenance(source="test-old-window-contract", provider_id=_PROVIDER),
-        transport=ReplayTransport([_recording(retained_evidence_root, a) for a in ("2024-01-01", "2024-01-04")]),
-    )
-    assert result.canonical_rows.is_duplicated().any()
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)

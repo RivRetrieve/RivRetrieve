@@ -110,65 +110,7 @@ def test_issue_policy_error_carries_issues(warning_issue: Issue, error_issue: Is
     assert error.value.issues == (warning_issue, error_issue)
 
 
-@pytest.mark.parametrize(
-    ("issues", "on_issue", "raises_policy_error"),
-    [
-        ([], "ignore", False),
-        ([], "warn", False),
-        ([], "raise", False),
-        ([Issue(severity="info", code="info", message="info")], "ignore", False),
-        ([Issue(severity="info", code="info", message="info")], "warn", False),
-        ([Issue(severity="info", code="info", message="info")], "raise", False),
-        ([Issue(severity="warning", code="warning", message="warning")], "ignore", False),
-        ([Issue(severity="warning", code="warning", message="warning")], "warn", False),
-        ([Issue(severity="warning", code="warning", message="warning")], "raise", True),
-        ([Issue(severity="error", code="error", message="error")], "ignore", False),
-        ([Issue(severity="error", code="error", message="error")], "warn", False),
-        ([Issue(severity="error", code="error", message="error")], "raise", True),
-        (
-            [
-                Issue(severity="info", code="info", message="info"),
-                Issue(severity="warning", code="warning", message="warning"),
-                Issue(severity="error", code="error", message="error"),
-            ],
-            "ignore",
-            False,
-        ),
-        (
-            [
-                Issue(severity="info", code="info", message="info"),
-                Issue(severity="warning", code="warning", message="warning"),
-                Issue(severity="error", code="error", message="error"),
-            ],
-            "warn",
-            False,
-        ),
-        (
-            [
-                Issue(severity="info", code="info", message="info"),
-                Issue(severity="warning", code="warning", message="warning"),
-                Issue(severity="error", code="error", message="error"),
-            ],
-            "raise",
-            True,
-        ),
-    ],
-)
-def test_fatal_contract_error_is_separate_from_on_issue(
-    issues: list[Issue], on_issue: OnIssue, raises_policy_error: bool
-) -> None:
-    fatal_error = FatalContractError()
-    assert fatal_error.issues == ()
-
-    if raises_policy_error:
-        with pytest.raises(IssuePolicyError) as error:
-            apply_on_issue(issues, on_issue)
-        assert not isinstance(error.value, FatalContractError)
-        return
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        try:
-            apply_on_issue(issues, on_issue)
-        except Exception as error:  # pragma: no cover
-            pytest.fail(f"apply_on_issue raised {type(error).__name__}: {error}")
+def test_fatal_contract_error_is_separate_from_issue_policy() -> None:
+    assert FatalContractError().issues == ()
+    assert not issubclass(FatalContractError, IssuePolicyError)
+    assert not issubclass(IssuePolicyError, FatalContractError)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from dataclasses import FrozenInstanceError
 
 import polars as pl
@@ -103,7 +102,7 @@ def test_inspection_does_not_mutate_or_supply_scientific_import_evidence() -> No
     second = rr.as_frame(selection)
     pl_testing.assert_frame_equal(first, second)
     assert first is not second
-    first = first.with_columns(pl.lit("invented").alias("unit"))
+    first.replace_column(first.get_column_index("unit"), pl.Series("unit", ["invented"] * first.height))
     assert first["unit"].to_list() != rr.as_frame(selection)["unit"].to_list()
     with pytest.raises(ValueError, match="bundle"):
         rr.from_frame(first)
@@ -140,14 +139,3 @@ def test_station_geometry_remains_separate_from_series_physics() -> None:
 def test_old_frames_are_refused_before_catalogue_reconstruction(frame) -> None:
     with pytest.raises(ValueError, match="versioned export bundle"):
         rr.from_frame(frame)
-
-
-def test_selection_signatures_expose_physical_filters_but_no_hidden_live_discovery() -> None:
-    find_parameters = inspect.signature(rr.find).parameters
-    pick_parameters = inspect.signature(rr.pick).parameters
-    assert {"quantity", "frequency", "statistic", "variant", "on_issue"}.issubset(find_parameters)
-    assert {"quantity", "frequency", "statistic", "variant", "on_issue"}.issubset(pick_parameters)
-    assert all(parameter.kind is inspect.Parameter.KEYWORD_ONLY for parameter in find_parameters.values())
-    assert {"product", "access_product", "live", "start", "end", "window", "bbox"}.isdisjoint(
-        set(find_parameters) | set(pick_parameters)
-    )

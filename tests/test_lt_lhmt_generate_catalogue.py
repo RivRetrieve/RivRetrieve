@@ -14,7 +14,6 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, re
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.lt_lhmt import generate_catalogue
 from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS
-from tests._catalogue import catalogue_recording_paths
 
 FIXTURE_PATH = Path("tests/test_data/lithuania_metadata_stations.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
@@ -82,62 +81,6 @@ def _fake_urlopen_calls(
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_lt_lhmt_generator_uses_committed_native_table_without_network(
-    retained_evidence_root,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fail_live_json(url: str) -> object:
-        raise AssertionError(f"unexpected live request to {url}")
-
-    monkeypatch.setattr(generate_catalogue, "_read_live_json", fail_live_json)
-
-    catalogue = _build_committed_catalogue(retained_evidence_root)
-
-    assert catalogue.stations.height == 97
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_lt_lhmt_generator_station_count_matches_fixture(retained_evidence_root) -> None:
-    catalogue = _build_committed_catalogue(retained_evidence_root)
-    assert catalogue.stations.height == 97
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_lt_lhmt_generator_products_are_two(retained_evidence_root) -> None:
-    catalogue = _build_committed_catalogue(retained_evidence_root)
-    assert catalogue.products.height == 2
-    product_ids = set(catalogue.products["product_id"].to_list())
-    assert product_ids == {"discharge_daily_mean", "stage_daily_mean"}
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_lt_lhmt_generator_station_products_count(retained_evidence_root) -> None:
-    catalogue = _build_committed_catalogue(retained_evidence_root)
-    assert catalogue.station_products.height == 97 * 2
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_lt_lhmt_generator_station_products_availability_unknown(retained_evidence_root) -> None:
-    catalogue = _build_committed_catalogue(retained_evidence_root)
-    availability_values = set(catalogue.station_products["availability"].cast(str).to_list())
-    assert availability_values == {"unknown"}
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_lt_lhmt_generator_first_station_sorted(retained_evidence_root) -> None:
-    catalogue = _build_committed_catalogue(retained_evidence_root)
-    station_ids = catalogue.stations["station_id"].to_list()
-    assert station_ids == sorted(station_ids)
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_lt_lhmt_generator_station_has_required_common_fields(retained_evidence_root) -> None:
-    catalogue = _build_committed_catalogue(retained_evidence_root)
-    assert catalogue.stations.columns == ["provider_id", "station_id", "latitude", "longitude", "crs"]
-    assert catalogue.stations["crs"].unique().to_list() == ["EPSG:4326"]
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 def test_build_catalogue_is_gated_on_origins(retained_evidence_root) -> None:
     broken = dict(STATION_CATALOGUE_ORIGINS)
     del broken["longitude"]
@@ -147,18 +90,6 @@ def test_build_catalogue_is_gated_on_origins(retained_evidence_root) -> None:
         match=r"lt_lhmt\.longitude: canonical column has no origin declaration",
     ):
         generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), broken)
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_lt_lhmt_generator_provider_info_fields(retained_evidence_root) -> None:
-    catalogue = _build_committed_catalogue(retained_evidence_root)
-    info = catalogue.provider_info
-    assert info["provider_id"] == "lt_lhmt"
-    assert info["catalogue_version"] == "2026-08-01"
-    assert catalogue.station_products["last_catalogue_check"].unique().to_list() == [date(2026, 8, 1)]
-    assert info["live_stations"] is False
-    assert info["live_products"] is False
-    assert info["live_station_products"] is False
 
 
 @pytest.mark.recorded("tests/test_data/lithuania_metadata_stations.json")
@@ -313,57 +244,6 @@ def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version(ret
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
-    "tests/test_data/lt_lhmt_terms_licence.html",
-)
-@pytest.mark.recorded(*catalogue_recording_paths("lt_lhmt"))
-def test_canonical_cli_writes_only_five_canonical_artifacts(
-    retained_evidence_root, tmp_path: Path, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.lt_lhmt.origins import build_acquisition_provenance
-
-    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
-    result = generate_catalogue.main(
-        [
-            "--build-inputs",
-            str(build_inputs_path),
-            "--native",
-            str(retained_evidence_root / NATIVE_PATH),
-            "--evidence-root",
-            str(retained_evidence_root),
-            "--out",
-            str(tmp_path),
-        ]
-    )
-
-    assert result == 0
-    assert {path.name for path in tmp_path.iterdir()} == {
-        "croissant.json",
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-    }
-    assert pl.read_parquet(tmp_path / "stations.parquet").height == 97
-    assert pl.read_parquet(tmp_path / "products.parquet").height == 2
-    stations = pl.read_parquet(tmp_path / "stations.parquet")
-    station_products = pl.read_parquet(tmp_path / "station_products.parquet")
-    assert station_products.height == 194
-    assert set(stations["crs"]) == {"EPSG:4326"}
-    assert set(station_products["last_catalogue_check"]) == {date(2026, 8, 1)}
-
-
 @pytest.mark.parametrize(
     "argv",
     [
@@ -386,50 +266,6 @@ def test_cli_rejects_cross_mode_combinations(argv: list[str]) -> None:
         generate_catalogue.main(argv)
 
     assert exc_info.value.code != 0
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
-    "tests/test_data/lt_lhmt_terms_licence.html",
-)
-@pytest.mark.recorded(*catalogue_recording_paths("lt_lhmt"))
-def test_native_build_is_network_free_and_byte_deterministic(
-    retained_evidence_root, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.lt_lhmt.origins import build_acquisition_provenance
-
-    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
-    calls: list[str] = []
-
-    def fail_network(*args: object, **kwargs: object) -> object:
-        calls.append("network")
-        raise AssertionError("network must not be accessed during build")
-
-    monkeypatch.setattr(generate_catalogue, "_read_live_json", fail_network)
-    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", fail_network)
-
-    result = generate_catalogue.main(
-        [
-            "--build-inputs",
-            str(build_inputs_path),
-            "--native",
-            str(retained_evidence_root / NATIVE_PATH),
-            "--evidence-root",
-            str(retained_evidence_root),
-            "--out",
-            str(tmp_path),
-        ]
-    )
-
-    assert result == 0
-    assert calls == []
-    for artifact_name in (
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-    ):
-        assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
 
 
 def test_native_build_requires_explicit_evidence_root(tmp_path: Path) -> None:

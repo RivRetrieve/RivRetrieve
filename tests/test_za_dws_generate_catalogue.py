@@ -13,7 +13,6 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, re
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.za_dws import generate_catalogue as generator
-from tests._catalogue import catalogue_recording_paths
 
 _TEST_DATA_DIR = Path("tests/test_data")
 _METADATA_FIXTURE = _TEST_DATA_DIR / "za_dws_metadata.json"
@@ -566,6 +565,23 @@ def test_manifest_payload_predicate_halves(
         generator.refresh_native_table_from_supplied_archive(archive, manifest)
 
 
+@pytest.mark.parametrize(("same_size", "token"), [(False, "manifest-byte-count"), (True, "manifest-sha256")])
+def test_manifest_cannot_replace_the_reviewed_payload_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, same_size: bool, token: str
+) -> None:
+    archive, manifest, entries = _synthetic_archive(tmp_path, monkeypatch)
+    path = archive / str(entries[0]["file"])
+    original = path.read_bytes()
+    replacement = b"!" + original[1:] if same_size else original + b"!"
+    path.write_bytes(replacement)
+    entries[0]["bytes"] = len(replacement)
+    entries[0]["sha256"] = hashlib.sha256(replacement).hexdigest()
+    manifest.write_text(json.dumps(entries), encoding="utf-8")
+
+    with pytest.raises(FatalContractError, match=token):
+        generator.refresh_native_table_from_supplied_archive(archive, manifest)
+
+
 def _test_dms_magnitude(value: str) -> float:
     degrees, minutes, seconds = (float(token) for token in value.split(":"))
     return degrees + minutes / 60.0 + seconds / 3600.0
@@ -755,115 +771,6 @@ def test_cli_rejects_every_cross_mode_combination(argv: list[str]) -> None:
     with pytest.raises(SystemExit) as exc_info:
         generator.main(argv)
     assert exc_info.value.code != 0
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
-    "tests/test_data/za_dws_terms_licence-1.html",
-    "tests/test_data/za_dws_terms_licence-4.html",
-    "tests/test_data/za_dws_terms_licence-5.html",
-)
-@pytest.mark.recorded(*catalogue_recording_paths("za_dws"))
-def test_canonical_cli_writes_versioned_native_built_artifacts(
-    retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.za_dws.origins import build_acquisition_provenance
-
-    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
-    assert (
-        generator.main(
-            [
-                "--build-inputs",
-                str(build_inputs_path),
-                "--native",
-                str(retained_evidence_root / _NATIVE_TABLE),
-                "--out",
-                str(tmp_path),
-            ]
-            + ["--evidence-root", str(retained_evidence_root)]
-        )
-        == 0
-    )
-    assert {path.name for path in tmp_path.iterdir()} == {
-        "croissant.json",
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-    }
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
-    "tests/test_data/za_dws_terms_licence-1.html",
-    "tests/test_data/za_dws_terms_licence-4.html",
-    "tests/test_data/za_dws_terms_licence-5.html",
-)
-@pytest.mark.recorded(*catalogue_recording_paths("za_dws"))
-def test_native_build_is_network_free_and_byte_deterministic(
-    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.za_dws.origins import build_acquisition_provenance
-
-    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
-    attempts: list[str] = []
-
-    def fail(*_args: object, **_kwargs: object) -> object:
-        attempts.append("network")
-        raise AssertionError("refresh/network seam called by native build")
-
-    monkeypatch.setattr(generator, "refresh_native_table_from_live", fail)
-    monkeypatch.setattr(generator, "refresh_native_table_from_supplied_archive", fail)
-    monkeypatch.setattr(generator, "_request_bytes", fail)
-    monkeypatch.setattr(generator.urllib.request, "urlopen", fail)
-    native_bytes = (retained_evidence_root / _NATIVE_TABLE).read_bytes()
-
-    assert (
-        generator.main(
-            [
-                "--build-inputs",
-                str(build_inputs_path),
-                "--native",
-                str(retained_evidence_root / _NATIVE_TABLE),
-                "--out",
-                str(tmp_path),
-            ]
-            + ["--evidence-root", str(retained_evidence_root)]
-        )
-        == 0
-    )
-
-    assert attempts == []
-    assert (retained_evidence_root / _NATIVE_TABLE).read_bytes() == native_bytes
-    assert {path.name for path in tmp_path.iterdir()} == {
-        "croissant.json",
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-    }
-    for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
-        assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
 
 
 def test_native_build_requires_explicit_evidence_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

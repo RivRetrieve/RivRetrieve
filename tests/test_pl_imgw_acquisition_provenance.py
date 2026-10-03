@@ -534,7 +534,10 @@ def test_packaged_poland_provenance_propagates_with_source_series_context() -> N
     assert next(location for location in selection.locations if location.station_id == "149180010").crs == "unknown"
 
 
-def test_poland_observation_result_propagates_two_sources_and_series_context() -> None:
+def test_poland_observation_result_propagates_two_sources_and_series_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     selection = rr.find(provider="pl_imgw", station="149180010", quantity="discharge", frequency="daily")
     result = rr.fetch(selection, start="2024-01-01", end="2024-01-02", on_issue="ignore")
 

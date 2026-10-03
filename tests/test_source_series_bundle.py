@@ -68,19 +68,11 @@ def test_post_fetch_pick_preserves_original_request_and_publisher_receipt(
     pl_testing.assert_frame_equal(restored.data, narrowed.data)
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
-def test_bundle_refuses_unknown_format_before_scientific_decode(monkeypatch, tmp_path, retained_evidence_root: Path):
-    result, _ = _result(monkeypatch, tmp_path, retained_evidence_root=retained_evidence_root)
-    original = rr.to_bundle(result)
+def test_bundle_refuses_unknown_format_before_scientific_decode():
     output = BytesIO()
-    with ZipFile(BytesIO(original)) as source, ZipFile(output, "w", compression=ZIP_DEFLATED) as destination:
-        for name in source.namelist():
-            content = source.read(name)
-            if name == "manifest.json":
-                manifest = json.loads(content)
-                manifest["version"] = 999
-                content = json.dumps(manifest).encode()
-            destination.writestr(name, content)
+    with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json", json.dumps({"format": "rivretrieve-source-series", "version": 999}))
+        archive.writestr("observations.parquet", b"not a parquet file")
     with pytest.raises(ValueError, match="format version"):
         rr.from_bundle(output.getvalue())
 

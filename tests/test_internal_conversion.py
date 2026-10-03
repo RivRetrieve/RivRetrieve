@@ -5,12 +5,6 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from rivretrieve._internal.catalogues.schemas import (
-    CatalogueSchema,
-)
-from rivretrieve._internal.catalogues.schemas import (
-    validate_catalogue as real_validate_catalogue,
-)
 from rivretrieve._internal.engine import (
     CanonicalRowsSchema,
     Daily,
@@ -29,8 +23,8 @@ from rivretrieve._internal.engine import (
     WindowEndpoint,
     ZoneValue,
 )
-from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import OnIssue, ProductId
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.source_series import (
     ClippingAxis,
     EvidenceFact,
@@ -141,47 +135,6 @@ def test_convert_validates_rows_schema_before_product_work() -> None:
             _window(datetime(2023, 1, 1), datetime(2023, 1, 1)),
             series=(),
         )
-
-
-def test_convert_invokes_real_rows_and_canonical_validators_in_order(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import rivretrieve._internal.conversion as conversion
-
-    calls: list[str] = []
-
-    def recording_validator(
-        frame: pl.DataFrame,
-        schema: CatalogueSchema,
-        *,
-        on_issue: OnIssue,
-    ) -> list[Issue]:
-        calls.append(schema.name)
-        return real_validate_catalogue(frame, schema, on_issue=on_issue)
-
-    monkeypatch.setattr(conversion, "validate_catalogue", recording_validator)
-    rows = _rows(
-        [
-            {
-                "station_id": "station-1",
-                "product_id": "level",
-                "time": datetime(2023, 1, 15, 12),
-                "value": 2.0,
-                "time_zone": "+00:00",
-            }
-        ]
-    )
-
-    provider_config = _config({"level": _product()})
-    native_rows = rows
-    conversion.convert(
-        (native_rows),
-        (provider_config),
-        _window(datetime(2023, 1, 15, 11), datetime(2023, 1, 15, 13)),
-        series=_series(native_rows, provider_config),
-    )
-
-    assert calls == ["Rows", "CanonicalRows"]
 
 
 def test_convert_rejects_undeclared_products() -> None:

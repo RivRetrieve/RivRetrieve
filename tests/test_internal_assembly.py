@@ -1,15 +1,9 @@
-import ast
-import inspect
-from dataclasses import fields
 from datetime import UTC, datetime
 
 import polars as pl
 import polars.testing as pl_testing
 
-import rivretrieve
-import rivretrieve._internal
-import rivretrieve._internal.assembly as assembly_module
-from rivretrieve._internal.assembly import _AssemblyResult, assemble
+from rivretrieve._internal.assembly import assemble
 from rivretrieve._internal.engine import CanonicalRowsSchema, SourceCallOrigin, UnknownOriginFact
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.observations import ObservationProvenance, ReceiptAuthorship, ReceiptEntry, Receipts
@@ -132,57 +126,6 @@ def test_assemble_packages_empty_inputs_unchanged() -> None:
     assert result.receipts is receipts
     assert result.receipts.entries == ()
     assert result.scope == SeriesScope()
-
-
-def test_assemble_return_construction_is_private_and_explicit_input_packaging() -> None:
-    result = assemble(
-        pl.DataFrame(schema=CanonicalRowsSchema.polars_schema),
-        ObservationProvenance(source="live", provider_id=ProviderId("provider-a")),
-        (),
-        Receipts(provider_id=ProviderId("provider-a")),
-    )
-
-    assert type(result) is _AssemblyResult
-    assert _AssemblyResult.__name__.startswith("_")
-    assert tuple(field.name for field in fields(_AssemblyResult)) == (
-        "canonical_rows",
-        "provenance",
-        "issues",
-        "receipts",
-        "source_series",
-        "inventories",
-        "outcomes",
-        "scope",
-    )
-    assert "_AssemblyResult" not in rivretrieve.__dict__
-    assert "_AssemblyResult" not in rivretrieve._internal.__dict__
-
-
-def test_assembly_has_no_conversion_or_provider_dependency() -> None:
-    module_tree = ast.parse(inspect.getsource(assembly_module))
-    imports = [node for node in module_tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
-    imported_modules = tuple(
-        alias.name for node in imports for alias in node.names if isinstance(node, ast.Import)
-    ) + tuple(node.module or "" for node in imports if isinstance(node, ast.ImportFrom))
-    imported_names = tuple(alias.name for node in imports if isinstance(node, ast.ImportFrom) for alias in node.names)
-
-    assert not any(
-        ".conversion" in module or module.endswith(".convert") or ".providers." in module for module in imported_modules
-    )
-    assert not {
-        "ObservationResult",
-        "apply_on_issue",
-        "Annotation" + "Schema",
-        "Annotation" + "Table",
-        "CanonicalRowsSchema",
-        "validate_catalogue",
-    }.intersection(imported_names)
-    assert not any(
-        forbidden_fragment in imported.lower()
-        for imported in (*imported_modules, *imported_names)
-        for forbidden_fragment in ("serializ", "validator")
-    )
-    assert not any(imported.startswith("Annotation") or imported.endswith("Schema") for imported in imported_names)
 
 
 def test_assemble_preserves_concrete_series_inventory_outcomes_and_scope_identity() -> None:

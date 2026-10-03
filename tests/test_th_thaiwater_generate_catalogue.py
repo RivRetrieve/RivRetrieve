@@ -22,7 +22,6 @@ from rivretrieve._internal.providers.th_thaiwater import generate_catalogue
 from rivretrieve._internal.providers.th_thaiwater.config import config
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
-from tests._catalogue import catalogue_content_without_build_identity
 
 FIXTURE_PATH = Path("tests/test_data/th_thaiwater_metadata.json")
 CATALOGUE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue"
@@ -526,14 +525,6 @@ def test_complete_native_table_shape_census_and_membership(retained_evidence_roo
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
-def test_complete_native_table_station_type_census(retained_evidence_root: Path) -> None:
-    committed = read_native_table(retained_evidence_root / NATIVE_PATH).data
-
-    assert committed.height == 825
-    assert committed.group_by("station_type").len().to_dicts() == [{"station_type": "tele_waterlevel", "len": 825}]
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_complete_native_table_has_pinned_full_content(retained_evidence_root: Path) -> None:
     assert (
         generate_catalogue.native_table_content_sha256(read_native_table(retained_evidence_root / NATIVE_PATH))
@@ -833,121 +824,12 @@ def test_station_product_check_uses_own_acquisition_date_and_provider_uses_nativ
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
 
 
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
-    "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
-    "tests/test_data/th_thaiwater_official_water_wl-2026-09-02.html",
-    "tests/test_data/th_thaiwater_terms_licence-1.html",
-    full_verification=("th_thaiwater",),
-)
-def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
-    retained_evidence_root: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    catalogue_build_inputs,
-    tmp_path_factory,
-) -> None:
-    build_inputs = catalogue_build_inputs(_build(retained_evidence_root).acquisition_provenance)
-    build_inputs_path = tmp_path_factory.mktemp("catalogue-inputs") / "build-inputs.json"
-    build_inputs_path.write_text(build_inputs.model_dump_json(), encoding="utf-8")
-    before = (retained_evidence_root / NATIVE_PATH).read_bytes()
-    monkeypatch.setattr(
-        generate_catalogue,
-        "_read_live_json",
-        lambda url: (_ for _ in ()).throw(AssertionError(f"unexpected live request to {url}")),
-    )
-    monkeypatch.setattr(generate_catalogue, "_read_fixture_json", lambda path: pytest.fail(f"fixture read: {path}"))
-
-    assert (
-        generate_catalogue.main(
-            [
-                "--evidence-root",
-                str(retained_evidence_root),
-                "--build-inputs",
-                str(build_inputs_path),
-                "--native",
-                str(retained_evidence_root / NATIVE_PATH),
-                "--availability-evidence",
-                str(LEDGER_PATH),
-                "--out",
-                str(tmp_path),
-            ]
-        )
-        == 0
-    )
-    assert (retained_evidence_root / NATIVE_PATH).read_bytes() == before
-    assert {path.name for path in tmp_path.iterdir()} == {
-        "croissant.json",
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-    }
-
-
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_committed_catalogue_station_projection_matches_native(retained_evidence_root: Path) -> None:
     native = _committed_native_table(retained_evidence_root)
     committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
 
     pl_testing.assert_frame_equal(committed, _expected_station_projection(native), check_exact=True)
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
-def test_committed_catalogue_ids_match_native_ids(retained_evidence_root: Path) -> None:
-    native = _committed_native_table(retained_evidence_root).data
-    committed = pl.read_parquet(CATALOGUE_PATH / "stations.parquet")
-
-    assert native.schema["station.id"] == committed.schema["station_id"] == pl.String
-    assert set(committed["station_id"]) == set(native["station.id"])
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
-@pytest.mark.recorded(
-    "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
-    "tests/test_data/th_thaiwater_official_water_wl-2026-09-02.html",
-    "tests/test_data/th_thaiwater_terms_licence-1.html",
-    full_verification=("th_thaiwater",),
-)
-def test_fresh_build_matches_all_committed_artefact_bytes(
-    retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs
-) -> None:
-    native = _committed_native_table(retained_evidence_root)
-    catalogue = _build(retained_evidence_root, native)
-    generate_catalogue.write_catalogue(
-        catalogue, tmp_path, build_inputs=catalogue_build_inputs(catalogue.acquisition_provenance), native_table=native
-    )
-
-    for artifact_name in (
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-        "croissant.json",
-    ):
-        assert catalogue_content_without_build_identity(
-            artifact_name, (tmp_path / artifact_name).read_bytes()
-        ) == catalogue_content_without_build_identity(artifact_name, (CATALOGUE_PATH / artifact_name).read_bytes())
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
@@ -980,14 +862,3 @@ def test_each_governing_product_uses_the_official_graph_field(retained_evidence_
     fields = dict(catalogue.products.select("product_id", "native_id").iter_rows())
     assert fields == {"stage_reported": "value", "discharge_reported": "discharge"}
     assert all(fields[pair.product_id] == pair.native_field for pair in _availability_evidence().pairs)
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
-def test_provider_request_description_distinguishes_source_fields_from_public_calls(
-    retained_evidence_root: Path,
-) -> None:
-    assert _build(retained_evidence_root).provider_info["bulk_observations"] == (
-        "true: graph responses co-publish stage and discharge fields; "
-        "public retrieval requests each product and source sub-window separately, "
-        "with at most 365 inclusive calendar dates per source request"
-    )

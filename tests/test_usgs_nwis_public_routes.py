@@ -57,14 +57,17 @@ def test_recorded_public_route_identity_physics_cache_and_receipt(
         identities.add(item["time_series_id"])
         stamp = datetime.fromisoformat(item["time"].replace("Z", "+00:00")).replace(tzinfo=None)
         if datetime.fromisoformat(start) <= stamp <= datetime.fromisoformat(end):
-            expected.append(float(item["value"]) * factor)
+            expected.append((stamp, float(item["value"]) * factor))
     assert len(expected) == (7 if daily else 96)
 
     def fetch(mode):
         return rr.fetch(selection, start=start, end=end, cache=mode, receipts=True, on_issue="raise")
 
     bypass = fetch("bypass")
-    pt.assert_frame_equal(bypass.data.select("value").sort("value"), pl.DataFrame({"value": expected}).sort("value"))
+    expected_rows = pl.DataFrame(expected, schema={"time": pl.Datetime("us"), "value": pl.Float64}, orient="row")
+    pt.assert_frame_equal(
+        bypass.data.select("time", "value").sort("time", "value"), expected_rows.sort("time", "value")
+    )
     assert {s.identity.published_id for s in bypass.source_series} == identities
     assert all(s.identity.namespace == "USGS.WaterData.time_series_id" for s in bypass.source_series)
     assert all(s.identity.description is None for s in bypass.source_series)

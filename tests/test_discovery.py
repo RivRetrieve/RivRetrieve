@@ -7,12 +7,11 @@ import pytest
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
-from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.discovery import products
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.registry import UnknownProviderError, _registry
-from rivretrieve._internal.results import CatalogProvenance, CatalogResult
+from rivretrieve._internal.results import CatalogResult
 
 EXPECTED_PRODUCT_IDS = [
     "discharge_daily",
@@ -200,31 +199,6 @@ def test_global_discovery_disabled_defaults_empty_registry_distinguishes_result_
 
     assert product_result == []
     assert type(product_result) is list
-
-
-def test_global_discovery_uses_reader_for_table_selection_and_validation(
-    monkeypatch: pytest.MonkeyPatch,
-    stub_packaged_catalogue_artifact: Callable[..., PackagedCatalogArtifact],
-) -> None:
-    _disable_default_provider_registration(monkeypatch)
-    artifact = stub_packaged_catalogue_artifact("stub_provider")
-    _registry.register("stub_provider", artifact)
-    calls = {"products": 0}
-
-    def read_products(self: CatalogueReader) -> CatalogResult[pl.DataFrame]:
-        calls["products"] += 1
-        return CatalogResult(
-            data=self.artifact.products,
-            provenance=CatalogProvenance(source="packaged", provider_id=self.provider_id),
-            issues=(),
-        )
-
-    monkeypatch.setattr(CatalogueReader, "read_products", read_products)
-
-    products_result = products()
-
-    assert products_result == ["level"]
-    assert calls == {"products": 1}
 
 
 def test_products_returns_exact_global_vocabulary_and_every_provider_subset() -> None:

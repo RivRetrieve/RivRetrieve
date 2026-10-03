@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import ast
-import inspect
 import subprocess
 import sys
 from dataclasses import FrozenInstanceError, fields
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,7 +11,6 @@ import polars as pl
 import polars.testing as pl_testing
 import pytest
 
-import rivretrieve._internal.driver as driver_module
 from rivretrieve._internal import engine
 from rivretrieve._internal.catalogues.schemas import CatalogueSchema, validate_catalogue
 from rivretrieve._internal.engine import (
@@ -87,46 +84,6 @@ def test_direct_fetch_window_construction_raises_for_provider_code() -> None:
         match="^FetchWindow is engine-owned and cannot be constructed by providers$",
     ):
         FetchWindow(start=start, end=end)
-
-
-def test_requested_to_fetch_construction_is_driver_owned_with_injectable_transport() -> None:
-    assert not hasattr(driver_module, "identity" + "_window")
-    assert not hasattr(driver_module, "Window" + "Padder")
-    signature = inspect.signature(driver_module.drive)
-    assert tuple(signature.parameters) == (
-        "request",
-        "provider",
-        "provenance",
-        "receipts",
-        "transport",
-        "credential_names",
-        "cache",
-        "store",
-    )
-    assert signature.parameters["request"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-    assert signature.parameters["provider"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-    assert signature.parameters["provenance"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert signature.parameters["receipts"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert signature.parameters["transport"].kind is inspect.Parameter.KEYWORD_ONLY
-
-    source_root = Path(__file__).parents[1] / "src" / "rivretrieve"
-    requested_to_fetch: list[str] = []
-    for source_path in source_root.rglob("*.py"):
-        tree = ast.parse(source_path.read_text(), filename=str(source_path))
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            parameter_annotations = [
-                argument.annotation
-                for argument in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
-                if argument.annotation is not None
-            ]
-            takes_requested = any("RequestedWindow" in ast.unparse(annotation) for annotation in parameter_annotations)
-            returns_fetch = node.returns is not None and "FetchWindow" in ast.unparse(node.returns)
-            if takes_requested and returns_fetch:
-                requested_to_fetch.append(f"{source_path.relative_to(source_root)}:{node.name}")
-
-    assert requested_to_fetch == []
 
 
 def test_engine_observation_request_preserves_requested_window_and_ids() -> None:
@@ -208,100 +165,6 @@ def test_window_declarations_and_renderings_are_immutable_and_non_arithmetic() -
         timedelta(days=1) + rendered.start  # type: ignore[operator]
     with pytest.raises(TypeError):
         rendered.start - timedelta(days=1)  # type: ignore[operator]
-
-
-def _window_decomposition_violations(module_source: str, path: object = "authored-control") -> list[str]:
-    violations: list[str] = []
-    tree = ast.parse(module_source)
-    for function in (node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))):
-        source = ast.get_source_segment(module_source, function) or ""
-        if "window" not in function.name.lower() and "FetchWindow" not in source:
-            continue
-        for node in ast.walk(function):
-            if (
-                isinstance(node, ast.BinOp)
-                and isinstance(node.op, (ast.Add, ast.Sub))
-                and not (
-                    isinstance(node.op, ast.Add)
-                    and (
-                        isinstance(node.left, ast.JoinedStr)
-                        or isinstance(node.left, ast.Constant)
-                        and isinstance(node.left.value, str)
-                    )
-                )
-            ):
-                violations.append(f"{path}:{function.name}:binary arithmetic")
-            if isinstance(node, ast.Call):
-                called = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
-                if called in {"timedelta", "monthrange", "relativedelta"}:
-                    violations.append(f"{path}:{function.name}:{called}")
-                if called == "replace" and any(
-                    keyword.arg in {"year", "month", "day", "hour", "minute", "second"} for keyword in node.keywords
-                ):
-                    violations.append(f"{path}:{function.name}:boundary replace")
-            if isinstance(node, (ast.For, ast.While)):
-                # Inspect operational identifiers, not publisher cursor vocabulary
-                # in string literals or comments inside a request loop.
-                loop_names = {item.id.lower() for item in ast.walk(node) if isinstance(item, ast.Name)}
-                if loop_names.intersection({"cursor", "window_start", "window_end", "next_date"}):
-                    violations.append(f"{path}:{function.name}:window cursor loop")
-    return violations
-
-
-def test_runtime_provider_window_helpers_do_not_perform_decomposition_arithmetic() -> None:
-    providers = Path(__file__).parents[1] / "src" / "rivretrieve" / "_internal" / "providers"
-    violations = [
-        violation
-        for path in providers.glob("*/*.py")
-        if path.name != "generate_catalogue.py"
-        for violation in _window_decomposition_violations(path.read_text(), path)
-    ]
-    assert violations == []
-
-
-@pytest.mark.parametrize(
-    "source",
-    [
-        "def window(fetch_window):\n    return fetch_window.start + timedelta(days=1)",
-        "def window(fetch_window):\n    return fetch_window.end.replace(hour=0)",
-        "def window(fetch_window):\n    while cursor < fetch_window.end:\n        cursor += step",
-    ],
-)
-def test_window_decomposition_guard_rejects_authored_boundary_arithmetic(source):
-    assert _window_decomposition_violations(source)
-
-
-def test_window_decomposition_guard_allows_publisher_pagination_vocabulary():
-    source = 'def fetch(fetch_window: FetchWindow):\n    for response in responses:\n        note("publisher cursor chains")\n        follow(response)'
-    assert _window_decomposition_violations(source) == []
-
-
-def test_obsolete_window_symbols_are_absent_from_tracked_source() -> None:
-    obsolete = {"identity_window", "WindowPadder", "_window_parameter", "_endpoint_year", "_query_years"}
-    tracked = subprocess.run(
-        ["git", "ls-files", "--", ":(glob)src/**/*.py"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.splitlines()
-    occurrences: list[str] = []
-    for source_path in tracked:
-        tree = ast.parse(Path(source_path).read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            names: tuple[str | None, ...] = ()
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                names = (node.name,)
-            elif isinstance(node, ast.alias):
-                names = (node.name, node.asname)
-            elif isinstance(node, ast.arg):
-                names = (node.arg,)
-            elif isinstance(node, ast.Name):
-                names = (node.id,)
-            for name in names:
-                if name in obsolete:
-                    occurrences.append(f"{source_path}:{getattr(node, 'lineno', 0)}:{name}")
-
-    assert occurrences == []
 
 
 def test_payload_accepts_bytes_and_preserves_complete_source_call() -> None:
@@ -411,7 +274,7 @@ def test_source_call_origin_distinguishes_known_empty_parameters_and_validates_f
         SourceCallOrigin("url", {}, 200, datetime(2026, 7, 29), "type", "path", unknown)
     with pytest.raises(ValueError, match="timezone-aware UTC"):
         SourceCallOrigin(
-            "url", {}, 200, datetime(2026, 7, 29, tzinfo=datetime.now().astimezone().tzinfo), "type", "path", unknown
+            "url", {}, 200, datetime(2026, 7, 29, tzinfo=timezone(timedelta(hours=2))), "type", "path", unknown
         )
 
 

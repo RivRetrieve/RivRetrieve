@@ -10,8 +10,6 @@ from pydantic import ValidationError
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
-    ExternalFactReference,
-    FactBinding,
     Transformation,
 )
 from tests._provenance import legacy_document
@@ -100,59 +98,6 @@ def test_absence_marker_value_must_match_its_canonical_output_fact() -> None:
         AcquisitionProvenance.model_validate(document)
 
 
-def test_exclusive_shape_prevents_direct_self_reference() -> None:
-    provenance = AcquisitionProvenance.model_validate(_document("ca_eccc"))
-    bindings = list(provenance.fact_bindings)
-    original = next(binding for binding in bindings if binding.transformation is not None)
-    bad = FactBinding.model_construct(
-        fact_group=original.fact_group,
-        facts=original.facts,
-        source_id="ca_eccc_msc",
-        acquisition_id="station_registry_capture_2026_08_02",
-        transformation=Transformation(
-            name="invalid direct self edge",
-            external_inputs=(ExternalFactReference(source_id="ca_eccc_msc", fact=original.facts[0]),),
-        ),
-    )
-    bindings[bindings.index(original)] = bad
-    payload = _model_payload(provenance)
-    payload["fact_bindings"] = tuple(bindings)
-
-    with pytest.raises(ValidationError, match="derived bindings cannot attribute outputs"):
-        AcquisitionProvenance.model_validate(payload)
-
-
-def test_exclusive_shape_prevents_indirect_cycle() -> None:
-    provenance = AcquisitionProvenance.model_validate(_document("ca_eccc"))
-    bindings = list(provenance.fact_bindings)
-    first, second = bindings[:2]
-    bindings[0] = FactBinding.model_construct(
-        fact_group=first.fact_group,
-        facts=first.facts,
-        source_id="ca_eccc_msc",
-        acquisition_id="station_registry_capture_2026_08_02",
-        transformation=Transformation(
-            name="invalid first cycle edge",
-            external_inputs=(ExternalFactReference(source_id="ca_eccc_msc", fact=second.facts[0]),),
-        ),
-    )
-    bindings[1] = FactBinding.model_construct(
-        fact_group=second.fact_group,
-        facts=second.facts,
-        source_id="ca_eccc_msc",
-        acquisition_id="station_registry_capture_2026_08_02",
-        transformation=Transformation(
-            name="invalid second cycle edge",
-            external_inputs=(ExternalFactReference(source_id="ca_eccc_msc", fact=first.facts[0]),),
-        ),
-    )
-    payload = _model_payload(provenance)
-    payload["fact_bindings"] = tuple(bindings)
-
-    with pytest.raises(ValidationError, match="derived bindings cannot attribute outputs"):
-        AcquisitionProvenance.model_validate(payload)
-
-
 def test_transformation_output_cannot_resolve_as_an_external_source_fact() -> None:
     document = _document("th_thaiwater")
     platform = next(item for item in document["fact_bindings"] if item["fact_group"] == "canonical_platform_carrier")
@@ -229,12 +174,13 @@ def test_transformations_require_lineage_except_authored_constants() -> None:
         AcquisitionProvenance.model_validate(thailand)
 
 
-def test_acquisition_record_requires_what_and_where() -> None:
+@pytest.mark.parametrize(("field", "value"), [("description", "   "), ("requested_from", [])])
+def test_acquisition_record_requires_what_and_where(field, value) -> None:
     document = _document("ca_eccc")
+    AcquisitionProvenance.model_validate(document)
     acquisition = document["source_records"][0]["acquisitions"][0]
-    acquisition["description"] = "   "
-    acquisition["requested_from"] = []
-    with pytest.raises(ValidationError, match="description|requested_from"):
+    acquisition[field] = value
+    with pytest.raises(ValidationError, match=field):
         AcquisitionProvenance.model_validate(document)
 
 

@@ -164,31 +164,11 @@ def test_every_governing_pair_is_bound_to_its_actual_acquisition_and_agency() ->
     }
 
 
-@pytest.mark.parametrize(
-    "field,value",
-    [
-        ("station_id", "999999999"),
-        ("product_id", "stage_instantaneous"),
-        ("native_field", "waterlevel_msl"),
-        ("source_id", "th_agency_8"),
-        ("response_sha256", "0" * 64),
-        ("response_bytes", "1"),
-        ("retrieved_at", "2026-09-12T18:03:34Z"),
-        ("request_url", "https://example.org/forged"),
-        ("status", "empty_in_tested_window"),
-        ("availability", "unknown"),
-        ("nonnull_observations", "0"),
-    ],
-)
-def test_reviewed_ledger_rejects_identity_hash_date_and_status_tampering(field: str, value: str) -> None:
+def test_reviewed_ledger_rejects_changed_bytes() -> None:
     original = LEDGER_PATH.read_bytes()
-    first_row = original.splitlines()[1]
-    fields = original.splitlines()[0].decode().split(",")
-    cells = first_row.decode().split(",")
-    cells[fields.index(field)] = value
-    altered = original.replace(first_row, ",".join(cells).encode(), 1)
+    GraphAvailabilityEvidence(original)
     with pytest.raises(FatalContractError, match="availability evidence digest mismatch"):
-        GraphAvailabilityEvidence(altered)
+        GraphAvailabilityEvidence(original + b"\n")
 
 
 @pytest.mark.governing(

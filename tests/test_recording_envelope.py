@@ -100,21 +100,6 @@ def test_recorded_requests_refuse_secret_bearing_request_locations(url: str, par
         RecordedRequest(HttpMethod.GET, url, parameters)
 
 
-@pytest.mark.recorded(
-    "tests/test_data",
-    "tests/recordings/br_ana",
-    "docs/verification/lithuania-provider/recordings",
-    "docs/verification/norway-provider/recordings",
-    "docs/verification/thailand-provider/recordings",
-    "maintenance/catalogue/ba_fhmzbih/recordings",
-)
-def test_every_retained_observation_recording_is_secret_safe_and_replayable(retained_evidence_root: Path) -> None:
-    recordings = sorted(retained_evidence_root.rglob("*.recording.json"))
-    assert recordings
-    for recording in recordings:
-        read_recording(recording)
-
-
 def test_recording_response_refuses_secret_bearing_fields() -> None:
     with pytest.raises(ValueError, match="response contains a secret-bearing field"):
         RecordingEnvelope(

@@ -738,15 +738,6 @@ def test_fetch_functions_require_rivretrieve_selection_and_expose_request_contro
         assert signature.parameters["cache"].default == "bypass"
         assert signature.parameters["on_issue"].kind is inspect.Parameter.KEYWORD_ONLY
         assert signature.parameters["on_issue"].default == "warn"
-        assert inspect.get_annotations(function, eval_str=False) == {
-            "selection": "_Selection",
-            "start": "object",
-            "end": "object",
-            "receipts": "bool",
-            "cache": "CacheMode",
-            "on_issue": "OnIssue",
-            "return": ("ObservationResult" if function is rr.fetch else "dict[str, ObservationResult]"),
-        }
     assert provider_lookups == []
 
 

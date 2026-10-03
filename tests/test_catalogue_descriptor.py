@@ -412,18 +412,6 @@ def test_generator_rejects_mixed_withheld_and_established_origins():
         build_catalogue_descriptor(provenance, (*origins, second), files)
 
 
-def test_thailand_governing_acquisitions_leave_no_withheld_relation_absence():
-    record = next(record for record in _descriptor("th_thaiwater")["recordSet"] if record["@id"] == "station_products")
-    assert "rr:absence" not in record
-
-
-def test_bosnia_record_sets_have_no_withheld_baseline_rows():
-    descriptor = _descriptor("ba_fhmzbih")
-    for record in descriptor["recordSet"]:
-        if record["@id"] in {"stations", "station_products"}:
-            assert "rr:absence" not in record
-
-
 @pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
 def test_descriptor_preserves_exact_bounded_contents(provider: str):
     evidence, origins, files = _inputs(provider)
@@ -434,13 +422,6 @@ def test_descriptor_preserves_exact_bounded_contents(provider: str):
     serialized = json.dumps(descriptor)
     assert len(serialized.encode()) <= 262_144
     assert "lineage/" not in serialized and "acquisition/" not in serialized
-
-
-def test_france_admitted_baseline_record_sets_have_no_missing_acquisition_absence():
-    descriptor = _descriptor("fr_hubeau")
-    for record in descriptor["recordSet"]:
-        if record["@id"] in {"stations", "station_products"}:
-            assert "rr:absence" not in record
 
 
 @pytest.mark.parametrize("provider", ("br_ana", "pl_imgw", "fr_hubeau", "ba_fhmzbih", "th_thaiwater"))

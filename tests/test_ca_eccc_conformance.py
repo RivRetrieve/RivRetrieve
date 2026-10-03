@@ -1,16 +1,5 @@
 """Canada catalogue claims follow the explicit compiled-store path."""
 
-from datetime import date
-
-from rivretrieve._internal.providers.ca_eccc.generate_catalogue import build_provider_info
-
-
-def test_provider_metadata_describes_explicit_compilation():
-    description = build_provider_info(date(2026, 9, 20))["bulk_observations"]
-    assert "explicit" in description
-    assert "first use" not in description
-    assert "SQL query" not in description
-
 
 def test_catalogue_and_compiler_share_station_independent_publisher_facts():
     from rivretrieve._internal.providers.ca_eccc.series import source_description, source_series

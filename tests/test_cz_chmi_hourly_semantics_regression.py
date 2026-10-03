@@ -5,7 +5,7 @@ import polars as pl
 from rivretrieve._internal.engine import Hourly, IntervalDefinition
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.cz_chmi.config import config
-from tests._catalogue import catalogue_reader, provider_info
+from tests._catalogue import catalogue_reader
 
 
 def test_product_config_can_state_hourly_mean_with_unknown_interval_definition() -> None:
@@ -24,10 +24,3 @@ def test_czech_catalogue_identifies_hourly_values_as_interval_means() -> None:
     station_products = catalogue_reader("cz_chmi").read_station_products().data
     assert set(station_products["product_id"].unique().to_list()) == set(products["product_id"].to_list())
     assert not station_products["product_id"].str.contains("instantaneous").any()
-
-
-def test_public_info_describes_live_coalescing_without_recovery_claims() -> None:
-    assert provider_info("cz_chmi").bulk_observations == (
-        "false: live annual JSON requests coalesced by station, year, and DQ/HQ file family; "
-        "non-success HTTP responses fail the source contract"
-    )

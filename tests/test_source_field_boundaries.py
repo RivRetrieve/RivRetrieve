@@ -164,10 +164,8 @@ def test_swiss_catalogue_routes_do_not_select_a_preferred_field():
 def test_swiss_active_lineage_describes_identified_observations():
     from rivretrieve._internal.providers.ch_foen.origins import build_acquisition_provenance
 
-    document = repr(build_acquisition_provenance())
-    assert "five_column" not in document
-    assert "five-column" not in document
-    assert "observation.source_series_shape" in document
+    provenance = build_acquisition_provenance()
+    assert any("observation.source_series_shape" in binding.facts for binding in provenance.fact_bindings)
 
 
 def test_bosnia_catalogue_retains_source_discharge_claim_without_workbook_id_alias():

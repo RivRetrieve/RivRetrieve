@@ -135,16 +135,6 @@ def test_discovered_fixture_inventory_exercises_the_production_seam() -> None:
     assert invalid_paths.keys() == EXPECTED.keys()
     print(f"discovered stores={len(paths)} valid={len(valid_paths)} invalid={len(invalid_paths)}")
 
-    controlled_name = sorted(invalid_paths)[0]
-    with pytest.raises(ObservationStoreRefusedError) as controlled_refusal:
-        validate_store(StoreRoot(invalid_paths[controlled_name].resolve()), PROVIDER_ID)
-    sentinel_expected = dict(EXPECTED)
-    sentinel_expected[controlled_name] = (sentinel_expected[controlled_name][0], "deterministic-control-sentinel")
-    with pytest.raises(AssertionError, match=f"CONTROL defect mismatch: {controlled_name}"):
-        assert controlled_refusal.value.refusal.defect == sentinel_expected[controlled_name][1], (
-            f"CONTROL defect mismatch: {controlled_name}"
-        )
-
     for _name, path in sorted(valid_paths.items()):
         resolved = path.resolve()
         result = validate_store(StoreRoot(resolved), PROVIDER_ID)
@@ -435,18 +425,11 @@ def _assert_snapshots_equal(before: dict[str, str], after: dict[str, str]) -> No
     assert not changed, f"changed paths: {changed!r}"
 
 
-def test_refusal_never_migrates_or_writes_and_digest_control_fires(tmp_path: Path) -> None:
+def test_refusal_never_migrates_or_writes(tmp_path: Path) -> None:
     store = _copy_fixture(tmp_path, "invalid_value_state_combination")
     before = _snapshot(store)
     _assert_refusal(store, "value_state.combination:product=level/year=2024:row=0")
     _assert_snapshots_equal(before, _snapshot(store))
-
-    control = _copy_fixture(tmp_path / "control", "invalid_value_state_combination")
-    control_before = _snapshot(control)
-    changed = control / "manifest.json"
-    changed.write_bytes(changed.read_bytes() + b" ")
-    with pytest.raises(AssertionError, match=r"changed paths: \['manifest.json'\]"):
-        _assert_snapshots_equal(control_before, _snapshot(control))
 
 
 def _forbidden_dependencies(source: str) -> list[str]:
@@ -481,12 +464,7 @@ def _forbidden_dependencies(source: str) -> list[str]:
     return findings
 
 
-def test_store_import_closure_has_no_transport_provider_or_write_path() -> None:
-    control = "from rivretrieve._internal.transport import HttpClient"
-    with pytest.raises(AssertionError, match="CONTROL forbidden dependency: rivretrieve._internal.transport"):
-        findings = _forbidden_dependencies(control)
-        assert not findings, f"CONTROL forbidden dependency: {findings[0]}"
-
+def test_reader_and_validator_have_no_transport_provider_or_write_imports() -> None:
     store_source = Path(validation_module.__file__).parent
     read_modules = (store_source / "reader.py", store_source / "validation.py")
     findings = {path.name: _forbidden_dependencies(path.read_text(encoding="utf-8")) for path in read_modules}
@@ -553,3 +531,11 @@ def test_non_object_source_column_disposition_is_malformed(tmp_path: Path) -> No
     manifest["source_column_dispositions"] = [42]
     _write_manifest(store, manifest)
     _assert_refusal(store, "manifest.not:source_column_dispositions.0")
+
+
+def test_fingerprint_refuses_changed_declared_type_with_old_digest(tmp_path: Path) -> None:
+    store = _copy_fixture(tmp_path)
+    manifest = _manifest(store)
+    manifest["source_schema"]["columns"][-1]["type"] = "integer"
+    _write_manifest(store, manifest)
+    _assert_refusal(store, "source_schema.fingerprint")

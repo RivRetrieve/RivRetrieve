@@ -26,7 +26,6 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.jp_mlit import generate_catalogue
 from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
-from tests._catalogue import catalogue_content_without_build_identity
 from tests._catalogue_projection import copy_catalogue_projection
 
 CATALOGUE_PATH = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue")
@@ -294,18 +293,6 @@ def test_base_packaged_ids_are_pinned(retained_evidence_root) -> None:
     assert len(seed) == len(set(seed)) == 1024 and seed == sorted(seed)
     assert all(isinstance(station_id, str) and len(station_id) == 15 and station_id.isdigit() for station_id in seed)
     assert _canonical_digest(seed) == BASE_ID_DIGEST
-
-
-def test_catalogue_generation_surface_is_native_only() -> None:
-    assert hasattr(generate_catalogue, "GeneratedJpMlitCatalogue")
-    assert hasattr(generate_catalogue, "build_catalogue")
-    for name in (
-        "generate_catalogue_from_fixture",
-        "generate_catalogue",
-        "generate_catalogue_from_live",
-        "validate_generated_catalogue",
-    ):
-        assert not hasattr(generate_catalogue, name)
 
 
 CORE_TOKENS = [
@@ -869,13 +856,6 @@ def test_broken_longitude_origin_fails_with_full_gate_message(retained_evidence_
     assert str(caught.value) == "jp_mlit.longitude: native column 'missing' does not exist"
 
 
-@pytest.mark.parametrize("argument", ["--fixture", "--live", "--catalogue-date", "--verbose"])
-def test_removed_cli_mode_is_rejected(argument: str, capsys: pytest.CaptureFixture[str]) -> None:
-    with pytest.raises(SystemExit):
-        generate_catalogue.main([argument, "unused"])
-    assert f"unrecognized arguments: {argument} unused" in capsys.readouterr().err
-
-
 @pytest.mark.parametrize("arguments", [["--native", str(NATIVE_PATH)], ["--out", "catalogue"]])
 def test_native_cli_requires_partner(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit):
@@ -911,77 +891,6 @@ def test_cli_rejects_mixed_modes(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit):
         generate_catalogue.main(["--native", str(NATIVE_PATH), "--station-catalogue", "stations.parquet"])
     assert "jp_mlit modes cannot mix native-build and supplied-capture arguments" in capsys.readouterr().err
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
-    "tests/test_data/jp_mlit_terms_citation.pdf",
-    "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
-)
-@pytest.mark.recorded(
-    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
-)
-def test_native_cli_is_offline_and_byte_deterministic(
-    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs, tmp_path_factory
-) -> None:
-    build_inputs = catalogue_build_inputs(generate_catalogue.build_acquisition_provenance())
-    build_inputs_path = tmp_path_factory.mktemp("catalogue-inputs") / "build-inputs.json"
-    build_inputs_path.write_text(build_inputs.model_dump_json(), encoding="utf-8")
-    calls: list[str] = []
-
-    def forbidden(*args: object, **kwargs: object) -> None:
-        calls.append("called")
-        raise AssertionError((args, kwargs))
-
-    monkeypatch.setattr(urllib.request, "urlopen", forbidden)
-    before = (retained_evidence_root / NATIVE_PATH).read_bytes()
-    assert (
-        generate_catalogue.main(
-            [
-                "--build-inputs",
-                str(build_inputs_path),
-                "--native",
-                str(retained_evidence_root / NATIVE_PATH),
-                "--out",
-                str(tmp_path),
-                "--license-recording",
-                str(retained_evidence_root / LICENSE_RECORDING),
-                "--citation-recording",
-                str(retained_evidence_root / CITATION_RECORDING),
-            ]
-        )
-        == 0
-    )
-    assert calls == [] and (retained_evidence_root / NATIVE_PATH).read_bytes() == before
-    expected_names = {
-        "croissant.json",
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-    }
-    assert {item.name for item in tmp_path.iterdir()} == expected_names
-    for name in expected_names:
-        assert catalogue_content_without_build_identity(
-            name, (tmp_path / name).read_bytes()
-        ) == catalogue_content_without_build_identity(name, (CATALOGUE_PATH / name).read_bytes())
 
 
 @pytest.mark.governing(
@@ -1093,8 +1002,3 @@ def test_native_build_removes_withheld_fact_before_writing(
             "reason": "no_acquisition_record_established",
         }
     ]
-
-
-def test_catalogue_builder_has_no_automated_collection_seam() -> None:
-    assert not hasattr(generate_catalogue, "refresh_native_table_from_live")
-    assert not hasattr(generate_catalogue, "_fetch_site_detail_response")

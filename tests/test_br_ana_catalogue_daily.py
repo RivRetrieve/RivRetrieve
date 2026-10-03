@@ -2,7 +2,6 @@
 
 import json
 from dataclasses import replace
-from pathlib import Path
 
 import polars as pl
 import pytest
@@ -19,7 +18,6 @@ from rivretrieve._internal.providers.br_ana.origins import (
     with_observation_products,
 )
 from rivretrieve._internal.recordings import read_recording
-from tests._catalogue import catalogue_content_without_build_identity
 from tests.test_br_ana_catalogue_telemetry import telemetry_evidence
 
 DOCUMENTS = (
@@ -164,29 +162,6 @@ def test_exact_variant_availability_has_only_its_own_recordings(catalogue_inputs
         }
         assert actual == expected
         assert not any("adopted" in ref.fact for ref in refs)
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
-    "tests/recordings/br_ana",
-    "tests/test_data/br_ana_inventory",
-)
-@pytest.mark.recorded("tests/test_data/br_ana_terms_licence.html")
-def test_six_product_packaged_artifact_rebuild_is_byte_identical(catalogue_inputs, tmp_path, catalogue_build_inputs):
-    from rivretrieve._internal.providers.br_ana.generate_catalogue import write_catalogue
-
-    catalogue = catalogue_inputs[-1]
-    write_catalogue(
-        catalogue,
-        tmp_path,
-        build_inputs=catalogue_build_inputs(catalogue.acquisition_provenance),
-        native_table=catalogue_inputs[1],
-    )
-    packaged = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/br_ana/catalogue"
-    for path in tmp_path.iterdir():
-        assert catalogue_content_without_build_identity(
-            path.name, path.read_bytes()
-        ) == catalogue_content_without_build_identity(path.name, (packaged / path.name).read_bytes()), path.name
 
 
 @pytest.mark.governing(

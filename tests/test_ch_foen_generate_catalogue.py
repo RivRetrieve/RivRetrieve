@@ -34,7 +34,6 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ch_foen import generate_catalogue
 from rivretrieve._internal.providers.ch_foen.origins import build_acquisition_provenance
-from tests._catalogue import catalogue_recording_paths
 
 FIXTURE_PATH = Path("tests/test_data/switzerland_metadata_locations.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
@@ -678,54 +677,6 @@ def test_cli_source_modes_are_mutually_exclusive(tmp_path: Path) -> None:
         )
 
     assert exc_info.value.code != 0
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
-    "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
-    "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
-    "tests/test_data/ch_foen_bafu_current_hydrological_data.html",
-    "tests/test_data/ch_foen_bafu_hydrology_data_service.html",
-    "tests/test_data/ch_foen_parameters_2026-09-02.recording.json",
-    "tests/test_data/ch_foen_terms_bafu.html",
-    "tests/test_data/ch_foen_terms_existenz.html",
-)
-@pytest.mark.recorded(*catalogue_recording_paths("ch_foen"))
-def test_native_build_matches_committed_catalogue_byte_for_byte(
-    retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.ch_foen.origins import build_acquisition_provenance
-
-    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
-    calls: list[str] = []
-    native_before = (retained_evidence_root / NATIVE_PATH).read_bytes()
-
-    def fail_network(*args, **kwargs):
-        calls.append(str(args[0]) if args else "unknown")
-        raise AssertionError("network call during native build")
-
-    monkeypatch.setattr(generate_catalogue, "_read_live_json", fail_network)
-    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", fail_network)
-    output = tmp_path / "catalogue"
-
-    assert (
-        generate_catalogue.main(
-            [
-                "--build-inputs",
-                str(build_inputs_path),
-                "--native",
-                str(retained_evidence_root / NATIVE_PATH),
-                "--out",
-                str(output),
-            ]
-            + ["--evidence-root", str(retained_evidence_root)]
-        )
-        == 0
-    )
-    assert calls == []
-    assert (retained_evidence_root / NATIVE_PATH).read_bytes() == native_before
-    for artifact in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
-        assert (output / artifact).read_bytes() == (CATALOGUE_PATH / artifact).read_bytes()
 
 
 def test_native_build_requires_explicit_evidence_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

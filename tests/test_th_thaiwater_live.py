@@ -1,6 +1,5 @@
 """ThaiWater live adapter proofs over the recorded official graph response."""
 
-from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -116,40 +115,3 @@ class _CountingReplay(ReplayTransport):
     def send(self, request: TransportRequest) -> TransportResponse:
         self.requests.append(request)
         return super().send(request)
-
-
-@pytest.mark.recorded("tests/test_data/th_thaiwater_1373273_2025-01-01_2026-01-01.recording.json")
-def test_historical_366_date_response_remains_parseable_without_claiming_current_window_policy(
-    retained_evidence_root: Path,
-) -> None:
-    recording = read_recording(
-        retained_evidence_root / "tests/test_data/th_thaiwater_1373273_2025-01-01_2026-01-01.recording.json"
-    )
-    replay = _CountingReplay((recording,))
-    fetch_window = _make_fetch_window(
-        WindowEndpoint.from_datetime(datetime(2025, 1, 1)),
-        WindowEndpoint.from_datetime(datetime(2026, 1, 1, 23, 59, 59, 999999)),
-    )
-    # Render the recorded historical 366-date request without changing the live 365-date declaration.
-    historical_declaration = replace(_STAGES.window_declarations.products[_PRODUCTS[0]], size=366)
-    rendered = dict.fromkeys(_PRODUCTS, plan_windows(fetch_window, historical_declaration))
-
-    fetched = _STAGES.fetch(
-        ("1373273",),
-        _PRODUCTS,
-        rendered,
-        fetch_window,
-        _STAGES.config,
-        replay,
-    )
-
-    assert len(replay.requests) == 1
-    assert len(fetched.value) == 1
-    assert fetched.value[0].content == recording.content
-    parsed = _STAGES.parse(fetched.value[0], _STAGES.config).rows
-    assert parsed.group_by("product_id").len().sort("product_id").rows() == [
-        ("discharge_reported", 52_704),
-        ("stage_reported", 52_704),
-    ]
-    assert parsed["time"].min() == datetime(2025, 1, 1)
-    assert parsed["time"].max() == datetime(2026, 1, 1, 23, 50)

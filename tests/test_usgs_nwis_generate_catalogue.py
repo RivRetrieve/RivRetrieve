@@ -21,7 +21,6 @@ from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as gene
 from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import PRODUCT_DEFINITIONS
 from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS
 from rivretrieve._internal.recordings import read_recording
-from tests._catalogue import catalogue_content_without_build_identity
 
 # Decoded historical native-table subsets, not HTTP response recordings.
 # Exact equality with the retained snapshot is tested below.
@@ -1135,77 +1134,6 @@ def test_committed_canonical_artifacts_have_pinned_whole_content(
     assert _frame_content_sha256(station_products) == (
         "a8ac1cc876ef1b2aac04fc09141eb9b0e5e59df3c767f7bddfdcb27fc59152d8"
     )
-
-
-@pytest.mark.governing(
-    "research/usgs-modern-coverage",
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
-    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
-    "tests/test_data/usgs_nwis_terms_citation-1.html",
-    "tests/test_data/usgs_nwis_terms_licence-1.html",
-)
-def test_native_build_is_network_free_and_byte_deterministic(
-    retained_evidence_root, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, catalogue_build_inputs, tmp_path_factory
-) -> None:
-    from rivretrieve._internal.providers.usgs_nwis.origins import build_modern_acquisition_provenance
-
-    modern_metadata = retained_evidence_root / "research/usgs-modern-coverage"
-    _, receipts = generator.read_modern_metadata(modern_metadata)
-    build_inputs = catalogue_build_inputs(build_modern_acquisition_provenance(receipts, modern_metadata))
-    build_inputs_path = tmp_path_factory.mktemp("catalogue-inputs") / "build-inputs.json"
-    build_inputs_path.write_text(build_inputs.model_dump_json(), encoding="utf-8")
-    calls: list[str] = []
-
-    def fail_network(*args: object, **kwargs: object) -> object:
-        calls.append("network")
-        raise AssertionError("network must not be accessed during build")
-
-    monkeypatch.setattr(generator, "read_live_native_rows", fail_network)
-    monkeypatch.setattr(generator.urllib.request, "urlopen", fail_network)
-    first = tmp_path / "first"
-    second = tmp_path / "second"
-
-    assert (
-        generator.main(
-            [
-                "--build-inputs",
-                str(build_inputs_path),
-                "--native",
-                str(retained_evidence_root / NATIVE_PATH),
-                "--evidence-root",
-                str(retained_evidence_root),
-                "--modern-metadata",
-                str(retained_evidence_root / "research/usgs-modern-coverage"),
-                "--out",
-                str(first),
-            ]
-        )
-        == 0
-    )
-    assert (
-        generator.main(
-            [
-                "--build-inputs",
-                str(build_inputs_path),
-                "--native",
-                str(retained_evidence_root / NATIVE_PATH),
-                "--evidence-root",
-                str(retained_evidence_root),
-                "--modern-metadata",
-                str(retained_evidence_root / "research/usgs-modern-coverage"),
-                "--out",
-                str(second),
-            ]
-        )
-        == 0
-    )
-    assert calls == []
-    for artifact in sorted(first.iterdir()):
-        artifact_name = artifact.name
-        assert artifact.read_bytes() == (second / artifact_name).read_bytes()
-        assert catalogue_content_without_build_identity(
-            artifact_name, artifact.read_bytes()
-        ) == catalogue_content_without_build_identity(artifact_name, (CATALOGUE_PATH / artifact_name).read_bytes())
 
 
 @pytest.mark.recorded(

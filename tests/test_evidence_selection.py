@@ -182,32 +182,13 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
         assert item["requirements"] == sorted(requirements)
         assert item["full_verification"] == sorted(full)
 
-    for name in (
-        "test_real_france_generator_does_not_render_national_acquisition_graph",
-        "test_native_cli_is_offline_byte_deterministic_and_preserves_native",
-    ):
-        assert selected[name]["full_verification"] == ["fr_hubeau"]
+    assert selected["test_native_composition_root_rebuilds_committed_artifacts_without_network[fr_hubeau]"][
+        "full_verification"
+    ] == ["fr_hubeau"]
 
     native = "src/rivretrieve/_internal/providers/{}/catalogue/native.parquet"
     for provider in ("cz_chmi", "fr_hubeau", "lt_lhmt"):
         check(f"test_projection_preserves_every_native_scalar[{provider}]", ["derived"], [native.format(provider)])
-        cli_recordings = {
-            "cz_chmi": ["tests/test_data/cz_chmi_terms_licence.html", "tests/test_data/cz_meta2.json"],
-            "fr_hubeau": [
-                "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
-                "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
-                "tests/test_data/fr_hubeau_hydrometrie.html",
-                "tests/test_data/fr_hubeau_temperature_openapi.json",
-                "tests/test_data/fr_hubeau_terms_licence.html",
-            ],
-            "lt_lhmt": ["tests/test_data/lt_lhmt_terms_licence.html"],
-        }
-        check(
-            f"test_native_cli_invokes_shared_recording_verifier[{provider}]",
-            ["derived"],
-            [native.format(provider), *cli_recordings[provider]],
-            ["fr_hubeau"] if provider == "fr_hubeau" else [],
-        )
         terms = f"tests/test_data/{provider}_terms_licence.html"
         check(
             f"test_production_provenance_rejects_changed_recording[{provider}-{provider}_terms_licence.html]",
@@ -227,7 +208,7 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
             ["fr_hubeau"] if provider == "fr_hubeau" else [],
         )
     check(
-        "test_committed_declaration_case_passes_real_build_and_origin_gate[lt_lhmt-stations]",
+        "test_each_provider_build_enforces_the_origin_gate[lt_lhmt-stations]",
         ["derived"],
         [native.format("lt_lhmt")],
     )
@@ -250,15 +231,8 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
         ["tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json", lithuanian],
     )
     assert lithuanian in selected["test_other_recorded_provider_parsers_retain_series_context"]["requirements"]
-    for name in (
+    check(
         "test_south_africa_cli_rejects_native_byte_substitution",
-        "test_canonical_cli_writes_versioned_native_built_artifacts",
-        "test_native_build_is_network_free_and_byte_deterministic",
-    ):
-        check(
-            name,
-            ["governing"]
-            if name == "test_south_africa_cli_rejects_native_byte_substitution"
-            else ["governing", "recorded"],
-            [native.format("za_dws"), *(f"tests/test_data/za_dws_terms_licence-{n}.html" for n in (1, 4, 5))],
-        )
+        ["governing"],
+        [native.format("za_dws"), *(f"tests/test_data/za_dws_terms_licence-{n}.html" for n in (1, 4, 5))],
+    )

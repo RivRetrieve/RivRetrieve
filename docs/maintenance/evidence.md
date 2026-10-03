@@ -53,10 +53,9 @@ enter packaged provenance. The full restricted receipt is not a package artifact
 
 Review the resulting station metadata, provenance, descriptors and distribution
 contents before copying approved products into RivRetrieve. New name mappings need
-both retained-input checks and a separate disclosure decision. The candidate review
-test writes examples only into the restricted output directory and approves neither
-mapping semantics nor redistribution. Compare existing area fields with their
-approved baseline without changing scalar values, units or absence states.
+both retained-input checks and a separate disclosure decision. Keep candidate field review and disclosure decisions separate from verification
+of adopted mappings. Compare existing area fields with their approved baseline
+without changing scalar values, units or absence states.
 
 Use the provider's instructions:
 
@@ -76,6 +75,9 @@ Use the provider's instructions:
   inputs and retained recordings used by the offline rebuild.
 
 ## Run tests
+
+The [testing guide](testing.md) explains each layer's purpose, expected answers
+and ownership. Use it when adding or changing coverage.
 
 Run source-independent checks from the RivRetrieve checkout without archive access:
 

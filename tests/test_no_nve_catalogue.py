@@ -24,7 +24,6 @@ from rivretrieve._internal.providers.no_nve.origins import (
     STATION_CATALOGUE_ORIGINS,
     build_acquisition_provenance,
 )
-from tests._catalogue import catalogue_content_without_build_identity, catalogue_recording_paths
 
 _ROOT = Path(__file__).parents[1]
 _DATA = Path("tests/test_data")
@@ -169,54 +168,6 @@ def test_build_populates_exact_attested_catalogue(retained_evidence_root) -> Non
     assert set(catalogue.stations["crs"]) == {"unknown"}
     assert catalogue.acquisition_provenance.native_table is not None
     assert catalogue.acquisition_provenance.withheld_facts == ()
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet")
-@pytest.mark.recorded(*catalogue_recording_paths("no_nve"))
-def test_build_is_network_free_and_byte_identical(
-    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.no_nve.origins import build_acquisition_provenance
-
-    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
-
-    def refuse(*args: object, **kwargs: object) -> object:
-        raise AssertionError("network access during native catalogue build")
-
-    monkeypatch.setattr("rivretrieve._internal.transport.HttpClient.send", refuse)
-    output = tmp_path / "catalogue"
-    assert (
-        generate_catalogue.main(
-            [
-                "--build-inputs",
-                str(build_inputs_path),
-                "--native",
-                str(retained_evidence_root / _NATIVE),
-                "--out",
-                str(output),
-            ]
-        )
-        == 0
-    )
-    for name in (
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-    ):
-        assert catalogue_content_without_build_identity(
-            name, (output / name).read_bytes()
-        ) == catalogue_content_without_build_identity(name, (_CATALOGUE / name).read_bytes())
 
 
 def test_public_discovery_selects_a_real_norwegian_edge() -> None:

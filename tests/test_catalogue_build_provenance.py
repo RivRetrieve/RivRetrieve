@@ -339,14 +339,17 @@ def test_metadata_publication_rejects_missing_or_ambiguous_lineage(mutation):
     if mutation == "missing_origins":
         build["declarations"] = build["declarations"][1:]
     elif mutation == "missing_mapping":
-        build["declarations"] = build["declarations"][:1]
+        build["declarations"] = tuple(
+            item for item in build["declarations"] if item["symbol"] != "STATION_METADATA_FIELDS"
+        )
     elif mutation == "ambiguous_origins":
         build["declarations"] += (_code("maintenance/other.py", "build_acquisition_provenance", "e" * 40),)
     elif mutation == "bad_fact":
         frame = frame.with_columns(pl.lit("metadata.drainage_area.other").alias("support_fact"))
     else:
         build["inputs"][0]["usage"] = "reviewed_support"
-    with pytest.raises(FatalContractError):
+    expected = "field-mapping declaration" if mutation == "missing_mapping" else None
+    with pytest.raises(FatalContractError, match=expected):
         _bind_catalogue_build_inputs(_provenance(), CatalogueBuildInputs.model_validate(build), frame)
 
 
@@ -1157,7 +1160,6 @@ def test_normalized_header_interns_exact_support_identities_without_changing_log
         assert support[0].verifier is not support[2].verifier
         assert support[0].reference.sha256 == support[2].reference.sha256
         assert reconstruct_provenance(item) == original
-    assert encode_catalogue_evidence(parsed)["provenance.json"].count(b"\n") == 1
 
 
 @pytest.mark.parametrize(
