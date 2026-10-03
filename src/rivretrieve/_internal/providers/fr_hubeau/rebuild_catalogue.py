@@ -40,6 +40,16 @@ def rebuild(
     *,
     build_inputs: CatalogueBuildInputs,
 ) -> None:
+    """Rebuild native and catalogue products from explicit retained station responses.
+
+    ``revision`` identifies the retained native input, not the executing code.
+    Outputs and the capture record must be outside source checkouts and separate
+    from ``evidence_root``. Missing inputs or changed publisher receipts raise
+    before publication. No network requests are made.
+    """
+    evidence_root = evidence_root.resolve(strict=True)
+    output = output.resolve()
+    capture_output = capture_output.resolve()
     for destination in (output, capture_output):
         if any((parent / ".git").exists() for parent in (destination, *destination.parents)):
             raise ValueError("Outputs must be outside source checkouts")
@@ -127,7 +137,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--availability-ledger",
         type=Path,
-        default=Path(__file__).resolve().parent / "governing_evidence.json.xz",
+        required=True,
     )
     parser.add_argument("--build-inputs", type=Path, required=True, help="Reviewed adopted CatalogueBuildInputs JSON.")
     parser.add_argument("--out", type=Path, required=True)

@@ -21,13 +21,11 @@ from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import Grap
 from rivretrieve._internal.providers.th_thaiwater.origins import build_acquisition_provenance
 from tests._provenance import legacy_provenance
 
-LEDGER_PATH = (
-    Path(__file__).parents[1] / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
-)
+LEDGER_PATH = Path("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 
 
-def _evidence() -> GraphAvailabilityEvidence:
-    return GraphAvailabilityEvidence(LEDGER_PATH.read_bytes())
+def _evidence(retained_evidence_root) -> GraphAvailabilityEvidence:
+    return GraphAvailabilityEvidence((retained_evidence_root / LEDGER_PATH).read_bytes())
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
@@ -98,14 +96,17 @@ def test_thailand_canonical_product_definition_is_rivretrieve_owned() -> None:
     assert set(canonical.facts) == {fact for fact in provenance.fact_universe if fact.startswith("product.")}
 
 
-def test_every_governing_pair_is_bound_to_its_actual_acquisition_and_agency() -> None:
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
+def test_every_governing_pair_is_bound_to_its_actual_acquisition_and_agency(
+    retained_evidence_root,
+) -> None:
     artifact = load_packaged_catalogue_artifact(declaration.catalogue)
     provenance = artifact.acquisition_provenance
     assert provenance is not None
     provenance = legacy_provenance(provenance)
     assert provenance is not None
     assert provenance.withheld_facts == ()
-    ledger = list(csv.DictReader(io.StringIO(LEDGER_PATH.read_text())))
+    ledger = list(csv.DictReader(io.StringIO((retained_evidence_root / LEDGER_PATH).read_text())))
     bindings = {
         binding.fact_group: binding
         for binding in provenance.fact_bindings
@@ -164,13 +165,17 @@ def test_every_governing_pair_is_bound_to_its_actual_acquisition_and_agency() ->
     }
 
 
-def test_reviewed_ledger_rejects_changed_bytes() -> None:
-    original = LEDGER_PATH.read_bytes()
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
+def test_reviewed_ledger_rejects_changed_bytes(
+    retained_evidence_root,
+) -> None:
+    original = (retained_evidence_root / LEDGER_PATH).read_bytes()
     GraphAvailabilityEvidence(original)
     with pytest.raises(FatalContractError, match="availability evidence digest mismatch"):
         GraphAvailabilityEvidence(original + b"\n")
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.governing(
     "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
     full_verification=("th_thaiwater",),
@@ -188,9 +193,10 @@ def test_native_agency_disagreement_with_reviewed_acquisition_fails(
         for column in ("agency.id", "station.agency_id")
     )
     with pytest.raises(FatalContractError, match="unverified evidence agency mapping"):
-        build_acquisition_provenance(NativeTable(altered), _evidence())
+        build_acquisition_provenance(NativeTable(altered), _evidence(retained_evidence_root))
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.governing(
     "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
     full_verification=("th_thaiwater",),
@@ -218,13 +224,14 @@ def test_thailand_cli_rejects_native_byte_substitution(retained_evidence_root: P
                 "--native",
                 str(native),
                 "--availability-evidence",
-                str(LEDGER_PATH),
+                str(retained_evidence_root / LEDGER_PATH),
                 "--out",
                 str(tmp_path / "out"),
             ]
         )
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.governing(
     "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
     full_verification=("th_thaiwater",),
@@ -254,13 +261,14 @@ def test_thailand_cli_invokes_recording_verification(
                     retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
                 ),
                 "--availability-evidence",
-                str(LEDGER_PATH),
+                str(retained_evidence_root / LEDGER_PATH),
                 "--out",
                 str(tmp_path),
             ]
         )
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_thailand_station_carrier_has_exact_multi_agency_lineage(
     retained_evidence_root: Path,
@@ -269,7 +277,7 @@ def test_thailand_station_carrier_has_exact_multi_agency_lineage(
         read_native_table(
             retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
         ),
-        _evidence(),
+        _evidence(retained_evidence_root),
     )
     station_carrier = next(
         binding for binding in provenance.fact_bindings if binding.fact_group == "canonical_station_carrier"
@@ -307,6 +315,7 @@ def test_retained_thaiwater_official_evidence_matches_capture_manifest(retained_
     assert "(ม.3/วิ.)".encode() in bundle
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_platform_identity_does_not_claim_the_agency_supplied_measurements(
     retained_evidence_root: Path,
@@ -315,7 +324,7 @@ def test_platform_identity_does_not_claim_the_agency_supplied_measurements(
         read_native_table(
             retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"
         ),
-        _evidence(),
+        _evidence(retained_evidence_root),
     )
     bindings = {binding.fact_group: binding for binding in provenance.fact_bindings}
     platform = bindings["canonical_platform_carrier"]

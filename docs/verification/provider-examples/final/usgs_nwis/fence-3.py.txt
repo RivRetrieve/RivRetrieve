@@ -1,9 +1,0 @@
-alternatives = rr.find(
-    provider="usgs_nwis",
-    station="02196000",
-    quantity="discharge",
-    frequency="daily",
-    statistic="mean",
-)
-
-print(sorted(rr.series(alternatives)["variant"].to_list()))

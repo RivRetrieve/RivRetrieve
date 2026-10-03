@@ -461,7 +461,7 @@ def _status(value: object) -> Status:
 
 
 def decode_availability(document: str | bytes) -> FranceAvailability:
-    """Decode the explicitly supplied public ledger, without reading private source bodies."""
+    """Decode the explicitly supplied reviewed ledger without reading retained source bodies."""
     raw = _object(
         json.loads(document), ("native_table", "pairs", "research_head", "schema_version", "scope", "summary")
     )

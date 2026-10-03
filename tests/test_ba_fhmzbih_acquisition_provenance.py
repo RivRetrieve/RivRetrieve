@@ -16,8 +16,10 @@ from tests._provenance import legacy_document, write_evidence_table
 _LEDGER = Path("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 
 
-def _provenance():
-    return build_acquisition_provenance(TypeAdapter(WorkbookAccessLedger).validate_json(_LEDGER.read_bytes()))
+def _provenance(retained_evidence_root):
+    return build_acquisition_provenance(
+        TypeAdapter(WorkbookAccessLedger).validate_json((retained_evidence_root / _LEDGER).read_bytes())
+    )
 
 
 def _withheld_document():
@@ -60,8 +62,11 @@ def _withheld_v3_document(directory: Path) -> dict:
     return header
 
 
-def test_bosnia_provenance_binds_baseline_to_actual_acquisitions() -> None:
-    provenance = _provenance()
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
+def test_bosnia_provenance_binds_baseline_to_actual_acquisitions(
+    retained_evidence_root,
+) -> None:
+    provenance = _provenance(retained_evidence_root)
     bound = {fact for binding in provenance.fact_bindings for fact in binding.facts}
     assert not provenance.withheld_facts
     assert len([fact for fact in bound if fact.startswith("source.station:")]) == 60
@@ -70,7 +75,7 @@ def test_bosnia_provenance_binds_baseline_to_actual_acquisitions() -> None:
     assert set(provenance.fact_universe) == bound
     workbook_acquisitions = {a.acquisition_id: a for a in provenance.source_records[0].acquisitions if a.material}
     assert len(workbook_acquisitions) == 180
-    ledger = TypeAdapter(WorkbookAccessLedger).validate_json(_LEDGER.read_bytes())
+    ledger = TypeAdapter(WorkbookAccessLedger).validate_json((retained_evidence_root / _LEDGER).read_bytes())
     for pair in ledger.pairs:
         acquisition = workbook_acquisitions[pair.acquisition_id]
         assert acquisition.recording_ids == ()
@@ -88,6 +93,7 @@ def test_bosnia_provenance_binds_baseline_to_actual_acquisitions() -> None:
         assert availability.transformation.external_inputs[0].fact == pair.source_fact
 
 
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 @pytest.mark.governing(
     "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
     "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
@@ -103,9 +109,9 @@ def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path, re
     # Synthetic selection reaches only the intended failing verification boundary.
     build_inputs_path = tmp_path / "synthetic-build-inputs.json"
     build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
-    verify_provenance_recordings(_provenance(), retained_evidence_root)
+    verify_provenance_recordings(_provenance(retained_evidence_root), retained_evidence_root)
     evidence = Path("tests/test_data/ba_fhmzbih_terms_absence.html")
-    for source in _provenance().source_records:
+    for source in _provenance(retained_evidence_root).source_records:
         for entry in source.evidence:
             if entry.recording is not None:
                 capture = Path(entry.recording.repository_path)
@@ -115,7 +121,7 @@ def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path, re
     target = tmp_path / evidence
     target.write_bytes((retained_evidence_root / evidence).read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="ba_fhmzbih_terms_absence digest mismatch"):
-        verify_provenance_recordings(_provenance(), tmp_path)
+        verify_provenance_recordings(_provenance(retained_evidence_root), tmp_path)
     native = tmp_path / "native.parquet"
     shutil.copy2(
         retained_evidence_root / "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet", native
@@ -129,7 +135,7 @@ def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path, re
                 "--native",
                 str(native),
                 "--workbook-access-ledger",
-                str(_LEDGER),
+                str(retained_evidence_root / _LEDGER),
                 "--series-recording",
                 str(retained_evidence_root / "tests/test_data/ba_fhmzbih_metadata_index.recording.json"),
                 "--evidence-root",

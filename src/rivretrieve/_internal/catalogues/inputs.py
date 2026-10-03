@@ -30,7 +30,7 @@ def _archive_identity(reference: ArchiveMemberReference) -> ArchiveMemberReferen
 def verify_retained_input_files(receipt: RetainedInputReceipt, evidence_root: Path) -> None:
     """Verify exact composed bytes without treating this handoff as archive authority."""
     root = evidence_root.resolve(strict=True)
-    for reference in receipt.inputs:
+    for reference in (*receipt.inputs, *receipt.declaration_inputs):
         path = (root / reference.consumer_path).resolve(strict=True)
         if not path.is_relative_to(root) or not path.is_file():
             raise FatalContractError("Retained catalogue input escapes its explicit root")
@@ -151,7 +151,19 @@ def select_catalogue_build_inputs(
     def code(path: str, symbol: str | None, revision: str) -> CodeReference:
         return CodeReference(repository=_PUBLIC_REPOSITORY, revision=revision, repository_path=path, symbol=symbol)
 
-    declarations = tuple(code(path, symbol, receipt.declaration_revision) for path, symbol in declaration_locations)
+    authored = {item.consumer_path: item.declaration for item in receipt.declaration_inputs}
+    declarations = []
+    for path, symbol in declaration_locations:
+        if path.startswith("src/"):
+            declarations.append(code(path, symbol, receipt.declaration_revision))
+        else:
+            try:
+                declaration = authored[path]
+            except KeyError:
+                raise FatalContractError("Selected inputs omit a required reviewed declaration") from None
+            if symbol is not None:
+                raise FatalContractError("Authored evidence inputs must identify whole declaration files")
+            declarations.append(declaration)
     return CatalogueBuildInputs(
         build=code(provider_path + "/generate_catalogue.py", "write_catalogue", receipt.code_revision),
         declarations=tuple(declarations),
@@ -167,7 +179,7 @@ def select_catalogue_support(
     locations: Mapping[str, Sequence[str]],
     verifier_location: tuple[str, str],
 ) -> tuple[RetainedSupportUse, ...]:
-    """Link explicit public ledger locators to already verified archive support.
+    """Link explicit reviewed ledger locators to already verified archive support.
 
     No support body is opened here. The receipt supplies only members from
     successful complete governing checks. A nested archive selector identifies
@@ -188,8 +200,8 @@ def select_catalogue_support(
     if set(locations) != set(acquisitions) or any(not facts[key] for key in locations):
         raise FatalContractError("A support locator does not resolve an existing acquired source fact")
     verifier = CodeReference(
-        repository=_PUBLIC_REPOSITORY,
-        revision=receipt.code_revision,
+        repository="https://github.com/RivRetrieve/verification-evidence",
+        revision=receipt.archive_code_revision,
         repository_path=verifier_location[0],
         symbol=verifier_location[1],
     )
@@ -205,7 +217,9 @@ def select_catalogue_support(
             try:
                 selected = available[outer]
             except KeyError:
-                raise FatalContractError("Complete governing support omits a required public ledger locator") from None
+                raise FatalContractError(
+                    "Complete governing support omits a required reviewed ledger locator"
+                ) from None
             material = acquisition.material
             if separator:
                 if material is None or material.filename != locator:

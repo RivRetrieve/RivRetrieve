@@ -470,6 +470,8 @@ NATIVE_TABLE_ACQUISITION_IDS = ("hydrometry_catalogue_capture_2026_09_21", "temp
 
 
 # Authored catalogue, physical-fact and support declarations selected at build time.
+# Non-source paths identify explicit authored inputs in the restricted handoff.
+# Their code references resolve to the reviewed private declaration owner.
 CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),

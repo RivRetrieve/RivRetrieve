@@ -1,5 +1,0 @@
---- inventory_material.py
-+++ inventory_material.py
-@@ -53 +53 @@
--   decoder=gzip.GzipFile(fileobj=f) if low.endswith('.gz') else lzma.LZMAFile(f)
-+   decoder=gzip.GzipFile(fileobj=f, mode="rb") if low.endswith('.gz') else lzma.LZMAFile(f)

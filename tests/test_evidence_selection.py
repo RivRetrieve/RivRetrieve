@@ -198,7 +198,13 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
         )
     for provider, extra in (
         ("cz_chmi", ["tests/test_data/cz_chmi_terms_licence.html", "tests/test_data/cz_meta2.json"]),
-        ("fr_hubeau", []),
+        (
+            "fr_hubeau",
+            [
+                "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
+                "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
+            ],
+        ),
         ("lt_lhmt", ["tests/test_data/lt_lhmt_terms_licence.html"]),
     ):
         check(

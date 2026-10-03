@@ -119,6 +119,12 @@ The current evidence representation uses a typed header and five normalized rela
 
 ## Evidence and verification
 
+RivRetrieve owns library behavior, catalogue transformations, synthetic fixtures and
+approved runtime products. The private source archive owns retained inputs, reviewed
+evidence ledgers, source-certification tools and tests of those tools. Safe provenance
+references identify the actual repository and reviewed revision of each declaration
+and executable. Historical acquisition paths remain identities, not local lookup paths.
+
 Source-independent tests check shared contracts and failure behavior. Source-backed
 tests replay genuine inputs through the transport boundary and refuse unmatched
 requests. These checks establish behavior against retained evidence, not current

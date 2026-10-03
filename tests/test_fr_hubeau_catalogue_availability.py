@@ -1,7 +1,6 @@
 """France catalogue admission preserves every evidenced native station/product pair."""
 
 import lzma
-from pathlib import Path
 
 import pytest
 
@@ -15,11 +14,15 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
 from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
 
+@pytest.mark.derived(
+    "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
+    "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
+)
 @pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
 def test_catalogue_admits_full_evidenced_native_inventory(retained_evidence_root) -> None:
     native_path = retained_evidence_root / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
     native = read_native_table(native_path)
-    ledger_path = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
+    ledger_path = retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
     availability = decode_availability(lzma.decompress(ledger_path.read_bytes()))
     capture = NativeInventoryCapture.model_validate_json((ledger_path.parent / "native_capture.json").read_bytes())
     catalogue = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, availability, native_capture=capture)

@@ -250,5 +250,5 @@ used (`bruto`, `consistido` or telemetry) and the date of retrieval.
 | HidroWebService manual, pages 11–12 | Retained historical telemetry field definitions; not freshly downloaded |
 
 The station count describes the packaged catalogue. Example observations were
-retrieved on 2026-09-22. The [verification record](../verification/brazil-provider/README.md)
+retrieved on 2026-09-22. The [private verification archive](https://github.com/RivRetrieve/verification-evidence#readme)
 retains commands, source evidence and the limits of these checks.

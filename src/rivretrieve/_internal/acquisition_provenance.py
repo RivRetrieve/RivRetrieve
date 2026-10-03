@@ -110,32 +110,17 @@ def _unique_consumer_paths(references: Sequence[RetainedInputReference]) -> None
         raise ValueError("retained inputs must have unique consumer_path identities")
 
 
-class RetainedInputReceipt(_ProvenanceModel):
-    """Restricted archive handoff. Only explicitly adopted members become public."""
-
-    schema_version: Literal[2]
-    code_revision: GitRevision
-    declaration_revision: GitRevision
-    inputs: tuple[RetainedInputReference, ...]
-    support_inputs: tuple[RetainedSupportReference, ...] = ()
-
-    @model_validator(mode="after")
-    def _identities(self) -> Self:
-        _unique_consumer_paths(self.inputs)
-        support_keys = [(item.provider_id, item.verifier_path) for item in self.support_inputs]
-        if len(support_keys) != len(set(support_keys)):
-            raise ValueError("reviewed support requires unique provider/verifier path identities")
-        return self
-
-
 class CodeReference(_ProvenanceModel):
-    """Public code or authored material at an explicit Git revision.
+    """Code or authored material at an explicit revision of its owning repository.
 
     A null ``symbol`` names the whole authored file. Executable references require
     a symbol identifying the implementation.
     """
 
-    repository: Literal["https://github.com/RivRetrieve/RivRetrieve"]
+    repository: Literal[
+        "https://github.com/RivRetrieve/RivRetrieve",
+        "https://github.com/RivRetrieve/verification-evidence",
+    ]
     revision: GitRevision
     repository_path: str
     symbol: str | None = None
@@ -153,6 +138,56 @@ class CodeReference(_ProvenanceModel):
         if not value or value != value.strip() or any(character.isspace() for character in value):
             raise ValueError("code symbols must be nonblank and contain no whitespace")
         return value
+
+
+class AuthoredDeclarationInput(_ProvenanceModel):
+    """Verified Git-authored declaration supplied at an explicit consumer path.
+
+    This is not a retained publisher original or a release archive member.
+    """
+
+    consumer_path: str
+    declaration: CodeReference
+    sha256: Sha256
+    byte_size: int = PydanticField(strict=True, ge=0)
+
+    @field_validator("consumer_path")
+    @classmethod
+    def _path(cls, value: str) -> str:
+        return _canonical_relative_path(value)
+
+    @model_validator(mode="after")
+    def _owner(self) -> Self:
+        if self.declaration.repository != "https://github.com/RivRetrieve/verification-evidence":
+            raise ValueError("authored evidence declarations belong to the private source archive")
+        if self.declaration.symbol is not None:
+            raise ValueError("authored evidence inputs identify the complete declaration file")
+        return self
+
+
+class RetainedInputReceipt(_ProvenanceModel):
+    """Restricted archive handoff. Only explicitly adopted identities become public."""
+
+    schema_version: Literal[3]
+    code_revision: GitRevision
+    declaration_revision: GitRevision
+    archive_code_revision: GitRevision
+    inputs: tuple[RetainedInputReference, ...]
+    support_inputs: tuple[RetainedSupportReference, ...] = ()
+    declaration_inputs: tuple[AuthoredDeclarationInput, ...] = ()
+
+    @model_validator(mode="after")
+    def _identities(self) -> Self:
+        _unique_consumer_paths(self.inputs)
+        paths = [item.consumer_path for item in (*self.inputs, *self.declaration_inputs)]
+        if len(paths) != len(set(paths)):
+            raise ValueError("retained and authored inputs require unique consumer paths")
+        if any(item.declaration.revision != self.archive_code_revision for item in self.declaration_inputs):
+            raise ValueError("authored declarations must match the reviewed archive code revision")
+        support_keys = [(item.provider_id, item.verifier_path) for item in self.support_inputs]
+        if len(support_keys) != len(set(support_keys)):
+            raise ValueError("reviewed support requires unique provider/verifier path identities")
+        return self
 
 
 def _public_archive_reference(value: object) -> object:
@@ -231,14 +266,25 @@ class CatalogueBuildInputs(_ProvenanceModel):
         input_keys = [(item.reference, item.usage) for item in self.inputs]
         if len(input_keys) != len(set(input_keys)):
             raise ValueError("adopted inputs require unique archive member and usage pairs")
+        if self.build.repository != "https://github.com/RivRetrieve/RivRetrieve":
+            raise ValueError("build executable requires a public library reference")
         if self.build.symbol is None:
             raise ValueError("build executable reference requires a symbol")
-        if any(item.verifier.revision != self.build.revision or item.verifier.symbol is None for item in self.support):
-            raise ValueError("reviewed support requires an exact verifier symbol at the build code revision")
         if not self.declarations or len(self.declarations) != len(set(self.declarations)):
             raise ValueError("build declarations must be nonempty and unique")
-        if len({declaration.revision for declaration in self.declarations}) != 1:
-            raise ValueError("build declarations must name one explicit declaration revision")
+        revisions: dict[str, set[str]] = {}
+        for declaration in self.declarations:
+            revisions.setdefault(declaration.repository, set()).add(declaration.revision)
+        if any(len(values) != 1 for values in revisions.values()):
+            raise ValueError("build declarations must name one explicit declaration revision per repository")
+        for item in self.support:
+            expected = (
+                {self.build.revision}
+                if item.verifier.repository == self.build.repository
+                else revisions.get(item.verifier.repository, set())
+            )
+            if item.verifier.symbol is None or item.verifier.revision not in expected:
+                raise ValueError("reviewed support requires an exact verifier symbol at its owner's reviewed revision")
         if not self.inputs:
             raise ValueError("catalogue builds require adopted retained inputs")
         return self
@@ -256,8 +302,10 @@ def validate_build_input_code_references(
         return
     if executable is not None and executable.symbol is None:
         raise ValueError("transformation executable reference requires a symbol")
-    if executable is not None and executable.revision != build_inputs.build.revision:
-        raise ValueError("transformation executable revision disagrees with build revision")
+    if executable is not None and (
+        executable.repository != build_inputs.build.repository or executable.revision != build_inputs.build.revision
+    ):
+        raise ValueError("transformation executable owner or revision disagrees with build revision")
     if declaration is not None and declaration not in build_inputs.declarations:
         raise ValueError("transformation declaration is absent from build declarations")
 

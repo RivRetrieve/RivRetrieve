@@ -1,4 +1,0 @@
-flow_ls = rr.pick(selection, variant="flow_ls")
-
-print(rr.series(flow).select("variant").rows())
-print(rr.series(flow_ls).select("variant").rows())

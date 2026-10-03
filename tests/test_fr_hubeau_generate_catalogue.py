@@ -39,6 +39,7 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
     TEMPERATURE_STATION_CATALOGUE_ORIGINS,
 )
 from tests._catalogue_projection import copy_catalogue_projection
+from tests.test_catalogue_origin_certification import _catalogue_recording_paths
 
 _TEST_DATA_DIR = Path("tests/test_data")
 _HYDRO_FIXTURE = _TEST_DATA_DIR / "fr_hubeau_metadata.json"
@@ -54,8 +55,8 @@ NATIVE_PATH = Path("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.
 CURRENT_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
 
 
-def _availability():
-    path = Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
+def _availability(retained_evidence_root):
+    path = retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
     return decode_availability(lzma.decompress(path.read_bytes()))
 
 
@@ -97,7 +98,9 @@ def _assert_issue(result: object, message: str) -> None:
 @pytest.fixture(scope="module")
 def _pristine_projection(retained_evidence_root):
     built = build_catalogue(
-        read_native_table(retained_evidence_root / NATIVE_PATH), FRANCE_ORIGIN_DECLARATIONS, _availability()
+        read_native_table(retained_evidence_root / NATIVE_PATH),
+        FRANCE_ORIGIN_DECLARATIONS,
+        _availability(retained_evidence_root),
     )
     return copy_catalogue_projection(built)
 
@@ -107,6 +110,7 @@ def catalogue(_pristine_projection):
     return copy_catalogue_projection(_pristine_projection)
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.parametrize(
     ("endpoint", "endpoint_origins"),
     [
@@ -133,9 +137,12 @@ def test_native_build_enforces_each_endpoint_origin_declaration(
         FatalContractError,
         match=r"^fr_hubeau\.longitude: canonical column has no origin declaration$",
     ):
-        build_catalogue(read_native_table(retained_evidence_root / NATIVE_PATH), origins, _availability())
+        build_catalogue(
+            read_native_table(retained_evidence_root / NATIVE_PATH), origins, _availability(retained_evidence_root)
+        )
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.parametrize(
     ("endpoint", "partition", "remaining", "expected"),
     [
@@ -164,27 +171,31 @@ def test_native_build_rejects_unattested_partition_changes(
     )
 
     with pytest.raises(FatalContractError) as raised:
-        build_catalogue(shortened, FRANCE_ORIGIN_DECLARATIONS, _availability())
+        build_catalogue(shortened, FRANCE_ORIGIN_DECLARATIONS, _availability(retained_evidence_root))
     assert str(raised.value) == "Hub’Eau native content does not match its acquisition identity"
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_station_count(catalogue) -> None:
     assert catalogue.stations.height == 7323
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_product_count(catalogue) -> None:
     cat = catalogue
     assert cat.products.height == 4
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_station_products_cross(catalogue) -> None:
     cat = catalogue
     assert cat.station_products.height == 20231
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_hydro_station_fields(catalogue) -> None:
     cat = catalogue
@@ -193,6 +204,7 @@ def test_generate_catalogue_hydro_station_fields(catalogue) -> None:
     assert station["crs"][0] == "EPSG:4326"
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_temp_station_fields(catalogue) -> None:
     cat = catalogue
@@ -201,11 +213,13 @@ def test_generate_catalogue_temp_station_fields(catalogue) -> None:
     assert station["crs"][0] == "EPSG:4326"
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_filters_no_stations(retained_evidence_root, catalogue) -> None:
     assert catalogue.stations.height == read_native_table(retained_evidence_root / NATIVE_PATH).data.height
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_hydro_station_products(catalogue) -> None:
     cat = catalogue
@@ -218,6 +232,7 @@ def test_generate_catalogue_hydro_station_products(catalogue) -> None:
     }
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_generate_catalogue_temp_station_products(catalogue) -> None:
     cat = catalogue
@@ -225,14 +240,15 @@ def test_generate_catalogue_temp_station_products(catalogue) -> None:
     assert temp_sp["product_id"].to_list() == ["water_temperature_reported"]
 
 
-def _assert_fatal_issue(table: NativeTable, code: str, message: str) -> None:
+def _assert_fatal_issue(retained_evidence_root, table: NativeTable, code: str, message: str) -> None:
     with pytest.raises(FatalContractError) as raised:
-        build_catalogue(table, FRANCE_ORIGIN_DECLARATIONS, _availability())
+        build_catalogue(table, FRANCE_ORIGIN_DECLARATIONS, _availability(retained_evidence_root))
     assert [(issue.provider_id, issue.code, issue.message) for issue in raised.value.issues] == [
         (ProviderId("fr_hubeau"), code, message)
     ]
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_native_builder_rejects_one_unknown_endpoint_row(retained_evidence_root) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH)
@@ -246,12 +262,14 @@ def test_native_builder_rejects_one_unknown_endpoint_row(retained_evidence_root)
         )
     )
     _assert_fatal_issue(
+        retained_evidence_root,
         bad,
         "catalogue_native.unknown_source_endpoint",
         "fr_hubeau native table contains unknown source_endpoint third/endpoint",
     )
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.parametrize(
     ("column", "message"),
     [
@@ -265,12 +283,14 @@ def test_native_builder_rejects_each_absent_endpoint_coordinate(
 ) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH)
     _assert_fatal_issue(
+        retained_evidence_root,
         NativeTable(native.data.drop(column)),
         "catalogue_origin.absent_native_column",
         message,
     )
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.parametrize("signature_column", ["coordonnee_x_station", "coordonnee_y_station"])
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_code_31_correction_requires_each_signature_half(retained_evidence_root, signature_column: str) -> None:
@@ -285,12 +305,14 @@ def test_code_31_correction_requires_each_signature_half(retained_evidence_root,
         )
     )
     _assert_fatal_issue(
+        retained_evidence_root,
         bad,
         "catalogue_coordinate.correction_precondition_failed",
         f"fr_hubeau station {station_id} code_projection=31 does not match the documented transposition signature",
     )
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.parametrize(
     ("source_column", "signature_column", "value"),
     [
@@ -314,12 +336,14 @@ def test_code_31_correction_checks_each_inclusive_bound(
         )
     )
     _assert_fatal_issue(
+        retained_evidence_root,
         bad,
         "catalogue_coordinate.outside_metropolitan_bounds",
         f"fr_hubeau station {station_id} remains outside the evidenced metropolitan bounds after code_projection=31 correction",
     )
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_only_code_31_coordinates_are_transposed(retained_evidence_root, catalogue) -> None:
     native = read_native_table(retained_evidence_root / NATIVE_PATH).data
@@ -422,6 +446,7 @@ def test_only_code_31_coordinates_are_transposed(retained_evidence_root, catalog
     assert old_orientation["longitude_station"].max() == 49.9048593
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet")
 def test_code_26_changed_ids_pass_through_exactly(retained_evidence_root, catalogue) -> None:
     ids = [
@@ -956,7 +981,7 @@ def test_capture_boundaries_and_documentation_evidence(retained_evidence_root) -
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
+                "ledger.json.xz",
                 "--out",
                 "out",
                 "--hydro-fixture",
@@ -969,7 +994,7 @@ def test_capture_boundaries_and_documentation_evidence(retained_evidence_root) -
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
+                "ledger.json.xz",
                 "--out",
                 "out",
                 "--temp-fixture",
@@ -982,7 +1007,7 @@ def test_capture_boundaries_and_documentation_evidence(retained_evidence_root) -
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
+                "ledger.json.xz",
                 "--out",
                 "out",
                 "--native-out",
@@ -995,7 +1020,7 @@ def test_capture_boundaries_and_documentation_evidence(retained_evidence_root) -
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
+                "ledger.json.xz",
                 "--out",
                 "out",
                 "--hydro-retrieved-at",
@@ -1008,7 +1033,7 @@ def test_capture_boundaries_and_documentation_evidence(retained_evidence_root) -
                 "--native",
                 str(NATIVE_PATH),
                 "--availability-ledger",
-                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
+                "ledger.json.xz",
                 "--out",
                 "out",
                 "--temperature-retrieved-at",
@@ -1201,6 +1226,7 @@ def test_complete_native_table_is_source_faithful(retained_evidence_root) -> Non
     assert native_table_content_digest(rematerialized.value) == _PINNED_NATIVE_DIGEST
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.governing(
     "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet",
     full_verification=("fr_hubeau",),
@@ -1218,11 +1244,12 @@ def test_native_dates_cannot_change_without_new_acquisition(retained_evidence_ro
             .alias("retrieved_at")
         )
     )
-    availability = _availability()
+    availability = _availability(retained_evidence_root)
     with pytest.raises(FatalContractError, match="native content does not match its acquisition identity"):
         build_catalogue(changed, FRANCE_ORIGIN_DECLARATIONS, availability)
 
 
+@pytest.mark.derived("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
 def test_committed_catalogue_preserves_source_controls_and_catalogue_consistency(retained_evidence_root) -> None:
     # Literal source controls are independent; shared builder checks establish consistency.
@@ -1295,8 +1322,131 @@ def test_committed_catalogue_preserves_source_controls_and_catalogue_consistency
         (row[0], d.product_id) for row in temperature.select("code_station").iter_rows() for d in TEMP_PRODUCT_DEFS
     )
     assert set(committed_station_products.select("station_id", "product_id").iter_rows()) == expected_pairs
-    projected = generator.hubeau_availability(_availability(), expected_pairs, NativeTable(native))
+    projected = generator.hubeau_availability(
+        _availability(retained_evidence_root), expected_pairs, NativeTable(native)
+    )
     pl_testing.assert_frame_equal(committed_station_products, generator.build_station_products(projected))
     assert committed_station_products["published_record_start_date"].null_count() == len(expected_pairs)
     assert committed_station_products["published_record_end_date"].null_count() == len(expected_pairs)
     assert committed_provider == generator.build_provider_info(native["retrieved_at"].max().date())
+
+
+def test_source_response_rebuild_requires_explicit_reviewed_ledger(tmp_path):
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "rivretrieve._internal.providers.fr_hubeau.rebuild_catalogue",
+            "--evidence-root",
+            str(tmp_path / "inputs"),
+            "--build-inputs",
+            str(tmp_path / "build-inputs.json"),
+            "--out",
+            str(tmp_path / "output"),
+            "--capture-output",
+            str(tmp_path / "capture.json"),
+            "--revision",
+            "a" * 40,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "--availability-ledger" in result.stderr
+    assert not (tmp_path / "output").exists()
+
+
+@pytest.mark.governing(
+    *_catalogue_recording_paths("fr_hubeau"),
+    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+    "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
+    "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
+    "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
+    "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
+    "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.receipt.json",
+    "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.receipt.json",
+    full_verification=("fr_hubeau",),
+)
+def test_retained_station_responses_rebuild_exact_native_capture(
+    retained_evidence_root, catalogue_build_inputs, tmp_path, monkeypatch
+):
+    """Source-response materialization is separate from the shared native-table build."""
+    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import NativeInventoryCapture
+    from rivretrieve._internal.providers.fr_hubeau.rebuild_catalogue import rebuild
+    from rivretrieve._internal.transport import HttpClient
+
+    def offline(*args, **kwargs):
+        pytest.fail("Retained source-response rebuild attempted network access")
+
+    monkeypatch.setattr(HttpClient, "send", offline)
+    inventory = retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory"
+    capture = NativeInventoryCapture.model_validate_json((inventory / "native_capture.json").read_bytes())
+    native = read_native_table(retained_evidence_root / CURRENT_NATIVE_PATH)
+    catalogue = build_catalogue(
+        native, FRANCE_ORIGIN_DECLARATIONS, _availability(retained_evidence_root), native_capture=capture
+    )
+    selected = catalogue_build_inputs(catalogue.acquisition_provenance)
+    output = tmp_path / "catalogue"
+    capture_output = tmp_path / "native_capture.json"
+    rebuild(
+        retained_evidence_root,
+        inventory / "governing_evidence.json.xz",
+        output,
+        capture_output,
+        capture.native_table.revision,
+        build_inputs=selected,
+    )
+    assert (output / "native.parquet").read_bytes() == (retained_evidence_root / CURRENT_NATIVE_PATH).read_bytes()
+    assert NativeInventoryCapture.model_validate_json(capture_output.read_bytes()) == capture
+    approved = Path(__file__).parents[1] / CURRENT_NATIVE_PATH.parent
+    for name in ("stations.parquet", "products.parquet", "station_products.parquet", "station_metadata.parquet"):
+        pl_testing.assert_frame_equal(pl.read_parquet(output / name), pl.read_parquet(approved / name))
+
+
+@pytest.mark.parametrize("alias", ["relative", "symlink", "checkout"])
+def test_source_response_rebuild_resolves_output_containment(tmp_path, monkeypatch, alias):
+    from rivretrieve._internal.providers.fr_hubeau.rebuild_catalogue import rebuild
+    from tests.test_catalogue_build_provenance import _build
+
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    monkeypatch.chdir(tmp_path)
+    output = tmp_path / "new-output"
+    capture = tmp_path / "capture.json"
+    if alias == "relative":
+        output = Path("inputs/../inputs/new-output")
+    elif alias == "symlink":
+        link = tmp_path / "alias"
+        link.symlink_to(inputs, target_is_directory=True)
+        capture = link / "new-capture.json"
+    else:
+        checkout = tmp_path / "checkout"
+        checkout.mkdir()
+        (checkout / ".git").write_text("synthetic checkout marker")
+        output = Path("checkout/new-output")
+    with pytest.raises(ValueError, match="outside source checkouts|separate from retained evidence"):
+        rebuild(inputs, inputs / "ledger.json.xz", output, capture, "a" * 40, build_inputs=_build())
+    assert not output.exists()
+    assert not capture.exists()
+
+
+def test_source_response_rebuild_allows_new_external_output_paths(tmp_path):
+    from rivretrieve._internal.providers.fr_hubeau.rebuild_catalogue import rebuild
+    from tests.test_catalogue_build_provenance import _build
+
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    # The new output path passes containment, then the missing required input fails.
+    with pytest.raises(FileNotFoundError, match="hydrometry-stations"):
+        rebuild(
+            inputs,
+            inputs / "ledger.json.xz",
+            tmp_path / "new" / "catalogue",
+            tmp_path / "new" / "capture.json",
+            "a" * 40,
+            build_inputs=_build(),
+        )

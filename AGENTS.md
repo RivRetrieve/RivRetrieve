@@ -56,7 +56,10 @@ when changing an interface.
 
 Use [the maintainer guide](docs/maintenance/evidence.md) for verification and the
 private [source archive](https://github.com/RivRetrieve/verification-evidence)
-for retained material, exact collection selection and archive operations. Changes to governing claims, source bindings,
+for retained material, reviewed evidence ledgers, source-certification tools,
+exact collection selection and archive operations. RivRetrieve owns library behavior,
+catalogue transformations, synthetic fixtures and approved runtime products.
+Changes to governing claims, source bindings,
 verifiers or collections require the applicable full checks against genuine inputs.
 Review exact revisions before execution with private evidence.
 Report unavailable mandatory evidence as blocked; do not weaken checks or substitute

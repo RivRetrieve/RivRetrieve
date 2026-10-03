@@ -1,7 +1,0 @@
-discharge = rr.find(provider="th_thaiwater", station="1", quantity="discharge")
-
-discharge_result = rr.fetch(discharge, start="2024-06-01", end="2024-06-03", cache="bypass")
-
-print(discharge_result.data.height)
-print(discharge_result.data["value"].null_count())
-print([str(outcome.status) for outcome in discharge_result.outcomes])

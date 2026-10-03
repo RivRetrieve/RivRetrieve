@@ -26,7 +26,7 @@ from rivretrieve._internal.providers.ba_fhmzbih.origins import WorkbookAccessLed
 _TEST_DATA_DIR = Path("tests/test_data")
 _METADATA_FIXTURE = _TEST_DATA_DIR / "ba_fhmzbih_metadata.json"
 _NATIVE_TABLE = Path("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
-_LEDGER = Path(__file__).parents[1] / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
+_LEDGER = Path("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 _CATALOGUE_DIR = Path(__file__).parents[1] / _NATIVE_TABLE.parent
 _CRS_EVIDENCE = _TEST_DATA_DIR / "ba_fhmzbih_crs_evidence_stations.json"
 _RETRIEVED_AT = RetrievedAt(datetime(2026, 8, 2, 12, 42, 3, tzinfo=UTC))
@@ -108,13 +108,49 @@ def _origins():
     return STATION_CATALOGUE_ORIGINS
 
 
-def _access():
-    return TypeAdapter(WorkbookAccessLedger).validate_json(_LEDGER.read_bytes())
+def _access(retained_evidence_root):
+    return TypeAdapter(WorkbookAccessLedger).validate_json((retained_evidence_root / _LEDGER).read_bytes())
+
+
+@pytest.fixture
+def workbook_access_document():
+    """A synthetic one-row discharge workbook conclusion."""
+    return {
+        "schema_version": 1,
+        "publisher": "Agencija za vodno područje rijeke Save",
+        "baseline_native_sha256": "abcbc2d2234ea1751d638307f89fba4cba4feca96c9cd1d77c728b87a0fea77a",
+        "pairs": [
+            {
+                "station_no": "EXAMPLE",
+                "site_no": "1",
+                "product_id": "discharge_reported",
+                "source_code": "Q",
+                "workbook": "Q_1Y.xlsx",
+                "method": "GET",
+                "url": "https://vodostaji.voda.ba/data/internet/stations/1/EXAMPLE/Q/Q_1Y.xlsx",
+                "parameters": None,
+                "retrieved_at": "2026-01-02T00:00:00+00:00",
+                "http_status": 200,
+                "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "response_sha256": "a" * 64,
+                "byte_size": 1,
+                "parameter": "Proticaj",
+                "source_unit": "m³/s",
+                "status": "measurements_present",
+                "availability": "available",
+                "data_rows": 1,
+                "numerical_rows": 1,
+                "blank_rows": 0,
+                "observed_window_start": "2026-01-01T00:00:00",
+                "observed_window_end": "2026-01-01T00:00:00",
+            }
+        ],
+    }
 
 
 def _catalogue(retained_evidence_root: Path):
     return generate_catalogue.build_catalogue(
-        read_native_table(retained_evidence_root / _NATIVE_TABLE), _origins(), _access()
+        read_native_table(retained_evidence_root / _NATIVE_TABLE), _origins(), _access(retained_evidence_root)
     )
 
 
@@ -124,6 +160,7 @@ def _json_objects(values: pl.Series) -> list[dict[str, object]]:
     return objects
 
 
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_has_exact_counts_dates_and_schemas(retained_evidence_root: Path) -> None:
     catalogue = _catalogue(retained_evidence_root)
@@ -158,10 +195,11 @@ def test_native_build_has_exact_counts_dates_and_schemas(retained_evidence_root:
     )
 
 
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_is_exact_source_projection_and_preserves_native_material(retained_evidence_root: Path) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
-    actual = generate_catalogue.build_catalogue(native, _origins(), _access()).stations
+    actual = generate_catalogue.build_catalogue(native, _origins(), _access(retained_evidence_root)).stations
     expected = native.data.select(
         pl.lit("ba_fhmzbih").cast(pl.String).alias("provider_id"),
         pl.col("metadata_station_no").cast(pl.String).alias("station_id"),
@@ -240,20 +278,26 @@ def test_publisher_capture_and_attestation_support_not_published_crs(retained_ev
         assert values and min(values) == minimum and max(values) == maximum
 
 
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_enforces_origins_before_writing(retained_evidence_root: Path, tmp_path: Path) -> None:
     broken = dict(_origins())
     del broken["longitude"]
     with pytest.raises(FatalContractError, match=r"ba_fhmzbih\.longitude: canonical column has no origin declaration"):
-        generate_catalogue.build_catalogue(read_native_table(retained_evidence_root / _NATIVE_TABLE), broken, _access())
+        generate_catalogue.build_catalogue(
+            read_native_table(retained_evidence_root / _NATIVE_TABLE), broken, _access(retained_evidence_root)
+        )
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_rejects_empty_and_malformed_retrieval_timestamps(retained_evidence_root: Path) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
     with pytest.raises(FatalContractError, match="native table must not be empty"):
-        generate_catalogue.build_catalogue(NativeTable(native.data.clear()), _origins(), _access())
+        generate_catalogue.build_catalogue(
+            NativeTable(native.data.clear()), _origins(), _access(retained_evidence_root)
+        )
     malformed = object.__new__(NativeTable)
     object.__setattr__(
         malformed,
@@ -261,9 +305,10 @@ def test_native_build_rejects_empty_and_malformed_retrieval_timestamps(retained_
         native.data.with_columns(pl.lit(None).cast(pl.Datetime("us", "UTC")).alias("retrieved_at")),
     )
     with pytest.raises(FatalContractError, match="retrieved_at"):
-        generate_catalogue.build_catalogue(malformed, _origins(), _access())
+        generate_catalogue.build_catalogue(malformed, _origins(), _access(retained_evidence_root))
 
 
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_uses_workbook_dates_and_maximum_metadata_provider_date(retained_evidence_root: Path) -> None:
     native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
@@ -279,10 +324,10 @@ def test_native_build_uses_workbook_dates_and_maximum_metadata_provider_date(ret
         _origins(),
         TypeAdapter(WorkbookAccessLedger).validate_python(
             {
-                **json.loads(_LEDGER.read_bytes()),
+                **json.loads((retained_evidence_root / _LEDGER).read_bytes()),
                 "pairs": [
                     pair
-                    for pair in json.loads(_LEDGER.read_bytes())["pairs"]
+                    for pair in json.loads((retained_evidence_root / _LEDGER).read_bytes())["pairs"]
                     if pair["station_no"] in mixed["metadata_station_no"]
                 ],
             }
@@ -596,6 +641,7 @@ def test_main_rejects_incoherent_modes(
     assert message in captured.err
 
 
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_public_artifact_exposes_evidenced_baseline(retained_evidence_root: Path) -> None:
     artifact = _catalogue(retained_evidence_root).public_artifact
@@ -626,15 +672,17 @@ def test_public_artifact_exposes_evidenced_baseline(retained_evidence_root: Path
         ("byte_size", 0),
     ],
 )
-def test_workbook_ledger_rejects_inconsistent_pair(field, value) -> None:
+def test_workbook_ledger_rejects_inconsistent_pair(workbook_access_document, field, value) -> None:
     from pydantic import ValidationError
 
-    document = json.loads(_LEDGER.read_bytes())
+    document = workbook_access_document
+    TypeAdapter(WorkbookAccessLedger).validate_python(document)
     document["pairs"][0][field] = value
     with pytest.raises(ValidationError):
         TypeAdapter(WorkbookAccessLedger).validate_python(document)
 
 
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 @pytest.mark.governing(
     "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
     full_verification=("ba_fhmzbih",),
@@ -643,7 +691,7 @@ def test_workbook_ledger_rejects_inconsistent_pair(field, value) -> None:
 def test_workbook_build_rejects_unmatched_or_inconsistent_ledger(retained_evidence_root: Path, mutation) -> None:
     from pydantic import ValidationError
 
-    document = json.loads(_LEDGER.read_bytes())
+    document = json.loads((retained_evidence_root / _LEDGER).read_bytes())
     if mutation == "duplicate":
         document["pairs"].append(document["pairs"][0])
     elif mutation == "missing":
@@ -670,10 +718,11 @@ def test_workbook_build_rejects_unmatched_or_inconsistent_ledger(retained_eviden
         )
 
 
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_workbook_dates_reasons_and_unknown_published_bounds_are_preserved(retained_evidence_root: Path) -> None:
     catalogue = _catalogue(retained_evidence_root)
-    expected = _access()
+    expected = _access(retained_evidence_root)
     for pair in expected.pairs:
         row = catalogue.station_products.filter(
             (pl.col("station_id") == pair.station_no) & (pl.col("product_id") == pair.product_id)
@@ -689,19 +738,23 @@ def test_workbook_dates_reasons_and_unknown_published_bounds_are_preserved(retai
 
 
 @pytest.mark.parametrize("field", ["observed_window_start", "observed_window_end"])
-def test_workbook_ledger_rejects_zoned_source_wall_clock(field) -> None:
+def test_workbook_ledger_rejects_zoned_source_wall_clock(workbook_access_document, field) -> None:
     from pydantic import ValidationError
 
-    document = json.loads(_LEDGER.read_bytes())
+    document = workbook_access_document
+    TypeAdapter(WorkbookAccessLedger).validate_python(document)
     document["pairs"][0][field] += "+00:00"
     with pytest.raises(ValidationError, match="timezone"):
         TypeAdapter(WorkbookAccessLedger).validate_python(document)
 
 
-def test_workbook_ledger_requires_utc_retrieval_instant() -> None:
+def test_workbook_ledger_requires_utc_retrieval_instant(
+    workbook_access_document,
+) -> None:
     from pydantic import ValidationError
 
-    document = json.loads(_LEDGER.read_bytes())
+    document = workbook_access_document
+    TypeAdapter(WorkbookAccessLedger).validate_python(document)
     document["pairs"][0]["retrieved_at"] = "2026-09-13T23:57:40+05:00"
     with pytest.raises(ValidationError, match="UTC"):
         TypeAdapter(WorkbookAccessLedger).validate_python(document)
