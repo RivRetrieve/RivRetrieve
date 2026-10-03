@@ -1,9 +1,9 @@
-# Catalogue absence vocabulary and upstream proposal
+# Catalogue absence vocabulary
 
-This document defines RivRetrieve's local `rr:absence` property and drafts a proposal for
-MLCommons. The proposal has not been filed. The local meaning is defined in
-[`CONTEXT.md`](../CONTEXT.md); the examples are grounded in the packaged catalogue
-descriptors, which `rivretrieve.describe(provider)` returns unchanged as parsed JSON-LD.
+RivRetrieve's local `rr:absence` property records why catalogue information is unavailable.
+The local meaning is defined in [`CONTEXT.md`](../CONTEXT.md). The examples below come
+from the packaged catalogue descriptors, which `rivretrieve.describe(provider)` returns
+unchanged as parsed JSON-LD.
 
 ## Absence
 
@@ -65,54 +65,8 @@ Unchecked station-product pairs remain selectable with unknown availability. Bra
 exact station/variant observations were acquired. Unestablished CRS, citation and published
 record bounds remain explicit absences rather than inferred facts.
 
-## Why propose this upstream?
+## Upstream discussion
 
-[Croissant 1.0](https://docs.mlcommons.org/croissant/docs/croissant-spec.html) provides
-file descriptions and field extraction relationships. Our use case also needs a machine
-to distinguish deliberate lack of a source fact from an unestablished acquisition record.
-Neither a null value nor a free-text dataset description makes that distinction at the
-field where a consumer encounters it.
-
-[MLCommons issue #1012](https://github.com/mlcommons/croissant/issues/1012) asks how to
-describe known dataset biases or imbalances, using a gender imbalance as its example.
-This proposal concerns the evidence behind an absent field or excluded rows. It does not
-classify bias, infer representativeness, or claim that a publisher never supplies a fact
-merely because RivRetrieve did not acquire it.
-
-The proposed upstream capability is an explicit field-level absence with two distinct
-states and a corresponding record-set-level exclusion count. Names in an upstream
-vocabulary would be decided by MLCommons. RivRetrieve's `rr:` property remains local;
-this draft does not claim that MLCommons has accepted it.
-
-## Local evidence for the proposal
-
-Every provider ships one descriptor beside its four catalogue tables:
-
-| Providers | Examples to inspect |
-|---|---|
-| [ba_fhmzbih](../src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/croissant.json), [ch_foen](../src/rivretrieve/_internal/providers/ch_foen/catalogue/croissant.json), [cz_chmi](../src/rivretrieve/_internal/providers/cz_chmi/catalogue/croissant.json), [jp_mlit](../src/rivretrieve/_internal/providers/jp_mlit/catalogue/croissant.json), [no_nve](../src/rivretrieve/_internal/providers/no_nve/catalogue/croissant.json), [th_thaiwater](../src/rivretrieve/_internal/providers/th_thaiwater/catalogue/croissant.json), [za_dws](../src/rivretrieve/_internal/providers/za_dws/catalogue/croissant.json) | Evidenced not-published coordinate reference systems. |
-| [pl_imgw](../src/rivretrieve/_internal/providers/pl_imgw/catalogue/croissant.json) | Withheld coordinate reference system; coordinates trace to the recovered GRDC CSV, while station identity also uses IMGW roster membership. |
-| [fr_hubeau](../src/rivretrieve/_internal/providers/fr_hubeau/catalogue/croissant.json), [fr_hydroportail](../src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/croissant.json) | Independent source inventories with available and unknown source-specific pairs. |
-| [br_ana](../src/rivretrieve/_internal/providers/br_ana/catalogue/croissant.json) | Certified river-gauge candidates with exact source-variant availability evidence and explicit unestablished CRS and record bounds. |
-| [ca_eccc](../src/rivretrieve/_internal/providers/ca_eccc/catalogue/croissant.json), [lt_lhmt](../src/rivretrieve/_internal/providers/lt_lhmt/catalogue/croissant.json), [usgs_nwis](../src/rivretrieve/_internal/providers/usgs_nwis/catalogue/croissant.json) | Source lineage and verbatim credit alongside explicit absences where recorded. |
-
-The examples live under
-[`src/rivretrieve/_internal/providers/`](../src/rivretrieve/_internal/providers/).
-Their lineage originates in each provider's `provenance.json` and origin declarations;
-the descriptor does not grant additional certification. Public native tables retain
-commit-pinned repository identities and stay outside the wheel. Private material retains
-only its digest identity and permitted verification facts, with no private download link.
-
-Extraction and historical lineage use different relationships. A field's `subjectOf`
-describes its provenance as a schema.org `CreativeWork`; `isBasedOn` identifies its
-recorded acquisition inputs. A separate `citation` reference can identify corroborating
-evidence, leaving the source material's requested credit text unchanged. For Poland,
-the private workbook corroborates the recovered CSV; it is not established as the
-historical acquisition that produced it. That limitation travels with the description.
-
-Before filing, the maintainer can link a public released revision of these thirteen
-descriptors, their reference-validator results, and the relevant provenance records. The
-upstream discussion should settle how an absence value is represented in JSON-LD, how
-consumers distinguish unavailable source facts from the columns carrying their markers, and
-whether exclusion counts belong directly on a record set. Filing and upstream vocabulary
-changes remain separate maintainer decisions.
+[MLCommons Croissant issue #1056](https://github.com/mlcommons/croissant/issues/1056)
+raises the need to distinguish reasons for missing information. `rr:absence` remains a
+RivRetrieve extension; it is not part of the Croissant standard.
