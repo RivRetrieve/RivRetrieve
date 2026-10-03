@@ -140,7 +140,8 @@ def test_registry_matches_declared_provider_kinds() -> None:
 def test_repository_configuration_enforces_transport_boundary() -> None:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text())
     ruff_lint = config["tool"]["ruff"]["lint"]
-    assert "TID251" in ruff_lint["extend-select"]
+    selected_rules = {*ruff_lint.get("select", ()), *ruff_lint.get("extend-select", ())}
+    assert "TID251" in selected_rules
     assert set(ruff_lint["flake8-tidy-imports"]["banned-api"]) == {"httpx", "requests", "urllib"}
     assert ruff_lint["per-file-ignores"] == {
         "src/rivretrieve/_internal/transport.py": ["TID251"],
