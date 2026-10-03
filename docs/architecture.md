@@ -257,5 +257,5 @@ These links open tests rather than implementation modules:
 - [Window-planning tests](../tests/test_internal_window_planning.py) check shared splitting and rendering.
 - [Source-failure tests](../tests/test_source_failure_isolation.py) check partial results and retained diagnostics.
 - [Live-cache tests](../tests/test_live_cache.py) check reuse, refresh, coverage, and receipts.
-- [Store-conformance tests](../tests/test_observation_store_conformance.py) check native storage and shared reads.
+- [Store-validation tests](../tests/test_observation_store_validation.py), [reader refusal tests](../tests/store/test_reader_refusal.py), and [value-state tests](../tests/store/test_compile_value_states.py) check native storage, invalid-input refusal, and shared reads.
 - [Catalogue-evidence tests](../tests/test_catalogue_evidence.py) check the normalized evidence contract.
