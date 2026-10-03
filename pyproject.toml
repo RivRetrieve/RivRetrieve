@@ -91,7 +91,8 @@ line-length = 120
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "N", "I", "UP", "B", "C4", "SIM", "TID251"]
+select = ["E", "F", "W", "N", "I", "UP", "B", "C4", "SIM"]
+extend-select = ["TID251"]
 ignore = [
     "E501", # Allow long lines that the formatter cannot wrap.
     "N803", # allow X, Y for ML-style params
