@@ -32,6 +32,7 @@ def test_dws_packaged_snapshot_is_discoverable() -> None:
     assert set(products["product_id"]) == product_ids
     assert set(products["provider_id"]) == {provider}
     assert station_products.height == 8715
+    assert station_products.height == stations.height * products.height
     assert set(station_products["availability"].cast(str)) == {"unknown"}
     assert set(rr.products(provider=provider)) == product_ids
 

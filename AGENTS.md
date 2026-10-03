@@ -11,7 +11,7 @@ Use `uv` exclusively for project dependencies and execution.
 - Add dependencies: `uv add <package>`; development dependencies: `uv add --dev <package>`.
 - Sync the environment: `uv sync`.
 - Run commands: `uv run <command>`.
-- Run tests: `uv run pytest`.
+- Run source-independent tests: `uv run pytest --logic-only`.
 - Format: `uv run ruff format`.
 - Lint: `uv run ruff check --fix`.
 - Type-check: `uv run ty check src`.
@@ -58,25 +58,24 @@ Use [the maintainer guide](docs/maintenance/evidence.md) for verification and th
 private [source archive](https://github.com/RivRetrieve/verification-evidence)
 for retained material, exact collection selection and archive operations. Changes to governing claims, source bindings,
 verifiers or collections require the applicable full checks against genuine inputs.
+Review exact revisions before execution with private evidence.
 Report unavailable mandatory evidence as blocked; do not weaken checks or substitute
 derived data for originals. Keep controlled material and credentials out of public
 repositories, logs, caches, artifacts and distribution packages.
 
-## Contributing tests
+## Tests
 
-Follow the [testing guide](docs/maintenance/testing.md): protect named promises,
-use justified expectations, and choose the simplest sufficient level.
+Protect named behavior with an expectation that can detect the claimed defect, at
+the simplest sufficient level. Extend shared contracts; add provider-specific
+cases for real source differences. Use the [testing guide](docs/maintenance/testing.md)
+when adding or reorganising coverage.
 
-Before adding a test, check existing coverage and identify the distinct behavior or
-architectural rule it protects. Use focused tests for edge cases, and explain why expensive
-end-to-end combinations need separate coverage. Reuse expensive unchanged inputs only when
-tests remain isolated and changed or corrupt inputs still reach validation. Measure and report
-the runtime impact of costly new coverage. Lock exact wording or code structure only when that
-property is an intentional contract.
+Run affected source-independent tests, fix change-related failures and rerun
+without step-by-step approval. Match broader checks to changed boundaries and
+the task's acceptance requirements. Use temporary cache and store roots. Shared
+setup must not hide changed or corrupt inputs from validation.
 
-## Complex-data assertions
-
-Prefer library-specific assertions over manual element-by-element checks of structure or values:
+Prefer library-specific assertions for arrays, datasets and tables:
 
 ```python
 np.testing.assert_allclose(result, expected)
