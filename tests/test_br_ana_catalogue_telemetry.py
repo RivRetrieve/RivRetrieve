@@ -46,7 +46,11 @@ def inputs(retained_evidence_root):
     "tests/test_data/br_ana_inventory/capture.json",
 )
 @pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
-def test_real_unacquired_availability_survives_provenance_normalization_and_artifact(inputs, tmp_path):
+@pytest.mark.recorded("tests/test_data/br_ana_terms_licence.html")
+@pytest.mark.recorded("tests/test_data/br_ana_inventory")
+def test_real_unacquired_availability_survives_provenance_normalization_and_artifact(
+    inputs, tmp_path, catalogue_build_inputs
+):
     capture, native, telemetry, provenance = inputs
     catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, provenance, telemetry)
     assert catalogue.station_products.height == 2 * capture.fluviometric_station_count
@@ -67,7 +71,9 @@ def test_real_unacquired_availability_survives_provenance_normalization_and_arti
         located.select("station_id", "product_id").sort("station_id", "product_id"),
         catalogue.station_products.select("station_id", "product_id"),
     )
-    write_catalogue(catalogue, tmp_path)
+    write_catalogue(
+        catalogue, tmp_path, build_inputs=catalogue_build_inputs(catalogue.acquisition_provenance), native_table=native
+    )
     assert_frame_equal(pl.read_parquet(tmp_path / "station_products.parquet"), catalogue.station_products)
 
 

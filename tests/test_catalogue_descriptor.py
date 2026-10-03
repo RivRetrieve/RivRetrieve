@@ -199,7 +199,11 @@ def test_evidenced_baseline_record_sets_do_not_report_withheld_rows(provider: st
     "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
     "tests/test_data/br_ana_inventory/capture.json",
 )
-def test_reference_loader_reads_empty_tables_and_null_fields(retained_evidence_root: Path, monkeypatch, tmp_path):
+@pytest.mark.recorded("tests/test_data/br_ana_terms_licence.html")
+@pytest.mark.recorded("tests/test_data/br_ana_inventory")
+def test_reference_loader_reads_empty_tables_and_null_fields(
+    retained_evidence_root: Path, monkeypatch, tmp_path, catalogue_build_inputs
+):
     # Inventory-only projection remains a valid empty-table fixture, even though
     # the shipped Brazil catalogue now includes evidenced adopted telemetry.
     from rivretrieve._internal.catalogues.native import read_native_table
@@ -210,12 +214,15 @@ def test_reference_loader_reads_empty_tables_and_null_fields(retained_evidence_r
     monkeypatch.setattr(socket.socket, "connect", _deny_network)
     repository = retained_evidence_root
     capture = read_capture_record(repository / "tests/test_data/br_ana_inventory/capture.json")
+    native = read_native_table(repository / capture.native_table.repository_path)
     inventory = build_catalogue(
-        read_native_table(repository / capture.native_table.repository_path),
+        native,
         STATION_CATALOGUE_ORIGINS,
         build_acquisition_provenance(capture),
     )
-    write_catalogue(inventory, tmp_path)
+    write_catalogue(
+        inventory, tmp_path, build_inputs=catalogue_build_inputs(inventory.acquisition_provenance), native_table=native
+    )
     brazil = mlc.Dataset(tmp_path / "croissant.json")
     for record in ("products", "station_products"):
         assert list(brazil.records(record)) == []
@@ -484,3 +491,25 @@ def test_record_keys_expand_to_croissant_vocabulary(provider: str):
     for record in _record_sets(descriptor["recordSet"]):
         if "key" in record:
             assert list(graph.objects(URIRef(BASE + record["@id"]), croissant.key))
+
+
+@pytest.mark.parametrize("name", ["provenance.json", "croissant.json"])
+def test_build_identity_comparison_preserves_source_content(name: str) -> None:
+    from tests._catalogue import catalogue_content_without_build_identity
+
+    document = json.loads((_path("jp_mlit") / name).read_bytes())
+    expected = catalogue_content_without_build_identity(name, json.dumps(document).encode())
+    if name == "provenance.json":
+        document["build_inputs"] = {"test": "different selected revision"}
+        document["transformations"][0]["executable"] = {"test": "different code revision"}
+        document["transformations"][0]["declaration"] = {"test": "different declaration revision"}
+    else:
+        provenance = next(item for item in document["distribution"] if item["@id"] == "provenance.json")
+        provenance.update(sha256="different build header digest", contentSize="different header size")
+    assert catalogue_content_without_build_identity(name, json.dumps(document).encode()) == expected
+
+    if name == "provenance.json":
+        document["native_table"]["sha256"] = "changed native identity"
+    else:
+        document["distribution"][0]["sha256"] = "changed provider facts"
+    assert catalogue_content_without_build_identity(name, json.dumps(document).encode()) != expected

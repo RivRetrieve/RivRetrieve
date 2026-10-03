@@ -56,7 +56,7 @@ PAGES = [
     "docs/reference.md",
     "docs/examples/camels-us.md",
     "docs/product_dictionary.md",
-    "docs/drainage-areas.md",
+    "docs/station-metadata.md",
     "docs/catalogue-evidence.md",
     "docs/maintenance/evidence.md",
     "docs/catalogue-provenance.md",

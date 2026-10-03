@@ -27,6 +27,7 @@ from rivretrieve._internal.catalogue_origins import (
     Withheld,
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
+from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.br_ana.capture import (
     AdoptedTelemetryEvidence,
@@ -34,6 +35,14 @@ from rivretrieve._internal.providers.br_ana.capture import (
     InventoryCapture,
 )
 from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, BrAnaSourceCoordinates, config
+
+# Name mappings require genuine-input validation and owner disclosure approval
+# before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+    MetadataField("drainage_area", "Area_Drenagem"),
+    MetadataField("station_name", "Estacao_Nome"),
+    MetadataField("river_name", "Rio_Nome"),
+)
 
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("br_ana")),
@@ -583,3 +592,69 @@ def with_observation_products(
         fact_bindings=tuple(bindings),
         withheld_facts=withheld,
     )
+
+
+# Existing acquisition facts materialised in the retained native table.
+# This declares derived-input support, not preservation of original responses.
+NATIVE_TABLE_ACQUISITION_IDS = (
+    "inventory_UF_AC",
+    "inventory_UF_AL",
+    "inventory_UF_AP",
+    "inventory_UF_AM",
+    "inventory_UF_BA",
+    "inventory_UF_CE",
+    "inventory_UF_DF",
+    "inventory_UF_ES",
+    "inventory_UF_GO",
+    "inventory_UF_MA",
+    "inventory_UF_MT",
+    "inventory_UF_MS",
+    "inventory_UF_MG",
+    "inventory_UF_PA",
+    "inventory_UF_PB",
+    "inventory_UF_PR",
+    "inventory_UF_PE",
+    "inventory_UF_PI",
+    "inventory_UF_RJ",
+    "inventory_UF_RN",
+    "inventory_UF_RS",
+    "inventory_UF_RO",
+    "inventory_UF_RR",
+    "inventory_UF_SC",
+    "inventory_UF_SP",
+    "inventory_UF_SE",
+    "inventory_UF_TO",
+)
+
+
+# Authored catalogue, physical-fact and support declarations selected at build time.
+CATALOGUE_BUILD_DECLARATIONS = (
+    ("src/rivretrieve/_internal/providers/br_ana/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/br_ana/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/br_ana/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/br_ana/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/br_ana/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/br_ana/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/br_ana/catalogue_series.py", "describe_catalogue"),
+)
+
+
+# Additional retained declarations used by these source facts; not original-body claims.
+CATALOGUE_SUPPORTING_INPUTS = {
+    "source.ana.adopted_field_units_measurement_time": (
+        "tests/recordings/br_ana/manual-page11-acquisition.json",
+        "tests/recordings/br_ana/manual-page11-derived.txt",
+    ),
+    "source.ana.conventional_daily_definitions": (
+        "tests/recordings/br_ana/hidro-1.4-conventional-dictionary-derived.json",
+        "tests/recordings/br_ana/hidro-sqlserver-selected-views-derived.json",
+        "tests/recordings/br_ana/hidro-extraction-manifest.json",
+        "tests/recordings/br_ana/daily-source-comparison-report.md",
+        "tests/recordings/br_ana/paired-discharge-2024-comparison.json",
+        "tests/recordings/br_ana/paired-stage-2020-comparison.json",
+        "tests/recordings/br_ana/paired-discharge-2020-comparison.json",
+        "tests/recordings/br_ana/paired-stage-2024-comparison.json",
+        "tests/recordings/br_ana/daily-correspondence-identities.json",
+    ),
+}

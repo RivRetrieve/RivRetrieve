@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
     AcquisitionRecord,
+    CatalogueBuildInputs,
     EvidenceReference,
     MaterialIdentity,
     NativeTableIdentity,
@@ -1192,12 +1193,22 @@ def validate_generated_catalogue(
     )
 
 
-def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) -> None:
+def write_catalogue(
+    catalogue: GeneratedFrHubeauCatalogue,
+    out_dir: Path | str,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
+) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS
     from rivretrieve._internal.providers.fr_hubeau.config import config as source_config
-    from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
+    from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS, STATION_METADATA_FIELDS
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -1213,6 +1224,9 @@ def write_catalogue(catalogue: GeneratedFrHubeauCatalogue, out_dir: Path | str) 
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
         source_config=source_config(),
         source_mappings=SERIES_MAPPINGS,
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
@@ -1253,6 +1267,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--hydro-retrieved-at", type=_parse_retrieved_at)
     parser.add_argument("--temperature-retrieved-at", type=_parse_retrieved_at)
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
 
     refresh_requested = any(
@@ -1274,6 +1289,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--availability-ledger is required for canonical build")
         if args.evidence_root is None:
             parser.error("--evidence-root is required for canonical build")
+        if args.build_inputs is None:
+            parser.error("--out requires --build-inputs")
+        build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
         availability = decode_availability(lzma.decompress(args.availability_ledger.read_bytes()))
         from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
@@ -1282,18 +1300,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.native_capture
             else None
         )
+        native_table = read_native_table(
+            args.native,
+            expected_sha256=capture.native_table.sha256 if capture else NATIVE_TABLE_SHA256,
+            expected_byte_size=capture.native_table.byte_size if capture else NATIVE_TABLE_BYTE_SIZE,
+        )
         catalogue = build_catalogue(
-            read_native_table(
-                args.native,
-                expected_sha256=capture.native_table.sha256 if capture else NATIVE_TABLE_SHA256,
-                expected_byte_size=capture.native_table.byte_size if capture else NATIVE_TABLE_BYTE_SIZE,
-            ),
+            native_table,
             FRANCE_ORIGIN_DECLARATIONS,
             availability,
             native_capture=capture,
         )
         verify_provenance_recordings(catalogue.acquisition_provenance, args.evidence_root)
-        write_catalogue(catalogue, args.out)
+        write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)
         return 0
 
     if args.out is not None:

@@ -13,7 +13,11 @@ from typing import cast
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    CatalogueBuildInputs,
+    verify_provenance_recordings,
+)
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -58,6 +62,7 @@ class GeneratedLtLhmtCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    acquisition_provenance: AcquisitionProvenance
 
 
 def refresh_native_table(
@@ -115,6 +120,7 @@ def build_catalogue(
         products=products,
         stations=stations,
         station_products=station_products,
+        acquisition_provenance=build_acquisition_provenance(),
     )
 
 
@@ -217,10 +223,20 @@ def validate_generated_catalogue(
     )
 
 
-def write_catalogue(catalogue: GeneratedLtLhmtCatalogue, out_dir: Path | str) -> None:
+def write_catalogue(
+    catalogue: GeneratedLtLhmtCatalogue,
+    out_dir: Path | str,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
+) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -231,11 +247,14 @@ def write_catalogue(catalogue: GeneratedLtLhmtCatalogue, out_dir: Path | str) ->
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
     metadata = build_catalogue_metadata(
-        build_acquisition_provenance(),
+        catalogue.acquisition_provenance,
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
         source_config=source_config(),
         source_mappings=SERIES_MAPPINGS,
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
@@ -304,6 +323,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     destination.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
     parser.add_argument("--evidence-root", type=Path, help="External root for retained provenance inputs.")
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
 
     if args.native_out is not None:
@@ -326,17 +346,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.evidence_root is None:
         parser.error("--out requires --evidence-root")
+    if args.build_inputs is None:
+        parser.error("--out requires --build-inputs")
+    build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
     provenance = build_acquisition_provenance()
     verify_provenance_recordings(provenance, args.evidence_root)
+    native_table = read_native_table(
+        args.native,
+        expected_sha256=NATIVE_TABLE_SHA256,
+        expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
+    )
     catalogue = build_catalogue(
-        read_native_table(
-            args.native,
-            expected_sha256=NATIVE_TABLE_SHA256,
-            expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
-        ),
+        native_table,
         STATION_CATALOGUE_ORIGINS,
     )
-    write_catalogue(catalogue, args.out)
+    write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)
     return 0
 
 

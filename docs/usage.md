@@ -62,6 +62,21 @@ also shows identities found in the response. The packaged catalogue is a snapsho
 exhaustive census of current or historical series. An unrestricted selection includes later
 matching discoveries; it does not freeze retrieval to the catalogue's known members.
 
+### Inspect station metadata
+
+```python
+stations = rr.metadata(chosen_gauges)
+print(stations)
+
+source_attributes = rr.metadata(chosen_gauges, view="source")
+```
+
+The station table contains names and coordinates with their CRS. Unresolved name
+alternatives leave the summary name null and set its alternatives indicator.
+The source view preserves names and separate drainage-area fields with exact
+values, units where established, and explicit absence states. Both views work
+offline. See [station metadata](station-metadata.md) for interpretation.
+
 ### Narrow and save selections
 
 Use `pick` to narrow a selection by physical facts or by `variant` and `series_id`.

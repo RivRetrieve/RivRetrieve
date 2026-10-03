@@ -20,12 +20,17 @@ def execute(page):
     return scope
 
 
-def test_drainage_area_markdown():
-    scope = execute("docs/drainage-areas.md")
-    assert scope["value"] == 1035.0
-    assert scope["areas"].height == 2
-    assert set(scope["areas"]["state"]) == {"value", "source_null"}
-    assert scope["areas"]["station_id"].unique().to_list() == ["02GA010"]
+def test_station_metadata_markdown():
+    scope = execute("docs/station-metadata.md")
+    stations = scope["stations"]
+    source = scope["source"]
+    keys = ["provider_id", "station_id"]
+    assert stations.unique(subset=keys).height == stations.height
+    assert_frame_equal(stations.select(keys).sort(keys), source.select(keys).unique().sort(keys))
+    areas = scope["areas"].filter(pl.col("station_id") == "02GA010")
+    assert areas.height == 2
+    assert set(areas["state"]) == {"value", "source_null"}
+    assert 1035.0 in scope["values"]
 
 
 def test_catalogue_evidence_markdown():

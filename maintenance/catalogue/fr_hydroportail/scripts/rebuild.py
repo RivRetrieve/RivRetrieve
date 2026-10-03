@@ -14,6 +14,7 @@ def main() -> int:
         type=Path,
         default=Path(__file__).resolve().parents[2] / "fr_hubeau/inventory/governing_evidence.json.xz",
     )
+    parser.add_argument("--build-inputs", type=Path, required=True, help="Reviewed adopted CatalogueBuildInputs JSON.")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     args.out = args.out.resolve()
@@ -24,6 +25,8 @@ def main() -> int:
         parser.error("Output must be separate from retained evidence")
     return generate(
         [
+            "--build-inputs",
+            str(args.build_inputs.resolve()),
             "--evidence-root",
             str(evidence_root),
             "--native",

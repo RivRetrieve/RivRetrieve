@@ -16,7 +16,7 @@ from typing import cast
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
+from rivretrieve._internal.acquisition_provenance import CatalogueBuildInputs, verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -965,15 +965,25 @@ def validate_generated_catalogue(
     )
 
 
-def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) -> None:
+def write_catalogue(
+    catalogue: GeneratedUsgsNwisCatalogue,
+    out_dir: Path | str,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
+) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
 
     if catalogue.modern_metadata is None:
         raise FatalContractError(
             "Modern USGS publication requires complete modern metadata; legacy native builds cannot be published"
         )
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -994,7 +1004,13 @@ def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) 
     descriptions = modern_source_descriptions(features, locations)
     provenance = build_modern_acquisition_provenance(receipts, catalogue.modern_metadata)
     metadata = build_catalogue_metadata(
-        provenance, (STATION_CATALOGUE_ORIGINS,), files, source_descriptions=descriptions
+        provenance,
+        (STATION_CATALOGUE_ORIGINS,),
+        files,
+        source_descriptions=descriptions,
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
     )
     from rivretrieve._internal.catalogues.source_series import decode_source_descriptions, encode_source_descriptions
 
@@ -1002,10 +1018,12 @@ def write_catalogue(catalogue: GeneratedUsgsNwisCatalogue, out_dir: Path | str) 
     if decode_source_descriptions(metadata["source_series.json"]) != descriptions:
         raise FatalContractError("Source-description encoding changed source definitions")
     from rivretrieve._internal.catalogues.descriptor import build_catalogue_descriptor
-    from rivretrieve._internal.catalogues.evidence import normalize_provenance
+    from rivretrieve._internal.catalogues.evidence import EvidenceHeader
+    from rivretrieve._internal.catalogues.evidence_encoding import EVIDENCE_FILENAMES, parse_catalogue_evidence
 
-    evidence = normalize_provenance(
-        provenance, stations=catalogue.stations, station_products=catalogue.station_products
+    evidence = parse_catalogue_evidence(
+        EvidenceHeader.model_validate_json(metadata["provenance.json"]),
+        {filename: metadata[filename] for filename in EVIDENCE_FILENAMES.values()},
     )
     metadata["monitoring_locations.json"] = (
         json.dumps(locations, sort_keys=True, separators=(",", ":")) + "\n"
@@ -1075,6 +1093,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
     parser.add_argument("--native-out", type=Path, help="Output path for an attested native Parquet table.")
     parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
 
     if args.native is not None:
@@ -1093,6 +1112,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if args.evidence_root is None:
             parser.error("--native publication requires --evidence-root")
+        if args.build_inputs is None:
+            parser.error("--out requires --build-inputs")
+        build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
         verify_provenance_recordings(build_acquisition_provenance(), args.evidence_root)
         native_table = read_native_table(
             args.native,
@@ -1100,7 +1122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
         )
         catalogue = build_modern_catalogue(native_table, STATION_CATALOGUE_ORIGINS, args.modern_metadata)
-        write_catalogue(catalogue, args.out)
+        write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)
         return 0
 
     if args.out is not None:

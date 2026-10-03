@@ -19,6 +19,11 @@ from rivretrieve._internal.acquisition_provenance import (
     complete_transformed_fact_universe,
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
+from rivretrieve._internal.catalogues.station_metadata import MetadataField
+
+# Name mappings require genuine-input validation and owner disclosure approval
+# before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = ()
 
 if TYPE_CHECKING:
     from rivretrieve._internal.catalogues.native import NativeTable
@@ -202,3 +207,26 @@ def build_acquisition_provenance(
             ),
         ),
     )
+
+
+# Existing acquisition facts materialised in the retained native table.
+# This declares derived-input support, not preservation of original responses.
+NATIVE_TABLE_ACQUISITION_IDS = ("public_station_search",)
+
+
+# Authored catalogue, physical-fact and support declarations selected at build time.
+CATALOGUE_BUILD_DECLARATIONS = (
+    ("src/rivretrieve/_internal/providers/fr_hydroportail/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/fr_hydroportail/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/fr_hydroportail/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/fr_hydroportail/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/fr_hydroportail/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/fr_hydroportail/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/fr_hydroportail/config.py", "SERIES_MAPPINGS"),
+    ("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz", None),
+)
+
+
+# Additional retained declarations used by these source facts; not original-body claims.
+CATALOGUE_SUPPORTING_INPUTS = {}

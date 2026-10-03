@@ -23,11 +23,18 @@ repository copy. Shared engine and documentation tests also use these recordings
 
 The catalogue build takes explicit local inputs:
 
+Use the reviewed catalogue build through the [archive coordinator](../../../docs/maintenance/evidence.md) to export
+`usgs_nwis.build-inputs.json` outside the checkout. Set `BUILD_INPUTS` to that
+file. It contains the adopted `CatalogueBuildInputs` selection, not the
+coordinator receipt `catalogue-input-provenance.json`. Keep the selection and
+build outputs in the private output directory.
+
 ```sh
 uv run python -m rivretrieve._internal.providers.usgs_nwis.generate_catalogue \
   --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet" \
   --modern-metadata "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/research/usgs-modern-coverage" \
   --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --build-inputs "$BUILD_INPUTS" \
   --out "$PRIVATE_CATALOGUE_OUTPUT"
 ```
 

@@ -7,13 +7,24 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterator
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import polars as pl
+import pytest
 
-from rivretrieve._internal.catalogue_origins import Authored, AuthoredValue
+from rivretrieve._internal.acquisition_provenance import (
+    ArchiveMemberReference,
+    CatalogueBuildInputs,
+    CodeReference,
+    RetainedInputUse,
+)
+from rivretrieve._internal.catalogue_origins import Authored, AuthoredValue, Field
 from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES, load_packaged_catalogue_artifact
+from rivretrieve._internal.catalogues.native import NativeTable
 from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
 from rivretrieve._internal.catalogues.source_descriptions import generic_source_descriptions
 from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
@@ -40,10 +51,62 @@ def _copy_catalogue_with_provider_id(source: Path, destination: Path, provider_i
     # The plugin reuses the same acquired source data under an authored registration ID.
     evidence = evidence.model_copy(update={"header": evidence.header.model_copy(update={"provider_id": provider_id})})
     origins = {**STATION_CATALOGUE_ORIGINS, "provider_id": Authored(AuthoredValue(provider_id))}
+
+    # Synthetic build identities exercise dependency wiring only. This fixture
+    # does not certify archived bytes or add a provider source claim.
+    def code(path: str, symbol: str) -> CodeReference:
+        return CodeReference(
+            repository="https://github.com/RivRetrieve/RivRetrieve",
+            revision="0" * 40,
+            repository_path=path,
+            symbol=symbol,
+        )
+
+    source_fact = evidence.facts.join(evidence.binding_facts, on="fact_id").join(
+        evidence.bindings.filter(pl.col("transformation_id").is_null()), on="binding_id"
+    )["name"][0]
+    module = f"src/rivretrieve/_internal/providers/{provider_id}"
+    historical_native = evidence.header.native_table
+    assert historical_native is not None and historical_native.byte_size is not None
+    build_inputs = CatalogueBuildInputs(
+        build=code(f"{module}/generate_catalogue.py", "write_catalogue"),
+        declarations=(
+            code(f"{module}/generate_catalogue.py", "build_catalogue"),
+            code(f"{module}/origins.py", "build_acquisition_provenance"),
+            code("src/rivretrieve/_internal/assembly.py", "assemble"),
+        ),
+        inputs=(
+            RetainedInputUse(
+                reference=ArchiveMemberReference(
+                    archive_repository="https://github.com/RivRetrieve/verification-evidence",
+                    archive_revision="0" * 40,
+                    collection_id="synthetic",
+                    manifest_sha256="0" * 64,
+                    artifact_id="synthetic-native",
+                    sha256=historical_native.sha256,
+                    byte_size=historical_native.byte_size,
+                    role="derived_input",
+                ),
+                usage="native_table",
+                facts=(source_fact,),
+            ),
+        ),
+    )
+    station_origin = origins["station_id"]
+    assert isinstance(station_origin, Field)
+    native = NativeTable(
+        pl.read_parquet(destination / "stations.parquet").select(
+            pl.col("station_id").alias(str(station_origin.native_column)),
+            pl.lit(datetime(2000, 1, 1, tzinfo=UTC)).alias("retrieved_at"),
+        )
+    )
     metadata = build_catalogue_metadata(
         evidence,
         (origins,),
         {name: (destination / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
+        build_inputs=build_inputs,
+        native_table=native,
+        metadata_fields=(),
         source_describer=partial(generic_source_descriptions, config=None),
     )
     for name, content in metadata.items():
@@ -57,11 +120,22 @@ def _append_manifest_line(manifest: Path, provider_id: str) -> None:
     manifest.write_text(f"{source[: -len(closing)]}\n    {provider_id!r},{closing}")
 
 
-def test_new_catalogue_only_provider_requires_only_its_directory_and_manifest_line(tmp_path: Path) -> None:
+@pytest.fixture
+def provider_contract_workspace(record_property) -> Iterator[Path]:
+    checks = ROOT / ".worktrees" / "provider-contract-checks"
+    checks.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix="provider-", dir=checks) as temporary:
+        record_property("source_copy", temporary)
+        yield Path(temporary)
+
+
+def test_new_catalogue_only_provider_requires_only_its_directory_and_manifest_line(
+    provider_contract_workspace: Path,
+) -> None:
     provider_id = "test_" + "fourteenth"
-    project = tmp_path / "project"
+    project = provider_contract_workspace
     package = project / "src" / "rivretrieve"
-    shutil.copytree(PACKAGE_ROOT, package)
+    shutil.copytree(PACKAGE_ROOT, package, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     (project / "tests").mkdir()
     shutil.copy2(ROOT / "tests" / "test_provider_architecture_contracts.py", project / "tests")
 

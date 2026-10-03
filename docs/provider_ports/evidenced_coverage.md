@@ -157,22 +157,32 @@ Retrieve exact inputs outside the checkout as described in the
 private external output directory, then run these offline builds from the source
 checkout. Build outputs are disposable and are not the retained source evidence.
 
+Use the reviewed catalogue build through the [archive coordinator](../maintenance/evidence.md).
+Set `BUILD_INPUTS_DIRECTORY` to its private product output directory. The commands
+below use each exported `<provider>.build-inputs.json` selection. These files
+contain adopted `CatalogueBuildInputs`, not the coordinator receipt
+`catalogue-input-provenance.json`.
+
 ```sh
 uv run python -m rivretrieve._internal.providers.fr_hubeau.generate_catalogue \
   --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet" \
   --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --native-capture maintenance/catalogue/fr_hubeau/inventory/native_capture.json \
   --availability-ledger maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz \
+  --build-inputs "$BUILD_INPUTS_DIRECTORY/fr_hubeau.build-inputs.json" \
   --out "$VERIFICATION_OUTPUT/fr_hubeau"
 uv run python -m rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue \
   --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet" \
   --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
   --workbook-access-ledger maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json \
   --series-recording "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/tests/test_data/ba_fhmzbih_metadata_index.recording.json" \
+  --build-inputs "$BUILD_INPUTS_DIRECTORY/ba_fhmzbih.build-inputs.json" \
   --out "$VERIFICATION_OUTPUT/ba_fhmzbih"
 uv run python -m rivretrieve._internal.providers.th_thaiwater.generate_catalogue \
   --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet" \
   --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
   --availability-evidence maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv \
+  --build-inputs "$BUILD_INPUTS_DIRECTORY/th_thaiwater.build-inputs.json" \
   --out "$VERIFICATION_OUTPUT/th_thaiwater"
 ```
 

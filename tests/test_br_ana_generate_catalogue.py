@@ -94,7 +94,11 @@ def test_bad_coordinate_is_not_silently_discarded() -> None:
     "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
     "tests/test_data/br_ana_inventory/capture.json",
 )
-def test_attested_inventory_build_has_only_evidenced_station_facts(retained_evidence_root, tmp_path: Path) -> None:
+@pytest.mark.recorded("tests/test_data/br_ana_terms_licence.html")
+@pytest.mark.recorded("tests/test_data/br_ana_inventory")
+def test_attested_inventory_build_has_only_evidenced_station_facts(
+    retained_evidence_root, tmp_path: Path, catalogue_build_inputs
+) -> None:
     from rivretrieve._internal.catalogues.native import read_native_table
     from rivretrieve._internal.providers.br_ana.capture import read_capture_record, verify_native_identity
     from rivretrieve._internal.providers.br_ana.generate_catalogue import build_catalogue, write_catalogue
@@ -126,7 +130,9 @@ def test_attested_inventory_build_has_only_evidenced_station_facts(retained_evid
     assert str(catalogue.provider_info["bulk_observations"]).startswith("false:")
     terms = next(record for record in provenance.source_records if record.source_id == "br_ana.terms")
     assert catalogue.provider_info["license"] == terms.statements[0].exact_text
-    write_catalogue(catalogue, tmp_path)
+    write_catalogue(
+        catalogue, tmp_path, build_inputs=catalogue_build_inputs(catalogue.acquisition_provenance), native_table=native
+    )
     assert_frame_equal(pl.read_parquet(tmp_path / "stations.parquet"), catalogue.stations)
     assert pl.read_parquet(tmp_path / "products.parquet").is_empty()
     assert pl.read_parquet(tmp_path / "station_products.parquet").is_empty()

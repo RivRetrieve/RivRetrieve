@@ -84,5 +84,5 @@ null with an explicit reason.
 
 Drainage fields remain native strings. `drain_area_va` is published in square
 miles in the [USGS site-service documentation](https://waterservices.usgs.gov/docs/site-service/site-service-details/).
-Catalogue generation does not convert drainage areas. See [drainage-area metadata](../drainage-areas.md)
+Catalogue generation does not convert drainage areas. See [station metadata](../station-metadata.md)
 for the separate packaged projection.

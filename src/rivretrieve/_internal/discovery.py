@@ -1,4 +1,4 @@
-"""public retrieval : Selection × WindowInputs × CacheMode × CredentialSources → ObservationResult(s); provider discovery : ProviderDeclarations × CredentialSources → ProviderAccessFrame; drainage metadata : Selection → SourceAreaFrame."""
+"""public retrieval : Selection × WindowInputs × CacheMode × CredentialSources → ObservationResult(s); provider discovery : ProviderDeclarations × CredentialSources → ProviderAccessFrame; station metadata : Selection → StationMetadataFrame."""
 
 from __future__ import annotations
 
@@ -178,7 +178,7 @@ def find(
     -------
     selection
         A selection to pass to ``pick``, ``series``, ``fetch``,
-        ``fetch_by_provider``, ``drainage_areas``, ``map`` or ``to_bundle``.
+        ``fetch_by_provider``, ``metadata``, ``map`` or ``to_bundle``.
         It cannot be changed in place. Inspect its source series with
         ``series(selection)``.
 
@@ -649,59 +649,88 @@ def _validate_issue_policy(on_issue: OnIssue) -> None:
         raise ValueError("on_issue must be raise, warn or ignore")
 
 
-def drainage_areas(selection: _Selection) -> pl.DataFrame:
-    """Read selected gauges' packaged drainage-area metadata offline.
+def metadata(selection: _Selection, *, view: str = "summary") -> pl.DataFrame:
+    """Read selected gauges' packaged station metadata offline.
 
     Parameters
     ----------
     selection : selection
-        Selection returned by find, pick or from_bundle. Multiple providers and
-        products are accepted; each provider-station pair appears once per
-        source field, regardless of the number of selected products.
+        Selection from find, pick or from_bundle. Multiple providers and series
+        are accepted without repeating gauges or their attributes.
+    view : {"summary", "source"}, default "summary"
+        Summary returns one row per gauge with station_name, river_name,
+        latitude, longitude, crs and two Boolean name alternatives indicators.
+        Source returns separate source attributes with exact values and support.
 
     Returns
     -------
     polars.DataFrame
-        Columns: provider_id, station_id, source_field, source_value,
-        source_dtype, source_unit (String), and state (Enum). Rows sort by
-        provider, station and source field. Empty selections retain this schema.
-        source_value is JSON scalar text: json.loads decodes a non-null cell
-        to its original string or number. source_dtype names the native Polars
-        dtype. Formatted strings, blanks and numerical values are not converted.
-        source_unit preserves an already established unit, otherwise null;
-        units embedded in source fields or values remain there unchanged.
-        state is value, source_null (a known field holding null), or no_metadata
-        (no eligible field exposed for this gauge). The latter has null source
-        columns. A source_null row retains its field, dtype and established unit.
+        Both views retain provider_id and station_id as strings. Summary names
+        are verbatim strings when exactly one distinct nonblank name exists.
+        Otherwise the name is null; the corresponding ``*_alternatives`` flag
+        is true when multiple distinct nonblank names exist. Coordinates and CRS
+        preserve values and unknowns from the current packaged canonical station
+        catalogue, independently of locations retained in the selection.
+
+        Source columns are provider_id, station_id, source_field, source_value,
+        source_dtype, source_unit, state, attribute_role and support_fact.
+        All are String except state and attribute_role, which are Enums.
+        Decode non-null source_value with json.loads to recover the exact scalar.
+        Blanks and inline units remain unchanged. State is value, source_null
+        (a known field with null), or no_metadata (no exposed field for this
+        role). The latter has null source columns and support_fact. Other rows
+        retain their field, dtype, established unit and stable evidence fact name.
+        Roles are station_name, river_name and drainage_area. Areas remain
+        separate; no preferred field, inferred unit or conversion is applied.
+        Empty selections retain the chosen view's schema.
 
     Raises
     ------
     TypeError
         If selection is not a RivRetrieve selection.
+    ValueError
+        If view is not summary or source.
     FatalContractError
-        If the packaged projection has an invalid schema or omits a station.
+        If packaged metadata violates its schema, value states or gauge scope.
     OSError
-        If the packaged projection cannot be read.
+        If packaged metadata cannot be read.
 
     Notes
     -----
-    Reads only packaged metadata, without observations, credentials or network
-    access. Gauge identity does not require numeric observation admission or map
-    coordinates. Coverage is limited to drainage/watershed-size fields established
-    by existing repository evidence. Distinct source fields remain separate;
-    no area is preferred, inferred, converted or scientifically harmonized.
-    Neither absence state means zero or that an agency publishes no area
-    elsewhere. See docs/drainage-areas.md for an example and field coverage.
+    No observations, credentials, cache or network access are needed. Gauge
+    scope is independent of observation admission and map eligibility. Metadata
+    does not establish observation availability. Neither absence state means
+    zero or that an agency publishes no metadata elsewhere. See
+    docs/station-metadata.md for interpretation and examples.
     """
-    from rivretrieve._internal.drainage_areas import DRAINAGE_AREA_SCHEMA, drainage_area_frame
+    from rivretrieve._internal.station_metadata import (
+        SOURCE_METADATA_SCHEMA,
+        STATION_METADATA_SCHEMA,
+        source_metadata_frame,
+        station_metadata_frame,
+    )
 
+    if view not in ("summary", "source"):
+        raise ValueError("view must be summary or source")
     stations = _selection_station_keys(selection)
     if stations.is_empty():
-        return pl.DataFrame(schema=DRAINAGE_AREA_SCHEMA)
-    resource = files("rivretrieve._internal.catalogues").joinpath("drainage_areas.parquet")
-    with resource.open("rb") as stream:
-        metadata = pl.read_parquet(stream)
-    return drainage_area_frame(stations, metadata)
+        return pl.DataFrame(schema=SOURCE_METADATA_SCHEMA if view == "source" else STATION_METADATA_SCHEMA)
+    frames = []
+    locations = []
+    for provider in stations["provider_id"].unique().sort():
+        catalogue = files("rivretrieve._internal.providers").joinpath(provider, "catalogue")
+        with catalogue.joinpath("station_metadata.parquet").open("rb") as stream:
+            packaged = pl.read_parquet(stream)
+        selected = stations.filter(pl.col("provider_id") == provider)
+        frames.append(source_metadata_frame(selected, packaged))
+        if view == "summary":
+            with catalogue.joinpath("stations.parquet").open("rb") as stream:
+                canonical = pl.read_parquet(stream)
+            locations.append(canonical.join(selected, on=["provider_id", "station_id"], how="semi"))
+    source = pl.concat(frames)
+    if view == "source":
+        return source
+    return station_metadata_frame(stations, source, pl.concat(locations))
 
 
 def map(selection: _Selection) -> object:

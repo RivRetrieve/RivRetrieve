@@ -11,12 +11,18 @@ graph. Individual fact lineage can be resolved offline when needed.
 
 ### Packaged files and trust boundary
 
-The descriptor declares ten exact file identities: `provider.json`,
-`products.parquet`, `stations.parquet`, `station_products.parquet`,
-`provenance.json`, and the five evidence Parquets below. Each distribution includes
-its relative `contentUrl`, SHA-256, byte count (`contentSize`) and media type.
-`native.parquet` is not packaged. Its external revision-pinned identity remains
-`isBasedOn` on the descriptor when established.
+The descriptor declares exact identities for `provider.json`, `products.parquet`,
+`stations.parquet`, `station_products.parquet`, `provenance.json`, and the five
+evidence Parquets below. Catalogue publication also includes `format.json`,
+`source_series.json`, and `series_claims.parquet`. A catalogue with explicit
+`build_inputs` includes `station_metadata.parquet`; USGS also includes
+`monitoring_locations.json`. Each distribution records its relative `contentUrl`,
+SHA-256, byte count (`contentSize`) and media type.
+
+Native tables are archive inputs, not packaged files. A descriptor's `isBasedOn`
+link preserves the historical native-table Git identity when established. It does
+not locate the current archived input. The header's `build_inputs` identifies
+which archive members the build actually adopted.
 
 Validate the descriptor distributions and the schema-version-3 header against the
 actual supplied bytes before reading relations. The header's `files` key set is
@@ -30,6 +36,59 @@ declarations, withholding and row-locator requirements. Source records preserve
 issuer, operator, evidence recording identities, source statements and private
 verification states. They do not inline acquisitions. Private verification remains
 redacted. This profile does not publish private source bodies or interpret licences.
+
+### Explicit build and archived support
+
+`header.build_inputs` records an explicit executable build reference, authored
+code declarations, and adopted retained inputs. Each code reference names the
+public repository, a full Git revision, a repository path and a symbol. A null
+symbol names a whole authored file, such as a reviewed ledger; executable
+references require a symbol. Each retained input names its archive revision, collection, manifest digest, artifact,
+member digest and byte size. Consumer and verifier paths remain in the restricted
+archive receipt; packaged references contain neither locator. Archive `role`
+describes the material; build `usage`
+describes how this catalogue uses it. Neither classification substitutes for the
+other.
+
+Each adopted input lists the exact existing source or native fact names it
+supports. These references must resolve to bound facts. Equal digests do not merge
+distinct archive members. Adding a member to the archive does not adopt it into a
+catalogue. `build_inputs.inputs` records consumed build inputs. Separately,
+`build_inputs.support` records reviewed supporting members after complete positive
+source checks. Each supporting member names its fact dependencies,
+`verification_kind="full_positive"`, and the verifier's exact code reference.
+A `member_selector`, when present, preserves an established member name inside
+an archived container. Public references omit local verifier paths. This support
+record is distinct from archive integrity checks and native-table rebuilds.
+
+Historical headers can omit `build_inputs`; new publication requires explicit
+inputs. See [verification evidence](maintenance/evidence.md) for controlled archive
+access and genuine-input checks.
+
+Transformation declarations retain separate `executable` and `declaration` code
+references. Catalogue transformations identify the provider's catalogue builder;
+metadata transformations identify the shared projection. Observation references
+identify runtime assembly code, without claiming that observations were processed
+during the catalogue build. Authored constants have a declaration and no executable
+reference. The build's composition entry point remains in `build_inputs.build`.
+These code identities do not replace source acquisition methods, times or request
+scopes.
+
+### Station metadata support
+
+`station_metadata.parquet` contains the supported source attributes used by
+`metadata(selection, view="source")`. Its columns are `provider_id`, `station_id`,
+`source_field`, `source_value`, `source_dtype`, `source_unit`, `state`,
+`attribute_role`, and `support_fact`. Values retain their source scalar encoding,
+dtype, known unit and value or absence state.
+
+For an exposed field, `support_fact` names an exact
+`metadata.<attribute_role>.<source_field>` fact. Croissant links that column to the
+`name` column of `provenance_facts.parquet`. The metadata fact records the
+projection's executable and field declaration, with dependencies on existing
+native-input facts. It does not invent another source acquisition. A `no_metadata`
+row has no source field or support fact. Every metadata row remains within the
+canonical station identities.
 
 ### Fixed physical relations
 
@@ -157,6 +216,16 @@ through binding nodes and their exact external inputs to acquired materials.
 `about` explicitly links the issuing source. `license`, `citation` and `usageInfo`
 explicitly reference that source's statement nodes; each exact quotation appears
 once. Recording nodes retain exact URLs, instants, digests and source-local IDs.
+Their `historical_repository_path` property preserves an acquisition-era path;
+it is not an active relative `contentUrl`.
+
+A source or native fact's `citation` links the adopted archived members that
+support that fact. Each member node records its exact archive membership, digest,
+size, role and usage, without a private member path or download URL. Only members
+supporting the selected facts or their ancestors appear. A transformation's
+`subjectOf` separates executable implementation and authored declaration references,
+each with a public revision-pinned code URL and symbol.
+
 Corroborating material is separately labelled under `citation`, outside historical
 `isBasedOn` ancestry. Deliberate withholding uses `rr:absence`. No other extension
 predicate is introduced. Private locations are not promoted to download URLs.

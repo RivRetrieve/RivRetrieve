@@ -43,12 +43,19 @@ Rebuild offline using the current native table from the private archive. Set
 layout. The historical governing check uses a different native snapshot; see
 [French verification instructions](../../maintenance/catalogue/fr_hubeau/README.md).
 
+Use the reviewed catalogue build through the [archive coordinator](../maintenance/evidence.md) to export
+`fr_hubeau.build-inputs.json` outside the checkout. Set `BUILD_INPUTS` to that
+file. It contains the adopted `CatalogueBuildInputs` selection, not the
+coordinator receipt `catalogue-input-provenance.json`. Keep the selection and
+build outputs in the private output directory.
+
 ```sh
 uv run python -m rivretrieve._internal.providers.fr_hubeau.generate_catalogue \
   --evidence-root "$EVIDENCE_ROOT" \
   --native "$EVIDENCE_ROOT/src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet" \
   --native-capture maintenance/catalogue/fr_hubeau/inventory/native_capture.json \
   --availability-ledger maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz \
+  --build-inputs "$BUILD_INPUTS" \
   --out /path/to/catalogue-output
 ```
 

@@ -33,6 +33,31 @@ explicitly. Packaged catalogues remain in RivRetrieve and work without archive a
 Historical provenance paths identify the original acquisitions; they do not locate
 files in the current checkout.
 
+Catalogue publication receives an explicit selection of verified members and public
+code references. The selection records each adopted member's collection, manifest,
+artifact identity, digest, size and archive revision. The archive's material role
+and the member's use in the build remain separate. Adding a collection does not
+change a provider's selected inputs.
+
+Use the private coordinator's catalogue-input mode for catalogue rebuild tests.
+Select both the reviewed executable revision and the declaration revision explicitly.
+The current coordinator requires these revisions to match. Whole-file declaration
+references identify reviewed ledgers as well as Python declarations. A build's
+publication entry point is separate from the executable references for catalogue
+conversion, observation assembly and metadata projection. Authored constants retain
+their declaration reference without becoming automatic source derivations.
+The coordinator writes a restricted input handoff and an external product
+directory; builds do not write into the reviewed checkout. The build fixture selects the provider's declared native and
+recording support and verifies their exact local bytes. Only those adopted members
+enter packaged provenance. The full restricted receipt is not a package artifact.
+
+Review the resulting station metadata, provenance, descriptors and distribution
+contents before copying approved products into RivRetrieve. New name mappings need
+both retained-input checks and a separate disclosure decision. The candidate review
+test writes examples only into the restricted output directory and approves neither
+mapping semantics nor redistribution. Compare existing area fields with their
+approved baseline without changing scalar values, units or absence states.
+
 Use the provider's instructions:
 
 - [Bosnia](../../maintenance/catalogue/ba_fhmzbih/README.md): complete baseline

@@ -90,6 +90,12 @@ external working directory. Neither path is stored as a new source identity.
 `--repository-root` remains an alias for the required `--evidence-root` option;
 there is no current-directory input default.
 
+Use the reviewed catalogue build through the [archive coordinator](../maintenance/evidence.md) to export
+`br_ana.build-inputs.json` outside the checkout. Set `BUILD_INPUTS` to that
+file. It contains the adopted `CatalogueBuildInputs` selection, not the
+coordinator receipt `catalogue-input-provenance.json`. Keep the selection and
+build outputs in the private output directory.
+
 ```bash
 uv run python src/rivretrieve/_internal/providers/br_ana/generate_catalogue.py \
   --materialize-record "$EVIDENCE_ROOT/tests/test_data/br_ana_inventory/capture.json" \
@@ -97,6 +103,7 @@ uv run python src/rivretrieve/_internal/providers/br_ana/generate_catalogue.py \
 uv run python src/rivretrieve/_internal/providers/br_ana/generate_catalogue.py \
   --native "$PRIVATE_OUTPUT/ana-native.parquet" \
   --evidence-root "$EVIDENCE_ROOT" \
+  --build-inputs "$BUILD_INPUTS" \
   --out "$PRIVATE_OUTPUT/ana-catalogue"
 ```
 

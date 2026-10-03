@@ -15,7 +15,11 @@ from typing import cast
 import polars as pl
 from pydantic import TypeAdapter
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verify_provenance_recordings
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    CatalogueBuildInputs,
+    verify_provenance_recordings,
+)
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import (
     PackagedCatalogArtifact,
@@ -412,13 +416,22 @@ def source_series_claims(payload: object, stations: StationCatalog, *, evidence:
 
 
 def write_catalogue(
-    catalogue: GeneratedBaFhmzbihCatalogue, out_dir: Path | str, catalogue_claims: pl.DataFrame
+    catalogue: GeneratedBaFhmzbihCatalogue,
+    out_dir: Path | str,
+    catalogue_claims: pl.DataFrame,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
 ) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.ba_fhmzbih.config import SERIES_MAPPINGS
     from rivretrieve._internal.providers.ba_fhmzbih.config import config as source_config
-    from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -435,6 +448,9 @@ def write_catalogue(
         source_config=source_config(),
         source_mappings=SERIES_MAPPINGS,
         catalogue_claims=catalogue_claims,
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
@@ -629,6 +645,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--workbook-access-ledger", type=Path, help="Reviewed workbook access JSON ledger.")
     parser.add_argument("--series-recording", type=Path, help="Exact layer-20 recording with L1 source identities.")
     parser.add_argument("--evidence-root", type=Path, help="External inputs in repository-relative layout.")
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
 
     if args.native_payload is not None and (args.native is not None or args.out is not None):
@@ -678,6 +695,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--native requires --series-recording")
     if args.evidence_root is None:
         parser.error("--native requires --evidence-root")
+    if args.build_inputs is None:
+        parser.error("--out requires --build-inputs")
+    build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
     from rivretrieve._internal.recordings import read_recording
 
     if hashlib.sha256(args.series_recording.read_bytes()).hexdigest() != SERIES_RECORDING_SHA256:
@@ -689,8 +709,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     verify_provenance_recordings(build_acquisition_provenance(workbook_access), args.evidence_root.resolve())
     from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
 
+    native_table = read_native_table(
+        args.native, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE
+    )
     catalogue = build_catalogue(
-        read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE),
+        native_table,
         STATION_CATALOGUE_ORIGINS,
         workbook_access,
     )
@@ -699,7 +722,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         catalogue.stations,
         evidence="catalogue:ba_fhmzbih:source.series.layer20_discharge_identity",
     )
-    write_catalogue(catalogue, args.out, claims)
+    write_catalogue(catalogue, args.out, claims, build_inputs=build_inputs, native_table=native_table)
     return 0
 
 

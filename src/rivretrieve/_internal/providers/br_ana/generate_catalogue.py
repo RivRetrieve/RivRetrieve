@@ -11,7 +11,11 @@ from pathlib import Path
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, verified_provider_terms
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    CatalogueBuildInputs,
+    verified_provider_terms,
+)
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import (
     PackagedCatalogArtifact,
@@ -222,13 +226,24 @@ def build_catalogue(
     )
 
 
-def write_catalogue(catalogue: GeneratedBrAnaCatalogue, out_dir: Path) -> None:
+def write_catalogue(
+    catalogue: GeneratedBrAnaCatalogue,
+    out_dir: Path,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
+) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from functools import partial
 
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.br_ana.catalogue_series import describe_catalogue
     from rivretrieve._internal.providers.br_ana.config import config as source_config
+    from rivretrieve._internal.providers.br_ana.origins import STATION_METADATA_FIELDS
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     artifact = catalogue.public_artifact
@@ -244,6 +259,9 @@ def write_catalogue(catalogue: GeneratedBrAnaCatalogue, out_dir: Path) -> None:
         {name: (out_dir / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
         source_config=source_config(),
         source_describer=partial(describe_catalogue, config=source_config()),
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
     )
     for name, content in metadata.items():
         (out_dir / name).write_bytes(content)
@@ -267,6 +285,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="External retained inputs in repository-relative layout",
     )
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
     if args.materialize_record is not None:
         from rivretrieve._internal.catalogues.native import write_native_table
@@ -283,6 +302,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.out is None or args.native_out is not None:
         parser.error("--native requires --out and cannot use --native-out")
+    if args.build_inputs is None:
+        parser.error("--out requires --build-inputs")
+    build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
     from rivretrieve._internal.catalogues.native import read_native_table
     from rivretrieve._internal.providers.br_ana.capture import read_capture_record, verify_native_identity
     from rivretrieve._internal.providers.br_ana.origins import STATION_CATALOGUE_ORIGINS, build_acquisition_provenance
@@ -345,7 +367,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         build_acquisition_provenance(capture), capture, project_stations(native).data, telemetry, daily
     )
     catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, provenance, telemetry, daily)
-    write_catalogue(catalogue, args.out)
+    write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native)
     return 0
 
 

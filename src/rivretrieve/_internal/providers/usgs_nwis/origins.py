@@ -19,6 +19,15 @@ from rivretrieve._internal.acquisition_provenance import (
     complete_transformed_fact_universe,
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
+from rivretrieve._internal.catalogues.station_metadata import MetadataField
+
+# Name mappings require genuine-input validation and owner disclosure approval
+# before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+    MetadataField("drainage_area", "drain_area_va", "sq mi"),
+    MetadataField("drainage_area", "contrib_drain_area_va"),
+    MetadataField("station_name", "station_nm"),
+)
 
 _DATUM_TO_CRS = {
     "NAD27": "EPSG:4267",
@@ -368,3 +377,25 @@ def build_modern_acquisition_provenance(receipts, metadata_directory):
             ),
         ),
     )
+
+
+# Existing acquisition facts materialised in the retained native table.
+# This declares derived-input support, not preservation of original responses.
+NATIVE_TABLE_ACQUISITION_IDS = ("national_site_campaign_2026_08_02",)
+
+
+# Authored catalogue, physical-fact and support declarations selected at build time.
+CATALOGUE_BUILD_DECLARATIONS = (
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "modern_source_descriptions"),
+)
+
+
+# Additional retained declarations used by these source facts; not original-body claims.
+CATALOGUE_SUPPORTING_INPUTS = {}

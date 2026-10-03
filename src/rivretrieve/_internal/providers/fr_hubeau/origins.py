@@ -23,6 +23,16 @@ from rivretrieve._internal.acquisition_provenance import (
     complete_transformed_fact_universe,
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
+from rivretrieve._internal.catalogues.station_metadata import MetadataField
+
+# Name mappings require genuine-input validation and owner disclosure approval
+# before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+    MetadataField("drainage_area", "superficie_topo"),
+    MetadataField("drainage_area", "superficie_reelle"),
+    MetadataField("station_name", "libelle_station"),
+    MetadataField("river_name", "libelle_cours_eau"),
+)
 
 if TYPE_CHECKING:
     from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import FranceAvailability, NativeInventoryCapture
@@ -441,3 +451,27 @@ def build_acquisition_provenance(
             ),
         ),
     )
+
+
+# Existing acquisition facts materialised in the retained native table.
+# This declares derived-input support, not preservation of original responses.
+NATIVE_TABLE_ACQUISITION_IDS = ("hydrometry_catalogue_capture_2026_09_21", "temperature_catalogue_capture_2026_09_21")
+
+
+# Authored catalogue, physical-fact and support declarations selected at build time.
+CATALOGUE_BUILD_DECLARATIONS = (
+    ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/config.py", "SERIES_MAPPINGS"),
+    ("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz", None),
+    ("maintenance/catalogue/fr_hubeau/inventory/native_capture.json", None),
+)
+
+
+# Additional retained declarations used by these source facts; not original-body claims.
+CATALOGUE_SUPPORTING_INPUTS = {}

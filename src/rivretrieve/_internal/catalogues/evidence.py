@@ -19,6 +19,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_seriali
 from rivretrieve._internal.acquisition_provenance import (
     AbsenceMarkerValue,
     AcquisitionProvenance,
+    CatalogueBuildInputs,
+    CodeReference,
     EvidenceReference,
     NativeTableIdentity,
     Sha256,
@@ -26,6 +28,8 @@ from rivretrieve._internal.acquisition_provenance import (
     WithheldFact,
     _validate_requested_location,
     absence_marker_accepts_fact,
+    validate_build_input_code_references,
+    validate_build_input_facts,
 )
 
 EVIDENCE_FILENAMES = {
@@ -117,6 +121,8 @@ class TransformationDeclaration(_EvidenceModel):
     name: str
     kind: Literal["derived_value", "absence_marker", "authored_constant"]
     marker_value: AbsenceMarkerValue | None = None
+    executable: CodeReference | None = Field(default=None, exclude_if=lambda value: value is None)
+    declaration: CodeReference | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def _marker(self) -> Self:
@@ -148,6 +154,7 @@ class EvidenceHeader(_EvidenceModel):
     schema_version: Literal[3]
     provider_id: str
     native_table: NativeTableIdentity | None = None
+    build_inputs: CatalogueBuildInputs | None = Field(default=None, exclude_if=lambda value: value is None)
     source_records: tuple[IssuingSource, ...]
     descriptions: tuple[str, ...]
     transformations: tuple[TransformationDeclaration, ...]
@@ -163,6 +170,10 @@ class EvidenceHeader(_EvidenceModel):
             raise ValueError("evidence file path must equal its fixed basename")
         if len(set(self.descriptions)) != len(self.descriptions) or any(not text.strip() for text in self.descriptions):
             raise ValueError("descriptions must be unique nonblank exact strings")
+        for transformation in self.transformations:
+            validate_build_input_code_references(
+                self.build_inputs, transformation.executable, transformation.declaration
+            )
         if len(set(self.transformations)) != len(self.transformations):
             raise ValueError("transformation declarations must be unique")
         if len(set(self.row_locator_requirements)) != len(self.row_locator_requirements):
@@ -371,6 +382,7 @@ def _validate_relations(e: CatalogueEvidence) -> None:
                 if source is not None and source >= len(sources):
                     raise ValueError("external input source foreign key does not resolve")
                 inputs[b].append((source, fact))
+    validate_build_input_facts(h.build_inputs, {names[fact] for fact in producer})
     withheld: dict[int, int | None] = {}
     withheld_groups: set[str] = set()
     withheld_rows: set[tuple] = set()
@@ -731,7 +743,13 @@ def _normalize_provenance_relations(
         t = binding.transformation
         tid = None
         if t is not None:
-            declaration = TransformationDeclaration(name=t.name, kind=t.kind, marker_value=t.marker_value)
+            declaration = TransformationDeclaration(
+                name=t.name,
+                kind=t.kind,
+                marker_value=t.marker_value,
+                executable=t.executable,
+                declaration=t.declaration,
+            )
             tid = transformations.setdefault(declaration, len(transformations))
             rows["external_inputs"].extend(
                 (b, position, sources[r.source_id] if r.source_id is not None else None, names[r.fact])
@@ -753,6 +771,7 @@ def _normalize_provenance_relations(
         schema_version=3,
         provider_id=provenance.provider_id,
         native_table=provenance.native_table,
+        build_inputs=provenance.build_inputs,
         source_records=tuple(
             IssuingSource(
                 source_id=s.source_id,

@@ -29,12 +29,19 @@ The catalogue generator takes an external retained native table, source recordin
 and the reviewed workbook ledger as explicit build inputs. Retrieve the exact inputs
 following the [maintenance instructions](../../maintenance/catalogue/ba_fhmzbih/README.md). Runtime discovery loads only packaged catalogue artifacts; it does not open research paths or the private verification corpus.
 
+Use the reviewed catalogue build through the [archive coordinator](../maintenance/evidence.md) to export
+`ba_fhmzbih.build-inputs.json` outside the checkout. Set `BUILD_INPUTS` to that
+file. It contains the adopted `CatalogueBuildInputs` selection, not the
+coordinator receipt `catalogue-input-provenance.json`. Keep the selection and
+build outputs in the private output directory.
+
 ```console
 uv run python -m rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue \
   --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet" \
   --workbook-access-ledger maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json \
   --series-recording "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/tests/test_data/ba_fhmzbih_metadata_index.recording.json" \
   --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --build-inputs "$BUILD_INPUTS" \
   --out /path/to/build-output
 ```
 

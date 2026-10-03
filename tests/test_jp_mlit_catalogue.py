@@ -26,6 +26,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.jp_mlit import generate_catalogue
 from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
+from tests._catalogue import catalogue_content_without_build_identity
 from tests._catalogue_projection import copy_catalogue_projection
 
 CATALOGUE_PATH = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue")
@@ -917,9 +918,22 @@ def test_cli_rejects_mixed_modes(capsys: pytest.CaptureFixture[str]) -> None:
     "tests/test_data/jp_mlit_terms_citation.pdf",
     "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
 )
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_native_cli_is_offline_and_byte_deterministic(
-    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs, tmp_path_factory
 ) -> None:
+    build_inputs = catalogue_build_inputs(generate_catalogue.build_acquisition_provenance())
+    build_inputs_path = tmp_path_factory.mktemp("catalogue-inputs") / "build-inputs.json"
+    build_inputs_path.write_text(build_inputs.model_dump_json(), encoding="utf-8")
     calls: list[str] = []
 
     def forbidden(*args: object, **kwargs: object) -> None:
@@ -931,6 +945,8 @@ def test_native_cli_is_offline_and_byte_deterministic(
     assert (
         generate_catalogue.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(retained_evidence_root / NATIVE_PATH),
                 "--out",
@@ -959,10 +975,13 @@ def test_native_cli_is_offline_and_byte_deterministic(
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
     }
     assert {item.name for item in tmp_path.iterdir()} == expected_names
     for name in expected_names:
-        assert (tmp_path / name).read_bytes() == (CATALOGUE_PATH / name).read_bytes()
+        assert catalogue_content_without_build_identity(
+            name, (tmp_path / name).read_bytes()
+        ) == catalogue_content_without_build_identity(name, (CATALOGUE_PATH / name).read_bytes())
 
 
 @pytest.mark.governing(
@@ -971,12 +990,27 @@ def test_native_cli_is_offline_and_byte_deterministic(
     "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
 )
 @pytest.mark.parametrize("statement_kind", ["license", "citation"])
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+)
 def test_native_cli_rejects_statement_absent_from_recording(
     retained_evidence_root,
     statement_kind: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    catalogue_build_inputs,
+    tmp_path_factory,
 ) -> None:
+    build_inputs = catalogue_build_inputs(generate_catalogue.build_acquisition_provenance())
+    build_inputs_path = tmp_path_factory.mktemp("catalogue-inputs") / "build-inputs.json"
+    build_inputs_path.write_text(build_inputs.model_dump_json(), encoding="utf-8")
     provenance = generate_catalogue.build_acquisition_provenance()
     source = provenance.source_records[0]
     statements = tuple(
@@ -994,6 +1028,8 @@ def test_native_cli_rejects_statement_absent_from_recording(
     ):
         generate_catalogue.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(retained_evidence_root / NATIVE_PATH),
                 "--out",
@@ -1007,7 +1043,21 @@ def test_native_cli_rejects_statement_absent_from_recording(
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
-def test_native_build_removes_withheld_fact_before_writing(retained_evidence_root, tmp_path: Path) -> None:
+@pytest.mark.recorded(
+    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
+    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
+    "tests/test_data/jp_mlit_terms_citation.pdf",
+    "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
+)
+def test_native_build_removes_withheld_fact_before_writing(
+    retained_evidence_root, tmp_path: Path, catalogue_build_inputs
+) -> None:
     provenance = generate_catalogue.build_acquisition_provenance()
     payload = provenance.model_dump(mode="json")
     product_binding = next(item for item in payload["fact_bindings"] if item["fact_group"] == "product_catalogue")
@@ -1021,14 +1071,17 @@ def test_native_build_removes_withheld_fact_before_writing(retained_evidence_roo
     )
     withheld = type(provenance).model_validate(payload)
 
+    native = read_native_table(
+        (retained_evidence_root / NATIVE_PATH), expected_sha256=generate_catalogue.NATIVE_TABLE_SHA256
+    )
     catalogue = generate_catalogue.build_catalogue(
-        read_native_table(
-            (retained_evidence_root / NATIVE_PATH), expected_sha256=generate_catalogue.NATIVE_TABLE_SHA256
-        ),
+        native,
         STATION_CATALOGUE_ORIGINS,
         withheld,
     )
-    generate_catalogue.write_catalogue(catalogue, tmp_path)
+    generate_catalogue.write_catalogue(
+        catalogue, tmp_path, build_inputs=catalogue_build_inputs(catalogue.acquisition_provenance), native_table=native
+    )
 
     written = pl.read_parquet(tmp_path / "products.parquet")
     assert written["native_id"].null_count() == written.height

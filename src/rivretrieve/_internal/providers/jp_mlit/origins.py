@@ -27,6 +27,15 @@ from rivretrieve._internal.catalogue_origins import (
     NativeColumn,
     NotPublished,
 )
+from rivretrieve._internal.catalogues.station_metadata import MetadataField
+
+# Name mappings require genuine-input validation and owner disclosure approval
+# before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+    MetadataField("drainage_area", "流域面積"),
+    MetadataField("station_name", "観測所名"),
+    MetadataField("river_name", "河川名"),
+)
 
 _WORLD_GEODETIC_DMS = re.compile(r"北緯\s*(\d+)度(\d+)分(\d+)秒\s*東経\s*(\d+)度(\d+)分(\d+)秒")
 
@@ -495,3 +504,25 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
             ),
         ),
     )
+
+
+# Existing acquisition facts materialised in the retained native table.
+# This declares derived-input support, not preservation of original responses.
+NATIVE_TABLE_ACQUISITION_IDS = ("station_register_capture_2026_08_02",)
+
+
+# Authored catalogue, physical-fact and support declarations selected at build time.
+CATALOGUE_BUILD_DECLARATIONS = (
+    ("src/rivretrieve/_internal/providers/jp_mlit/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/jp_mlit/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/jp_mlit/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/jp_mlit/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/jp_mlit/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/jp_mlit/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/jp_mlit/config.py", "SERIES_MAPPINGS"),
+)
+
+
+# Additional retained declarations used by these source facts; not original-body claims.
+CATALOGUE_SUPPORTING_INPUTS = {}

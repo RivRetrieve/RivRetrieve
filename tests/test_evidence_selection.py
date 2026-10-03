@@ -154,7 +154,7 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
     monkeypatch.delenv("RIVRETRIEVE_TEST_EVIDENCE_ROOT", raising=False)
     monkeypatch.delenv("THAIWATER_REVIEW_EVIDENCE_ROOT", raising=False)
     modules = (
-        "test_drainage_areas",
+        "test_station_metadata_areas",
         "test_cz_fr_lt_acquisition_provenance",
         "test_catalogue_origin_certification",
         "test_catalogue_evidence",

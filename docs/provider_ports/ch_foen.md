@@ -47,10 +47,17 @@ uv run pytest tests/test_ch_foen*.py -q --tb=no -p no:cacheprovider
 
 Build the catalogue from the retained native table and verified source recordings:
 
+Use the reviewed catalogue build through the [archive coordinator](../maintenance/evidence.md) to export
+`ch_foen.build-inputs.json` outside the checkout. Set `BUILD_INPUTS` to that
+file. It contains the adopted `CatalogueBuildInputs` selection, not the
+coordinator receipt `catalogue-input-provenance.json`. Keep the selection and
+build outputs in the private output directory.
+
 ```sh
 uv run python -m rivretrieve._internal.providers.ch_foen.generate_catalogue \
   --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet" \
   --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --build-inputs "$BUILD_INPUTS" \
   --out "$CATALOGUE_OUTPUT"
 ```
 

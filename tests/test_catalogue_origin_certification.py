@@ -6,6 +6,7 @@ import hashlib
 import importlib
 import json
 import lzma
+import os
 import re
 import socket
 import urllib.request
@@ -848,23 +849,42 @@ def _normalized_built_at(payload: bytes) -> bytes:
     return replaced
 
 
+def _catalogue_recording_paths(provider: str) -> tuple[str, ...]:
+    """Declare existing public recording identities without opening their retained bodies."""
+    header = json.loads(
+        (ROOT / "src/rivretrieve/_internal/providers" / provider / "catalogue/provenance.json").read_text()
+    )
+    return tuple(
+        sorted(
+            {
+                evidence["recording"]["repository_path"]
+                for source in header["source_records"]
+                for evidence in source["evidence"]
+            }
+        )
+    )
+
+
 @pytest.mark.parametrize(
     "adapter",
     [
         pytest.param(
             "ba_fhmzbih",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("ba_fhmzbih"),
                 "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
                 "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
                 "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
                 "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
                 "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
                 "tests/test_data/ba_fhmzbih_terms_absence.html",
+                full_verification=("ba_fhmzbih",),
             ),
         ),
         pytest.param(
             "br_ana",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("br_ana"),
                 "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
                 "tests/test_data/br_ana_inventory/capture.json",
                 "tests/recordings/br_ana",
@@ -873,6 +893,7 @@ def _normalized_built_at(payload: bytes) -> bytes:
         pytest.param(
             "ca_eccc",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("ca_eccc"),
                 "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
                 "tests/test_data/ca_eccc_terms_citation.html",
                 "tests/test_data/ca_eccc_terms_licence.html",
@@ -881,6 +902,7 @@ def _normalized_built_at(payload: bytes) -> bytes:
         pytest.param(
             "ch_foen",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("ch_foen"),
                 "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
                 "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
                 "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
@@ -894,6 +916,7 @@ def _normalized_built_at(payload: bytes) -> bytes:
         pytest.param(
             "cz_chmi",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("cz_chmi"),
                 "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
                 "tests/test_data/cz_chmi_terms_licence.html",
                 "tests/test_data/cz_meta2.json",
@@ -902,13 +925,16 @@ def _normalized_built_at(payload: bytes) -> bytes:
         pytest.param(
             "fr_hydroportail",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("fr_hydroportail"),
                 "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
                 "maintenance/catalogue/fr_hydroportail/evidence",
+                full_verification=("fr_hubeau",),
             ),
         ),
         pytest.param(
             "jp_mlit",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("jp_mlit"),
                 "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
                 "tests/test_data/jp_mlit_terms_citation.pdf",
                 "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
@@ -917,6 +943,7 @@ def _normalized_built_at(payload: bytes) -> bytes:
         pytest.param(
             "lt_lhmt",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("lt_lhmt"),
                 "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
                 "tests/test_data/lt_lhmt_terms_licence.html",
             ),
@@ -924,12 +951,14 @@ def _normalized_built_at(payload: bytes) -> bytes:
         pytest.param(
             "no_nve",
             marks=pytest.mark.derived(
+                *_catalogue_recording_paths("no_nve"),
                 "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
             ),
         ),
         pytest.param(
             "pl_imgw",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("pl_imgw"),
                 "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
                 "tests/test_data/pl_imgw_terms_regulations.html",
             ),
@@ -937,15 +966,18 @@ def _normalized_built_at(payload: bytes) -> bytes:
         pytest.param(
             "th_thaiwater",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("th_thaiwater"),
                 "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
                 "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
                 "tests/test_data/th_thaiwater_official_water_wl-2026-09-02.html",
                 "tests/test_data/th_thaiwater_terms_licence-1.html",
+                full_verification=("th_thaiwater",),
             ),
         ),
         pytest.param(
             "usgs_nwis",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("usgs_nwis"),
                 "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
                 "research/usgs-modern-coverage",
                 "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
@@ -956,6 +988,7 @@ def _normalized_built_at(payload: bytes) -> bytes:
         pytest.param(
             "za_dws",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("za_dws"),
                 "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
                 "tests/test_data/za_dws_terms_licence-1.html",
                 "tests/test_data/za_dws_terms_licence-4.html",
@@ -965,19 +998,25 @@ def _normalized_built_at(payload: bytes) -> bytes:
         pytest.param(
             "fr_hubeau",
             marks=pytest.mark.governing(
+                *_catalogue_recording_paths("fr_hubeau"),
                 "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
                 "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
                 "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
                 "tests/test_data/fr_hubeau_hydrometrie.html",
                 "tests/test_data/fr_hubeau_temperature_openapi.json",
                 "tests/test_data/fr_hubeau_terms_licence.html",
+                full_verification=("fr_hubeau",),
             ),
         ),
     ],
     indirect=True,
 )
 def test_native_composition_root_rebuilds_committed_artifacts_without_network(
-    retained_evidence_root: Path, adapter: ProviderAdapter, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    retained_evidence_root: Path,
+    adapter: ProviderAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    catalogue_build_inputs,
 ) -> None:
     calls: list[str] = []
 
@@ -1003,8 +1042,32 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
 
     native_before = adapter.native_path.read_bytes()
     source_inputs_before: dict[Path, bytes] = {}
-    output = tmp_path / str(adapter.provider_id)
-    arguments = ["--native", str(adapter.native_path), "--out", str(output)]
+    configured_output = os.environ.get("RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT")
+    if not configured_output:
+        pytest.fail("The reviewed catalogue command must supply restricted product output.", pytrace=False)
+    product_root = Path(configured_output).resolve()
+    if product_root.is_relative_to(ROOT.resolve()) or product_root.is_relative_to(retained_evidence_root.resolve()):
+        pytest.fail("Catalogue products must stay outside the checkout and retained inputs.", pytrace=False)
+    output = product_root / str(adapter.provider_id)
+    output.mkdir(mode=0o700)
+    if adapter.provider_id == "br_ana":
+        from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
+
+        *_, provenance, generated = read_catalogue_inputs(retained_evidence_root)
+    else:
+        generated = _build(adapter)
+        provenance = generated.acquisition_provenance if adapter.provider_id != "usgs_nwis" else None
+    if adapter.provider_id == "usgs_nwis":
+        from rivretrieve._internal.providers.usgs_nwis.origins import build_modern_acquisition_provenance
+
+        metadata_root = retained_evidence_root / "research/usgs-modern-coverage"
+        _, receipts = adapter.generator.read_modern_metadata(metadata_root)
+        provenance = build_modern_acquisition_provenance(receipts, metadata_root)
+    adopted = catalogue_build_inputs(provenance)
+    input_selection = product_root / f"{adapter.provider_id}.build-inputs.json"
+    with input_selection.open("x", encoding="utf-8") as stream:
+        stream.write(adopted.model_dump_json())
+    arguments = ["--native", str(adapter.native_path), "--out", str(output), "--build-inputs", str(input_selection)]
     if adapter.provider_id in {
         "ba_fhmzbih",
         "ca_eccc",
@@ -1092,9 +1155,6 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     assert {path: path.read_bytes() for path in source_inputs_before} == source_inputs_before
 
     catalogue_dir = ROOT / "src/rivretrieve/_internal/providers" / str(adapter.provider_id) / "catalogue"
-    committed_names = {
-        path.name for path in catalogue_dir.iterdir() if path.is_file() and path.name != "native.parquet"
-    }
     rebuilt_names = {path.name for path in output.iterdir() if path.is_file()}
     expected_names = {
         "provider.json",
@@ -1114,11 +1174,58 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     }
     if adapter.provider_id == "usgs_nwis":
         expected_names.add("monitoring_locations.json")
-    assert committed_names == rebuilt_names == expected_names
-    for name in committed_names:
+    expected_names.add("station_metadata.parquet")
+    assert rebuilt_names == expected_names
+    # Build revisions deliberately change provenance and descriptor byte identities.
+    # Physical/catalogue claims and original acquisition identities must not change.
+    unchanged = {
+        "provider.json",
+        "products.parquet",
+        "stations.parquet",
+        "station_products.parquet",
+        "format.json",
+        "source_series.json",
+        "series_claims.parquet",
+    }
+    if adapter.provider_id == "usgs_nwis":
+        unchanged.add("monitoring_locations.json")
+    for name in unchanged:
         committed = (catalogue_dir / name).read_bytes()
         rebuilt = (output / name).read_bytes()
-        if name.endswith(".json") and name != "croissant.json":
+        if name.endswith(".json"):
             assert _normalized_built_at(rebuilt) == _normalized_built_at(committed)
         else:
             assert rebuilt == committed
+    from polars.testing import assert_frame_equal
+
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.catalogues.evidence_encoding import reconstruct_provenance
+    from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
+
+    def claims(path: Path):
+        evidence = load_packaged_catalogue_artifact(path, on_issue="raise").acquisition_provenance
+        assert evidence is not None
+        document = reconstruct_provenance(evidence).model_dump(mode="json")
+        document.pop("build_inputs", None)
+        document["fact_universe"] = [fact for fact in document["fact_universe"] if not fact.startswith("metadata.")]
+        document["fact_bindings"] = [
+            binding
+            for binding in document["fact_bindings"]
+            if not all(fact.startswith("metadata.") for fact in binding["facts"])
+        ]
+        for binding in document["fact_bindings"]:
+            if transform := binding.get("transformation"):
+                transform.pop("executable", None)
+                transform.pop("declaration", None)
+        return document
+
+    assert claims(output) == claims(catalogue_dir)
+    projected = build_station_metadata(
+        str(adapter.provider_id),
+        read_native_table(adapter.native_path),
+        generated.stations,
+        adapter.cases[0].declarations["station_id"],
+        _module(str(adapter.provider_id), "origins").STATION_METADATA_FIELDS,
+    )
+    assert_frame_equal(pl.read_parquet(output / "station_metadata.parquet"), projected)
+    assert not any(path.name == "native.parquet" for path in output.iterdir())

@@ -105,6 +105,7 @@ def reconstruct_provenance(evidence: CatalogueEvidence) -> AcquisitionProvenance
             "schema_version": 2,
             "provider_id": h.provider_id,
             "native_table": h.native_table,
+            "build_inputs": h.build_inputs,
             "source_records": sources,
             "fact_universe": names,
             "fact_bindings": bindings,

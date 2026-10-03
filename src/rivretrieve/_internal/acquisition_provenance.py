@@ -35,6 +35,241 @@ class _ProvenanceModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+ArchiveIdentifier = Annotated[str, StringConstraints(min_length=1, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")]
+
+
+def _canonical_relative_path(value: str) -> str:
+    path = PurePosixPath(value)
+    if (
+        not value
+        or path.is_absolute()
+        or any(part in {"", ".", ".."} for part in value.split("/"))
+        or "\\" in value
+        or any(unicodedata.category(character).startswith("C") for character in value)
+    ):
+        raise ValueError("paths must be canonical relative POSIX paths")
+    return value
+
+
+class ArchiveMemberReference(_ProvenanceModel):
+    """Exact archive membership without a local input or verifier location."""
+
+    archive_repository: Literal["https://github.com/RivRetrieve/verification-evidence"]
+    archive_revision: GitRevision
+    collection_id: ArchiveIdentifier
+    manifest_sha256: Sha256
+    artifact_id: ArchiveIdentifier
+    sha256: Sha256
+    byte_size: int = PydanticField(strict=True, ge=0)
+    role: Literal[
+        "publisher_original",
+        "response_recording",
+        "derived_input",
+        "authored_interpretation",
+        "authored_declaration",
+        "research_context",
+        "runtime_product",
+        "acquisition_receipt",
+    ]
+
+    @field_validator("collection_id", "artifact_id")
+    @classmethod
+    def _identifier(cls, value: str) -> str:
+        if value.endswith("."):
+            raise ValueError("archive identifiers cannot end with a dot")
+        return value
+
+
+class RetainedInputReference(ArchiveMemberReference):
+    """Archive member supplied at an explicit consumer input path."""
+
+    consumer_path: str
+
+    @field_validator("consumer_path")
+    @classmethod
+    def _path(cls, value: str) -> str:
+        return _canonical_relative_path(value)
+
+
+class RetainedSupportReference(ArchiveMemberReference):
+    """Restricted receipt member checked by a provider's complete verifier."""
+
+    provider_id: Literal["ba_fhmzbih", "fr_hubeau", "th_thaiwater"]
+    verifier_path: str
+    verification_kind: Literal["full_positive"]
+
+    @field_validator("verifier_path")
+    @classmethod
+    def _path(cls, value: str) -> str:
+        return _canonical_relative_path(value)
+
+
+def _unique_consumer_paths(references: Sequence[RetainedInputReference]) -> None:
+    paths = [reference.consumer_path for reference in references]
+    if len(paths) != len(set(paths)):
+        raise ValueError("retained inputs must have unique consumer_path identities")
+
+
+class RetainedInputReceipt(_ProvenanceModel):
+    """Restricted archive handoff. Only explicitly adopted members become public."""
+
+    schema_version: Literal[2]
+    code_revision: GitRevision
+    declaration_revision: GitRevision
+    inputs: tuple[RetainedInputReference, ...]
+    support_inputs: tuple[RetainedSupportReference, ...] = ()
+
+    @model_validator(mode="after")
+    def _identities(self) -> Self:
+        _unique_consumer_paths(self.inputs)
+        support_keys = [(item.provider_id, item.verifier_path) for item in self.support_inputs]
+        if len(support_keys) != len(set(support_keys)):
+            raise ValueError("reviewed support requires unique provider/verifier path identities")
+        return self
+
+
+class CodeReference(_ProvenanceModel):
+    """Public code or authored material at an explicit Git revision.
+
+    A null ``symbol`` names the whole authored file. Executable references require
+    a symbol identifying the implementation.
+    """
+
+    repository: Literal["https://github.com/RivRetrieve/RivRetrieve"]
+    revision: GitRevision
+    repository_path: str
+    symbol: str | None = None
+
+    @field_validator("repository_path")
+    @classmethod
+    def _path(cls, value: str) -> str:
+        return _canonical_relative_path(value)
+
+    @field_validator("symbol")
+    @classmethod
+    def _symbol(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if not value or value != value.strip() or any(character.isspace() for character in value):
+            raise ValueError("code symbols must be nonblank and contain no whitespace")
+        return value
+
+
+def _public_archive_reference(value: object) -> object:
+    if isinstance(value, ArchiveMemberReference) and type(value) is not ArchiveMemberReference:
+        raise ValueError("public archive references cannot contain consumer or verifier locators")
+    return value
+
+
+def _retained_fact_names(value: tuple[str, ...]) -> tuple[str, ...]:
+    if not value or len(value) != len(set(value)) or any(not fact.startswith(("source.", "native.")) for fact in value):
+        raise ValueError("adopted support requires unique source/native fact names")
+    return value
+
+
+class RetainedInputUse(_ProvenanceModel):
+    """Adopted archive member and the existing source/native fact names it supports.
+
+    ``usage`` records the build responsibility. ``reference.role`` retains the
+    archive's classification of the material; neither implies the other.
+    """
+
+    reference: ArchiveMemberReference
+    usage: Literal["native_table", "original", "recording", "reviewed_support"]
+    facts: tuple[str, ...]
+
+    @field_validator("reference", mode="before")
+    @classmethod
+    def _public_reference(cls, value: object) -> object:
+        return _public_archive_reference(value)
+
+    @field_validator("facts")
+    @classmethod
+    def _facts(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return _retained_fact_names(value)
+
+
+class RetainedSupportUse(_ProvenanceModel):
+    """Reviewed source support, separate from inputs consumed by the build.
+
+    ``member_selector`` retains an established relative member name within an
+    archived container. Local verifier paths are never part of this public model.
+    """
+
+    reference: ArchiveMemberReference
+    facts: tuple[str, ...]
+    verification_kind: Literal["full_positive"]
+    verifier: CodeReference
+    member_selector: str | None = None
+
+    @field_validator("reference", mode="before")
+    @classmethod
+    def _public_reference(cls, value: object) -> object:
+        return _public_archive_reference(value)
+
+    @field_validator("facts")
+    @classmethod
+    def _facts(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return _retained_fact_names(value)
+
+    @field_validator("member_selector")
+    @classmethod
+    def _member(cls, value: str | None) -> str | None:
+        return _canonical_relative_path(value) if value is not None else None
+
+
+class CatalogueBuildInputs(_ProvenanceModel):
+    """Explicit code, declarations and adopted archived support for a catalogue."""
+
+    build: CodeReference
+    declarations: tuple[CodeReference, ...]
+    inputs: tuple[RetainedInputUse, ...]
+    support: tuple[RetainedSupportUse, ...] = ()
+
+    @model_validator(mode="after")
+    def _identities(self) -> Self:
+        input_keys = [(item.reference, item.usage) for item in self.inputs]
+        if len(input_keys) != len(set(input_keys)):
+            raise ValueError("adopted inputs require unique archive member and usage pairs")
+        if self.build.symbol is None:
+            raise ValueError("build executable reference requires a symbol")
+        if any(item.verifier.revision != self.build.revision or item.verifier.symbol is None for item in self.support):
+            raise ValueError("reviewed support requires an exact verifier symbol at the build code revision")
+        if not self.declarations or len(self.declarations) != len(set(self.declarations)):
+            raise ValueError("build declarations must be nonempty and unique")
+        if len({declaration.revision for declaration in self.declarations}) != 1:
+            raise ValueError("build declarations must name one explicit declaration revision")
+        if not self.inputs:
+            raise ValueError("catalogue builds require adopted retained inputs")
+        return self
+
+
+def validate_build_input_code_references(
+    build_inputs: CatalogueBuildInputs | None,
+    executable: CodeReference | None,
+    declaration: CodeReference | None,
+) -> None:
+    """Check a transformation's code references against its build header."""
+    if build_inputs is None:
+        if executable is not None or declaration is not None:
+            raise ValueError("transformation code references require build_inputs")
+        return
+    if executable is not None and executable.symbol is None:
+        raise ValueError("transformation executable reference requires a symbol")
+    if executable is not None and executable.revision != build_inputs.build.revision:
+        raise ValueError("transformation executable revision disagrees with build revision")
+    if declaration is not None and declaration not in build_inputs.declarations:
+        raise ValueError("transformation declaration is absent from build declarations")
+
+
+def validate_build_input_facts(build_inputs: CatalogueBuildInputs | None, bound_facts: set[str]) -> None:
+    """Require adopted support edges to resolve bound source/native facts."""
+    if build_inputs is not None:
+        for item in (*build_inputs.inputs, *build_inputs.support):
+            if not set(item.facts) <= bound_facts:
+                raise ValueError("adopted retained input references dangling or withheld facts")
+
+
 class RecordingReference(_ProvenanceModel):
     """Identity and retrieval context for recorded public source bytes."""
 
@@ -387,6 +622,8 @@ class Transformation(_ProvenanceModel):
     )
     marker_value: AbsenceMarkerValue | None = PydanticField(default=None, exclude_if=lambda value: value is None)
     external_inputs: tuple[ExternalFactReference, ...]
+    executable: CodeReference | None = PydanticField(default=None, exclude_if=lambda value: value is None)
+    declaration: CodeReference | None = PydanticField(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def _marker_value_matches_transformation_kind(self) -> Self:
@@ -537,6 +774,7 @@ class AcquisitionProvenance(_ProvenanceModel):
     schema_version: Literal[2]
     provider_id: str
     native_table: NativeTableIdentity | None = None
+    build_inputs: CatalogueBuildInputs | None = PydanticField(default=None, exclude_if=lambda value: value is None)
     fact_universe: tuple[str, ...]
     source_records: tuple[SourceRecord, ...]
     fact_bindings: tuple[FactBinding, ...]
@@ -593,6 +831,12 @@ class AcquisitionProvenance(_ProvenanceModel):
         if len(bound_fact_list) != len(set(bound_fact_list)):
             raise ValueError("each fact may be bound only once")
         bound_facts = set(bound_fact_list)
+        validate_build_input_facts(self.build_inputs, bound_facts)
+        for binding in self.fact_bindings:
+            if binding.transformation is not None:
+                validate_build_input_code_references(
+                    self.build_inputs, binding.transformation.executable, binding.transformation.declaration
+                )
         catalogue_prefixes = ("provider.", "product.", "station.", "station_product.")
         if self.native_table is None:
             non_authored_catalogue_facts = {

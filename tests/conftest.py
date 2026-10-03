@@ -412,3 +412,102 @@ def source_terms_catalogue_artifact() -> Callable[[str], PackagedCatalogArtifact
         )
 
     return build
+
+
+@pytest.fixture(scope="session")
+def catalogue_build_inputs(retained_evidence_root: Path):
+    """Adopt only explicit catalogue support from the restricted coordinator handoff."""
+    import importlib
+
+    from rivretrieve._internal.acquisition_provenance import RetainedInputReceipt
+    from rivretrieve._internal.catalogues.inputs import (
+        select_catalogue_build_inputs,
+        verify_recording_envelopes,
+        verify_retained_input_files,
+    )
+
+    configured = os.environ.get("RIVRETRIEVE_CATALOGUE_INPUT_PROVENANCE")
+    if not configured:
+        pytest.fail("The reviewed archive command must supply catalogue input provenance.", pytrace=False)
+    receipt = RetainedInputReceipt.model_validate_json(Path(configured).read_bytes())
+    if receipt.code_revision != receipt.declaration_revision:
+        pytest.fail("Catalogue declarations must use the explicitly selected executed revision.", pytrace=False)
+
+    def select(provenance):
+        origins = importlib.import_module(f"rivretrieve._internal.providers.{provenance.provider_id}.origins")
+        supporting_inputs = {}
+        for fact, paths in origins.CATALOGUE_SUPPORTING_INPUTS.items():
+            if fact in provenance.fact_universe:
+                for path in paths:
+                    supporting_inputs.setdefault(path, []).append(fact)
+        result = select_catalogue_build_inputs(
+            provenance,
+            receipt,
+            origins.NATIVE_TABLE_ACQUISITION_IDS,
+            origins.CATALOGUE_BUILD_DECLARATIONS,
+            recording_artifact_sha256=verify_recording_envelopes(provenance, receipt, retained_evidence_root),
+            supporting_inputs=supporting_inputs,
+        )
+        consumed_paths = {provenance.native_table.repository_path, *supporting_inputs}
+        consumed_paths.update(
+            item.recording.repository_path for source in provenance.source_records for item in source.evidence
+        )
+        adopted = receipt.model_copy(
+            update={"inputs": tuple(item for item in receipt.inputs if item.consumer_path in consumed_paths)}
+        )
+        verify_retained_input_files(adopted, retained_evidence_root)
+        family, locations, verifier = _governing_support_locations(provenance)
+        if locations:
+            from rivretrieve._internal.catalogues.inputs import select_catalogue_support
+
+            support = select_catalogue_support(
+                provenance,
+                receipt,
+                family=family,
+                locations=locations,
+                verifier_location=verifier,
+            )
+            result = type(result).model_validate({**result.model_dump(mode="python"), "support": support})
+        return result
+
+    return select
+
+
+def _governing_support_locations(provenance):
+    """Resolve existing public ledger rows; never inspect source bodies or inventory."""
+    import csv
+    import json
+
+    root = Path(__file__).parents[1]
+    provider = provenance.provider_id
+    paths = {}
+    if provider == "ba_fhmzbih":
+        ledger = json.loads(
+            (root / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json").read_text()
+        )
+        for pair in ledger["pairs"]:
+            paths[f"workbook:{pair['station_no']}:{pair['product_id']}"] = (pair["response_file"],)
+        return provider, paths, ("maintenance/catalogue/ba_fhmzbih/scripts/verify_evidence.py", "main")
+    if provider == "th_thaiwater":
+        with (
+            root / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
+        ).open() as stream:
+            for row in csv.DictReader(stream):
+                locations = (row["evidence_body"], row["evidence_receipt"])
+                previous = paths.setdefault(row["request_id"], locations)
+                if previous != locations:
+                    pytest.fail("Public ThaiWater ledger has conflicting acquisition support locators.", pytrace=False)
+        return provider, paths, ("maintenance/catalogue/th_thaiwater/scripts/verify_governing_evidence.py", "main")
+    if provider in {"fr_hubeau", "fr_hydroportail"}:
+        # The existing provider decoder has already selected the applicable
+        # ledger acquisitions and retained their exact material locators.
+        prefix = "availability_" if provider == "fr_hubeau" else "history_"
+        for source in provenance.source_records:
+            for acquisition in source.acquisitions:
+                if not acquisition.acquisition_id.startswith(prefix):
+                    continue
+                if acquisition.material is None:
+                    pytest.fail("French ledger acquisition has no exact source material locator.", pytrace=False)
+                paths[acquisition.acquisition_id] = (acquisition.material.filename,)
+        return "fr_hubeau", paths, ("maintenance/catalogue/fr_hubeau/scripts/verify_governing_evidence.py", "main")
+    return "", {}, ("", "")

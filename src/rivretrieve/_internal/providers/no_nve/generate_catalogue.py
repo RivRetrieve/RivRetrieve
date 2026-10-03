@@ -18,6 +18,7 @@ import polars as pl
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
+    CatalogueBuildInputs,
     verified_provider_terms,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -761,14 +762,24 @@ def validate_generated_catalogue(
     )
 
 
-def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> None:
+def write_catalogue(
+    catalogue: GeneratedNoNveCatalogue,
+    out_dir: Path | str,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
+) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from functools import partial
 
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.no_nve.catalogue_series import describe_catalogue
     from rivretrieve._internal.providers.no_nve.config import config as source_config
-    from rivretrieve._internal.providers.no_nve.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.no_nve.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     output = Path(out_dir)
     output.mkdir(parents=True, exist_ok=True)
@@ -785,6 +796,9 @@ def write_catalogue(catalogue: GeneratedNoNveCatalogue, out_dir: Path | str) -> 
         {name: (output / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
         source_config=source_config(),
         source_describer=partial(describe_catalogue, native=catalogue.source_native),
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
     )
     for name, content in metadata.items():
         (output / name).write_bytes(content)
@@ -914,6 +928,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="External input root containing the capture's repository-relative paths (--repository-root is an alias).",
     )
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
     if (args.capture_responses is not None or args.materialize_record is not None) and args.evidence_root is None:
         parser.error("capture and materialization require --evidence-root")
@@ -1005,6 +1020,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             or args.env_file is not None
         ):
             parser.error("--native requires --out and cannot use capture options")
+        if args.build_inputs is None:
+            parser.error("--out requires --build-inputs")
+        build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
         from rivretrieve._internal.providers.no_nve.origins import (
             NATIVE_TABLE_BYTE_SIZE,
             NATIVE_TABLE_SHA256,
@@ -1014,7 +1032,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         table = read_native_table(
             args.native, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE
         )
-        write_catalogue(build_catalogue(table, STATION_CATALOGUE_ORIGINS), args.out)
+        write_catalogue(
+            build_catalogue(table, STATION_CATALOGUE_ORIGINS), args.out, build_inputs=build_inputs, native_table=table
+        )
         return 0
     raise AssertionError("unreachable catalogue mode")
 

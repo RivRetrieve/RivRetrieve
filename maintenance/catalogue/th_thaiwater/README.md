@@ -45,11 +45,18 @@ not a hosted workflow requirement.
 The native table and source recordings are external build inputs. The reviewed
 ledger stays in this repository. Build with explicit input and output locations:
 
+Use the reviewed catalogue build through the [archive coordinator](../../../docs/maintenance/evidence.md) to export
+`th_thaiwater.build-inputs.json` outside the checkout. Set `BUILD_INPUTS` to that
+file. It contains the adopted `CatalogueBuildInputs` selection, not the
+coordinator receipt `catalogue-input-provenance.json`. Keep the selection and
+build outputs in the private output directory.
+
 ```sh
 uv run python -m rivretrieve._internal.providers.th_thaiwater.generate_catalogue \
   --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet" \
   --availability-evidence maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv \
   --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
+  --build-inputs "$BUILD_INPUTS" \
   --out /path/to/catalogue-output
 ```
 

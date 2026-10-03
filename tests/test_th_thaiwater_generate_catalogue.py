@@ -22,6 +22,7 @@ from rivretrieve._internal.providers.th_thaiwater import generate_catalogue
 from rivretrieve._internal.providers.th_thaiwater.config import config
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
+from tests._catalogue import catalogue_content_without_build_identity
 
 FIXTURE_PATH = Path("tests/test_data/th_thaiwater_metadata.json")
 CATALOGUE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue"
@@ -837,10 +838,18 @@ def test_station_product_check_uses_own_acquisition_date_and_provider_uses_nativ
     "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
     "tests/test_data/th_thaiwater_official_water_wl-2026-09-02.html",
     "tests/test_data/th_thaiwater_terms_licence-1.html",
+    full_verification=("th_thaiwater",),
 )
 def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
-    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    retained_evidence_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    catalogue_build_inputs,
+    tmp_path_factory,
 ) -> None:
+    build_inputs = catalogue_build_inputs(_build(retained_evidence_root).acquisition_provenance)
+    build_inputs_path = tmp_path_factory.mktemp("catalogue-inputs") / "build-inputs.json"
+    build_inputs_path.write_text(build_inputs.model_dump_json(), encoding="utf-8")
     before = (retained_evidence_root / NATIVE_PATH).read_bytes()
     monkeypatch.setattr(
         generate_catalogue,
@@ -854,6 +863,8 @@ def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
             [
                 "--evidence-root",
                 str(retained_evidence_root),
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(retained_evidence_root / NATIVE_PATH),
                 "--availability-evidence",
@@ -880,6 +891,7 @@ def test_build_cli_is_offline_and_leaves_native_bytes_unchanged(
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
     }
 
 
@@ -901,8 +913,20 @@ def test_committed_catalogue_ids_match_native_ids(retained_evidence_root: Path) 
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
-def test_fresh_build_matches_all_committed_artefact_bytes(retained_evidence_root: Path, tmp_path: Path) -> None:
-    generate_catalogue.write_catalogue(_build(retained_evidence_root), tmp_path)
+@pytest.mark.recorded(
+    "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
+    "tests/test_data/th_thaiwater_official_water_wl-2026-09-02.html",
+    "tests/test_data/th_thaiwater_terms_licence-1.html",
+    full_verification=("th_thaiwater",),
+)
+def test_fresh_build_matches_all_committed_artefact_bytes(
+    retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs
+) -> None:
+    native = _committed_native_table(retained_evidence_root)
+    catalogue = _build(retained_evidence_root, native)
+    generate_catalogue.write_catalogue(
+        catalogue, tmp_path, build_inputs=catalogue_build_inputs(catalogue.acquisition_provenance), native_table=native
+    )
 
     for artifact_name in (
         "provider.json",
@@ -918,9 +942,12 @@ def test_fresh_build_matches_all_committed_artefact_bytes(retained_evidence_root
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
         "croissant.json",
     ):
-        assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
+        assert catalogue_content_without_build_identity(
+            artifact_name, (tmp_path / artifact_name).read_bytes()
+        ) == catalogue_content_without_build_identity(artifact_name, (CATALOGUE_PATH / artifact_name).read_bytes())
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")

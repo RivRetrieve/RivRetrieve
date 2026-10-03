@@ -12,6 +12,7 @@ from urllib.parse import urlencode  # noqa: TID251 -- structural request encodin
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionRecord,
+    CatalogueBuildInputs,
     EvidenceReference,
     NativeTableIdentity,
     RecordingReference,
@@ -30,7 +31,15 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
 from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
 
 
-def rebuild(evidence_root: Path, availability_ledger: Path, output: Path, capture_output: Path, revision: str) -> None:
+def rebuild(
+    evidence_root: Path,
+    availability_ledger: Path,
+    output: Path,
+    capture_output: Path,
+    revision: str,
+    *,
+    build_inputs: CatalogueBuildInputs,
+) -> None:
     for destination in (output, capture_output):
         if any((parent / ".git").exists() for parent in (destination, *destination.parents)):
             raise ValueError("Outputs must be outside source checkouts")
@@ -109,7 +118,7 @@ def rebuild(evidence_root: Path, availability_ledger: Path, output: Path, captur
     availability = decode_availability(lzma.decompress(availability_ledger.read_bytes()))
     catalogue = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, availability, native_capture=capture)
     verify_provenance_recordings(catalogue.acquisition_provenance, evidence_root)
-    write_catalogue(catalogue, output)
+    write_catalogue(catalogue, output, build_inputs=build_inputs, native_table=native)
 
 
 if __name__ == "__main__":
@@ -120,6 +129,7 @@ if __name__ == "__main__":
         type=Path,
         default=Path(__file__).resolve().parent / "governing_evidence.json.xz",
     )
+    parser.add_argument("--build-inputs", type=Path, required=True, help="Reviewed adopted CatalogueBuildInputs JSON.")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--capture-output", type=Path, required=True)
     parser.add_argument("--revision", required=True, help="Repository revision containing the retained native input")
@@ -130,4 +140,5 @@ if __name__ == "__main__":
         args.out.resolve(),
         args.capture_output.resolve(),
         args.revision,
+        build_inputs=CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes()),
     )
