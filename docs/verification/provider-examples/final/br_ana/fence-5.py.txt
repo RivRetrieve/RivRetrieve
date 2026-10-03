@@ -1,5 +1,0 @@
-print(
-    rr.series(selection)
-    .select("station_id", "variant", "frequency", "statistic")
-    .rows()
-)

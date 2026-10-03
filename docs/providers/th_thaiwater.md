@@ -207,5 +207,5 @@ is practical guidance, not an official ThaiWater citation.
 Station counts and agencies come from the packaged catalogue. The examples were run
 against the live API on 2026-09-24. They verify one station, two quantities and one
 period, not service-wide availability. The
-[verification record](../verification/thailand-provider/README.md) retains commands,
+[private verification archive](https://github.com/RivRetrieve/verification-evidence#readme) retains commands,
 source checks, exact output and the limits of these checks.

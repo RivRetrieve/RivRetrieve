@@ -196,7 +196,11 @@ def test_receipt_preserves_equal_bytes_at_distinct_archive_identities():
         consumer_path="retained/other.parquet", collection_id="other-collection", archive_revision="f" * 40
     )
     receipt = RetainedInputReceipt(
-        schema_version=2, code_revision="d" * 40, declaration_revision="e" * 40, inputs=(first, second)
+        schema_version=3,
+        archive_code_revision="f" * 40,
+        code_revision="d" * 40,
+        declaration_revision="e" * 40,
+        inputs=(first, second),
     )
     assert RetainedInputReceipt.model_validate_json(receipt.model_dump_json()) == receipt
     uses = tuple(
@@ -215,7 +219,11 @@ def test_duplicate_consumer_paths_rejected(ambiguous):
     second = _reference(collection_id="other" if ambiguous else first.collection_id)
     with pytest.raises(ValidationError, match="consumer_path"):
         RetainedInputReceipt(
-            schema_version=2, code_revision="d" * 40, declaration_revision="e" * 40, inputs=(first, second)
+            schema_version=3,
+            archive_code_revision="f" * 40,
+            code_revision="d" * 40,
+            declaration_revision="e" * 40,
+            inputs=(first, second),
         )
 
 
@@ -727,7 +735,8 @@ def test_reviewed_support_retains_exact_identity_and_omits_restricted_locations(
         verification_kind="full_positive",
     )
     receipt = RetainedInputReceipt(
-        schema_version=2,
+        schema_version=3,
+        archive_code_revision="f" * 40,
         code_revision="d" * 40,
         declaration_revision="e" * 40,
         inputs=(_reference(),),
@@ -1249,3 +1258,49 @@ def test_header_revalidation_rejects_unchecked_copied_support_identities(mutatio
         parse_catalogue_evidence(unchecked, files)
     with pytest.raises(ValidationError):
         encode_catalogue_evidence(evidence.model_copy(update={"header": unchecked}))
+
+
+def test_private_declarations_and_verifiers_keep_independent_reviewed_revision():
+    from rivretrieve._internal.acquisition_provenance import RetainedSupportUse
+
+    private = CodeReference(
+        repository="https://github.com/RivRetrieve/verification-evidence",
+        revision="f" * 40,
+        repository_path="declarations/synthetic/ledger.json",
+    )
+    verifier = private.model_copy(update={"repository_path": "verification/synthetic/verify.py", "symbol": "main"})
+    build = CatalogueBuildInputs.model_validate(
+        {
+            **_build().model_dump(),
+            "declarations": (*_build().declarations, private),
+            "support": (
+                RetainedSupportUse(
+                    reference=_member(),
+                    facts=("native.latitude",),
+                    verification_kind="full_positive",
+                    verifier=verifier,
+                ),
+            ),
+        }
+    )
+    provenance = AcquisitionProvenance.model_validate({**_provenance().model_dump(), "build_inputs": build})
+    files = encode_catalogue_evidence(_normalize(provenance))
+    header = EvidenceHeader.model_validate_json(files.pop("provenance.json"))
+    restored = reconstruct_provenance(parse_catalogue_evidence(header, files))
+    assert restored.build_inputs == build
+    wrong = build.model_dump()
+    wrong["support"][0]["verifier"]["revision"] = build.build.revision
+    with pytest.raises(ValidationError, match="owner's reviewed revision"):
+        CatalogueBuildInputs.model_validate(wrong)
+    wrong = build.model_dump()
+    wrong["build"]["repository"] = private.repository
+    with pytest.raises(ValidationError, match="public library"):
+        CatalogueBuildInputs.model_validate(wrong)
+
+
+def test_private_reference_cannot_impersonate_public_transformation_executable():
+    document = _provenance().model_dump()
+    transformation = document["fact_bindings"][1]["transformation"]
+    transformation["executable"]["repository"] = "https://github.com/RivRetrieve/verification-evidence"
+    with pytest.raises(ValidationError, match="owner or revision"):
+        AcquisitionProvenance.model_validate(document)

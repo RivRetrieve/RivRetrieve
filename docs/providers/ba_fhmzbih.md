@@ -176,5 +176,5 @@ Publisher pages checked on 2026-09-28:
 - [AVP Sava main website](https://www.voda.ba/): copyright notice.
 
 The station counts describe the packaged catalogue. The example was retrieved
-live on 2026-09-28. The [verification record](../verification/bosnia-provider/README.md)
+live on 2026-09-28. The [private verification archive](https://github.com/RivRetrieve/verification-evidence#readme)
 retains commands, source checks, exact output and the limits of these checks.

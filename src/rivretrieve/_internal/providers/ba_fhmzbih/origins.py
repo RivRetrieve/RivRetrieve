@@ -418,6 +418,8 @@ NATIVE_TABLE_ACQUISITION_IDS = ("catalogue_capture_2026_08_02",)
 
 
 # Authored catalogue, physical-fact and support declarations selected at build time.
+# Non-source paths identify explicit authored inputs in the restricted handoff.
+# Their code references resolve to the reviewed private declaration owner.
 CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/ba_fhmzbih/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/ba_fhmzbih/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),

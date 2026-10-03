@@ -169,24 +169,3 @@ def test_declared_source_cap_splits_engine_padding_across_the_leap_date() -> Non
             ("2024-03-02", "2024-03-05"),
         ]
     # No response or measurements are invented for the second source window.
-
-
-@pytest.mark.recorded(
-    "tests/test_data/th_thaiwater_1373273_2025-01-01_2026-01-01.recording.json",
-    "tests/test_data/th_thaiwater_1373273_2025-09-09_2026-09-08.recording.json",
-    "tests/test_data/th_thaiwater_1373273_2026-09-09_2026-09-12.recording.json",
-)
-def test_retained_source_recordings_match_their_capture_manifest(retained_evidence_root: Path) -> None:
-    import hashlib
-    import json
-
-    manifest = json.loads((Path(__file__).parent / "test_data/th_thaiwater_source_window_manifest.json").read_text())
-    for capture in manifest["captures"]:
-        path = retained_evidence_root / "tests/test_data" / capture["recording"]
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == capture["recording_sha256"]
-        recording = read_recording(path)
-        assert recording.sha256 == capture["response_sha256"]
-        assert recording.retrieved_at == datetime.fromisoformat(capture["retrieved_at"])
-    historical = next(capture for capture in manifest["captures"] if capture["name"] == "historical_null")
-    raw = (retained_evidence_root / "tests/test_data" / historical["recording"]).read_bytes()
-    assert hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest() == historical["original_git_blob"]

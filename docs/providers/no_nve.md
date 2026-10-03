@@ -244,5 +244,5 @@ Publisher pages checked on 2026-09-23:
 
 The station counts describe the packaged catalogue. Live public retrieval and the
 recording path were checked on 2026-09-23. The
-[verification record](../verification/norway-provider/README.md) retains commands,
+[private verification archive](https://github.com/RivRetrieve/verification-evidence#readme) retains commands,
 source checks, exact output and the limits of these checks.

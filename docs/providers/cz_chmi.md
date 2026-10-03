@@ -165,5 +165,5 @@ Publisher pages checked on 2026-09-28:
 - [Disclaimer and conditions of use](https://www.chmi.cz/vylou%C4%8Den%C3%AD-odpov%C4%9Bdnosti): attribution.
 
 The station count describes the packaged catalogue. The example was retrieved
-live on 2026-09-28. The [verification record](../verification/czech-provider/README.md)
+live on 2026-09-28. The [private verification archive](https://github.com/RivRetrieve/verification-evidence#readme)
 retains commands, source checks, exact output and limitations.

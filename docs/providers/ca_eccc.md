@@ -197,5 +197,5 @@ Publisher pages checked on 2026-09-22:
 
 The station count describes the packaged catalogue. Fresh national acquisition
 and local example retrieval were checked on 2026-09-22–23. The
-[verification record](../verification/canada-provider/README.md) retains the
+[private verification archive](https://github.com/RivRetrieve/verification-evidence#readme) retains the
 commands, evidence and limits of these checks.

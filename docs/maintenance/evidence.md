@@ -26,22 +26,24 @@ or provide an independent backup.
 
 ## Verify source claims
 
-Provider interpretation, reviewed declarations and source-claim verifiers remain
-in RivRetrieve. Retained source material and required historical test inputs live
-in the private archive. Tests and catalogue tools receive verified local inputs
+RivRetrieve owns library behavior, catalogue transformations and their declarations.
+The private archive owns reviewed evidence ledgers, source-certification verifiers,
+retained source material and tests of its tooling. Tests and catalogue tools receive verified local inputs
 explicitly. Packaged catalogues remain in RivRetrieve and work without archive access.
 Historical provenance paths identify the original acquisitions; they do not locate
 files in the current checkout.
 
-Catalogue publication receives an explicit selection of verified members and public
-code references. The selection records each adopted member's collection, manifest,
+Catalogue publication receives an explicit selection of verified members and revision-pinned
+code references to their actual owning repositories. The selection records each adopted member's collection, manifest,
 artifact identity, digest, size and archive revision. The archive's material role
 and the member's use in the build remain separate. Adding a collection does not
 change a provider's selected inputs.
 
 Use the private coordinator's catalogue-input mode for catalogue rebuild tests.
-Select both the reviewed executable revision and the declaration revision explicitly.
-The current coordinator requires these revisions to match. Whole-file declaration
+Select the reviewed RivRetrieve revision and the independently reviewed archive
+code revision explicitly. Public builds and transformations use the RivRetrieve
+revision; private ledgers and verifiers use the archive code revision. Authored
+ledger inputs are verified separately from retained release members. Whole-file declaration
 references identify reviewed ledgers as well as Python declarations. A build's
 publication entry point is separate from the executable references for catalogue
 conversion, observation assembly and metadata projection. Authored constants retain
@@ -57,21 +59,21 @@ both retained-input checks and a separate disclosure decision. Keep candidate fi
 of adopted mappings. Compare existing area fields with their approved baseline
 without changing scalar values, units or absence states.
 
-Use the provider's instructions:
+Use the private archive README to locate each provider's maintained checks:
 
-- [Bosnia](../../maintenance/catalogue/ba_fhmzbih/README.md): complete baseline
+- [Bosnia](https://github.com/RivRetrieve/verification-evidence#readme): complete baseline
   workbook checks require the controlled source bodies and receipts.
-- [France](../../maintenance/catalogue/fr_hubeau/README.md): historical governing
+- [France](https://github.com/RivRetrieve/verification-evidence#readme): historical governing
   checks require the retained historical native table, not the current Hub’Eau
   catalogue table.
-- [HydroPortail](../../maintenance/catalogue/fr_hydroportail/README.md): native
+- [HydroPortail](https://github.com/RivRetrieve/verification-evidence#readme): native
   inventory rebuild and the limits of historical source witnesses.
-- [ThaiWater](../../maintenance/catalogue/th_thaiwater/README.md): complete
+- [ThaiWater](https://github.com/RivRetrieve/verification-evidence#readme): complete
   genuine-input verification must precede negative provenance regressions. The
   archive coordinator supplies the verified governing inputs after that positive
   check passes. A skipped test or an exception from missing files does not establish
   acceptance.
-- [Brazil](../../maintenance/catalogue/br_ana/README.md): digest-bound supporting
+- [Brazil](https://github.com/RivRetrieve/verification-evidence#readme): digest-bound supporting
   inputs and retained recordings used by the offline rebuild.
 
 ## Run tests
@@ -139,7 +141,7 @@ regression does not itself certify every source body; its declared full-positive
 prerequisites run first. Historical coverage gaps remain recorded in the archive.
 
 Other provider checks and retained-input limits are recorded in the private
-archive and provider maintenance notes under `docs/provider_ports/`.
+archive. Its maintained README identifies the current provider instructions.
 
 Run applicable full checks when governing claims, source bindings, verifiers or
 collections change. Missing mandatory material is blocked, not a passing or

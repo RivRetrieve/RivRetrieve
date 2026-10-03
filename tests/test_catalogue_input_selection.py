@@ -12,7 +12,11 @@ from tests.test_catalogue_build_provenance import _provenance, _reference
 
 def _receipt(*references, declaration_revision="d" * 40):
     return RetainedInputReceipt(
-        schema_version=2, code_revision="d" * 40, declaration_revision=declaration_revision, inputs=references
+        schema_version=3,
+        archive_code_revision="f" * 40,
+        code_revision="d" * 40,
+        declaration_revision=declaration_revision,
+        inputs=references,
     )
 
 
@@ -99,7 +103,7 @@ def test_support_joins_exact_ledger_location_and_omits_unused_collection_entries
     assert len(result) == 1
     assert result[0].facts == ("native.latitude",)
     assert result[0].verification_kind == "full_positive"
-    assert result[0].verifier.revision == receipt.code_revision
+    assert result[0].verifier.revision == receipt.archive_code_revision
     assert "verifier_path" not in result[0].model_dump_json()
     assert "unused.bin" not in result[0].model_dump_json()
 
@@ -206,3 +210,80 @@ def test_recording_wrapper_and_source_body_keep_distinct_hashes_and_acquisition(
     write_recording(replace(envelope, retrieved_at=datetime(2021, 1, 1, tzinfo=UTC)), path)
     with pytest.raises(FatalContractError, match="acquisition"):
         verify_recording_envelopes(provenance, receipt(), tmp_path)
+
+
+def _authored_declaration(body=b"synthetic reviewed declaration"):
+    from rivretrieve._internal.acquisition_provenance import AuthoredDeclarationInput, CodeReference
+
+    return AuthoredDeclarationInput(
+        consumer_path="maintenance/synthetic/ledger.json",
+        declaration=CodeReference(
+            repository="https://github.com/RivRetrieve/verification-evidence",
+            revision="f" * 40,
+            repository_path="declarations/synthetic/ledger.json",
+        ),
+        sha256=sha256(body).hexdigest(),
+        byte_size=len(body),
+    )
+
+
+def test_authored_inputs_keep_private_code_identity_separate_from_archive_members(tmp_path):
+    from rivretrieve._internal.acquisition_provenance import RetainedInputReceipt
+
+    body = b"synthetic reviewed declaration"
+    authored = _authored_declaration(body)
+    receipt = RetainedInputReceipt.model_validate(
+        {
+            **_receipt(_reference(consumer_path="historical/native.parquet")).model_dump(),
+            "declaration_inputs": [authored],
+        }
+    )
+    result = select_catalogue_build_inputs(
+        _provenance(),
+        receipt,
+        ("historical-acquisition",),
+        (("src/synthetic/origins.py", "build_acquisition_provenance"), (authored.consumer_path, None)),
+    )
+    assert result.declarations[1] == authored.declaration
+    assert len(result.inputs) == 1
+    assert result.build.repository == "https://github.com/RivRetrieve/RivRetrieve"
+    assert "consumer_path" not in result.model_dump_json()
+    path = tmp_path / authored.consumer_path
+    path.parent.mkdir(parents=True)
+    path.write_bytes(body)
+    declaration_receipt = receipt.model_copy(update={"inputs": ()})
+    verify_retained_input_files(declaration_receipt, tmp_path)
+    path.write_bytes(b"changed declaration")
+    with pytest.raises(FatalContractError, match="differs"):
+        verify_retained_input_files(declaration_receipt, tmp_path)
+
+
+@pytest.mark.parametrize("defect", ["owner", "revision", "symbol", "overlap"])
+def test_authored_handoff_rejects_unreviewed_identity_or_ambiguous_path(defect):
+    from pydantic import ValidationError
+
+    from rivretrieve._internal.acquisition_provenance import RetainedInputReceipt
+
+    document = _receipt().model_dump()
+    declaration = _authored_declaration().model_dump()
+    if defect == "owner":
+        declaration["declaration"]["repository"] = "https://github.com/RivRetrieve/RivRetrieve"
+    elif defect == "revision":
+        declaration["declaration"]["revision"] = "e" * 40
+    elif defect == "symbol":
+        declaration["declaration"]["symbol"] = "main"
+    else:
+        document["inputs"] = [_reference(consumer_path=declaration["consumer_path"])]
+    document["declaration_inputs"] = [declaration]
+    with pytest.raises(ValidationError):
+        RetainedInputReceipt.model_validate(document)
+
+
+def test_missing_authored_declaration_never_falls_back_to_checkout():
+    with pytest.raises(FatalContractError, match="required reviewed declaration"):
+        select_catalogue_build_inputs(
+            _provenance(),
+            _receipt(_reference(consumer_path="historical/native.parquet")),
+            ("historical-acquisition",),
+            (("maintenance/synthetic/ledger.json", None),),
+        )

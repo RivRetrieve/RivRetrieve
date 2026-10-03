@@ -41,7 +41,10 @@ redacted. This profile does not publish private source bodies or interpret licen
 
 `header.build_inputs` records an explicit executable build reference, authored
 code declarations, and adopted retained inputs. Each code reference names the
-public repository, a full Git revision, a repository path and a symbol. A null
+owning repository, a full Git revision, a repository path and a symbol.
+Library transformations refer to RivRetrieve; reviewed evidence ledgers and
+source-certification verifiers can refer to the private archive. These safe
+references identify code without granting access or publishing restricted contents. A null
 symbol names a whole authored file, such as a reviewed ledger; executable
 references require a symbol. Each retained input names its archive revision, collection, manifest digest, artifact,
 member digest and byte size. Consumer and verifier paths remain in the restricted
@@ -236,7 +239,9 @@ support that fact. Each member node records its exact archive membership, digest
 size, role and usage, without a private member path or download URL. Only members
 supporting the selected facts or their ancestors appear. A transformation's
 `subjectOf` separates executable implementation and authored declaration references,
-each with a public revision-pinned code URL and symbol.
+each with a revision-pinned code URL and symbol in its owning repository.
+A private reference requires archive access to inspect; offline fact traversal
+does not fetch it.
 
 Corroborating material is separately labelled under `citation`, outside historical
 `isBasedOn` ancestry. Deliberate withholding uses `rr:absence`. No other extension

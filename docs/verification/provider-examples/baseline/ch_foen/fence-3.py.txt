@@ -1,5 +1,0 @@
-candidates = rr.series(selection).select(
-    "station_id", "variant", "quantity", "source_unit", "unit", "frequency", "statistic"
-)
-
-print(candidates.rows())

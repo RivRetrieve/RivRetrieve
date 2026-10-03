@@ -57,7 +57,6 @@ THAI_AVAILABILITY_EVIDENCE_PATH = Path(
     "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
 )
 RECEIPTS_PATH = Path("tests/test_data/catalogue_origin_evidence_receipts.json")
-PROVIDER_NOTES = ROOT / "docs/provider_ports"
 SCHEMA_COLUMNS = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
 
 
@@ -121,12 +120,12 @@ def _adapter(retained_evidence_root: Path, provider: str, cases: tuple[Declarati
         )
         build = partial(build, provenance=provenance, telemetry=telemetry)
     if provider == "fr_hubeau":
-        ledger = ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
+        ledger = retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
         availability = decode_availability(lzma.decompress(ledger.read_bytes()))
         from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import NativeInventoryCapture
 
         capture = NativeInventoryCapture.model_validate_json(
-            (ROOT / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json").read_bytes()
+            (retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json").read_bytes()
         )
         build = partial(build, availability=availability, native_capture=capture)
     if provider == "fr_hydroportail":
@@ -168,7 +167,9 @@ def _adapter(retained_evidence_root: Path, provider: str, cases: tuple[Declarati
         )
         historical = decode_availability(
             lzma.decompress(
-                (ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz").read_bytes()
+                (
+                    retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"
+                ).read_bytes()
             )
         )
         build = partial(
@@ -177,11 +178,15 @@ def _adapter(retained_evidence_root: Path, provider: str, cases: tuple[Declarati
     if provider == "th_thaiwater":
         build = partial(
             build,
-            availability_evidence=GraphAvailabilityEvidence((ROOT / THAI_AVAILABILITY_EVIDENCE_PATH).read_bytes()),
+            availability_evidence=GraphAvailabilityEvidence(
+                (retained_evidence_root / THAI_AVAILABILITY_EVIDENCE_PATH).read_bytes()
+            ),
         )
     if provider == "ba_fhmzbih":
         workbook_access = TypeAdapter(generator.WorkbookAccessLedger).validate_json(
-            (ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json").read_bytes()
+            (
+                retained_evidence_root / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
+            ).read_bytes()
         )
         build = partial(build, workbook_access=workbook_access)
     return ProviderAdapter(
@@ -248,6 +253,14 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
         )
     elif provider == "fr_hydroportail":
         paths.append("maintenance/catalogue/fr_hydroportail/evidence")
+    if provider == "ba_fhmzbih":
+        paths.append("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
+    elif provider in {"fr_hubeau", "fr_hydroportail"}:
+        paths.append("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz")
+        if provider == "fr_hubeau":
+            paths.append("maintenance/catalogue/fr_hubeau/inventory/native_capture.json")
+    elif provider == "th_thaiwater":
+        paths.append(THAI_AVAILABILITY_EVIDENCE_PATH.as_posix())
     return pytest.mark.derived(*paths, *additional_paths)
 
 
@@ -793,6 +806,7 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
         pytest.param(
             "ba_fhmzbih",
             marks=pytest.mark.governing(
+                "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json",
                 *_catalogue_recording_paths("ba_fhmzbih"),
                 "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
                 "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
@@ -849,6 +863,7 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
         pytest.param(
             "fr_hydroportail",
             marks=pytest.mark.governing(
+                "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
                 *_catalogue_recording_paths(
                     "fr_hydroportail", scopes=("maintenance/catalogue/fr_hydroportail/evidence",)
                 ),
@@ -892,6 +907,7 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
         pytest.param(
             "th_thaiwater",
             marks=pytest.mark.governing(
+                "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv",
                 *_catalogue_recording_paths("th_thaiwater"),
                 "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
                 "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
@@ -924,6 +940,8 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
         pytest.param(
             "fr_hubeau",
             marks=pytest.mark.governing(
+                "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
+                "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
                 *_catalogue_recording_paths("fr_hubeau"),
                 "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
                 "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
@@ -1020,7 +1038,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
             )
         )
     elif adapter.provider_id == "ba_fhmzbih":
-        ledger = ROOT / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
+        ledger = retained_evidence_root / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
         series_recording = retained_evidence_root / "tests/test_data/ba_fhmzbih_metadata_index.recording.json"
         source_inputs_before = {path: path.read_bytes() for path in (ledger, series_recording)}
         arguments.extend(("--workbook-access-ledger", str(ledger), "--series-recording", str(series_recording)))
@@ -1043,9 +1061,9 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 "--evidence-root",
                 str(retained_evidence_root),
                 "--availability-ledger",
-                str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
+                str(retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
                 "--native-capture",
-                str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"),
+                str(retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"),
             )
         )
     elif adapter.provider_id == "fr_hydroportail":
@@ -1058,11 +1076,11 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 "--evidence",
                 str(retained_evidence_root / "maintenance/catalogue/fr_hydroportail/evidence"),
                 "--availability-ledger",
-                str(ROOT / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
+                str(retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
             )
         )
     elif adapter.provider_id == "th_thaiwater":
-        arguments.extend(("--availability-evidence", str(ROOT / THAI_AVAILABILITY_EVIDENCE_PATH)))
+        arguments.extend(("--availability-evidence", str(retained_evidence_root / THAI_AVAILABILITY_EVIDENCE_PATH)))
     elif adapter.provider_id == "pl_imgw":
         arguments.extend(
             ("--terms-recording", str(retained_evidence_root / "tests/test_data/pl_imgw_terms_regulations.html"))

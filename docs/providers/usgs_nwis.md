@@ -224,5 +224,5 @@ form, with the bracketed dates replaced for the data used:
 ## Sources
 
 Source checks and example retrievals: 2026-09-22. Counts describe the packaged
-catalogue. The [verification record](../verification/usgs-provider/README.md)
+catalogue. The [private verification archive](https://github.com/RivRetrieve/verification-evidence#readme)
 retains the evidence, execution details and limits.

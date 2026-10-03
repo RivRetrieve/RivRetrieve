@@ -25,13 +25,11 @@ from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOG
 
 FIXTURE_PATH = Path("tests/test_data/th_thaiwater_metadata.json")
 CATALOGUE_PATH = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue"
-LEDGER_PATH = (
-    Path(__file__).parents[1] / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
-)
+LEDGER_PATH = Path("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 
 
-def _availability_evidence() -> GraphAvailabilityEvidence:
-    return GraphAvailabilityEvidence(LEDGER_PATH.read_bytes())
+def _availability_evidence(retained_evidence_root) -> GraphAvailabilityEvidence:
+    return GraphAvailabilityEvidence((retained_evidence_root / LEDGER_PATH).read_bytes())
 
 
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
@@ -217,7 +215,9 @@ def _build(
     retained_evidence_root: Path, table: NativeTable | None = None
 ) -> generate_catalogue.GeneratedThThaiWaterCatalogue:
     return generate_catalogue.build_catalogue(
-        table or _committed_native_table(retained_evidence_root), STATION_CATALOGUE_ORIGINS, _availability_evidence()
+        table or _committed_native_table(retained_evidence_root),
+        STATION_CATALOGUE_ORIGINS,
+        _availability_evidence(retained_evidence_root),
     )
 
 
@@ -673,6 +673,7 @@ def test_native_cli_refuses_error_issues(
     assert called is False
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_native_build_counts_and_identity_station_fields(retained_evidence_root: Path) -> None:
     catalogue = _build(retained_evidence_root)
@@ -707,6 +708,7 @@ def test_native_build_counts_and_identity_station_fields(retained_evidence_root:
     assert station["crs"].item() == "unknown"
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [
@@ -754,6 +756,7 @@ def test_native_build_contracts_fail_loud(retained_evidence_root: Path, mutation
         _build(retained_evidence_root, NativeTable(data))
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_native_build_rejects_non_string_station_id(retained_evidence_root: Path) -> None:
     data = (
@@ -764,6 +767,7 @@ def test_native_build_rejects_non_string_station_id(retained_evidence_root: Path
         _build(retained_evidence_root, NativeTable(data))
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_generated_station_projection_matches_native_exactly(retained_evidence_root: Path) -> None:
     native = _committed_native_table(retained_evidence_root)
@@ -794,6 +798,7 @@ def test_native_preserves_displaced_source_fields(retained_evidence_root: Path) 
     assert displaced["station.tele_station_oldcode"].null_count() == 0
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_origin_enforcement_is_part_of_native_build(retained_evidence_root: Path) -> None:
     declarations = dict(STATION_CATALOGUE_ORIGINS)
@@ -801,10 +806,13 @@ def test_origin_enforcement_is_part_of_native_build(retained_evidence_root: Path
 
     with pytest.raises(FatalContractError, match="th_thaiwater.longitude: canonical column has no origin declaration"):
         generate_catalogue.build_catalogue(
-            _committed_native_table(retained_evidence_root), declarations, _availability_evidence()
+            _committed_native_table(retained_evidence_root),
+            declarations,
+            _availability_evidence(retained_evidence_root),
         )
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_station_product_check_uses_own_acquisition_date_and_provider_uses_native_date(
     retained_evidence_root: Path,
@@ -812,7 +820,7 @@ def test_station_product_check_uses_own_acquisition_date_and_provider_uses_nativ
     catalogue = _build(retained_evidence_root)
     expected = {
         (pair.station_id, pair.product_id): pair.acquisition.retrieved_at_start.date()
-        for pair in _availability_evidence().pairs
+        for pair in _availability_evidence(retained_evidence_root).pairs
         if pair.acquisition.retrieved_at_start is not None
     }
     assert {
@@ -832,6 +840,7 @@ def test_committed_catalogue_station_projection_matches_native(retained_evidence
     pl_testing.assert_frame_equal(committed, _expected_station_projection(native), check_exact=True)
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_governing_acquisitions_expose_all_baseline_pairs(retained_evidence_root: Path) -> None:
     catalogue = _build(retained_evidence_root)
@@ -847,18 +856,20 @@ def test_governing_acquisitions_expose_all_baseline_pairs(retained_evidence_root
     assert catalogue.acquisition_provenance.withheld_facts == ()
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_build_cli_requires_explicit_reviewed_availability_evidence(
-    retained_evidence_root: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     with pytest.raises(SystemExit):
-        generate_catalogue.main(["--native", str(retained_evidence_root / NATIVE_PATH), "--out", str(tmp_path)])
+        generate_catalogue.main(["--native", "native.parquet", "--out", str(tmp_path)])
     assert "--out requires --availability-evidence" in capsys.readouterr().err
 
 
+@pytest.mark.derived("maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv")
 @pytest.mark.derived("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
 def test_each_governing_product_uses_the_official_graph_field(retained_evidence_root: Path) -> None:
     catalogue = _build(retained_evidence_root)
     fields = dict(catalogue.products.select("product_id", "native_id").iter_rows())
     assert fields == {"stage_reported": "value", "discharge_reported": "discharge"}
-    assert all(fields[pair.product_id] == pair.native_field for pair in _availability_evidence().pairs)
+    assert all(
+        fields[pair.product_id] == pair.native_field for pair in _availability_evidence(retained_evidence_root).pairs
+    )

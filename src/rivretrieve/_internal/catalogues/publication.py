@@ -170,7 +170,8 @@ def _bind_catalogue_build_inputs(
     declarations = tuple(
         reference
         for reference in build_inputs.declarations
-        if reference.symbol in {"build_acquisition_provenance", "build_modern_acquisition_provenance"}
+        if reference.repository == build_inputs.build.repository
+        and reference.symbol in {"build_acquisition_provenance", "build_modern_acquisition_provenance"}
     )
     if len(declarations) != 1:
         raise FatalContractError("Catalogue publication requires one exact origins declaration reference")
@@ -206,12 +207,15 @@ def _bind_catalogue_build_inputs(
     if not set(implementations) <= executable_groups:
         raise FatalContractError("Implementation responsibility must name an existing executable transformation group")
     declared_code = {
-        (reference.repository_path, reference.symbol): reference for reference in build_inputs.declarations
+        (reference.repository_path, reference.symbol): reference
+        for reference in build_inputs.declarations
+        if reference.repository == build_inputs.build.repository
     }
     catalogue_builders = tuple(
         reference
         for reference in build_inputs.declarations
-        if reference.repository_path
+        if reference.repository == build_inputs.build.repository
+        and reference.repository_path
         == f"src/rivretrieve/_internal/providers/{original.provider_id}/generate_catalogue.py"
         and reference.symbol in {"build_catalogue", "build_modern_catalogue"}
     )
@@ -266,7 +270,8 @@ def _bind_catalogue_build_inputs(
         mapping_declarations = tuple(
             reference
             for reference in build_inputs.declarations
-            if reference.repository_path == f"src/rivretrieve/_internal/providers/{original.provider_id}/origins.py"
+            if reference.repository == build_inputs.build.repository
+            and reference.repository_path == f"src/rivretrieve/_internal/providers/{original.provider_id}/origins.py"
             and reference.symbol == "STATION_METADATA_FIELDS"
         )
         if len(mapping_declarations) != 1:

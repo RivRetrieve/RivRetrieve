@@ -374,14 +374,17 @@ def test_mapped_products_preserve_exact_optional_physical_facts(provider):
         assert row["period_anchor"] == (facts.timestamp_anchor.value or "unknown")
 
 
-def test_bosnia_physics_lineage_uses_all_three_published_workbook_headers():
+@pytest.mark.derived("maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json")
+def test_bosnia_physics_lineage_uses_all_three_published_workbook_headers(
+    retained_evidence_root,
+):
     from pydantic import TypeAdapter
 
     from rivretrieve._internal.providers.ba_fhmzbih.origins import WorkbookAccessLedger, build_acquisition_provenance
 
     ledger = TypeAdapter(WorkbookAccessLedger).validate_json(
         (
-            Path(__file__).parents[1] / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
+            retained_evidence_root / "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json"
         ).read_bytes()
     )
     provenance = build_acquisition_provenance(ledger)

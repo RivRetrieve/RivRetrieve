@@ -433,6 +433,8 @@ def catalogue_build_inputs(retained_evidence_root: Path):
     if receipt.code_revision != receipt.declaration_revision:
         pytest.fail("Catalogue declarations must use the explicitly selected executed revision.", pytrace=False)
 
+    verify_retained_input_files(receipt.model_copy(update={"inputs": (), "support_inputs": ()}), retained_evidence_root)
+
     def select(provenance):
         origins = importlib.import_module(f"rivretrieve._internal.providers.{provenance.provider_id}.origins")
         supporting_inputs = {}
@@ -456,7 +458,7 @@ def catalogue_build_inputs(retained_evidence_root: Path):
             update={"inputs": tuple(item for item in receipt.inputs if item.consumer_path in consumed_paths)}
         )
         verify_retained_input_files(adopted, retained_evidence_root)
-        family, locations, verifier = _governing_support_locations(provenance)
+        family, locations, verifier = _governing_support_locations(provenance, retained_evidence_root)
         if locations:
             from rivretrieve._internal.catalogues.inputs import select_catalogue_support
 
@@ -473,12 +475,11 @@ def catalogue_build_inputs(retained_evidence_root: Path):
     return select
 
 
-def _governing_support_locations(provenance):
-    """Resolve existing public ledger rows; never inspect source bodies or inventory."""
+def _governing_support_locations(provenance, root: Path):
+    """Resolve explicitly supplied reviewed ledger rows without opening source bodies."""
     import csv
     import json
 
-    root = Path(__file__).parents[1]
     provider = provenance.provider_id
     paths = {}
     if provider == "ba_fhmzbih":
@@ -487,7 +488,7 @@ def _governing_support_locations(provenance):
         )
         for pair in ledger["pairs"]:
             paths[f"workbook:{pair['station_no']}:{pair['product_id']}"] = (pair["response_file"],)
-        return provider, paths, ("maintenance/catalogue/ba_fhmzbih/scripts/verify_evidence.py", "main")
+        return provider, paths, ("verification/ba_fhmzbih/verify_evidence.py", "main")
     if provider == "th_thaiwater":
         with (
             root / "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv"
@@ -497,7 +498,7 @@ def _governing_support_locations(provenance):
                 previous = paths.setdefault(row["request_id"], locations)
                 if previous != locations:
                     pytest.fail("Public ThaiWater ledger has conflicting acquisition support locators.", pytrace=False)
-        return provider, paths, ("maintenance/catalogue/th_thaiwater/scripts/verify_governing_evidence.py", "main")
+        return provider, paths, ("verification/th_thaiwater/verify_governing_evidence.py", "main")
     if provider in {"fr_hubeau", "fr_hydroportail"}:
         # The existing provider decoder has already selected the applicable
         # ledger acquisitions and retained their exact material locators.
@@ -509,7 +510,7 @@ def _governing_support_locations(provenance):
                 if acquisition.material is None:
                     pytest.fail("French ledger acquisition has no exact source material locator.", pytrace=False)
                 paths[acquisition.acquisition_id] = (acquisition.material.filename,)
-        return "fr_hubeau", paths, ("maintenance/catalogue/fr_hubeau/scripts/verify_governing_evidence.py", "main")
+        return "fr_hubeau", paths, ("verification/fr_hubeau/verify_governing_evidence.py", "main")
     return "", {}, ("", "")
 
 

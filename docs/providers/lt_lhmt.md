@@ -202,5 +202,5 @@ Publisher pages checked on 2026-09-27:
 - [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/): the licence's share-alike condition.
 
 The station count describes the packaged catalogue. The example was retrieved
-live on 2026-09-28. The [verification record](../verification/lithuania-provider/README.md)
+live on 2026-09-28. The [private verification archive](https://github.com/RivRetrieve/verification-evidence#readme)
 retains commands, source checks, exact output and the limits of these checks.

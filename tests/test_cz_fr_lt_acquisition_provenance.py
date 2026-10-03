@@ -126,6 +126,8 @@ def test_production_provenance_rejects_changed_recording(
             "fr_hubeau",
             marks=pytest.mark.governing(
                 "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+                "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
+                "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
                 full_verification=("fr_hubeau",),
             ),
         ),
@@ -167,9 +169,9 @@ def test_native_cli_rejects_raw_byte_substitution(
         if provider_id == "fr_hubeau":
             args += [
                 "--native-capture",
-                "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
+                str(retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"),
                 "--availability-ledger",
-                "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
+                str(retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
             ]
         generator.main(args)
 

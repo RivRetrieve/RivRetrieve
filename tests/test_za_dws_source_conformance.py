@@ -1,7 +1,6 @@
 """DWS catalogue-only conformance against retained publisher evidence."""
 
 from datetime import date
-from pathlib import Path
 
 import pytest
 
@@ -27,17 +26,6 @@ def test_provenance_does_not_claim_runtime_observation_acquisition() -> None:
         for source in provenance.source_records
         for acquisition in source.acquisitions
     )
-
-
-@pytest.mark.recorded("tests/test_data/za_dws_terms_licence-5.html")
-def test_exact_monthly_recording_does_not_establish_enrolled_columns(retained_evidence_root: Path) -> None:
-    import hashlib
-
-    payload = (retained_evidence_root / "tests/test_data/za_dws_terms_licence-5.html").read_bytes()
-    assert hashlib.sha256(payload).hexdigest() == "5d10dfdb5c487c4884983cf71149a0533f35b9af0f7ad45f81a8f2e9540baf36"
-    assert b"Variable 100.00 Surface Water Level" in payload
-    assert b"12 Monthly volumes in million cubic metres from Oct to Sep." in payload
-    assert all(column not in payload for column in (b"D_AVG_FR", b"COR_FLOW", b"COR_LEVEL"))
 
 
 def test_catalogue_physics_follow_publisher_field_definitions() -> None:
@@ -103,30 +91,3 @@ def test_public_discovery_pick_and_fetch_refusal_are_offline(policy, cache, monk
     for chosen in (selection, discharge, daily):
         with pytest.raises(ObservationsUnavailableError, match="za_dws"):
             rr.fetch(chosen, start="2020-01-01", end="2020-01-02", cache=cache, receipts=True, on_issue=policy)
-
-
-@pytest.mark.recorded(
-    "tests/recordings/za_dws/X3H001_daily_2020-01.html",
-    "tests/recordings/za_dws/X3H001_point_2020-01.html",
-)
-@pytest.mark.parametrize(
-    "kind, digest, size",
-    [
-        ("daily", "d7edcd596883840c36800535c9ad7eaa52fc3d920c837ad134b902c96fa31d20", 2188),
-        ("point", "7b266fa724354709d1c3cb5602e0bf1b5bfa80e09bc5b272d4145d6153d88ae4", 5134),
-    ],
-)
-def test_historical_definition_fixtures_preserve_git_blob_bytes(
-    retained_evidence_root: Path, kind, digest, size
-) -> None:
-    import hashlib
-
-    raw = (retained_evidence_root / f"tests/recordings/za_dws/X3H001_{kind}_2020-01.html").read_bytes()
-    assert len(raw) == size
-    assert hashlib.sha256(raw).hexdigest() == digest
-    assert b"Variable 100.00 Surface Water Level" in raw
-    if kind == "daily":
-        assert b"Daily avg flow rate in cubic metres/sec" in raw
-    else:
-        assert b"Corrected level in m" in raw
-        assert b"Corrected flow in cubic metres/sec" in raw

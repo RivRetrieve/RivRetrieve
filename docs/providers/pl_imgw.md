@@ -289,5 +289,5 @@ practical guidance, not an IMGW-PIB citation template.
 The station count describes the packaged catalogue. A fresh national download and the
 example on this page were run on 2026-09-27. The example verifies one station,
 discharge and one week, not continuous history or national coverage. The
-[verification record](../verification/poland-provider/index.md) retains the commands,
+[private verification archive](https://github.com/RivRetrieve/verification-evidence#readme) retains the commands,
 source checks, exact output and the limits of these checks.
