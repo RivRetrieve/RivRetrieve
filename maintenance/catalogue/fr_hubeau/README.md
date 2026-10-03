@@ -56,6 +56,7 @@ Keep verifier output and full failure details private.
 ```sh
 uv run python maintenance/catalogue/fr_hubeau/inventory/build_catalogue.py \
   --evidence-root "$EVIDENCE_ROOT" \
+  --build-inputs "$BUILD_INPUTS" \
   --revision RETAINED_NATIVE_REVISION \
   --out /path/to/private-output/hubeau-catalogue \
   --capture-output /path/to/private-output/native_capture.json
