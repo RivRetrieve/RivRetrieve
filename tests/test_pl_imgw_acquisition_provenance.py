@@ -42,7 +42,6 @@ from rivretrieve._internal.providers.pl_imgw.origins import (
     STATION_CATALOGUE_ORIGINS,
     build_acquisition_provenance,
 )
-from tests._catalogue import catalogue_recording_paths
 from tests._provenance import (
     assert_evidence_equal,
     legacy_document,
@@ -50,6 +49,7 @@ from tests._provenance import (
     remove_external_inputs,
     write_evidence_table,
 )
+from tests.test_catalogue_origin_certification import _catalogue_recording_paths
 
 CATALOGUE = Path("src/rivretrieve/_internal/providers/pl_imgw/catalogue")
 NATIVE = CATALOGUE / "native.parquet"
@@ -284,7 +284,7 @@ def test_poland_native_identity_and_raw_substitution_refusal(retained_evidence_r
     "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
     "tests/test_data/pl_imgw_terms_regulations.html",
 )
-@pytest.mark.recorded(*catalogue_recording_paths("pl_imgw"))
+@pytest.mark.recorded(*_catalogue_recording_paths("pl_imgw", scopes=("tests/test_data/pl_imgw_annual",)))
 def test_poland_terms_are_verified_in_real_generation_path(
     retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs_path
 ) -> None:
@@ -432,7 +432,7 @@ def test_private_verification_record_is_redacted_and_not_packaged() -> None:
     "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
     "tests/test_data/pl_imgw_terms_regulations.html",
 )
-@pytest.mark.recorded(*catalogue_recording_paths("pl_imgw"))
+@pytest.mark.recorded(*_catalogue_recording_paths("pl_imgw", scopes=("tests/test_data/pl_imgw_annual",)))
 def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
     retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs_path
 ) -> None:

@@ -26,7 +26,8 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.pl_imgw import generate_catalogue
-from tests._catalogue import catalogue_content_without_build_identity, catalogue_recording_paths
+from tests._catalogue import catalogue_content_without_build_identity
+from tests.test_catalogue_origin_certification import _catalogue_recording_paths
 
 _TEST_DATA_DIR = Path("tests/test_data")
 _METADATA_FIXTURE = _TEST_DATA_DIR / "pl_imgw_metadata.csv"
@@ -818,7 +819,7 @@ def test_native_build_matches_independent_exact_full_projections(retained_eviden
     "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
     "tests/test_data/pl_imgw_terms_regulations.html",
 )
-@pytest.mark.recorded(*catalogue_recording_paths("pl_imgw"))
+@pytest.mark.recorded(*_catalogue_recording_paths("pl_imgw", scopes=("tests/test_data/pl_imgw_annual",)))
 def test_native_build_without_reverification_input_is_byte_identical_to_committed_artifacts(
     retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs_path
 ) -> None:
