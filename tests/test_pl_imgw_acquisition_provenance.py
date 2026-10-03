@@ -49,6 +49,7 @@ from tests._provenance import (
     remove_external_inputs,
     write_evidence_table,
 )
+from tests.test_catalogue_origin_certification import _catalogue_recording_paths
 
 CATALOGUE = Path("src/rivretrieve/_internal/providers/pl_imgw/catalogue")
 NATIVE = CATALOGUE / "native.parquet"
@@ -241,6 +242,11 @@ def test_poland_recovery_and_corroboration_are_distinct_acquisitions() -> None:
     "tests/test_data/pl_imgw_terms_regulations.html",
 )
 def test_poland_native_identity_and_raw_substitution_refusal(retained_evidence_root: Path, tmp_path: Path) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic selection reaches only the intended failing verification boundary.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
     provenance = build_acquisition_provenance()
     assert provenance.native_table.repository_path == str(NATIVE)
     assert provenance.native_table.revision == "c9c81934bb1773b0286c968f4fd7323f724c71ac"
@@ -262,6 +268,8 @@ def test_poland_native_identity_and_raw_substitution_refusal(retained_evidence_r
     with pytest.raises(FatalContractError, match=f"expected {NATIVE_TABLE_SHA256}.*observed"):
         generate_catalogue.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(substituted),
                 "--out",
@@ -276,10 +284,18 @@ def test_poland_native_identity_and_raw_substitution_refusal(retained_evidence_r
     "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
     "tests/test_data/pl_imgw_terms_regulations.html",
 )
-def test_poland_terms_are_verified_in_real_generation_path(retained_evidence_root: Path, tmp_path: Path) -> None:
+@pytest.mark.recorded(*_catalogue_recording_paths("pl_imgw", scopes=("tests/test_data/pl_imgw_annual",)))
+def test_poland_terms_are_verified_in_real_generation_path(
+    retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs_path
+) -> None:
+    from rivretrieve._internal.providers.pl_imgw.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     assert (
         generate_catalogue.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(retained_evidence_root / NATIVE),
                 "--out",
@@ -303,6 +319,8 @@ def test_poland_terms_are_verified_in_real_generation_path(retained_evidence_roo
     with pytest.raises(FatalContractError, match="digest mismatch"):
         generate_catalogue.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(retained_evidence_root / NATIVE),
                 "--out",
@@ -414,9 +432,13 @@ def test_private_verification_record_is_redacted_and_not_packaged() -> None:
     "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
     "tests/test_data/pl_imgw_terms_regulations.html",
 )
+@pytest.mark.recorded(*_catalogue_recording_paths("pl_imgw", scopes=("tests/test_data/pl_imgw_annual",)))
 def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
-    retained_evidence_root: Path, tmp_path: Path
+    retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs_path
 ) -> None:
+    from rivretrieve._internal.providers.pl_imgw.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     record = PrivateEmailVerificationRecord(
         schema_version=2,
         statement_id="pl_imgw.grdc.inclusion",
@@ -441,6 +463,8 @@ def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
     with pytest.raises(FatalContractError, match="redacted private verification record identity mismatch"):
         generate_catalogue.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(retained_evidence_root / NATIVE),
                 "--out",
@@ -455,6 +479,8 @@ def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
     output = tmp_path / "catalogue"
     generate_catalogue.main(
         [
+            "--build-inputs",
+            str(build_inputs_path),
             "--native",
             str(retained_evidence_root / NATIVE),
             "--out",
@@ -566,6 +592,11 @@ def test_packaged_poland_rejects_exposed_withheld_provider_scalar(tmp_path: Path
     "tests/test_data/pl_imgw_terms_regulations.html",
 )
 def test_generator_rejects_original_private_identity_claim(retained_evidence_root: Path, tmp_path: Path) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic selection reaches only the intended failing verification boundary.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
     claim = {
         "schema_version": 2,
         "statement_id": "pl_imgw.grdc.inclusion",
@@ -583,6 +614,8 @@ def test_generator_rejects_original_private_identity_claim(retained_evidence_roo
     with pytest.raises(FatalContractError, match="redacted private verification record is invalid"):
         generate_catalogue.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(retained_evidence_root / NATIVE),
                 "--out",

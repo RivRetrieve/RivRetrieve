@@ -65,7 +65,21 @@
 
 Identity and facts are separate. Nullable facts carry explicit evidence states; admission and inventory are not completeness scores. Use to_bundle for lossless exports.
 
-### Drainage-area frame
+### Station metadata summary
+
+| Column | Polars dtype |
+| --- | --- |
+| `provider_id` | `String` |
+| `station_id` | `String` |
+| `station_name` | `String` |
+| `river_name` | `String` |
+| `latitude` | `Float64` |
+| `longitude` | `Float64` |
+| `crs` | `String` |
+| `station_name_alternatives` | `Boolean` |
+| `river_name_alternatives` | `Boolean` |
+
+### Source metadata frame
 
 | Column | Polars dtype |
 | --- | --- |
@@ -76,8 +90,10 @@ Identity and facts are separate. Nullable facts carry explicit evidence states; 
 | `source_dtype` | `String` |
 | `source_unit` | `String` |
 | `state` | `Enum(categories=['value', 'source_null', 'no_metadata'])` |
+| `attribute_role` | `Enum(categories=['station_name', 'river_name', 'drainage_area'])` |
+| `support_fact` | `String` |
 
-See `drainage_areas` above and [drainage-area metadata](drainage-areas.md) for JSON decoding and absence states.
+See `metadata` above and [station metadata](station-metadata.md) for name alternatives, JSON decoding and absence states.
 
 ### Observation frame
 

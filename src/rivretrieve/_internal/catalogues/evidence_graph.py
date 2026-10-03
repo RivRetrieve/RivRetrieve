@@ -7,6 +7,7 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from rivretrieve._internal.acquisition_provenance import CodeReference, RetainedInputUse, RetainedSupportUse
 from rivretrieve._internal.catalogues.descriptor import _context, _organization, _reference
 from rivretrieve._internal.catalogues.evidence import CatalogueEvidence, IssuingSource
 from rivretrieve._internal.issues import FatalContractError
@@ -61,7 +62,11 @@ def _source_nodes(source: IssuingSource, ordinal: int) -> list[dict[str, object]
                 "name": evidence.evidence_id,
                 "description": evidence.description,
                 "url": recording.source_url,
-                "contentUrl": recording.repository_path,
+                "additionalProperty": {
+                    "@type": "sc:PropertyValue",
+                    "name": "historical_repository_path",
+                    "value": recording.repository_path,
+                },
                 "sha256": recording.sha256,
                 "encodingFormat": recording.media_type,
                 "subjectOf": {
@@ -142,6 +147,47 @@ def _acquisition_node(evidence: CatalogueEvidence, row: dict) -> dict[str, objec
     return node
 
 
+def _retained_input_node(identity: str, item: RetainedInputUse | RetainedSupportUse) -> dict[str, object]:
+    reference = item.reference
+    properties = {
+        "archive_repository": reference.archive_repository,
+        "archive_revision": reference.archive_revision,
+        "collection_id": reference.collection_id,
+        "manifest_sha256": reference.manifest_sha256,
+        "artifact_id": reference.artifact_id,
+        "role": reference.role,
+        "usage": item.usage if isinstance(item, RetainedInputUse) else "reviewed_support",
+    }
+    if isinstance(item, RetainedSupportUse):
+        properties["verification_kind"] = item.verification_kind
+        if item.member_selector is not None:
+            properties["member_selector"] = item.member_selector
+    node: dict[str, object] = {
+        "@id": identity,
+        "@type": "sc:MediaObject",
+        "identifier": reference.artifact_id,
+        "name": "Adopted retained input" if isinstance(item, RetainedInputUse) else "Reviewed retained support",
+        "sha256": reference.sha256,
+        "contentSize": f"{reference.byte_size} B",
+        "additionalProperty": [
+            {"@type": "sc:PropertyValue", "name": name, "value": value} for name, value in properties.items()
+        ],
+    }
+    if isinstance(item, RetainedSupportUse):
+        node["subjectOf"] = _code_node(item.verifier, "Complete positive verifier")
+    return node
+
+
+def _code_node(reference: CodeReference, meaning: str) -> dict[str, object]:
+    return {
+        "@type": "sc:SoftwareSourceCode",
+        "name": meaning,
+        "identifier": reference.symbol,
+        "codeRepository": f"{reference.repository}/blob/{reference.revision}/{reference.repository_path}",
+        "version": reference.revision,
+    }
+
+
 def resolve_evidence(
     evidence: CatalogueEvidence,
     selection: FactSelection,
@@ -165,6 +211,15 @@ def resolve_evidence(
         if canonical_pair.provider_id != evidence.header.provider_id or matched.height != 1:
             raise FatalContractError("Canonical pair identity does not match the selected evidence locator")
     withheld = {fact: group for group in evidence.header.withheld_facts for fact in group.facts}
+    retained: dict[str, list[tuple[str, RetainedInputUse | RetainedSupportUse]]] = {}
+    if evidence.header.build_inputs is not None:
+        for prefix, members in (
+            ("retained-input", evidence.header.build_inputs.inputs),
+            ("retained-support", evidence.header.build_inputs.support),
+        ):
+            for index, item in enumerate(members):
+                for fact in item.facts:
+                    retained.setdefault(fact, []).append((f"{prefix}/{index}", item))
     nodes: dict[str, dict[str, object]] = {}
     sources: set[int] = set()
     pending = selected["fact_id"].to_list()
@@ -194,6 +249,10 @@ def resolve_evidence(
                     node["about"] = _reference(f"issuer/{ordinal}")
             else:
                 node["isBasedOn"] = _reference(f"lineage/{producers[fact['fact_id']]}")
+            if adopted := retained.get(fact["name"]):
+                node["citation"] = [_reference(member_id) for member_id, _ in adopted]
+                for member_id, item in adopted:
+                    nodes[member_id] = _retained_input_node(member_id, item)
             nodes[identity] = node
         bindings = evidence.bindings.filter(pl.col("binding_id").is_in(list(producers.values())))
         for binding in bindings.iter_rows(named=True):
@@ -224,6 +283,13 @@ def resolve_evidence(
             else:
                 transform = evidence.header.transformations[binding["transformation_id"]]
                 node.update(description=transform.name, name=transform.kind)
+                code = []
+                if transform.executable is not None:
+                    code.append(_code_node(transform.executable, "Executable implementation"))
+                if transform.declaration is not None:
+                    code.append(_code_node(transform.declaration, "Authored declaration"))
+                if code:
+                    node["subjectOf"] = code
                 inputs = evidence.external_inputs.filter(pl.col("binding_id") == binding["binding_id"]).sort("position")
                 node["isBasedOn"] = [_reference(f"fact/{value}") for value in inputs["fact_id"]]
                 pending.extend(inputs["fact_id"].to_list())

@@ -19,6 +19,12 @@ export EVIDENCE_ROOT=/path/to/verified-inputs
 export RIVRETRIEVE_TEST_EVIDENCE_ROOT="$EVIDENCE_ROOT"
 ```
 
+Use the reviewed catalogue build through the [archive coordinator](../../../docs/maintenance/evidence.md)
+to export `fr_hubeau.build-inputs.json` outside the checkout. Set
+`BUILD_INPUTS` to that adopted `CatalogueBuildInputs` selection. The coordinator
+receipt `catalogue-input-provenance.json` has a different schema. Keep these
+files and generated outputs in the private output directory.
+
 ```sh
 uv run python maintenance/catalogue/fr_hubeau/scripts/verify_governing_evidence.py \
   --native "$EVIDENCE_ROOT/maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet" \
@@ -50,6 +56,7 @@ Keep verifier output and full failure details private.
 ```sh
 uv run python maintenance/catalogue/fr_hubeau/inventory/build_catalogue.py \
   --evidence-root "$EVIDENCE_ROOT" \
+  --build-inputs "$BUILD_INPUTS" \
   --revision RETAINED_NATIVE_REVISION \
   --out /path/to/private-output/hubeau-catalogue \
   --capture-output /path/to/private-output/native_capture.json

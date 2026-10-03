@@ -14,6 +14,7 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, re
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.lt_lhmt import generate_catalogue
 from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS
+from tests._catalogue import catalogue_recording_paths
 
 FIXTURE_PATH = Path("tests/test_data/lithuania_metadata_stations.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
@@ -316,9 +317,17 @@ def test_mixed_retrieval_dates_flow_to_station_products_and_provider_version(ret
     "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
     "tests/test_data/lt_lhmt_terms_licence.html",
 )
-def test_canonical_cli_writes_only_five_canonical_artifacts(retained_evidence_root, tmp_path: Path) -> None:
+@pytest.mark.recorded(*catalogue_recording_paths("lt_lhmt"))
+def test_canonical_cli_writes_only_five_canonical_artifacts(
+    retained_evidence_root, tmp_path: Path, catalogue_build_inputs_path
+) -> None:
+    from rivretrieve._internal.providers.lt_lhmt.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     result = generate_catalogue.main(
         [
+            "--build-inputs",
+            str(build_inputs_path),
             "--native",
             str(retained_evidence_root / NATIVE_PATH),
             "--evidence-root",
@@ -344,6 +353,7 @@ def test_canonical_cli_writes_only_five_canonical_artifacts(retained_evidence_ro
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
     }
     assert pl.read_parquet(tmp_path / "stations.parquet").height == 97
     assert pl.read_parquet(tmp_path / "products.parquet").height == 2
@@ -382,11 +392,13 @@ def test_cli_rejects_cross_mode_combinations(argv: list[str]) -> None:
     "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
     "tests/test_data/lt_lhmt_terms_licence.html",
 )
+@pytest.mark.recorded(*catalogue_recording_paths("lt_lhmt"))
 def test_native_build_is_network_free_and_byte_deterministic(
-    retained_evidence_root,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, catalogue_build_inputs_path
 ) -> None:
+    from rivretrieve._internal.providers.lt_lhmt.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     calls: list[str] = []
 
     def fail_network(*args: object, **kwargs: object) -> object:
@@ -398,6 +410,8 @@ def test_native_build_is_network_free_and_byte_deterministic(
 
     result = generate_catalogue.main(
         [
+            "--build-inputs",
+            str(build_inputs_path),
             "--native",
             str(retained_evidence_root / NATIVE_PATH),
             "--evidence-root",

@@ -7,12 +7,12 @@ from pathlib import Path
 
 import polars as pl
 
-from rivretrieve._internal.drainage_areas import DRAINAGE_AREA_SCHEMA
 from rivretrieve._internal.observations import ObservationDataSchema
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.providers.registration import BulkStore, CatalogueOnly, LiveStages, load_manifest
 from rivretrieve._internal.selection import _series_frame
 from rivretrieve._internal.source_series import SeriesScope
+from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA, STATION_METADATA_SCHEMA
 
 
 def _schema(title: str, schema: pl.Schema) -> str:
@@ -34,8 +34,9 @@ def render_tables() -> str:
             _schema("Series inspection frame", _series_frame((), SeriesScope()).schema),
             "Identity and facts are separate. Nullable facts carry explicit evidence states; "
             "admission and inventory are not completeness scores. Use to_bundle for lossless exports.\n",
-            _schema("Drainage-area frame", DRAINAGE_AREA_SCHEMA),
-            "See `drainage_areas` above and [drainage-area metadata](drainage-areas.md) for JSON decoding and absence states.\n",
+            _schema("Station metadata summary", STATION_METADATA_SCHEMA),
+            _schema("Source metadata frame", SOURCE_METADATA_SCHEMA),
+            "See `metadata` above and [station metadata](station-metadata.md) for name alternatives, JSON decoding and absence states.\n",
             _schema("Observation frame", ObservationDataSchema.polars_schema),
             "Only value is nullable. Time precision can vary while remaining Datetime. "
             "The zone belongs to each row, not the timestamp dtype. "

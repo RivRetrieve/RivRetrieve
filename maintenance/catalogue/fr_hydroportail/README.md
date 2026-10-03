@@ -15,10 +15,17 @@ Retrieve the selected archive inputs outside source checkouts in their original
 repository-relative layout. Set `EVIDENCE_ROOT` to that directory. From the code
 repository root:
 
+Use the reviewed catalogue build through the [archive coordinator](../../../docs/maintenance/evidence.md)
+to export `fr_hydroportail.build-inputs.json` outside the checkout. Set
+`BUILD_INPUTS` to that adopted `CatalogueBuildInputs` selection. The coordinator
+receipt `catalogue-input-provenance.json` has a different schema. Keep these
+files and generated outputs in the private output directory.
+
 ```sh
 export EVIDENCE_ROOT=/path/to/verified-inputs
 uv run python maintenance/catalogue/fr_hydroportail/scripts/rebuild.py \
   --evidence-root "$EVIDENCE_ROOT" \
+  --build-inputs "$BUILD_INPUTS" \
   --out /path/to/private-output/hydroportail-catalogue
 ```
 

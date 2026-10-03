@@ -13,6 +13,7 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, re
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.za_dws import generate_catalogue as generator
+from tests._catalogue import catalogue_recording_paths
 
 _TEST_DATA_DIR = Path("tests/test_data")
 _METADATA_FIXTURE = _TEST_DATA_DIR / "za_dws_metadata.json"
@@ -762,10 +763,23 @@ def test_cli_rejects_every_cross_mode_combination(argv: list[str]) -> None:
     "tests/test_data/za_dws_terms_licence-4.html",
     "tests/test_data/za_dws_terms_licence-5.html",
 )
-def test_canonical_cli_writes_versioned_native_built_artifacts(retained_evidence_root: Path, tmp_path: Path) -> None:
+@pytest.mark.recorded(*catalogue_recording_paths("za_dws"))
+def test_canonical_cli_writes_versioned_native_built_artifacts(
+    retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs_path
+) -> None:
+    from rivretrieve._internal.providers.za_dws.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     assert (
         generator.main(
-            ["--native", str(retained_evidence_root / _NATIVE_TABLE), "--out", str(tmp_path)]
+            [
+                "--build-inputs",
+                str(build_inputs_path),
+                "--native",
+                str(retained_evidence_root / _NATIVE_TABLE),
+                "--out",
+                str(tmp_path),
+            ]
             + ["--evidence-root", str(retained_evidence_root)]
         )
         == 0
@@ -785,6 +799,7 @@ def test_canonical_cli_writes_versioned_native_built_artifacts(retained_evidence
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
     }
 
 
@@ -794,9 +809,13 @@ def test_canonical_cli_writes_versioned_native_built_artifacts(retained_evidence
     "tests/test_data/za_dws_terms_licence-4.html",
     "tests/test_data/za_dws_terms_licence-5.html",
 )
+@pytest.mark.recorded(*catalogue_recording_paths("za_dws"))
 def test_native_build_is_network_free_and_byte_deterministic(
-    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, catalogue_build_inputs_path
 ) -> None:
+    from rivretrieve._internal.providers.za_dws.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     attempts: list[str] = []
 
     def fail(*_args: object, **_kwargs: object) -> object:
@@ -811,7 +830,14 @@ def test_native_build_is_network_free_and_byte_deterministic(
 
     assert (
         generator.main(
-            ["--native", str(retained_evidence_root / _NATIVE_TABLE), "--out", str(tmp_path)]
+            [
+                "--build-inputs",
+                str(build_inputs_path),
+                "--native",
+                str(retained_evidence_root / _NATIVE_TABLE),
+                "--out",
+                str(tmp_path),
+            ]
             + ["--evidence-root", str(retained_evidence_root)]
         )
         == 0
@@ -834,6 +860,7 @@ def test_native_build_is_network_free_and_byte_deterministic(
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
     }
     for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
         assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()

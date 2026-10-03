@@ -39,6 +39,7 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
     TEMPERATURE_CRS_EVIDENCE_URL,
     TEMPERATURE_STATION_CATALOGUE_ORIGINS,
 )
+from tests._catalogue import catalogue_content_without_build_identity
 from tests._catalogue_projection import copy_catalogue_projection
 
 _TEST_DATA_DIR = Path("tests/test_data")
@@ -1336,10 +1337,19 @@ def test_committed_catalogue_matches_independent_source_projection(retained_evid
     "tests/test_data/fr_hubeau_hydrometrie.html",
     "tests/test_data/fr_hubeau_temperature_openapi.json",
     "tests/test_data/fr_hubeau_terms_licence.html",
+    full_verification=("fr_hubeau",),
 )
 def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
-    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs_path
 ) -> None:
+    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import NativeInventoryCapture
+
+    capture = NativeInventoryCapture.model_validate_json(
+        (Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json").read_bytes()
+    )
+    native = read_native_table(retained_evidence_root / CURRENT_NATIVE_PATH)
+    generated = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, _availability(), native_capture=capture)
+    build_inputs_path = catalogue_build_inputs_path(generated.acquisition_provenance)
     calls: list[str] = []
 
     def forbidden(*args: object, **kwargs: object) -> object:
@@ -1353,6 +1363,8 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
     assert (
         generator.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(retained_evidence_root / CURRENT_NATIVE_PATH),
                 "--evidence-root",
@@ -1384,6 +1396,7 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
     }
     for artifact in (
         "provider.json",
@@ -1399,8 +1412,11 @@ def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
         "croissant.json",
     ):
-        assert (tmp_path / artifact).read_bytes() == (
-            Path(__file__).parents[1] / CURRENT_NATIVE_PATH.parent / artifact
-        ).read_bytes()
+        assert catalogue_content_without_build_identity(
+            artifact, (tmp_path / artifact).read_bytes()
+        ) == catalogue_content_without_build_identity(
+            artifact, (Path(__file__).parents[1] / CURRENT_NATIVE_PATH.parent / artifact).read_bytes()
+        )

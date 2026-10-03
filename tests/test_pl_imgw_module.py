@@ -45,6 +45,7 @@ def test_pl_imgw_station_products_and_artifacts() -> None:
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
     }
 
 

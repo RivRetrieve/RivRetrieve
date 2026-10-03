@@ -19,13 +19,20 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_seriali
 from rivretrieve._internal.acquisition_provenance import (
     AbsenceMarkerValue,
     AcquisitionProvenance,
+    ArchiveMemberReference,
+    CatalogueBuildInputs,
+    CodeReference,
     EvidenceReference,
     NativeTableIdentity,
+    RetainedInputUse,
+    RetainedSupportUse,
     Sha256,
     SourceStatement,
     WithheldFact,
     _validate_requested_location,
     absence_marker_accepts_fact,
+    validate_build_input_code_references,
+    validate_build_input_facts,
 )
 
 EVIDENCE_FILENAMES = {
@@ -94,6 +101,88 @@ class _EvidenceModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+class _RetainedSupportEncoding(_EvidenceModel):
+    reference: int = Field(strict=True, ge=0)
+    verifier: int = Field(strict=True, ge=0)
+    facts: tuple[str, ...]
+    verification_kind: Literal["full_positive"]
+    member_selector: str | None = None
+
+
+class _BuildInputsEncoding(_EvidenceModel):
+    """Normalized-header encoding; the build/CLI model remains uninterned."""
+
+    encoding_version: Literal[1]
+    build: CodeReference
+    declarations: tuple[CodeReference, ...]
+    inputs: tuple[RetainedInputUse, ...]
+    support_references: tuple[ArchiveMemberReference, ...]
+    support_verifiers: tuple[CodeReference, ...]
+    support: tuple[_RetainedSupportEncoding, ...]
+
+    @field_validator("encoding_version", mode="before")
+    @classmethod
+    def _version(cls, value: object) -> object:
+        if type(value) is not int:
+            raise ValueError("build input encoding_version must be an integer")
+        return value
+
+    @model_validator(mode="after")
+    def _pools(self) -> Self:
+        for pool, indices in (
+            (self.support_references, [edge.reference for edge in self.support]),
+            (self.support_verifiers, [edge.verifier for edge in self.support]),
+        ):
+            if len(pool) != len(set(pool)):
+                raise ValueError("support identity pools must contain unique exact identities")
+            if set(indices) != set(range(len(pool))):
+                raise ValueError("support identity pool references must resolve and use every pool member")
+        return self
+
+
+def _encode_build_inputs(value: CatalogueBuildInputs) -> _BuildInputsEncoding:
+    references: dict[ArchiveMemberReference, int] = {}
+    verifiers: dict[CodeReference, int] = {}
+    support = tuple(
+        _RetainedSupportEncoding(
+            reference=references.setdefault(item.reference, len(references)),
+            verifier=verifiers.setdefault(item.verifier, len(verifiers)),
+            facts=item.facts,
+            verification_kind=item.verification_kind,
+            member_selector=item.member_selector,
+        )
+        for item in value.support
+    )
+    return _BuildInputsEncoding(
+        encoding_version=1,
+        build=value.build,
+        declarations=value.declarations,
+        inputs=value.inputs,
+        support_references=tuple(references),
+        support_verifiers=tuple(verifiers),
+        support=support,
+    )
+
+
+def _decode_build_inputs(value: object) -> CatalogueBuildInputs:
+    encoded = _BuildInputsEncoding.model_validate(value)
+    return CatalogueBuildInputs(
+        build=encoded.build,
+        declarations=encoded.declarations,
+        inputs=encoded.inputs,
+        support=tuple(
+            RetainedSupportUse(
+                reference=encoded.support_references[edge.reference],
+                verifier=encoded.support_verifiers[edge.verifier],
+                facts=edge.facts,
+                verification_kind=edge.verification_kind,
+                member_selector=edge.member_selector,
+            )
+            for edge in encoded.support
+        ),
+    )
+
+
 class IssuingSource(_EvidenceModel):
     """An issuing body and its exact established evidence and words."""
 
@@ -117,6 +206,8 @@ class TransformationDeclaration(_EvidenceModel):
     name: str
     kind: Literal["derived_value", "absence_marker", "authored_constant"]
     marker_value: AbsenceMarkerValue | None = None
+    executable: CodeReference | None = Field(default=None, exclude_if=lambda value: value is None)
+    declaration: CodeReference | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def _marker(self) -> Self:
@@ -148,12 +239,31 @@ class EvidenceHeader(_EvidenceModel):
     schema_version: Literal[3]
     provider_id: str
     native_table: NativeTableIdentity | None = None
+    build_inputs: CatalogueBuildInputs | None = Field(default=None, exclude_if=lambda value: value is None)
     source_records: tuple[IssuingSource, ...]
     descriptions: tuple[str, ...]
     transformations: tuple[TransformationDeclaration, ...]
     withheld_facts: tuple[WithheldFact, ...] = ()
     row_locator_requirements: tuple[RowLocatorRequirement, ...] = ()
     files: dict[str, EvidenceFileIdentity]
+
+    @field_validator("build_inputs", mode="before", json_schema_input_type=_BuildInputsEncoding | None)
+    @classmethod
+    def _build_inputs_value(cls, value: object, info: ValidationInfo) -> CatalogueBuildInputs | None:
+        if value is None:
+            return None
+        if isinstance(value, dict) and "encoding_version" in value:
+            return _decode_build_inputs(value)
+        if info.mode == "json":
+            raise ValueError("normalized build inputs require an explicit encoding_version")
+        logical = value if isinstance(value, CatalogueBuildInputs) else CatalogueBuildInputs.model_validate(value)
+        # Revalidate pooled values once, then share those typed identities across
+        # all support edges. Never expand identities during normalized decoding.
+        return _decode_build_inputs(_encode_build_inputs(logical).model_dump(mode="python"))
+
+    @field_serializer("build_inputs", when_used="json")
+    def _serialize_build_inputs(self, value: CatalogueBuildInputs | None) -> _BuildInputsEncoding | None:
+        return _encode_build_inputs(value) if value is not None else None
 
     @model_validator(mode="after")
     def _identities(self) -> Self:
@@ -163,6 +273,10 @@ class EvidenceHeader(_EvidenceModel):
             raise ValueError("evidence file path must equal its fixed basename")
         if len(set(self.descriptions)) != len(self.descriptions) or any(not text.strip() for text in self.descriptions):
             raise ValueError("descriptions must be unique nonblank exact strings")
+        for transformation in self.transformations:
+            validate_build_input_code_references(
+                self.build_inputs, transformation.executable, transformation.declaration
+            )
         if len(set(self.transformations)) != len(self.transformations):
             raise ValueError("transformation declarations must be unique")
         if len(set(self.row_locator_requirements)) != len(self.row_locator_requirements):
@@ -203,7 +317,7 @@ class CatalogueEvidence(_EvidenceModel):
     @classmethod
     def _header_value(cls, value: object) -> object:
         if isinstance(value, EvidenceHeader):
-            return EvidenceHeader.model_validate(value.model_dump(mode="python"))
+            return EvidenceHeader.model_validate(value.model_dump(mode="json"))
         return value
 
     @field_validator(*EVIDENCE_SCHEMAS, mode="before")
@@ -371,6 +485,7 @@ def _validate_relations(e: CatalogueEvidence) -> None:
                 if source is not None and source >= len(sources):
                     raise ValueError("external input source foreign key does not resolve")
                 inputs[b].append((source, fact))
+    validate_build_input_facts(h.build_inputs, {names[fact] for fact in producer})
     withheld: dict[int, int | None] = {}
     withheld_groups: set[str] = set()
     withheld_rows: set[tuple] = set()
@@ -731,7 +846,13 @@ def _normalize_provenance_relations(
         t = binding.transformation
         tid = None
         if t is not None:
-            declaration = TransformationDeclaration(name=t.name, kind=t.kind, marker_value=t.marker_value)
+            declaration = TransformationDeclaration(
+                name=t.name,
+                kind=t.kind,
+                marker_value=t.marker_value,
+                executable=t.executable,
+                declaration=t.declaration,
+            )
             tid = transformations.setdefault(declaration, len(transformations))
             rows["external_inputs"].extend(
                 (b, position, sources[r.source_id] if r.source_id is not None else None, names[r.fact])
@@ -753,6 +874,7 @@ def _normalize_provenance_relations(
         schema_version=3,
         provider_id=provenance.provider_id,
         native_table=provenance.native_table,
+        build_inputs=provenance.build_inputs,
         source_records=tuple(
             IssuingSource(
                 source_id=s.source_id,

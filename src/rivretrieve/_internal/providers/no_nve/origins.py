@@ -26,6 +26,25 @@ from rivretrieve._internal.catalogue_origins import (
     NotPublished,
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
+from rivretrieve._internal.catalogues.station_metadata import MetadataField
+
+# Name mappings require genuine-input validation and owner disclosure approval
+# before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_NOTICE = (
+    "Contains data under the Norwegian licence for Open Government data (NLOD, "
+    "https://data.norge.no/nlod/en/2.0) distributed by the Norwegian Water Resources and Energy "
+    "Directorate (NVE), through HydAPI (https://hydapi.nve.no/). RivRetrieve selected the declared source "
+    "fields and encoded their values and absence states; source names remain unchanged. Processing and "
+    "publication of this projection: RivRetrieve."
+)
+
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+    MetadataField("drainage_area", "drainageBasinArea", "km2"),
+    MetadataField("drainage_area", "drainageBasinAreaNorway", "km2"),
+    MetadataField("station_name", "stationName"),
+    MetadataField("river_name", "riverName"),
+    MetadataField("river_name", "lakeName"),
+)
 
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("no_nve")),
@@ -288,3 +307,26 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
         source_records=(source,),
         fact_bindings=bindings,
     )
+
+
+# Existing acquisition facts materialised in the retained native table.
+# This declares derived-input support, not preservation of original responses.
+NATIVE_TABLE_ACQUISITION_IDS = ("stations_active_1_capture_2026_09_04", "stations_active_0_capture_2026_09_04")
+
+
+# Authored catalogue, physical-fact and support declarations selected at build time.
+CATALOGUE_BUILD_DECLARATIONS = (
+    ("src/rivretrieve/_internal/providers/no_nve/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/no_nve/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/no_nve/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/no_nve/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/no_nve/origins.py", "STATION_METADATA_NOTICE"),
+    ("src/rivretrieve/_internal/providers/no_nve/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/no_nve/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/no_nve/catalogue_series.py", "describe_catalogue"),
+)
+
+
+# Additional retained declarations used by these source facts; not original-body claims.
+CATALOGUE_SUPPORTING_INPUTS = {}

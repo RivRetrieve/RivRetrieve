@@ -195,11 +195,11 @@ reviewed code are required; runtime package users need neither.
 
 ## Data rights
 
-All data rights remain with the original providers. Credit the providers of data you use and
-follow their attribution and citation requirements. Users are responsible for reviewing and
-following each provider's terms, which can be found on their respective homepages. The MIT licence
-in the LICENSE file applies only to the code of this package, not to any data downloaded through
-it.
+Data rights remain with the original providers. The MIT licence in LICENSE applies to
+RivRetrieve's code, not to provider data, including packaged catalogues, station metadata
+and downloaded observations. Follow each provider's attribution, citation and reuse
+conditions. See [station metadata rights](docs/station-metadata.md#data-rights) and
+the [provider pages](docs/README.md#providers).
 
 ## Background
 

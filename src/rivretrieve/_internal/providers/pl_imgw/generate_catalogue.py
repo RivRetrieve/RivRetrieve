@@ -33,6 +33,7 @@ import polars as pl
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
+    CatalogueBuildInputs,
     verify_acquisition_provenance_statements,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -445,12 +446,22 @@ def build_provider_info(catalogue_date: date) -> dict[str, object]:
     }
 
 
-def write_catalogue(catalogue: GeneratedPlImgwCatalogue, out_dir: Path | str) -> None:
+def write_catalogue(
+    catalogue: GeneratedPlImgwCatalogue,
+    out_dir: Path | str,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
+) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.pl_imgw.catalogue_series import describe_catalogue
     from rivretrieve._internal.providers.pl_imgw.config import config as source_config
-    from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -466,6 +477,9 @@ def write_catalogue(catalogue: GeneratedPlImgwCatalogue, out_dir: Path | str) ->
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
         source_config=source_config,
         source_describer=describe_catalogue,
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
@@ -542,6 +556,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         help="Private exact source words; read locally and included only after verification.",
     )
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
 
     private_email_inputs = tuple(value for value in (args.verify_forwarded_grdc_email,) if value is not None)
@@ -634,6 +649,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         build_acquisition_provenance,
     )
 
+    if args.build_inputs is None:
+        parser.error("--out requires --build-inputs")
+    build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
     private_verification = None
     if args.private_verification_record is not None:
         from rivretrieve._internal.private_source_verification import parse_private_email_verification
@@ -654,11 +672,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         provenance,
         {"pl_imgw_terms_regulations": terms_bytes},
     )
+    native_table = read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256)
     catalogue = build_catalogue(
-        read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256),
+        native_table,
         STATION_CATALOGUE_ORIGINS,
     )
-    write_catalogue(catalogue, args.out)
+    write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)
     print(
         f"pl_imgw catalogue written to {args.out}: "
         f"{catalogue.stations.height} stations, "

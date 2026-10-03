@@ -19,6 +19,7 @@ from rivretrieve._internal.providers.br_ana.origins import (
     with_observation_products,
 )
 from rivretrieve._internal.recordings import read_recording
+from tests._catalogue import catalogue_content_without_build_identity
 from tests.test_br_ana_catalogue_telemetry import telemetry_evidence
 
 DOCUMENTS = (
@@ -97,8 +98,7 @@ def test_daily_evidence_does_not_promote_instantaneous_rows_or_another_consisten
     assert not parse_conventional_daily_evidence(documents, ((path, only_instantaneous),), comparisons).available_pairs
 
 
-@pytest.fixture(scope="module")
-def catalogue_inputs(retained_evidence_root):
+def read_catalogue_inputs(retained_evidence_root):
     capture = read_capture_record(retained_evidence_root / "tests/test_data/br_ana_inventory/capture.json")
     native = read_native_table(retained_evidence_root / capture.native_table.repository_path)
     telemetry = telemetry_evidence(retained_evidence_root)
@@ -108,6 +108,11 @@ def catalogue_inputs(retained_evidence_root):
     )
     catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, provenance, telemetry, daily)
     return capture, native, telemetry, daily, provenance, catalogue
+
+
+@pytest.fixture(scope="module")
+def catalogue_inputs(retained_evidence_root):
+    return read_catalogue_inputs(retained_evidence_root)
 
 
 @pytest.mark.governing(
@@ -166,14 +171,22 @@ def test_exact_variant_availability_has_only_its_own_recordings(catalogue_inputs
     "tests/recordings/br_ana",
     "tests/test_data/br_ana_inventory",
 )
-def test_six_product_packaged_artifact_rebuild_is_byte_identical(catalogue_inputs, tmp_path):
+@pytest.mark.recorded("tests/test_data/br_ana_terms_licence.html")
+def test_six_product_packaged_artifact_rebuild_is_byte_identical(catalogue_inputs, tmp_path, catalogue_build_inputs):
     from rivretrieve._internal.providers.br_ana.generate_catalogue import write_catalogue
 
     catalogue = catalogue_inputs[-1]
-    write_catalogue(catalogue, tmp_path)
+    write_catalogue(
+        catalogue,
+        tmp_path,
+        build_inputs=catalogue_build_inputs(catalogue.acquisition_provenance),
+        native_table=catalogue_inputs[1],
+    )
     packaged = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/br_ana/catalogue"
     for path in tmp_path.iterdir():
-        assert path.read_bytes() == (packaged / path.name).read_bytes(), path.name
+        assert catalogue_content_without_build_identity(
+            path.name, path.read_bytes()
+        ) == catalogue_content_without_build_identity(path.name, (packaged / path.name).read_bytes()), path.name
 
 
 @pytest.mark.governing(

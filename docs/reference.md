@@ -26,9 +26,9 @@ Functions import from `rivretrieve`. The reference renders their source docstrin
 
 ::: rivretrieve.download
 
-### drainage_areas
+### metadata
 
-::: rivretrieve.drainage_areas
+::: rivretrieve.metadata
 
 ### fetch
 

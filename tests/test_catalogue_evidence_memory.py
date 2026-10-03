@@ -46,7 +46,15 @@ def test_national_normalization_releases_row_buffers_before_closure(monkeypatch)
     result = evidence_module.normalize_provenance(
         provenance, stations=artifact.stations, station_products=artifact.station_products
     )
-    assert validated_sizes == [107578]
+    metadata_facts = {
+        "metadata.drainage_area.Area_Drenagem",
+        "metadata.station_name.Estacao_Nome",
+        "metadata.river_name.Rio_Nome",
+    }
+    actual_metadata_facts = {name for name in expected.facts["name"] if name.startswith("metadata.")}
+    assert actual_metadata_facts == metadata_facts
+    assert expected.facts.height - len(metadata_facts) == 107578
+    assert validated_sizes == [107578 + len(metadata_facts)]
     assert retained_counts == [0], "Raw relation row buffers overlap full national closure validation"
     assert result.header == expected.header
     for name in evidence_module.EVIDENCE_SCHEMAS:

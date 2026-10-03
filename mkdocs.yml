@@ -102,7 +102,7 @@ nav:
   - User Guide:
       - Quickstart & Usage: usage.md
       - CAMELS-US Example: examples/camels-us.md
-      - Drainage Areas: drainage-areas.md
+      - Station Metadata: station-metadata.md
 
   - Providers:
       - Hub'Eau (France): providers/fr_hubeau.md

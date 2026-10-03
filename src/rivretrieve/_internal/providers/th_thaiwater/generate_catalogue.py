@@ -25,6 +25,7 @@ import polars as pl
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
     AcquisitionRecord,
+    CatalogueBuildInputs,
     MaterialIdentity,
     verify_provenance_recordings,
 )
@@ -573,10 +574,20 @@ def validate_generated_catalogue(
     )
 
 
-def write_catalogue(catalogue: GeneratedThThaiWaterCatalogue, out_dir: Path | str) -> None:
+def write_catalogue(
+    catalogue: GeneratedThThaiWaterCatalogue,
+    out_dir: Path | str,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
+) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.th_thaiwater.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -592,6 +603,9 @@ def write_catalogue(catalogue: GeneratedThThaiWaterCatalogue, out_dir: Path | st
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
         source_config=source_config(),
         source_mappings=SERIES_MAPPINGS,
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
@@ -637,6 +651,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
     parser.add_argument("--retrieved-at")
     parser.add_argument("--evidence-root", type=Path, help="External retained inputs in repository-relative layout.")
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
 
     if args.out is not None and args.native_out is not None:
@@ -655,6 +670,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--out requires --availability-evidence")
         if args.evidence_root is None:
             parser.error("--out requires --evidence-root")
+        if args.build_inputs is None:
+            parser.error("--out requires --build-inputs")
+        build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
         from rivretrieve._internal.providers.th_thaiwater.origins import (
             NATIVE_TABLE_BYTE_SIZE,
             NATIVE_TABLE_SHA256,
@@ -669,7 +687,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         availability_evidence = GraphAvailabilityEvidence(args.availability_evidence.read_bytes())
         catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS, availability_evidence)
         verify_provenance_recordings(catalogue.acquisition_provenance, args.evidence_root)
-        write_catalogue(catalogue, args.out)
+        write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)
         return 0
 
     if args.availability_evidence is not None:

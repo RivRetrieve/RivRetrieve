@@ -98,6 +98,11 @@ def test_bosnia_provenance_binds_baseline_to_actual_acquisitions() -> None:
     full_verification=("ba_fhmzbih",),
 )
 def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path, retained_evidence_root: Path) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic selection reaches only the intended failing verification boundary.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
     verify_provenance_recordings(_provenance(), retained_evidence_root)
     evidence = Path("tests/test_data/ba_fhmzbih_terms_absence.html")
     for source in _provenance().source_records:
@@ -119,6 +124,8 @@ def test_bosnia_terms_recording_and_native_bytes_are_verified(tmp_path: Path, re
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
         main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(native),
                 "--workbook-access-ledger",

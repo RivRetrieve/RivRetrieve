@@ -18,6 +18,7 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.ca_eccc import generate_catalogue
 from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
+from tests._catalogue import catalogue_content_without_build_identity, catalogue_recording_paths
 
 FIXTURE_PATH = Path("tests/test_data/ca_eccc_metadata.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
@@ -548,9 +549,13 @@ def test_cli_rejects_cross_mode_combinations(argv: list[str]) -> None:
     "tests/test_data/ca_eccc_terms_citation.html",
     "tests/test_data/ca_eccc_terms_licence.html",
 )
+@pytest.mark.recorded(*catalogue_recording_paths("ca_eccc"))
 def test_native_build_is_network_free_and_byte_deterministic(
-    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, catalogue_build_inputs_path
 ) -> None:
+    from rivretrieve._internal.providers.ca_eccc.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     calls: list[str] = []
 
     def fail_network(*args: object, **kwargs: object) -> object:
@@ -563,6 +568,8 @@ def test_native_build_is_network_free_and_byte_deterministic(
 
     result = generate_catalogue.main(
         [
+            "--build-inputs",
+            str(build_inputs_path),
             "--native",
             str(retained_evidence_root / NATIVE_PATH),
             "--out",
@@ -590,6 +597,7 @@ def test_native_build_is_network_free_and_byte_deterministic(
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
     }
     for artifact_name in (
         "provider.json",
@@ -605,8 +613,11 @@ def test_native_build_is_network_free_and_byte_deterministic(
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
     ):
-        assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
+        assert catalogue_content_without_build_identity(
+            artifact_name, (tmp_path / artifact_name).read_bytes()
+        ) == catalogue_content_without_build_identity(artifact_name, (CATALOGUE_PATH / artifact_name).read_bytes())
 
 
 def test_canonical_build_requires_explicit_evidence_root(tmp_path: Path) -> None:

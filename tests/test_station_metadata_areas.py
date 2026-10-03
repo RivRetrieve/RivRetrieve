@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 import socket
-import subprocess
-import sys
+from importlib import import_module
 from pathlib import Path
 
 import polars as pl
@@ -14,9 +13,30 @@ from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
 from rivretrieve._internal import discovery
-from rivretrieve._internal.drainage_areas import DRAINAGE_AREA_SCHEMA, drainage_area_frame
-from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.catalogues.native import NativeTable
+from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+
+AREA_SCHEMA = pl.Schema(
+    {
+        "provider_id": pl.String,
+        "station_id": pl.String,
+        "source_field": pl.String,
+        "source_value": pl.String,
+        "source_dtype": pl.String,
+        "source_unit": pl.String,
+        "state": pl.Enum(["value", "source_null", "no_metadata"]),
+    }
+)
+
+
+def _area_columns(source: pl.DataFrame) -> pl.DataFrame:
+    return source.filter(pl.col("attribute_role") == "drainage_area").select(AREA_SCHEMA.names())
+
+
+def _areas(selection) -> pl.DataFrame:
+    return _area_columns(rr.metadata(selection, view="source"))
+
 
 # Independent source-column expectations, including established units only.
 SOURCE_FIELDS = {
@@ -45,13 +65,13 @@ def test_canadian_example_and_product_deduplication() -> None:
             ("ca_eccc", "02GA010", "DRAINAGE_AREA_EFFECT", None, "Float64", None, "source_null"),
             ("ca_eccc", "02GA010", "DRAINAGE_AREA_GROSS", "1035.0", "Float64", None, "value"),
         ],
-        schema=DRAINAGE_AREA_SCHEMA,
+        schema=AREA_SCHEMA,
         orient="row",
     )
-    assert_frame_equal(rr.drainage_areas(gauge), expected)
+    assert_frame_equal(_areas(gauge), expected)
     all_products = rr.find(provider="ca_eccc", station="02GA010")
     assert len(all_products.series) > 1
-    assert_frame_equal(rr.drainage_areas(all_products), expected)
+    assert_frame_equal(_areas(all_products), expected)
 
 
 def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,7 +84,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(discovery, "dotenv_values", forbidden)
     selection = rr.find()
     before = rr.as_frame(selection)
-    result = rr.drainage_areas(selection)
+    result = _areas(selection)
     keys = ["provider_id", "station_id"]
     assert_frame_equal(result.select(keys).unique().sort(keys), before.select(keys).unique().sort(keys))
     assert result.select(*keys, "source_field").is_duplicated().sum() == 0
@@ -84,16 +104,6 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     assert "regulationArea" not in result["source_field"]
 
 
-def test_empty_and_invalid_selection() -> None:
-    empty = rr.pick(
-        rr.find(provider="ca_eccc", station="02GA010", quantity="stage"),
-        quantity="discharge",
-    )
-    assert_frame_equal(rr.drainage_areas(empty), pl.DataFrame(schema=DRAINAGE_AREA_SCHEMA))
-    with pytest.raises(TypeError, match="RivRetrieve selection"):
-        rr.drainage_areas(pl.DataFrame())  # ty: ignore[invalid-argument-type]
-
-
 @pytest.mark.parametrize(
     "provider",
     [
@@ -111,8 +121,18 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     )
     stations = pl.read_parquet(catalogue / "stations.parquet").select("station_id")
-    projection = pl.read_parquet(repository / "src/rivretrieve/_internal/catalogues/drainage_areas.parquet")
-    actual = projection.filter(pl.col("provider_id") == provider)
+    projection = pl.read_parquet(catalogue / "station_metadata.parquet")
+    origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
+    if provider == "fr_hubeau":
+        origin = origins.HYDROMETRY_STATION_CATALOGUE_ORIGINS["station_id"]
+        assert origin == origins.TEMPERATURE_STATION_CATALOGUE_ORIGINS["station_id"]
+    else:
+        origin = origins.STATION_CATALOGUE_ORIGINS["station_id"]
+    # Reuse this retained input for both rebuild equality and independent scalar
+    # assertions, instead of reading all providers again in a subprocess test.
+    rebuilt = build_station_metadata(provider, NativeTable(native), stations, origin, origins.STATION_METADATA_FIELDS)
+    assert_frame_equal(rebuilt, projection)
+    actual = _area_columns(projection)
     identity, fields = SOURCE_FIELDS[provider]
     assert_frame_equal(actual.select("station_id").unique().sort("station_id"), stations.sort("station_id"))
     assert set(actual["source_field"].drop_nulls()) == set(fields)
@@ -132,61 +152,20 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
 
 
 def test_formatted_string_is_not_parsed() -> None:
-    result = rr.drainage_areas(rr.find(provider="ba_fhmzbih", station="4510"))
+    result = _areas(rr.find(provider="ba_fhmzbih", station="4510"))
     assert result["source_value"].item() == '"633.00 km²"'
     assert result["source_dtype"].item() == "String"
     assert result["source_unit"].item() is None
 
 
 def test_nonbreaking_space_and_blank_are_values() -> None:
-    nonbreaking = rr.drainage_areas(rr.find(provider="jp_mlit", station="301011281104310"))
+    nonbreaking = _areas(rr.find(provider="jp_mlit", station="301011281104310"))
     assert json.loads(nonbreaking["source_value"].item()) == "\u00a0"
     assert nonbreaking["state"].item() == "value"
-    bosnia = rr.drainage_areas(rr.find(provider="ba_fhmzbih"))
+    bosnia = _areas(rr.find(provider="ba_fhmzbih"))
     blanks = bosnia.filter(pl.col("source_value") == '""')
     assert blanks.height == 10
     assert set(blanks["state"]) == {"value"}
-
-
-@pytest.mark.derived(
-    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
-)
-def test_projection_build_is_current(retained_evidence_root: Path) -> None:
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/build_drainage_areas.py",
-            "--check",
-            "--evidence-root",
-            str(retained_evidence_root),
-        ],
-        cwd=Path(__file__).parents[1],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_broken_projection_does_not_become_absence() -> None:
-    stations = pl.DataFrame({"provider_id": ["ca_eccc"], "station_id": ["02GA010"]})
-    with pytest.raises(FatalContractError, match="absent"):
-        drainage_area_frame(stations, pl.DataFrame(schema=DRAINAGE_AREA_SCHEMA))
-    with pytest.raises(FatalContractError, match="schema"):
-        drainage_area_frame(stations, pl.DataFrame())
 
 
 def test_station_metadata_does_not_require_numeric_source_unit_admission() -> None:
@@ -195,7 +174,7 @@ def test_station_metadata_does_not_require_numeric_source_unit_admission() -> No
     assert inspected["station_id"].n_unique() == 2905
     keys = ["provider_id", "station_id"]
     assert_frame_equal(
-        rr.drainage_areas(selection).select(keys).unique().sort(keys),
+        _areas(selection).select(keys).unique().sort(keys),
         inspected.select(keys).unique().sort(keys),
     )
 
@@ -204,10 +183,12 @@ def test_station_metadata_is_independent_of_retained_map_coordinates() -> None:
     from dataclasses import replace
 
     selected = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean")
-    expected = rr.drainage_areas(selected)
+    expected = _areas(selected)
     assert expected.height == 2
+    summary = rr.metadata(selected)
     without_coordinates = replace(selected, locations=())
-    assert_frame_equal(rr.drainage_areas(without_coordinates), expected)
+    assert_frame_equal(_areas(without_coordinates), expected)
+    assert_frame_equal(rr.metadata(without_coordinates), summary)
 
 
 def test_catalogue_only_station_metadata_without_numeric_admission(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -248,19 +229,21 @@ def test_catalogue_only_station_metadata_without_numeric_admission(monkeypatch: 
     selected = rr.find(provider="za_dws", station="A1H001")
     assert not selected.series
     assert len(selected.locations) == 1
-    projection = pl.read_parquet(
-        Path(__file__).parents[1] / "src/rivretrieve/_internal/catalogues/drainage_areas.parquet"
+    projection = _area_columns(
+        pl.read_parquet(
+            Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/za_dws/catalogue/station_metadata.parquet"
+        )
     )
     expected = projection.filter((pl.col("provider_id") == "za_dws") & (pl.col("station_id") == "A1H001"))
     assert expected.height > 0
-    assert_frame_equal(rr.drainage_areas(selected), expected)
+    assert_frame_equal(_areas(selected), expected)
     without_geometry = replace(selected, locations=())
-    assert_frame_equal(rr.drainage_areas(without_geometry), expected)
-    assert_frame_equal(rr.drainage_areas(rr.pick(selected, quantity="discharge")), expected)
+    assert_frame_equal(_areas(without_geometry), expected)
+    assert_frame_equal(_areas(rr.pick(selected, quantity="discharge")), expected)
     for narrowed in (
         rr.pick(selected, quantity="temperature"),
         rr.pick(selected, variant="unestablished", on_issue="ignore"),
         rr.pick(selected, series_id=[], on_issue="ignore"),
         rr.pick(selected, provider="ch_foen"),
     ):
-        assert_frame_equal(rr.drainage_areas(narrowed), pl.DataFrame(schema=DRAINAGE_AREA_SCHEMA))
+        assert_frame_equal(_areas(narrowed), pl.DataFrame(schema=AREA_SCHEMA))

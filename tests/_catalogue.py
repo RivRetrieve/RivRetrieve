@@ -1,5 +1,6 @@
 """test catalogue access : ProviderDeclaration → CatalogueReader."""
 
+import json
 from functools import lru_cache
 from importlib import import_module
 from pathlib import Path
@@ -33,3 +34,35 @@ def catalogue_reader(provider_id: str) -> CatalogueReader:
 def provider_info(provider_id: str) -> ProviderInfo:
     """Parse one built-in provider's packaged provider information."""
     return ProviderInfo.from_row(catalogue_reader(provider_id).artifact.provider_info)
+
+
+def catalogue_content_without_build_identity(name: str, content: bytes) -> object:
+    """Compare content while excluding only selected build code and archive identities."""
+    if name not in {"provenance.json", "croissant.json"}:
+        return content
+    document = json.loads(content)
+    if name == "provenance.json":
+        document.pop("build_inputs", None)
+        for transformation in document["transformations"]:
+            transformation.pop("executable", None)
+            transformation.pop("declaration", None)
+    else:
+        for distribution in document["distribution"]:
+            if distribution["@id"] == "provenance.json":
+                distribution.pop("sha256", None)
+                distribution.pop("contentSize", None)
+    return document
+
+
+def catalogue_recording_paths(provider_id: str) -> tuple[str, ...]:
+    """Declare public recording paths without opening retained source bodies."""
+    header = json.loads((catalogue_path(provider_id) / "provenance.json").read_text())
+    return tuple(
+        sorted(
+            {
+                entry["recording"]["repository_path"]
+                for source in header["source_records"]
+                for entry in source["evidence"]
+            }
+        )
+    )

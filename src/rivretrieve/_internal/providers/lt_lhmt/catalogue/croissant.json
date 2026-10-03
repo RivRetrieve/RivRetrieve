@@ -78,16 +78,16 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "aa6c9d9a738811e0cba0a32acaa3f197ed24f3da6f9f25f35d14b8a420666be9",
-      "contentSize": "4367 B"
+      "sha256": "08c8bbc939e15110f3d3827f1f7bd6f5ce8c370be55a2f8e41460871df5aca45",
+      "contentSize": "9410 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "e5e79eedf3d83b8ae2b34a9a44db2df6113038ef1bf82d4f313fe8b67518a2e0",
-      "contentSize": "2722 B"
+      "sha256": "bcd30996563cbf22144429e6ca3f77f41f80804829a1987038961dd95b44635b",
+      "contentSize": "2753 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
@@ -102,24 +102,24 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "d8fc69fe5e292ebd0db1cfc943b128d08f974f7a70c5bfb7d59e9baf7d2d3d90",
-      "contentSize": "2169 B"
+      "sha256": "0afa079218dbc0a2e66d405be899bc0760c4fe706305dc4d52285c936bcb8060",
+      "contentSize": "2227 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "9f4186e67ed8a95f7a8f7512a75bd72065b132e9b8e42c53085a038aa767f56c",
-      "contentSize": "1379 B"
+      "sha256": "116697f704ba410cf38dea791ba9431cf35914a3f3c84579cd7aaf866a8484dc",
+      "contentSize": "1399 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "b043b3f9e13205f0b31d67381ccd162eb6f239c51e14c1e6d7be2669df28f66f",
-      "contentSize": "1588 B"
+      "sha256": "36c077eabcb88f8dee7c024c5d512bc77e94d408e29407acbb982d916308a954",
+      "contentSize": "1610 B"
     },
     {
       "@id": "format.json",
@@ -144,6 +144,14 @@
       "encodingFormat": "application/x-parquet",
       "sha256": "b448a5498c3a96d9c072ace55c3a7071e5860ca4d2cd4a8e12b4a528bb7d84d8",
       "contentSize": "1220 B"
+    },
+    {
+      "@id": "station_metadata.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "station_metadata.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "b2137cf19414897ae99831e8b0949933975a1ff8920706760b29a8deeb13bd28",
+      "contentSize": "6496 B"
     }
   ],
   "recordSet": [
@@ -825,6 +833,138 @@
       }
     },
     {
+      "@id": "station_metadata",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "station_metadata/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_field",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_field"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_value",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_value"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_dtype",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_dtype"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_unit",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_unit"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/state",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "state"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/attribute_role",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "attribute_role"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/support_fact",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "support_fact"
+            }
+          },
+          "references": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "name"
+            }
+          }
+        }
+      ],
+      "description": "Station metadata from the Lithuanian Hydrometeorological Service (LHMT), distributed through the Meteo.lt API (https://api.meteo.lt/). This RivRetrieve projection is distributed under Creative Commons Attribution-ShareAlike 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). RivRetrieve selected the declared source fields and encoded their values and absence states; source names remain unchanged. Processing and publication of this projection: RivRetrieve."
+    },
+    {
       "@id": "provenance_facts",
       "@type": "cr:RecordSet",
       "field": [
@@ -1349,7 +1489,8 @@
   "subjectOf": {
     "@type": "sc:CreativeWork",
     "url": "provenance.json",
-    "name": "Issuing sources, exact statements and evidence declarations",
+    "name": "Source acquisitions, adopted archived inputs and executable and authored code references",
+    "description": "build_inputs records exact adopted archive members, their supported fact names, and build and declaration revisions. transformations records executable and authored declaration references. Historical acquisition identities remain separate.",
     "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
   },
   "version": "2026-08-01",
@@ -1357,7 +1498,7 @@
   "isBasedOn": {
     "@id": "native-table",
     "@type": "sc:MediaObject",
-    "name": "Committed native catalogue build input",
+    "name": "Historical committed native catalogue build input",
     "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/7b71c51715f92085ea5d83c9e862c2b67d0b742e/src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
     "sha256": "f1ddebed42b911d1417f22e22abebc5904652db4d5fc6da0bd0bed666d321b8d",
     "contentSize": "6156 B",

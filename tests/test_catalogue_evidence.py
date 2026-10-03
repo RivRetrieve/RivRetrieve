@@ -23,6 +23,7 @@ from rivretrieve._internal.catalogues.evidence_encoding import (
     reconstruct_provenance,
 )
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+from tests._provenance import historical_source_provenance
 
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 
@@ -911,6 +912,10 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(request: p
         provider,
         retained_evidence_root / "tests/test_data/french_combined_catalogue" if provider == "fr_hubeau" else None,
     )
+    if restored.build_inputs is not None:
+        restored = historical_source_provenance(
+            restored, pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+        )
     if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
         restored = _assert_field_source_lineage_repair_and_restore_original(retained_evidence_root, restored)
     if provider == "ch_foen":

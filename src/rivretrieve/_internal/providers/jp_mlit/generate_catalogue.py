@@ -21,6 +21,7 @@ import polars.testing as pl_testing
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
+    CatalogueBuildInputs,
     verify_acquisition_provenance_statements,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -238,10 +239,24 @@ def _validate(
     )
 
 
-def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) -> None:
+def write_catalogue(
+    catalogue: GeneratedJpMlitCatalogue,
+    out_dir: Path | str,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
+) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.jp_mlit.origins import (
+        STATION_CATALOGUE_ORIGINS,
+        STATION_METADATA_FIELDS,
+        STATION_METADATA_NOTICE,
+    )
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -257,6 +272,10 @@ def write_catalogue(catalogue: GeneratedJpMlitCatalogue, out_dir: Path | str) ->
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
         source_config=source_config(),
         source_mappings=SERIES_MAPPINGS,
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
+        station_metadata_notice=STATION_METADATA_NOTICE,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
@@ -671,6 +690,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--license-recording", type=Path)
     parser.add_argument("--citation-recording", type=Path)
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
 
     native_mode = args.native is not None or args.out is not None
@@ -684,6 +704,9 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("jp_mlit native mode requires both --native and --out")
         if args.license_recording is None or args.citation_recording is None:
             parser.error("jp_mlit native mode requires license and citation recordings")
+        if args.build_inputs is None:
+            parser.error("--out requires --build-inputs")
+        build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
         from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
 
         provenance = build_acquisition_provenance()
@@ -695,13 +718,16 @@ def main(argv: list[str] | None = None) -> int:
         except OSError as exc:
             raise FatalContractError("jp_mlit source-statement recording cannot be read") from exc
         verify_acquisition_provenance_statements(provenance, recording_bytes)
+        native_table = read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256)
         write_catalogue(
             build_catalogue(
-                read_native_table(args.native, expected_sha256=NATIVE_TABLE_SHA256),
+                native_table,
                 STATION_CATALOGUE_ORIGINS,
                 provenance,
             ),
             args.out,
+            build_inputs=build_inputs,
+            native_table=native_table,
         )
         return 0
     if capture_mode:

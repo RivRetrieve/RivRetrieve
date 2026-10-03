@@ -231,10 +231,11 @@ Users do not supply this credential. Publisher credential rotation requires a li
 Catalogue builds check canonical columns against declared origins and acquisition evidence.
 Canonical station columns describe identity and geometry, not harmonised names, river labels, or quality judgements.
 Native tables are verified archive inputs supplied to catalogue builds. They are not a public wheel API.
-`drainage_areas` reads a small packaged projection of established drainage-area
-fields at provider-station grain. It preserves source vocabulary and values,
-including explicit null and no-metadata states, without changing canonical facts.
-See [drainage-area metadata](drainage-areas.md) for the output and offline build.
+`metadata` reads a packaged projection of approved station names, river names and
+drainage-area fields at provider-station grain. Its summary preserves canonical
+geometry and shows unresolved name alternatives. Its source view preserves source
+vocabulary, exact scalar values, null and no-metadata states, and stable support
+fact references. See [station metadata](station-metadata.md) for interpretation.
 `describe` reads the packaged Croissant descriptor offline.
 The current evidence representation uses a typed header and five normalized relations, with explicit resolution of individual fact lineage.
 

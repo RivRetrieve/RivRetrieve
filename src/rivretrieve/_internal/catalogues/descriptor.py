@@ -24,6 +24,7 @@ from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
 from rivretrieve._internal.catalogues.evidence import EVIDENCE_FILENAMES, EVIDENCE_SCHEMAS, CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import PROVIDER_INFO_CATALOG_SCHEMA, CatalogueDtype
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA, source_metadata_frame
 
 ABSENCE_NAMESPACE = "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-absence.md#"
 
@@ -165,11 +166,25 @@ def build_catalogue_descriptor(
     evidence: CatalogueEvidence,
     origins: Sequence[OriginDeclarations],
     files: Mapping[str, bytes],
+    *,
+    station_metadata_notice: str | None = None,
 ) -> dict[str, object]:
-    """Describe exact packaged bytes and their recorded historical inputs, without IO."""
+    """Describe exact packaged bytes and their recorded historical inputs, without IO.
+
+    An optional notice describes only the station-metadata record set. It leaves
+    the source's top-level licence and citation quotations unchanged.
+    """
+    if station_metadata_notice is not None and (
+        not isinstance(station_metadata_notice, str)
+        or not station_metadata_notice.strip()
+        or evidence.header.build_inputs is None
+    ):
+        raise FatalContractError("A station metadata notice requires nonblank text and a metadata product")
     expected_files = (*REQUIRED_ARTIFACT_FILES, "provenance.json", *EVIDENCE_FILENAMES.values())
     if "format.json" in files or "source_series.json" in files:
         expected_files += ("format.json", "source_series.json", "series_claims.parquet")
+    if evidence.header.build_inputs is not None:
+        expected_files += ("station_metadata.parquet",)
     if "monitoring_locations.json" in files:
         expected_files += ("monitoring_locations.json",)
     if set(files) != set(expected_files):
@@ -312,6 +327,33 @@ def build_catalogue_descriptor(
                 "fields": [fact.partition(".")[2] for fact in withheld if fact.startswith(f"{carrier}.")],
             }
         record_sets.append(record)
+    if evidence.header.build_inputs is not None:
+        metadata = pl.read_parquet(BytesIO(files["station_metadata.parquet"]))
+        keys = tables["stations"].select("provider_id", "station_id")
+        scoped = source_metadata_frame(keys, metadata)
+        if scoped.height != metadata.height:
+            raise FatalContractError("Station metadata contains identities outside the canonical catalogue")
+        bound_names = set(evidence.facts.join(evidence.binding_facts, on="fact_id")["name"].to_list())
+        if not set(metadata["support_fact"].drop_nulls().to_list()) <= bound_names:
+            raise FatalContractError("Station metadata support facts must resolve bound catalogue facts")
+        fields = []
+        for column, dtype in SOURCE_METADATA_SCHEMA.items():
+            field = {
+                "@id": f"station_metadata/{column}",
+                "@type": "cr:Field",
+                "dataType": _data_type(dtype),
+                "source": {"fileObject": _reference("station_metadata.parquet"), "extract": {"column": column}},
+            }
+            if column == "support_fact":
+                field["references"] = {
+                    "fileObject": _reference("provenance_facts.parquet"),
+                    "extract": {"column": "name"},
+                }
+            fields.append(field)
+        metadata_record: dict[str, object] = {"@id": "station_metadata", "@type": "cr:RecordSet", "field": fields}
+        if station_metadata_notice is not None:
+            metadata_record["description"] = station_metadata_notice
+        record_sets.append(metadata_record)
     record_sets.extend(_evidence_record_sets())
     descriptor: dict[str, object] = {
         "@context": _context(),
@@ -334,6 +376,18 @@ def build_catalogue_descriptor(
             "conformsTo": PROFILE_URI,
         },
     }
+    if evidence.header.build_inputs is not None:
+        descriptor["subjectOf"] = {
+            "@type": "sc:CreativeWork",
+            "url": "provenance.json",
+            "name": "Source acquisitions, adopted archived inputs and executable and authored code references",
+            "description": (
+                "build_inputs records exact adopted archive members, their supported fact names, "
+                "and build and declaration revisions. transformations records executable and "
+                "authored declaration references. Historical acquisition identities remain separate."
+            ),
+            "conformsTo": PROFILE_URI,
+        }
     if provider["catalogue_version"] is not None:
         descriptor.update(version=provider["catalogue_version"], datePublished=provider["catalogue_version"])
     native = evidence.header.native_table
@@ -343,7 +397,11 @@ def build_catalogue_descriptor(
         descriptor["isBasedOn"] = {
             "@id": "native-table",
             "@type": "sc:MediaObject",
-            "name": "Committed native catalogue build input",
+            "name": (
+                "Historical committed native catalogue build input"
+                if evidence.header.build_inputs is not None
+                else "Committed native catalogue build input"
+            ),
             "contentUrl": f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}",
             "sha256": native.sha256,
             "contentSize": f"{native.byte_size} B",
@@ -358,6 +416,8 @@ def write_catalogue_descriptor(
     evidence: CatalogueEvidence,
     origins: Sequence[OriginDeclarations],
     files: Mapping[str, bytes],
+    *,
+    station_metadata_notice: str | None = None,
 ) -> None:
-    descriptor = build_catalogue_descriptor(evidence, origins, files)
+    descriptor = build_catalogue_descriptor(evidence, origins, files, station_metadata_notice=station_metadata_notice)
     destination.write_text(json.dumps(descriptor, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

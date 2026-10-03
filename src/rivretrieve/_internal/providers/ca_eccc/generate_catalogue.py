@@ -15,7 +15,11 @@ from typing import cast
 import polars as pl
 import requests
 
-from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    CatalogueBuildInputs,
+    verify_provenance_recordings,
+)
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -134,6 +138,7 @@ class GeneratedCaEcccCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    acquisition_provenance: AcquisitionProvenance
 
 
 def refresh_native_table(
@@ -346,7 +351,7 @@ def build_catalogue(native_table: NativeTable, origins: OriginDeclarations) -> G
         raise FatalContractError("Canada native table has no valid retrieved_at values")
     provider_info = build_provider_info(maximum_retrieved_at.date())
     _validate(provider_info, products, stations, station_products)
-    return GeneratedCaEcccCatalogue(provider_info, products, stations, station_products)
+    return GeneratedCaEcccCatalogue(provider_info, products, stations, station_products, build_acquisition_provenance())
 
 
 def build_products() -> ProductCatalog:
@@ -514,12 +519,27 @@ def _validate(
     )
 
 
-def write_catalogue(catalogue: GeneratedCaEcccCatalogue, out_dir: Path | str) -> None:
+def write_catalogue(
+    catalogue: GeneratedCaEcccCatalogue,
+    out_dir: Path | str,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
+) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.ca_eccc.catalogue_series import describe_catalogue
     from rivretrieve._internal.providers.ca_eccc.config import config as source_config
-    from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.ca_eccc.origins import (
+        STATION_CATALOGUE_ORIGINS,
+        STATION_METADATA_FIELDS,
+        STATION_METADATA_NOTICE,
+        TRANSFORMATION_IMPLEMENTATIONS,
+    )
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -531,11 +551,16 @@ def write_catalogue(catalogue: GeneratedCaEcccCatalogue, out_dir: Path | str) ->
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
     metadata = build_catalogue_metadata(
-        build_acquisition_provenance(),
+        catalogue.acquisition_provenance,
         (STATION_CATALOGUE_ORIGINS,),
         {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
         source_config=source_config,
         source_describer=describe_catalogue,
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
+        station_metadata_notice=STATION_METADATA_NOTICE,
+        transformation_implementations=TRANSFORMATION_IMPLEMENTATIONS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
@@ -709,6 +734,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     destination.add_argument("--out", type=Path)
     parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
     parser.add_argument("--evidence-root", type=Path, help="External archive inputs in repository-relative layout.")
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
     if args.native_out is not None:
         if args.evidence_root is not None:
@@ -732,17 +758,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--retrieved-at is only valid with refresh mode")
     if args.evidence_root is None:
         parser.error("--evidence-root is required with --out")
+    if args.build_inputs is None:
+        parser.error("--out requires --build-inputs")
+    build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
     verify_provenance_recordings(build_acquisition_provenance(), args.evidence_root.resolve())
     from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
 
+    native_table = read_native_table(
+        args.native, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE
+    )
     write_catalogue(
         build_catalogue(
-            read_native_table(
-                args.native, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE
-            ),
+            native_table,
             STATION_CATALOGUE_ORIGINS,
         ),
         args.out,
+        build_inputs=build_inputs,
+        native_table=native_table,
     )
     return 0
 

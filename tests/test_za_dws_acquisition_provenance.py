@@ -50,7 +50,13 @@ def test_south_africa_provenance_exposes_unsigned_dms_transformation() -> None:
     "tests/test_data/za_dws_terms_licence-4.html",
     "tests/test_data/za_dws_terms_licence-5.html",
 )
-def test_south_africa_cli_rejects_native_byte_substitution(retained_evidence_root: Path, tmp_path: Path) -> None:
+def test_south_africa_cli_rejects_native_byte_substitution(
+    retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs
+) -> None:
+    from rivretrieve._internal.providers.za_dws.origins import build_acquisition_provenance
+
+    build_inputs_path = tmp_path / "build-inputs.json"
+    build_inputs_path.write_text(catalogue_build_inputs(build_acquisition_provenance()).model_dump_json())
     native = tmp_path / "native.parquet"
     native.write_bytes(
         (retained_evidence_root / "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet").read_bytes()
@@ -58,11 +64,18 @@ def test_south_africa_cli_rejects_native_byte_substitution(retained_evidence_roo
     )
     with pytest.raises(FatalContractError, match="native table digest mismatch: expected .* observed"):
         generate_catalogue.main(
-            ["--native", str(native), "--out", str(tmp_path / "out")] + ["--evidence-root", str(retained_evidence_root)]
+            ["--native", str(native), "--out", str(tmp_path / "out"), "--build-inputs", str(build_inputs_path)]
+            + ["--evidence-root", str(retained_evidence_root)]
         )
 
 
 def test_south_africa_cli_invokes_recording_verification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic context reaches only the deliberately failing verification seam.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json())
+
     def reject(_provenance: object, evidence_root: Path) -> None:
         assert evidence_root == tmp_path
         raise FatalContractError("recording verification invoked")
@@ -71,6 +84,8 @@ def test_south_africa_cli_invokes_recording_verification(tmp_path: Path, monkeyp
     with pytest.raises(FatalContractError, match="recording verification invoked"):
         generate_catalogue.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(tmp_path / "native.parquet"),
                 "--out",

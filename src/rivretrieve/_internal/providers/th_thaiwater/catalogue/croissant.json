@@ -88,8 +88,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "7746edf1d9cf01deb17cf2be7a30b168f0207d39a98c004e4736735374f3295d",
-      "contentSize": "265697 B"
+      "sha256": "de033091afd96f51c2d9e3b7ef5f617abc83aff807813c72e6225a067595921c",
+      "contentSize": "1400461 B"
     },
     {
       "@id": "provenance_facts.parquet",
@@ -154,6 +154,14 @@
       "encodingFormat": "application/x-parquet",
       "sha256": "b448a5498c3a96d9c072ace55c3a7071e5860ca4d2cd4a8e12b4a528bb7d84d8",
       "contentSize": "1220 B"
+    },
+    {
+      "@id": "station_metadata.parquet",
+      "@type": "cr:FileObject",
+      "contentUrl": "station_metadata.parquet",
+      "encodingFormat": "application/x-parquet",
+      "sha256": "8db108a60a9f50c8aabb519fa980eb68bfadc45c54a34b53058481334922afe3",
+      "contentSize": "8334 B"
     }
   ],
   "recordSet": [
@@ -839,6 +847,137 @@
       }
     },
     {
+      "@id": "station_metadata",
+      "@type": "cr:RecordSet",
+      "field": [
+        {
+          "@id": "station_metadata/provider_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "provider_id"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/station_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "station_id"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_field",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_field"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_value",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_value"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_dtype",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_dtype"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_unit",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_unit"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/state",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "state"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/attribute_role",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "attribute_role"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/support_fact",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "support_fact"
+            }
+          },
+          "references": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "name"
+            }
+          }
+        }
+      ]
+    },
+    {
       "@id": "provenance_facts",
       "@type": "cr:RecordSet",
       "field": [
@@ -1363,7 +1502,8 @@
   "subjectOf": {
     "@type": "sc:CreativeWork",
     "url": "provenance.json",
-    "name": "Issuing sources, exact statements and evidence declarations",
+    "name": "Source acquisitions, adopted archived inputs and executable and authored code references",
+    "description": "build_inputs records exact adopted archive members, their supported fact names, and build and declaration revisions. transformations records executable and authored declaration references. Historical acquisition identities remain separate.",
     "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
   },
   "version": "2026-08-02",
@@ -1371,7 +1511,7 @@
   "isBasedOn": {
     "@id": "native-table",
     "@type": "sc:MediaObject",
-    "name": "Committed native catalogue build input",
+    "name": "Historical committed native catalogue build input",
     "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/bfeb825a6f3b3aad4982649625d570c070b4ee32/src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
     "sha256": "7a39c2c4e1144cb9b761a3f94153c06d72927224cd82318efe1f957d90d27d03",
     "contentSize": "126616 B",

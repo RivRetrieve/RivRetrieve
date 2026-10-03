@@ -154,10 +154,12 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
     monkeypatch.delenv("RIVRETRIEVE_TEST_EVIDENCE_ROOT", raising=False)
     monkeypatch.delenv("THAIWATER_REVIEW_EVIDENCE_ROOT", raising=False)
     modules = (
-        "test_drainage_areas",
+        "test_station_metadata_areas",
         "test_cz_fr_lt_acquisition_provenance",
         "test_catalogue_origin_certification",
         "test_catalogue_evidence",
+        "test_catalogue_evidence_representation",
+        "test_fr_hubeau_generate_catalogue",
         "test_live_numeric_values",
         "test_provider_series_parse",
         "test_za_dws_acquisition_provenance",
@@ -180,10 +182,32 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
         assert item["requirements"] == sorted(requirements)
         assert item["full_verification"] == sorted(full)
 
+    for name in (
+        "test_real_france_generator_does_not_render_national_acquisition_graph",
+        "test_native_cli_is_offline_byte_deterministic_and_preserves_native",
+    ):
+        assert selected[name]["full_verification"] == ["fr_hubeau"]
+
     native = "src/rivretrieve/_internal/providers/{}/catalogue/native.parquet"
     for provider in ("cz_chmi", "fr_hubeau", "lt_lhmt"):
         check(f"test_projection_preserves_every_native_scalar[{provider}]", ["derived"], [native.format(provider)])
-        check(f"test_native_cli_invokes_shared_recording_verifier[{provider}]", ["derived"], [native.format(provider)])
+        cli_recordings = {
+            "cz_chmi": ["tests/test_data/cz_chmi_terms_licence.html", "tests/test_data/cz_meta2.json"],
+            "fr_hubeau": [
+                "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
+                "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
+                "tests/test_data/fr_hubeau_hydrometrie.html",
+                "tests/test_data/fr_hubeau_temperature_openapi.json",
+                "tests/test_data/fr_hubeau_terms_licence.html",
+            ],
+            "lt_lhmt": ["tests/test_data/lt_lhmt_terms_licence.html"],
+        }
+        check(
+            f"test_native_cli_invokes_shared_recording_verifier[{provider}]",
+            ["derived"],
+            [native.format(provider), *cli_recordings[provider]],
+            ["fr_hubeau"] if provider == "fr_hubeau" else [],
+        )
         terms = f"tests/test_data/{provider}_terms_licence.html"
         check(
             f"test_production_provenance_rejects_changed_recording[{provider}-{provider}_terms_licence.html]",
@@ -233,6 +257,8 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
     ):
         check(
             name,
-            ["governing"],
+            ["governing"]
+            if name == "test_south_africa_cli_rejects_native_byte_substitution"
+            else ["governing", "recorded"],
             [native.format("za_dws"), *(f"tests/test_data/za_dws_terms_licence-{n}.html" for n in (1, 4, 5))],
         )

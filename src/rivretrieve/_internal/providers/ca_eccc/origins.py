@@ -27,6 +27,23 @@ from rivretrieve._internal.catalogue_origins import (
     NativeColumn,
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
+from rivretrieve._internal.catalogues.station_metadata import MetadataField
+
+# Name mappings require genuine-input validation and owner disclosure approval
+# before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_NOTICE = (
+    "Station metadata from Environment and Climate Change Canada, Meteorological Service of Canada. "
+    "Contains information licensed under the Open Government Licence – Canada "
+    "(https://open.canada.ca/en/open-government-licence-canada). RivRetrieve selected the declared source "
+    "fields and encoded their values and absence states; source names remain unchanged. Processing and "
+    "publication of this projection: RivRetrieve."
+)
+
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+    MetadataField("drainage_area", "DRAINAGE_AREA_GROSS"),
+    MetadataField("drainage_area", "DRAINAGE_AREA_EFFECT"),
+    MetadataField("station_name", "STATION_NAME"),
+)
 
 CRS_EVIDENCE_URL = "https://api.weather.gc.ca/collections/hydrometric-stations?f=json"
 STATION_CATALOGUE_ORIGINS = {
@@ -282,3 +299,33 @@ def _complete_catalogue_carrier(provenance: AcquisitionProvenance) -> Acquisitio
 def build_acquisition_provenance() -> AcquisitionProvenance:
     """Build closed ca_eccc acquisition provenance."""
     return _complete_catalogue_carrier(_build_provider_acquisition_provenance())
+
+
+# Existing acquisition facts materialised in the retained native table.
+# This declares derived-input support, not preservation of original responses.
+NATIVE_TABLE_ACQUISITION_IDS = ("station_registry_capture_2026_08_02",)
+
+
+# Authored catalogue, physical-fact and support declarations selected at build time.
+CATALOGUE_BUILD_DECLARATIONS = (
+    ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "STATION_METADATA_NOTICE"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/bulk.py", "_unpivot_month"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "TRANSFORMATION_IMPLEMENTATIONS"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/catalogue_series.py", "describe_catalogue"),
+)
+
+
+# Additional retained declarations used by these source facts; not original-body claims.
+CATALOGUE_SUPPORTING_INPUTS = {}
+
+
+# Exact observation operation responsibility; catalogue publication does not run it.
+TRANSFORMATION_IMPLEMENTATIONS = {
+    "canonical_observation_shape": ("src/rivretrieve/_internal/providers/ca_eccc/bulk.py", "_unpivot_month"),
+}

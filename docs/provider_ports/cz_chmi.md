@@ -105,9 +105,16 @@ The catalogue generator requires `--native` to select the retained native table
 and `--evidence-root` to select the external root for provenance checks. Recorded
 paths remain acquisition identities; they are resolved below that root. For example:
 
+Use the reviewed catalogue build through the [archive coordinator](../maintenance/evidence.md) to export
+`cz_chmi.build-inputs.json` outside the checkout. Set `BUILD_INPUTS` to that
+file. It contains the adopted `CatalogueBuildInputs` selection, not the
+coordinator receipt `catalogue-input-provenance.json`. Keep the selection and
+build outputs in the private output directory.
+
 ```sh
 uv run python -m rivretrieve._internal.providers.cz_chmi.generate_catalogue \
   --native "$RIVRETRIEVE_TEST_EVIDENCE_ROOT/src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet" \
   --evidence-root "$RIVRETRIEVE_TEST_EVIDENCE_ROOT" \
-  --out catalogue-output
+  --build-inputs "$BUILD_INPUTS" \
+  --out /path/to/private-output/catalogue
 ```

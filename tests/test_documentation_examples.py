@@ -452,8 +452,10 @@ def test_usage_selection_bundle_roundtrip(monkeypatch, tmp_path):
 
     monkeypatch.chdir(tmp_path)
     scope = {}
-    for block in blocks("docs/usage.md")[:2]:
+    for block in blocks("docs/usage.md"):
         execute_block(block, scope, "usage-selection")
+        if "restored_gauges" in scope:
+            break
     selected = scope["chosen_gauges"]
     restored = scope["restored_gauges"]
     assert restored.scope == selected.scope

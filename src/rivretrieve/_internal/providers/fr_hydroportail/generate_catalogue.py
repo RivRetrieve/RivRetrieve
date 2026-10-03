@@ -18,6 +18,7 @@ import polars as pl
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
+    CatalogueBuildInputs,
     EvidenceReference,
     NativeTableIdentity,
     RecordingReference,
@@ -32,6 +33,7 @@ from rivretrieve._internal.catalogues.schemas import (
     STATION_CATALOG_SCHEMA,
     STATION_PRODUCT_CATALOG_SCHEMA,
 )
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import AvailabilityAcquisition, FranceAvailability
 
@@ -263,11 +265,22 @@ def build_catalogue(
     return GeneratedHydroportailCatalogue(provider, products, stations, station_products, provenance, artifact, origins)
 
 
-def write_catalogue(catalogue: GeneratedHydroportailCatalogue, out: Path) -> None:
+def write_catalogue(
+    catalogue: GeneratedHydroportailCatalogue,
+    out: Path,
+    *,
+    build_inputs: CatalogueBuildInputs | None = None,
+    native_table: NativeTable | None = None,
+) -> None:
+    """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
     from rivretrieve._internal.providers.fr_hydroportail.config import VARIANTS, series_mapping
+    from rivretrieve._internal.providers.fr_hydroportail.origins import STATION_METADATA_FIELDS
+
+    if build_inputs is None or native_table is None:
+        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
 
     out.mkdir(parents=True, exist_ok=True)
     artifact = catalogue.public_artifact
@@ -292,6 +305,9 @@ def write_catalogue(catalogue: GeneratedHydroportailCatalogue, out: Path) -> Non
                 for variant in VARIANTS
             ),
         ),
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
     )
     for name, content in metadata.items():
         (out / name).write_bytes(content)
@@ -316,7 +332,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--availability-ledger", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
+    if args.build_inputs is None:
+        parser.error("--out requires --build-inputs")
+    build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
     native = read_native_table(args.native)
     captured, receipt = read_inventory(
         args.evidence / "national-tests.body", args.evidence / "national-tests.receipt.json"
@@ -357,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     catalogue = build_catalogue(native, STATION_CATALOGUE_ORIGINS, historical, receipt, tuple(documents), identity)
     verify_provenance_recordings(catalogue.acquisition_provenance, args.evidence_root)
-    write_catalogue(catalogue, args.out)
+    write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native)
     return 0
 
 

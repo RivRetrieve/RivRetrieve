@@ -27,7 +27,12 @@ from rivretrieve._internal.catalogue_origins import (
     NativeColumn,
     Withheld,
 )
+from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
+
+# Name mappings require genuine-input validation and owner disclosure approval
+# before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (MetadataField("drainage_area", "area"),)
 
 CRS_EVIDENCE_URL = "https://danepubliczne.imgw.pl/pl/apiinfo"
 """Retained IMGW evidence URL; it is not authority for GRDC-issued geometry."""
@@ -468,3 +473,25 @@ def build_acquisition_provenance(
             ),
         ),
     )
+
+
+# Existing acquisition facts materialised in the retained native table.
+# This declares derived-input support, not preservation of original responses.
+NATIVE_TABLE_ACQUISITION_IDS = ("recovered_upstream_import_f67f6d8",)
+
+
+# Authored catalogue, physical-fact and support declarations selected at build time.
+CATALOGUE_BUILD_DECLARATIONS = (
+    ("src/rivretrieve/_internal/providers/pl_imgw/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/pl_imgw/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/pl_imgw/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/pl_imgw/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/pl_imgw/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/pl_imgw/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/pl_imgw/catalogue_series.py", "describe_catalogue"),
+)
+
+
+# Additional retained declarations used by these source facts; not original-body claims.
+CATALOGUE_SUPPORTING_INPUTS = {}
