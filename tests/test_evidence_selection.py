@@ -158,6 +158,8 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
         "test_cz_fr_lt_acquisition_provenance",
         "test_catalogue_origin_certification",
         "test_catalogue_evidence",
+        "test_catalogue_evidence_representation",
+        "test_fr_hubeau_generate_catalogue",
         "test_live_numeric_values",
         "test_provider_series_parse",
         "test_za_dws_acquisition_provenance",
@@ -179,6 +181,12 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
         assert item["purposes"] == sorted(purposes)
         assert item["requirements"] == sorted(requirements)
         assert item["full_verification"] == sorted(full)
+
+    for name in (
+        "test_real_france_generator_does_not_render_national_acquisition_graph",
+        "test_native_cli_is_offline_byte_deterministic_and_preserves_native",
+    ):
+        assert selected[name]["full_verification"] == ["fr_hubeau"]
 
     native = "src/rivretrieve/_internal/providers/{}/catalogue/native.parquet"
     for provider in ("cz_chmi", "fr_hubeau", "lt_lhmt"):

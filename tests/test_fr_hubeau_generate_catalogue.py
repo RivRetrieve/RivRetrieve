@@ -1337,6 +1337,7 @@ def test_committed_catalogue_matches_independent_source_projection(retained_evid
     "tests/test_data/fr_hubeau_hydrometrie.html",
     "tests/test_data/fr_hubeau_temperature_openapi.json",
     "tests/test_data/fr_hubeau_terms_licence.html",
+    full_verification=("fr_hubeau",),
 )
 def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
     retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs_path

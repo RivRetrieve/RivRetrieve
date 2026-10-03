@@ -47,6 +47,7 @@ def test_france_public_evidence_and_descriptor_fit_normalized_budget() -> None:
     "tests/test_data/fr_hubeau_hydrometrie.html",
     "tests/test_data/fr_hubeau_temperature_openapi.json",
     "tests/test_data/fr_hubeau_terms_licence.html",
+    full_verification=("fr_hubeau",),
 )
 def test_real_france_generator_does_not_render_national_acquisition_graph(
     retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs
