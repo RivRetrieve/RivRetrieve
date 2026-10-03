@@ -51,11 +51,8 @@ PAGES = [
     "docs/README.md",
     "docs/usage.md",
     "docs/architecture.md",
-    "docs/usgs-discovery.md",
-    "docs/providers/usgs_nwis.md",
     "docs/reference.md",
     "docs/examples/camels-us.md",
-    "docs/product_dictionary.md",
     "docs/station-metadata.md",
     "docs/catalogue-evidence.md",
     "docs/maintenance/evidence.md",
@@ -63,12 +60,15 @@ PAGES = [
     "docs/catalogue-absence.md",
     "docs/design/observation-store-layout.md",
     "docs/development-conventions.md",
+    "docs/contributing.md",
+    "docs/maintenance/testing.md",
     "CONTEXT.md",
 ]
 
 
 def test_documentation_local_links_and_python_syntax():
-    for name in PAGES:
+    pages = [*PAGES, *(str(path.relative_to(ROOT)) for path in (ROOT / "docs/providers").glob("*.md"))]
+    for name in pages:
         path = ROOT / name
         text = path.read_text()
         for block in python_blocks(path):
@@ -91,3 +91,21 @@ def test_documentation_local_links_and_python_syntax():
 def test_generated_reference_is_current():
     namespace = runpy.run_path(str(ROOT / "scripts/generate_reference.py"))
     assert (ROOT / "docs/_generated/reference-tables.md").read_text() == namespace["render_tables"]()
+
+
+def test_station_map_counts_match_packaged_catalogues():
+    text = (ROOT / "docs/map.md").read_text()
+    documented = {
+        provider: int(count.replace(",", "")) for provider, count in re.findall(r"\| `([^`]+)` \| ([\d,]+) \|", text)
+    }
+    from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+    from rivretrieve._internal.providers.registration import load_manifest
+
+    actual = {
+        item.provider_id: pl.read_parquet(item.declaration.catalogue / "stations.parquet").height
+        for item in load_manifest(BUILTIN_PROVIDER_IDS)
+    }
+    assert documented == actual
+    total = re.search(r"Explore \*\*([\d,]+)\*\*", text)
+    assert total is not None
+    assert int(total.group(1).replace(",", "")) == sum(actual.values())

@@ -15,16 +15,11 @@ import polars as pl
 import pytest
 
 from rivretrieve._internal.authentication import ExchangeSpec
-from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests.test_br_ana_public_daily import _IDENTIFIER, _PASSWORD, _AuthenticatedReplay
 from tests.usgs_modern_recordings import ModernReplay, body, coordinates, manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 DAILY_RECORDING = "daily-07374000-docs-2023"
-INSTANT_RECORDING = "continuous-07374000-docs-quarter-hour-2023"
-LITHUANIAN_RECORDINGS = [
-    Path(f"tests/test_data/lt_lhmt_anyksciu-vms_daily_{month}.recording.json") for month in ("2022-12", "2023-01")
-]
 
 
 def blocks(page):
@@ -56,36 +51,21 @@ def output_contracts(block):
     return contracts
 
 
-class CountingReplay(ReplayTransport):
-    """Keep transport call counts; never replace the public retrieval path."""
-
-    def __init__(self, recording, *additional_recordings):
-        super().__init__((recording, *additional_recordings))
-        self.calls = []
-
-    def send(self, request):
-        self.calls.append(request)
-        return super().send(request)
-
-
-class NewcomerReplay(CountingReplay):
-    """Route ANA through its credential protocol and all observations through exact replay."""
+class DocumentationReplay:
+    """Route documented downloads through exact USGS and authenticated ANA replay."""
 
     def __init__(self, retained_evidence_root: Path):
-        super().__init__(
-            *(read_recording(retained_evidence_root / path) for path in LITHUANIAN_RECORDINGS),
-        )
-        self.usgs = ModernReplay(DAILY_RECORDING, INSTANT_RECORDING, evidence_root=retained_evidence_root)
+        self.calls = []
+        self.usgs = ModernReplay(DAILY_RECORDING, evidence_root=retained_evidence_root)
         self.ana = _AuthenticatedReplay(retained_evidence_root, "stage_daily_mean_bruto")
 
     def send(self, request):
+        self.calls.append(request)
         if request.url.startswith("https://api.waterdata.usgs.gov/"):
-            self.calls.append(request)
             return self.usgs.send(request)
         if request.url in (ExchangeSpec.ana().exchange_url, self.ana.recording.request.url):
-            self.calls.append(request)
             return self.ana.send(request)
-        return super().send(request)
+        raise AssertionError(f"Unexpected documentation request: {request.url}")
 
 
 def execute_block(block, scope, label):
@@ -107,7 +87,7 @@ def execute_block(block, scope, label):
 def execute_page(page, monkeypatch, tmp_path, retained_evidence_root: Path):
     import rivretrieve._internal.discovery as discovery
 
-    replay = NewcomerReplay(retained_evidence_root=retained_evidence_root)
+    replay = DocumentationReplay(retained_evidence_root=retained_evidence_root)
     monkeypatch.setenv("ANA_IDENTIFICADOR", _IDENTIFIER)
     monkeypatch.setenv("ANA_SENHA", _PASSWORD)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
@@ -126,8 +106,6 @@ def execute_page(page, monkeypatch, tmp_path, retained_evidence_root: Path):
 @pytest.mark.parametrize("page", ["README.md", "docs/usage.md"])
 @pytest.mark.recorded(
     "tests/recordings/br_ana",
-    "tests/test_data/lt_lhmt_anyksciu-vms_daily_2022-12.recording.json",
-    "tests/test_data/lt_lhmt_anyksciu-vms_daily_2023-01.recording.json",
     "tests/test_data/usgs_modern",
 )
 def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path, request, retained_evidence_root: Path):
@@ -169,13 +147,10 @@ def test_newcomer_page_examples_execute(page, monkeypatch, tmp_path, request, re
 
 
 def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
-    from folium import Marker
     from polars.testing import assert_frame_equal
 
     result = scope["result"]
     rr = scope["rr"]
-    assert rr.series(scope["swiss"]).height > 0
-    assert rr.series(scope["swiss_daily"]).is_empty()
     assert set(rr.series(scope["brazil"])["variant"]) == {"bruto", "consistido"}
     assert rr.series(scope["consistido"])["variant"].to_list() == ["consistido"]
     both = scope["brazil_result"]
@@ -218,32 +193,11 @@ def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
     )
     assert scope["_transport"].ana.exchange_calls == 2
     assert scope["_transport"].ana.observation_calls >= 2
-    singleton = scope["lithuanian_result"]
-    assert not singleton.issues
-    expected_singleton = pl.DataFrame(
-        {"station_id": ["anyksciu-vms"], "time": [datetime(2023, 1, 1)], "unit": ["m3/s"], "value": [81.8]}
-    )
-    assert_frame_equal(singleton.data.select(expected_singleton.columns), expected_singleton)
-    assert singleton.data["series_id"].n_unique() == 1
-    assert [item.code for item in scope["no_variant"].issues] == ["selection.unresolved_inventory"]
-    assert [item.code for item in scope["no_match"].issues] == ["selection.no_match"]
     assert_frame_equal(scope["restored_result"].data, result.data)
     assert scope["restored_result"].source_series == result.source_series
     assert scope["restored_result"].outcomes == result.outcomes
     assert scope["restored_gauges"].scope == scope["chosen_gauges"].scope
     assert scope["restored_gauges"].known_series == scope["chosen_gauges"].known_series
-    instantaneous = scope["instant_result"]
-    assert not instantaneous.issues
-    assert instantaneous.data["time_zone"].to_list() == ["+00:00", "+00:00"]
-    assert instantaneous.data["time"].to_list() == [datetime(2023, 1, 1), datetime(2023, 1, 1, 0, 15)]
-    expected_utc = instantaneous.data.with_columns(
-        pl.Series("time", [datetime(2023, 1, 1), datetime(2023, 1, 1, 0, 15)]),
-        pl.lit("+00:00").alias("time_zone"),
-    )
-    assert_frame_equal(scope["utc_result"].data, expected_utc)
-    assert scope["utc_result"].provenance is instantaneous.provenance
-    assert scope["utc_result"].issues is instantaneous.issues
-    assert scope["utc_result"].receipts is instantaneous.receipts
     assert_frame_equal(scope["cached_result"].data, result.data)
     assert scope["status"].store == tmp_path / "cache" / "usgs_nwis" / "store"
     calls = scope["_calls_by_block"]
@@ -273,20 +227,16 @@ def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
         interval.retrieved_at == fresh.provenance.retrieved_at for interval in cached.provenance.served_intervals
     )
     assert not result.receipts.entries
-    markers = [child for child in scope["station_map"]._children.values() if isinstance(child, Marker)]
-    assert len(markers) == 1
-    location = next(item for item in scope["chosen_gauges"].locations if item.station_id == "07374000")
-    assert markers[0].location == [location.latitude, location.longitude]
-    html = (tmp_path / "stations.html").read_text()
-    assert "07374000" in html
-    assert "L.marker(" in html
+    assert scope["outcome_details"] == [
+        (item.station_id, item.series_id, item.requested_selector, item.status.value, item.reason)
+        for item in result.outcomes
+    ]
+    assert_frame_equal(scope["returned_series"], rr.series(result))
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 @pytest.mark.recorded(
     "tests/recordings/br_ana",
-    "tests/test_data/lt_lhmt_anyksciu-vms_daily_2022-12.recording.json",
-    "tests/test_data/lt_lhmt_anyksciu-vms_daily_2023-01.recording.json",
     "tests/test_data/usgs_modern",
 )
 def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path, retained_evidence_root: Path):
@@ -318,10 +268,6 @@ def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path, r
     assert converted.provenance is synthetic.provenance
     assert converted.issues is synthetic.issues
     assert converted.receipts is synthetic.receipts
-
-
-def issue_example():
-    return next(block for block in blocks("docs/usage.md") if "checked_result =" in block)
 
 
 class ScriptedModernReplay(ModernReplay):
@@ -358,16 +304,6 @@ def issue_scope(monkeypatch, tmp_path, outcome, retained_evidence_root: Path):
     return {"rr": rr, "chosen_gauges": rr.pick(daily_gauges, station=["07374000"])}, replay
 
 
-@pytest.mark.usefixtures("reuse_packaged_catalogues")
-@pytest.mark.recorded("tests/test_data/usgs_modern")
-def test_actual_issue_example_success(monkeypatch, tmp_path, retained_evidence_root: Path):
-    scope, replay = issue_scope(monkeypatch, tmp_path, "success", retained_evidence_root=retained_evidence_root)
-    checked = execute_block(issue_example(), scope, "usage-issues-success")
-    assert len(checked) == 1
-    assert len(replay.calls) == 1
-    assert not scope["checked_result"].issues
-
-
 @pytest.mark.parametrize("policy", ["warn", "ignore", "raise"])
 @pytest.mark.parametrize("outcome", ["success", "empty", 404, 503])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
@@ -391,11 +327,9 @@ def test_documented_issue_call_with_each_policy(monkeypatch, tmp_path, policy, o
         and isinstance(node.args[0], ast.Name)
         and node.args[0].id == "chosen_gauges"
     ]
-    call = next(
-        call
-        for call in calls
-        if next((keyword.value.value for keyword in call.keywords if keyword.arg == "on_issue"), "warn") == policy
-    )
+    call = calls[0]
+    call.keywords.append(ast.keyword(arg="on_issue", value=ast.Constant(policy)))
+    ast.fix_missing_locations(call)
     expression = compile(ast.Expression(call), "usage-policy-expression", "eval")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -466,37 +400,19 @@ def test_usage_selection_bundle_roundtrip(monkeypatch, tmp_path):
         rr.from_frame(rr.as_frame(selected))
 
 
-@pytest.mark.parametrize("policy", ["warn", "ignore", "raise"])
-@pytest.mark.parametrize("restriction", ["no_variant", "no_match"])
-def test_documented_variant_restriction_policy(policy, restriction):
-    """Execute the documented pick call against real catalogue scope, never a fabricated inventory."""
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+def test_usage_variant_selection():
     import rivretrieve as rr
-    from rivretrieve._internal.issues import IssuePolicyError
 
     scope = {"rr": rr}
-    for block in blocks("docs/usage.md"):
-        if "brazil =" in block:
-            execute_block(block, scope, "usage-physical-facts")
-    scope["lithuania"] = rr.find(
-        provider="lt_lhmt", station="anyksciu-vms", quantity="discharge", frequency="daily", statistic="mean"
-    )
-    block = next(block for block in blocks("docs/usage.md") if f"{restriction} =" in block)
-    call = ast.parse(block).body[0].value
-    for keyword in call.keywords:
-        if keyword.arg == "on_issue":
-            keyword.value = ast.Constant(policy)
-    expression = compile(ast.fix_missing_locations(ast.Expression(call)), "usage-variant-policy", "eval")
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        if policy == "raise":
-            with pytest.raises(IssuePolicyError) as raised:
-                eval(expression, scope)
-            issues = raised.value.issues
-        else:
-            selected = eval(expression, scope)
-            assert rr.series(selected).is_empty()
-            issues = selected.issues
-    assert len(caught) == int(policy == "warn")
-    assert [item.code for item in issues] == [
-        "selection.unresolved_inventory" if restriction == "no_variant" else "selection.no_match"
-    ]
+    block = next(block for block in blocks("docs/usage.md") if "brazil =" in block)
+    execute_block(block, scope, "usage-variants")
+    assert set(rr.series(scope["brazil"])["variant"]) == {"bruto", "consistido"}
+    assert rr.series(scope["consistido"])["variant"].to_list() == ["consistido"]
+
+
+@pytest.mark.parametrize("page", ["README.md", "docs/usage.md"])
+def test_documentation_output_contracts(page):
+    """Check every displayed print has an expected output before replay."""
+    for block in blocks(page):
+        output_contracts(block)

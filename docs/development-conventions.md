@@ -1,26 +1,56 @@
-# Development conventions
+# Development
 
-## Docstrings
+Start with an [agreed change](contributing.md). Read the repository's
+[project instructions](../AGENTS.md) and the [architecture](architecture.md) before
+changing code. Use Python 3.13 or later and [uv](https://docs.astral.sh/uv/).
 
-Public functions and user-facing returned types, methods and attributes follow the
-[public API docstring rule](../AGENTS.md#public-api-docstrings) in the root `AGENTS.md`.
+## Set up and check a change
 
-For internal functions, use NumPy-style docstrings when the contract is not clear from the
-signature. Document the parameters, returns and raised exceptions that need explanation.
+Run these commands from the source checkout. `uv sync --extra map` installs the
+locked project, development tools and optional map dependency. It creates the
+local environment; it does not download provider observations.
 
-## API reference
+```sh
+uv sync --extra map
+uv run pytest --logic-only
+uv run ruff format --check
+uv run ruff check
+uv run ty check src
+```
 
-Edit NumPy docstrings in the source. `uv run mkdocs build --strict` renders them
-with mkdocstrings. `docs/reference.md` lists the supported functions, returned
-interfaces and exceptions; add directives there when the supported surface grows.
-Keep private helpers and validation methods out of the reference.
+Successful tests report passed counts, formatting reports unchanged files, and
+lint and type checks report no errors. Counts vary with the selected revision.
+Run affected tests while editing, then the broader checks required by the changed
+boundary. The [testing guide](maintenance/testing.md) explains how to choose useful
+checks. Source-backed tests use the reviewed private
+[evidence workflow](maintenance/evidence.md); missing inputs are not a passing check.
 
-Factual schema and provider tables are committed in
-`docs/_generated/reference-tables.md`. After changing those facts, run
-`uv run python scripts/generate_reference.py` and commit the updated tables.
-The build checks their freshness before preparing other files. Docstring edits
-need no regeneration. Run the focused checks with
-`uv run pytest tests/test_documentation.py tests/test_reference_contracts.py`.
+Use temporary cache and store roots for experiments. Do not commit credentials,
+private source bodies, generated environments or local cache data.
+
+## Documentation
+
+Follow the [documentation language guidelines](AGENTS.md) and the
+[public API docstring rule](../AGENTS.md#public-api-docstrings). Edit public NumPy
+docstrings in source; mkdocstrings renders the API reference. Add reference
+directives when the supported public surface grows, without exposing private helpers.
+
+The homepage comes from the root README through `docs/hooks.py`. Edit that source,
+not the generated `docs/index.md`. Schema and provider tables come from
+`scripts/generate_reference.py`; regenerate them only when their underlying facts
+change and commit the updated tables.
+
+```sh
+uv run python scripts/generate_reference.py --check
+uv run pytest --logic-only tests/test_documentation.py tests/test_reference_contracts.py
+uv run mkdocs build --strict
+```
+
+The first command reports `Reference is current.` when tables match the code and
+packaged catalogues. The tests report their results; a successful build writes
+`site/` and reports completion. Review the rendered navigation and links as well.
+A local build does not deploy the site. Documentation publication remains in
+`.github/workflows/deploy-docs.yml` and targets `RivRetrieve/RivRetrieve.github.io`.
 
 ## Versions and publishing
 
@@ -28,9 +58,8 @@ need no regeneration. Run the focused checks with
 installed distribution metadata, so there is no second version to update.
 Use uv to prepare the version and update `uv.lock`:
 
-```sh
-uv version 0.1.0
-```
+`uv version 0.1.0` sets the version in the project files. This is a release
+operation, not a setup or test command.
 
 For subsequent pre-1.0 releases, use `uv version --bump minor` for breaking changes
 or `uv version --bump patch` for compatible improvements and fixes. Review and
