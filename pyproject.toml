@@ -27,9 +27,8 @@ map = [
     "folium",
 ]
 
-
 [build-system]
-requires = ["uv_build>=0.11.16,<0.12"]
+requires = ["uv_build>=0.12.1,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -74,9 +73,9 @@ wheel-exclude = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3", # tests
+    "pytest>=8.3",
     "pytest-cov>=6.2.1",
-    "ruff>=0.12", # linter + formatter
+    "ruff>=0.12",
     "ty>=0.0.35",
     "tqdm>=4.70.0",
     "mlcroissant>=1.1.0",
@@ -84,22 +83,17 @@ dev = [
     "mkdocstrings[python]>=1.0.6",
     "geopandas>=1.2.0",
     "matplotlib>=3.11.2",
-    "uv-build>=0.11.16,<0.12",
+    "uv-build>=0.12.1,<0.13",
 ]
 
-# -----------------------
-# Ruff (lint + format)
-# -----------------------
 [tool.ruff]
 line-length = 120
 target-version = "py313"
 
 [tool.ruff.lint]
-# Errors, warnings, naming, imports, modern py, bugbear, comprehensions, simplify
-select = ["E", "F", "W", "N", "I", "UP", "B", "C4", "SIM"]
-extend-select = ["TID251"]
+select = ["E", "F", "W", "N", "I", "UP", "B", "C4", "SIM", "TID251"]
 ignore = [
-    "E501", # let formatter handle wrapping
+    "E501", # Allow long lines that the formatter cannot wrap.
     "N803", # allow X, Y for ML-style params
     "N806", # allow X, Y for local vars
 ]
@@ -115,18 +109,11 @@ ignore = [
 "tests/**" = ["TID251"]
 
 [tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
+exclude = ["docs/**"]
 
-# -----------------------
-# ty (fast static type checker)
-# -----------------------
-# [tool.ty.rules]
-# possibly-unresolved-reference = "warn"
+[tool.ty.src]
+include = ["src"]
 
-# -----------------------
-# Pytest
-# -----------------------
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
@@ -134,6 +121,3 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
-
-[tool.uv.sources]
-# ctrl-freak = { git = "https://github.com/hydrosolutions/ctrl-freak.git", rev = "main" } # example of how to add a git dependency
