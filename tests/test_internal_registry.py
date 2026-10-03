@@ -316,7 +316,7 @@ def test_registry_module_without_engine_stages_rejects_observation_dispatch(
         nonlocal called
         called = True
 
-    monkeypatch.setattr(stub_provider, "observations", legacy_observations)
+    monkeypatch.setattr(stub_provider, "observations", legacy_observations, raising=False)
 
     handle = registry.register("stub_provider", artifact, provider_module=stub_provider)
 
