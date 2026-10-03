@@ -216,6 +216,11 @@ def test_native_agency_disagreement_with_reviewed_acquisition_fails(
     full_verification=("th_thaiwater",),
 )
 def test_thailand_cli_rejects_native_byte_substitution(retained_evidence_root: Path, tmp_path: Path) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic selection reaches only the intended failing verification boundary.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
     native = tmp_path / "native.parquet"
     native.write_bytes(
         (
@@ -228,6 +233,8 @@ def test_thailand_cli_rejects_native_byte_substitution(retained_evidence_root: P
             [
                 "--evidence-root",
                 str(retained_evidence_root),
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(native),
                 "--availability-evidence",
@@ -245,6 +252,12 @@ def test_thailand_cli_rejects_native_byte_substitution(retained_evidence_root: P
 def test_thailand_cli_invokes_recording_verification(
     retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic selection reaches only the intended failing verification boundary.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
+
     def reject(*_args: object) -> None:
         raise FatalContractError("recording verification invoked")
 
@@ -254,6 +267,8 @@ def test_thailand_cli_invokes_recording_verification(
             [
                 "--evidence-root",
                 str(retained_evidence_root),
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(
                     retained_evidence_root / "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet"

@@ -23,6 +23,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ba_fhmzbih import generate_catalogue
 from rivretrieve._internal.providers.ba_fhmzbih.origins import WorkbookAccessLedger
+from tests._catalogue import catalogue_recording_paths
 
 _TEST_DATA_DIR = Path("tests/test_data")
 _METADATA_FIXTURE = _TEST_DATA_DIR / "ba_fhmzbih_metadata.json"
@@ -662,11 +663,13 @@ def test_main_rejects_incoherent_modes(
     "tests/test_data/ba_fhmzbih_terms_absence.html",
     full_verification=("ba_fhmzbih",),
 )
+@pytest.mark.recorded(*catalogue_recording_paths("ba_fhmzbih"))
 def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
-    retained_evidence_root: Path,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs_path
 ) -> None:
+    from rivretrieve._internal.providers.ba_fhmzbih.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance(_access()))
     assert hasattr(urllib.request, "urlopen")
     calls: list[object] = []
 
@@ -678,6 +681,8 @@ def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
     first = tmp_path / "first"
     second = tmp_path / "second"
     argv = [
+        "--build-inputs",
+        str(build_inputs_path),
         "--native",
         str(retained_evidence_root / _NATIVE_TABLE),
         "--workbook-access-ledger",

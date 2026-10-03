@@ -34,6 +34,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ch_foen import generate_catalogue
 from rivretrieve._internal.providers.ch_foen.origins import build_acquisition_provenance
+from tests._catalogue import catalogue_recording_paths
 
 FIXTURE_PATH = Path("tests/test_data/switzerland_metadata_locations.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet")
@@ -689,11 +690,13 @@ def test_cli_source_modes_are_mutually_exclusive(tmp_path: Path) -> None:
     "tests/test_data/ch_foen_terms_bafu.html",
     "tests/test_data/ch_foen_terms_existenz.html",
 )
+@pytest.mark.recorded(*catalogue_recording_paths("ch_foen"))
 def test_native_build_matches_committed_catalogue_byte_for_byte(
-    retained_evidence_root: Path,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs_path
 ) -> None:
+    from rivretrieve._internal.providers.ch_foen.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     calls: list[str] = []
     native_before = (retained_evidence_root / NATIVE_PATH).read_bytes()
 
@@ -707,7 +710,14 @@ def test_native_build_matches_committed_catalogue_byte_for_byte(
 
     assert (
         generate_catalogue.main(
-            ["--native", str(retained_evidence_root / NATIVE_PATH), "--out", str(output)]
+            [
+                "--build-inputs",
+                str(build_inputs_path),
+                "--native",
+                str(retained_evidence_root / NATIVE_PATH),
+                "--out",
+                str(output),
+            ]
             + ["--evidence-root", str(retained_evidence_root)]
         )
         == 0

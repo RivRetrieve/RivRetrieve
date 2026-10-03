@@ -81,6 +81,11 @@ def test_usgs_build_rejects_changed_terms_recording(retained_evidence_root, tmp_
     "tests/test_data/usgs_nwis_terms_licence-1.html",
 )
 def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_path: Path) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic selection reaches only the intended failing verification boundary.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
     native = tmp_path / "native.parquet"
     native.write_bytes(
         (retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet").read_bytes()
@@ -89,6 +94,8 @@ def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_p
     with pytest.raises(FatalContractError, match="native table digest mismatch: expected .* observed"):
         generate_catalogue.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(native),
                 "--evidence-root",
@@ -125,6 +132,12 @@ def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_p
 def test_usgs_cli_invokes_recording_verification(
     retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic selection reaches only the intended failing verification boundary.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
+
     def reject(*_args: object) -> None:
         raise FatalContractError("recording verification invoked")
 
@@ -132,6 +145,8 @@ def test_usgs_cli_invokes_recording_verification(
     with pytest.raises(FatalContractError, match="recording verification invoked"):
         generate_catalogue.main(
             [
+                "--build-inputs",
+                str(build_inputs_path),
                 "--native",
                 str(retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"),
                 "--evidence-root",

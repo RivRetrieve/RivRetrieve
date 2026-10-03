@@ -42,6 +42,11 @@ def test_swiss_provenance_separates_bafu_from_existenz() -> None:
     "tests/test_data/ch_foen_terms_existenz.html",
 )
 def test_swiss_terms_recordings_and_native_bytes_are_verified(retained_evidence_root: Path, tmp_path: Path) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic selection reaches only the intended failing verification boundary.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
     verify_provenance_recordings(build_acquisition_provenance(), retained_evidence_root)
     for name in (
         "ch_foen_terms_bafu.html",
@@ -67,7 +72,8 @@ def test_swiss_terms_recordings_and_native_bytes_are_verified(retained_evidence_
     native.write_bytes(native.read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
         main(
-            ["--native", str(native), "--out", str(tmp_path / "out")] + ["--evidence-root", str(retained_evidence_root)]
+            ["--build-inputs", str(build_inputs_path), "--native", str(native), "--out", str(tmp_path / "out")]
+            + ["--evidence-root", str(retained_evidence_root)]
         )
 
 

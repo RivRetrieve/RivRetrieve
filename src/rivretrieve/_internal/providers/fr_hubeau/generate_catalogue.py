@@ -1205,7 +1205,11 @@ def write_catalogue(
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS
     from rivretrieve._internal.providers.fr_hubeau.config import config as source_config
-    from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS, STATION_METADATA_FIELDS
+    from rivretrieve._internal.providers.fr_hubeau.origins import (
+        FRANCE_ORIGIN_DECLARATIONS,
+        STATION_METADATA_FIELDS,
+        STATION_METADATA_NOTICE,
+    )
 
     if build_inputs is None or native_table is None:
         raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
@@ -1227,6 +1231,7 @@ def write_catalogue(
         build_inputs=build_inputs,
         native_table=native_table,
         metadata_fields=STATION_METADATA_FIELDS,
+        station_metadata_notice=STATION_METADATA_NOTICE,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

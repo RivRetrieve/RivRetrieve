@@ -983,3 +983,267 @@ def test_explicit_transformation_responsibility_requires_known_group_and_declare
         _bind_catalogue_build_inputs(
             _provenance(), _publication_build(), _projected_metadata(), transformation_implementations=mapping
         )
+
+
+def test_station_metadata_notice_is_scoped_verbatim_and_readable_offline(tmp_path, monkeypatch):
+    import socket
+
+    import mlcroissant as mlc
+
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+
+    original, origins, files, native, fields = _publication_components()
+    payload = original.model_dump(mode="python")
+    source = payload["source_records"][0]
+    source["acquisitions"] += (
+        {
+            "acquisition_id": "synthetic-terms",
+            "method": "http_request",
+            "instant_type": "retrieval",
+            "description": "Synthetic source terms",
+            "requested_from": ("https://example.org/terms",),
+            "retrieved_at_start": "2020-01-01T00:00:00Z",
+            "recording_ids": ("synthetic-terms",),
+        },
+    )
+    source["evidence"] = (
+        {
+            "evidence_id": "synthetic-terms",
+            "description": "Synthetic source terms",
+            "recording": {
+                "recording_id": "synthetic-terms",
+                "repository_path": "synthetic/terms.html",
+                "source_url": "https://example.org/terms",
+                "retrieved_at": "2020-01-01T00:00:00Z",
+                "media_type": "text/html",
+                "sha256": "0" * 64,
+            },
+        },
+    )
+    terms = {
+        "license": "Synthetic source licence, exact wording.",
+        "citation": "Synthetic source citation, exact wording.",
+    }
+    source["statements"] = tuple(
+        {"kind": kind, "exact_text": words, "recording_id": "synthetic-terms", "fact": f"source.terms.{kind}"}
+        for kind, words in terms.items()
+    )
+    term_facts = tuple(statement["fact"] for statement in source["statements"])
+    payload["fact_universe"] += term_facts
+    payload["fact_bindings"] += (
+        {
+            "fact_group": "synthetic-terms",
+            "facts": term_facts,
+            "source_id": "issuer",
+            "acquisition_id": "synthetic-terms",
+        },
+    )
+    notice = "RivRetrieve station metadata projection. Source names remain verbatim."
+    metadata = build_catalogue_metadata(
+        AcquisitionProvenance.model_validate(payload),
+        origins,
+        files,
+        build_inputs=_publication_build(),
+        native_table=native,
+        metadata_fields=fields,
+        station_metadata_notice=notice,
+        source_descriptions=SourceDescriptions(provider_id="synthetic", descriptions=()),
+    )
+    descriptor = json.loads(metadata["croissant.json"])
+    assert {kind: descriptor[kind] for kind in terms} == terms
+    record = next(item for item in descriptor["recordSet"] if item["@id"] == "station_metadata")
+    assert record["description"] == notice
+    assert notice not in descriptor["description"]
+    for name, content in {**files, **metadata}.items():
+        (tmp_path / name).write_bytes(content)
+    from rivretrieve._internal.catalogues.descriptor import write_catalogue_descriptor
+
+    header = EvidenceHeader.model_validate_json(metadata["provenance.json"])
+    evidence = parse_catalogue_evidence(header, {name: metadata[name] for name in header.files})
+    write_catalogue_descriptor(
+        tmp_path / "croissant.json",
+        evidence,
+        origins,
+        {**files, **{name: content for name, content in metadata.items() if name != "croissant.json"}},
+        station_metadata_notice=notice,
+    )
+    assert json.loads((tmp_path / "croissant.json").read_text()) == descriptor
+
+    def deny_network(*args, **kwargs):
+        raise AssertionError("Metadata notice inspection attempted network access")
+
+    monkeypatch.setattr(socket.socket, "connect", deny_network)
+    dataset = mlc.Dataset(tmp_path / "croissant.json")
+    loaded = next(record for record in dataset.metadata.record_sets if record.id == "station_metadata")
+    assert loaded.description == notice
+
+
+@pytest.mark.parametrize("notice", ["", "   "])
+def test_station_metadata_notice_requires_nonblank_text(notice):
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+    from rivretrieve._internal.issues import FatalContractError
+
+    original, origins, files, native, fields = _publication_components()
+    with pytest.raises(FatalContractError, match="nonblank"):
+        build_catalogue_metadata(
+            original,
+            origins,
+            files,
+            build_inputs=_publication_build(),
+            native_table=native,
+            metadata_fields=fields,
+            station_metadata_notice=notice,
+            source_descriptions=SourceDescriptions(provider_id="synthetic", descriptions=()),
+        )
+
+
+def _supported_provenance():
+    from rivretrieve._internal.acquisition_provenance import RetainedSupportUse
+
+    first = _member()
+    same_bytes_elsewhere = ArchiveMemberReference.model_validate({**first.model_dump(), "collection_id": "another"})
+    verifier = _code("maintenance/verify.py", "main")
+    payload = _provenance().model_dump(mode="python")
+    payload["build_inputs"]["support"] = (
+        RetainedSupportUse(
+            reference=first,
+            verifier=verifier,
+            verification_kind="full_positive",
+            facts=("native.latitude",),
+            member_selector="body/first.json",
+        ),
+        RetainedSupportUse(
+            reference=first,
+            verifier=verifier,
+            verification_kind="full_positive",
+            facts=("native.latitude",),
+            member_selector="body/second.json",
+        ),
+        RetainedSupportUse(
+            reference=same_bytes_elsewhere,
+            verifier=_code("maintenance/verify.py", "other"),
+            verification_kind="full_positive",
+            facts=("native.latitude",),
+            member_selector="body/third.json",
+        ),
+    )
+    return AcquisitionProvenance.model_validate(payload)
+
+
+def test_normalized_header_interns_exact_support_identities_without_changing_logical_build_inputs():
+    original = _supported_provenance()
+    evidence = _normalize(original)
+    files = encode_catalogue_evidence(evidence)
+    encoded_header = json.loads(files.pop("provenance.json"))
+    encoded = encoded_header["build_inputs"]
+    assert encoded["encoding_version"] == 1
+    assert len(encoded["support_references"]) == len(encoded["support_verifiers"]) == 2
+    assert [item["reference"] for item in encoded["support"]] == [0, 0, 1]
+    assert [item["verifier"] for item in encoded["support"]] == [0, 0, 1]
+    assert "encoding_version" not in original.build_inputs.model_dump(mode="json")
+    with pytest.raises(ValidationError):
+        CatalogueBuildInputs.model_validate(encoded)
+    header = EvidenceHeader.model_validate_json(json.dumps(encoded_header))
+    parsed = parse_catalogue_evidence(header, files)
+    json_roundtrip = CatalogueEvidence.model_validate_json(parsed.model_dump_json())
+    for item in (evidence, parsed, json_roundtrip):
+        assert item.header.build_inputs == original.build_inputs
+        support = item.header.build_inputs.support
+        assert support[0].reference is support[1].reference
+        assert support[0].verifier is support[1].verifier
+        assert support[0].reference is not support[2].reference
+        assert support[0].verifier is not support[2].verifier
+        assert support[0].reference.sha256 == support[2].reference.sha256
+        assert reconstruct_provenance(item) == original
+    assert encode_catalogue_evidence(parsed)["provenance.json"].count(b"\n") == 1
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("reference", True),
+        ("reference", -1),
+        ("reference", 2),
+        ("reference", "0"),
+        ("verifier", False),
+        ("verifier", -1),
+        ("verifier", 2),
+        ("verifier", 0.0),
+    ],
+)
+def test_interned_support_indices_are_strict_bounded_ordinals(field, value):
+    payload = _normalize(_supported_provenance()).header.model_dump(mode="json")
+    payload["build_inputs"]["support"][0][field] = value
+    with pytest.raises(ValidationError):
+        EvidenceHeader.model_validate_json(json.dumps(payload))
+
+
+@pytest.mark.parametrize("pool", ["support_references", "support_verifiers"])
+@pytest.mark.parametrize("mutation", ["duplicate", "unused", "missing"])
+def test_interned_support_pools_are_unique_used_and_closed(pool, mutation):
+    payload = _normalize(_supported_provenance()).header.model_dump(mode="json")
+    values = payload["build_inputs"][pool]
+    if mutation == "missing":
+        values.pop()
+    else:
+        extra = dict(values[0])
+        if mutation == "unused":
+            extra["artifact_id" if pool == "support_references" else "symbol"] = "unused"
+        values.append(extra)
+    with pytest.raises(ValidationError, match="pool"):
+        EvidenceHeader.model_validate_json(json.dumps(payload))
+
+
+@pytest.mark.parametrize("version", [2, True])
+def test_header_encoding_is_declared_and_does_not_accept_cli_build_input_json(version):
+    original = _supported_provenance()
+    payload = _normalize(original).header.model_dump(mode="json")
+    payload["build_inputs"]["encoding_version"] = version
+    with pytest.raises(ValidationError):
+        EvidenceHeader.model_validate_json(json.dumps(payload))
+    payload["build_inputs"] = original.build_inputs.model_dump(mode="json")
+    with pytest.raises(ValidationError, match="encoding_version"):
+        EvidenceHeader.model_validate_json(json.dumps(payload))
+
+
+@pytest.mark.parametrize("mode", ["validation", "serialization"])
+def test_header_json_schema_declares_pooled_wire_form_while_cli_schema_stays_logical(mode):
+    schema = EvidenceHeader.model_json_schema(mode=mode)
+    build_reference = next(item["$ref"] for item in schema["properties"]["build_inputs"]["anyOf"] if "$ref" in item)
+    encoded = schema["$defs"][build_reference.rsplit("/", 1)[1]]
+    assert {"encoding_version", "support_references", "support_verifiers", "support"} <= set(encoded["properties"])
+    edge_reference = encoded["properties"]["support"]["items"]["$ref"]
+    edge = schema["$defs"][edge_reference.rsplit("/", 1)[1]]
+    for field in ("reference", "verifier"):
+        assert edge["properties"][field]["type"] == "integer"
+        assert edge["properties"][field]["minimum"] == 0
+    logical = CatalogueBuildInputs.model_json_schema(mode=mode)
+    assert "encoding_version" not in logical["properties"]
+    logical_edge_reference = logical["properties"]["support"]["items"]["$ref"]
+    logical_edge = logical["$defs"][logical_edge_reference.rsplit("/", 1)[1]]
+    assert "$ref" in logical_edge["properties"]["reference"]
+    assert "$ref" in logical_edge["properties"]["verifier"]
+
+
+@pytest.mark.parametrize("mutation", ["reference_hash", "verifier_revision", "selector"])
+def test_header_revalidation_rejects_unchecked_copied_support_identities(mutation):
+    evidence = _normalize(_supported_provenance())
+    build = evidence.header.build_inputs
+    first = build.support[0]
+    if mutation == "reference_hash":
+        first = first.model_copy(update={"reference": first.reference.model_copy(update={"sha256": "invalid"})})
+    elif mutation == "verifier_revision":
+        first = first.model_copy(update={"verifier": first.verifier.model_copy(update={"revision": "e" * 40})})
+    else:
+        first = first.model_copy(update={"member_selector": "../unvalidated"})
+    unchecked = evidence.header.model_copy(
+        update={"build_inputs": build.model_copy(update={"support": (first, *build.support[1:])})}
+    )
+    files = encode_catalogue_evidence(evidence)
+    files.pop("provenance.json")
+    with pytest.raises(ValidationError):
+        parse_catalogue_evidence(unchecked, files)
+    with pytest.raises(ValidationError):
+        encode_catalogue_evidence(evidence.model_copy(update={"header": unchecked}))

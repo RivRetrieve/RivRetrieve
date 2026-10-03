@@ -31,6 +31,15 @@ from rivretrieve._internal.catalogues.station_metadata import MetadataField
 
 # Name mappings require genuine-input validation and owner disclosure approval
 # before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_NOTICE = (
+    "Station metadata from the Ministry of Land, Infrastructure, Transport and Tourism, Water Information "
+    "System (https://www1.river.go.jp/), accessed 2026-08-02 (UTC). Used under PDL1.0 "
+    "(https://www1.river.go.jp/WDBrules_20251210.pdf), subject to its third-party-rights and statutory "
+    "qualifications. RivRetrieve selected the declared source fields and encoded their values and absence "
+    "states; source names remain unchanged. Processing and publication of this projection: RivRetrieve. "
+    "This projection is not an original MLIT publication."
+)
+
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "流域面積"),
     MetadataField("station_name", "観測所名"),
@@ -517,6 +526,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/jp_mlit/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/jp_mlit/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/jp_mlit/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/jp_mlit/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/jp_mlit/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/assembly.py", "assemble"),
     ("src/rivretrieve/_internal/providers/jp_mlit/config.py", "config"),

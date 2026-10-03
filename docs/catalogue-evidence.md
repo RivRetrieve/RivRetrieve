@@ -61,6 +61,16 @@ A `member_selector`, when present, preserves an established member name inside
 an archived container. Public references omit local verifier paths. This support
 record is distinct from archive integrity checks and native-table rebuilds.
 
+In serialized normalized headers, `build_inputs.encoding_version=1` stores exact
+support member identities once in `support_references`, and verifier code identities
+once in `support_verifiers`. Each support entry retains its facts, member selector
+and verification kind, with integer `reference` and `verifier` indices into those
+pools. Indices must resolve; pool identities must be unique and all must be used.
+Decoding restores the logical build-input models and shares the pooled identity
+objects across their support entries. Equal digests alone do not merge identities.
+The build/CLI input JSON remains the separate, uninterned logical representation.
+`provenance.json` uses compact JSON; the five evidence relations are unchanged.
+
 Historical headers can omit `build_inputs`; new publication requires explicit
 inputs. See [verification evidence](maintenance/evidence.md) for controlled archive
 access and genuine-input checks.

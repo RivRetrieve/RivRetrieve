@@ -37,6 +37,7 @@ _VERIFICATION = r"""
 import json
 import socket
 import sys
+from importlib import import_module
 from importlib.resources import files
 from pathlib import Path
 
@@ -72,6 +73,12 @@ for provider_id in provider_ids:
     selection = rr.find(provider=provider_id, station=station_id)
     selections.append(rr.from_bundle(rr.to_bundle(selection)))
     frames.append(rr.metadata(selections[-1], view="source"))
+    if provider_id in {"br_ana", "ca_eccc", "cz_chmi", "fr_hubeau", "jp_mlit", "lt_lhmt", "no_nve", "usgs_nwis"}:
+        expected_notice = import_module(f"rivretrieve._internal.providers.{provider_id}.origins").STATION_METADATA_NOTICE
+        assert isinstance(expected_notice, str) and expected_notice.strip()
+        descriptor = rr.describe(provider_id)
+        metadata_record = next(record for record in descriptor["recordSet"] if record["@id"] == "station_metadata")
+        assert metadata_record["description"] == expected_notice
 
 actual = pl.concat(frames)
 schema = pl.Schema({

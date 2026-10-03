@@ -31,6 +31,14 @@ from rivretrieve._internal.catalogues.station_metadata import MetadataField
 
 # Name mappings require genuine-input validation and owner disclosure approval
 # before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_NOTICE = (
+    "Station metadata from Environment and Climate Change Canada, Meteorological Service of Canada. "
+    "Contains information licensed under the Open Government Licence – Canada "
+    "(https://open.canada.ca/en/open-government-licence-canada). RivRetrieve selected the declared source "
+    "fields and encoded their values and absence states; source names remain unchanged. Processing and "
+    "publication of this projection: RivRetrieve."
+)
+
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "DRAINAGE_AREA_GROSS"),
     MetadataField("drainage_area", "DRAINAGE_AREA_EFFECT"),
@@ -304,6 +312,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/ca_eccc/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/providers/ca_eccc/bulk.py", "_unpivot_month"),
     ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "TRANSFORMATION_IMPLEMENTATIONS"),

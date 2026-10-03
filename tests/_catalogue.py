@@ -52,3 +52,17 @@ def catalogue_content_without_build_identity(name: str, content: bytes) -> objec
                 distribution.pop("sha256", None)
                 distribution.pop("contentSize", None)
     return document
+
+
+def catalogue_recording_paths(provider_id: str) -> tuple[str, ...]:
+    """Declare public recording paths without opening retained source bodies."""
+    header = json.loads((catalogue_path(provider_id) / "provenance.json").read_text())
+    return tuple(
+        sorted(
+            {
+                entry["recording"]["repository_path"]
+                for source in header["source_records"]
+                for entry in source["evidence"]
+            }
+        )
+    )

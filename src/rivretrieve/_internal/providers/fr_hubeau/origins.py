@@ -27,6 +27,17 @@ from rivretrieve._internal.catalogues.station_metadata import MetadataField
 
 # Name mappings require genuine-input validation and owner disclosure approval
 # before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_NOTICE = (
+    "Station metadata distributed by Hub’Eau through its hydrometry and river-temperature services "
+    "(https://hubeau.eaufrance.fr/), used under the Etalab Open Licence "
+    "(https://www.etalab.gouv.fr/licence-ouverte-open-licence). Hub’Eau distributes data from several "
+    "producers; its role does not establish the original producer of every record. Source acquisition "
+    "identities and dates remain in the catalogue provenance; acquisition dates are not asserted to be "
+    "publisher last-update dates. RivRetrieve selected the declared source fields and encoded their "
+    "values and absence states; source names remain unchanged. Processing and publication of this "
+    "projection: RivRetrieve."
+)
+
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "superficie_topo"),
     MetadataField("drainage_area", "superficie_reelle"),
@@ -464,6 +475,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/assembly.py", "assemble"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/config.py", "config"),

@@ -42,6 +42,7 @@ def build_catalogue_metadata(
     build_inputs: CatalogueBuildInputs | None = None,
     native_table: NativeTable | None = None,
     metadata_fields: tuple[MetadataField, ...] | None = None,
+    station_metadata_notice: str | None = None,
     transformation_implementations: Mapping[str, tuple[str, str]] | None = None,
     source_descriptions: SourceDescriptions | None = None,
     source_config: ProviderConfig | None = None,
@@ -55,7 +56,9 @@ def build_catalogue_metadata(
     Historical provenance remains readable without these build-only inputs.
     ``transformation_implementations`` maps exact non-catalogue fact groups to
     declared code locations. It records operation responsibility without running
-    those observation operations. Missing inputs, unresolved responsibilities or
+    those observation operations. ``station_metadata_notice`` is retained verbatim
+    on the descriptor's station-metadata record set, separate from source terms.
+    Missing inputs, unresolved responsibilities or
     ambiguous station identity declarations raise ``FatalContractError`` before
     publication.
     """
@@ -126,7 +129,9 @@ def build_catalogue_metadata(
     buffer = BytesIO()
     claims.write_parquet(buffer, compression="zstd", statistics=True)
     metadata["series_claims.parquet"] = buffer.getvalue()
-    descriptor = build_catalogue_descriptor(evidence, origins, {**files, **metadata})
+    descriptor = build_catalogue_descriptor(
+        evidence, origins, {**files, **metadata}, station_metadata_notice=station_metadata_notice
+    )
     metadata["croissant.json"] = (json.dumps(descriptor, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     return metadata
 

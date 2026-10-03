@@ -23,6 +23,15 @@ from rivretrieve._internal.catalogues.station_metadata import MetadataField
 
 # Name mappings require genuine-input validation and owner disclosure approval
 # before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_NOTICE = (
+    "Station metadata from the U.S. Geological Survey (USGS), National Water Information System. "
+    "USGS-authored or produced data and information are in the U.S. public domain "
+    "(https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits); this statement "
+    "does not extend to third-party content. RivRetrieve selected the declared source fields and encoded "
+    "their values and absence states; source names remain unchanged. Processing and publication of this "
+    "projection: RivRetrieve."
+)
+
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "drain_area_va", "sq mi"),
     MetadataField("drainage_area", "contrib_drain_area_va"),
@@ -390,6 +399,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
     ("src/rivretrieve/_internal/assembly.py", "assemble"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/config.py", "config"),

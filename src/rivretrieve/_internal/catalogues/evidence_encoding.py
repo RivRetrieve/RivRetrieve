@@ -26,7 +26,7 @@ from rivretrieve._internal.catalogues.evidence import (
 def parse_catalogue_evidence(header: EvidenceHeader, table_bytes: Mapping[str, bytes]) -> CatalogueEvidence:
     """parse evidence : EvidenceHeader × EvidenceTableBytes → CatalogueEvidence (pure)."""
     # Reparse small declarations so unchecked model_copy updates cannot grant file authority.
-    header = EvidenceHeader.model_validate(header.model_dump(mode="python"))
+    header = EvidenceHeader.model_validate(header.model_dump(mode="json"))
     if set(table_bytes) != set(EVIDENCE_FILENAMES.values()):
         raise ValueError("exactly five fixed evidence file basenames required")
     frames = {}
@@ -47,11 +47,11 @@ def encode_catalogue_evidence(evidence: CatalogueEvidence) -> dict[str, bytes]:
     frames = {name: getattr(evidence, name) for name in EVIDENCE_SCHEMAS}
     files = encode_evidence_tables(frames)
     header = EvidenceHeader.model_validate(
-        {**evidence.header.model_dump(mode="python"), "files": evidence_file_identities(frames, files)}
+        {**evidence.header.model_dump(mode="json"), "files": evidence_file_identities(frames, files)}
     )
     # Validate the actual value before publishing, including caller-mutated frames.
     CatalogueEvidence(header=header, **frames)
-    return {"provenance.json": (header.model_dump_json(indent=2) + "\n").encode(), **files}
+    return {"provenance.json": (header.model_dump_json() + "\n").encode(), **files}
 
 
 def reconstruct_provenance(evidence: CatalogueEvidence) -> AcquisitionProvenance:

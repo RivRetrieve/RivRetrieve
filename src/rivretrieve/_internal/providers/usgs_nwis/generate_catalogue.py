@@ -975,7 +975,11 @@ def write_catalogue(
     """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+    from rivretrieve._internal.providers.usgs_nwis.origins import (
+        STATION_CATALOGUE_ORIGINS,
+        STATION_METADATA_FIELDS,
+        STATION_METADATA_NOTICE,
+    )
 
     if catalogue.modern_metadata is None:
         raise FatalContractError(
@@ -1011,6 +1015,7 @@ def write_catalogue(
         build_inputs=build_inputs,
         native_table=native_table,
         metadata_fields=STATION_METADATA_FIELDS,
+        station_metadata_notice=STATION_METADATA_NOTICE,
     )
     from rivretrieve._internal.catalogues.source_series import decode_source_descriptions, encode_source_descriptions
 
@@ -1031,7 +1036,12 @@ def write_catalogue(
     metadata.pop("croissant.json")
     metadata["croissant.json"] = (
         json.dumps(
-            build_catalogue_descriptor(evidence, (STATION_CATALOGUE_ORIGINS,), {**files, **metadata}),
+            build_catalogue_descriptor(
+                evidence,
+                (STATION_CATALOGUE_ORIGINS,),
+                {**files, **metadata},
+                station_metadata_notice=STATION_METADATA_NOTICE,
+            ),
             ensure_ascii=False,
             indent=2,
         )

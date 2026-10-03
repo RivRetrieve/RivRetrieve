@@ -38,6 +38,14 @@ from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordi
 
 # Name mappings require genuine-input validation and owner disclosure approval
 # before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_NOTICE = (
+    "Station metadata from Agência Nacional de Águas e Saneamento Básico (ANA). ANA states that its open "
+    "data are freely available for use without licence restrictions "
+    "(https://www.gov.br/ana/pt-br/acesso-a-informacao/dados-abertos). RivRetrieve selected the declared "
+    "source fields and encoded their values and absence states; source names remain unchanged. Processing "
+    "and publication of this projection: RivRetrieve."
+)
+
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "Area_Drenagem"),
     MetadataField("station_name", "Estacao_Nome"),
@@ -633,6 +641,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/br_ana/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/br_ana/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/br_ana/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/br_ana/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/br_ana/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/assembly.py", "assemble"),
     ("src/rivretrieve/_internal/providers/br_ana/config.py", "config"),

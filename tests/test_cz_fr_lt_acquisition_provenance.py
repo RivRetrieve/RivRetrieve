@@ -8,6 +8,7 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.acquisition_provenance import verify_provenance_recordings
 from rivretrieve._internal.issues import FatalContractError
+from tests._catalogue import catalogue_recording_paths
 from tests._provenance import legacy_provenance
 
 
@@ -118,18 +119,21 @@ def test_production_provenance_rejects_changed_recording(
             "cz_chmi",
             marks=pytest.mark.derived(
                 "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
+                *catalogue_recording_paths("cz_chmi"),
             ),
         ),
         pytest.param(
             "fr_hubeau",
             marks=pytest.mark.derived(
                 "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+                *catalogue_recording_paths("fr_hubeau"),
             ),
         ),
         pytest.param(
             "lt_lhmt",
             marks=pytest.mark.derived(
                 "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
+                *catalogue_recording_paths("lt_lhmt"),
             ),
         ),
     ],
@@ -139,11 +143,31 @@ def test_native_cli_invokes_shared_recording_verifier(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     provider_id: str,
+    catalogue_build_inputs_path,
 ) -> None:
     from importlib import import_module
 
     generator = import_module(f"rivretrieve._internal.providers.{provider_id}.generate_catalogue")
     native = retained_evidence_root / f"src/rivretrieve/_internal/providers/{provider_id}/catalogue/native.parquet"
+    origins = import_module(f"rivretrieve._internal.providers.{provider_id}.origins")
+    if provider_id == "fr_hubeau":
+        import lzma
+
+        from rivretrieve._internal.catalogues.native import read_native_table
+
+        capture = generator.NativeInventoryCapture.model_validate_json(
+            Path("maintenance/catalogue/fr_hubeau/inventory/native_capture.json").read_bytes()
+        )
+        availability = generator.decode_availability(
+            lzma.decompress(Path("maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz").read_bytes())
+        )
+        generated = generator.build_catalogue(
+            read_native_table(native), origins.FRANCE_ORIGIN_DECLARATIONS, availability, native_capture=capture
+        )
+        provenance = generated.acquisition_provenance
+    else:
+        provenance = origins.build_acquisition_provenance()
+    build_inputs_path = catalogue_build_inputs_path(provenance)
     calls: list[str] = []
 
     def record_call(provenance: object, repository_root: Path) -> None:
@@ -152,7 +176,16 @@ def test_native_cli_invokes_shared_recording_verifier(
         calls.append(provider_id)
 
     monkeypatch.setattr(generator, "verify_provenance_recordings", record_call)
-    args = ["--native", str(native), "--out", str(tmp_path), "--evidence-root", str(retained_evidence_root)]
+    args = [
+        "--build-inputs",
+        str(build_inputs_path),
+        "--native",
+        str(native),
+        "--out",
+        str(tmp_path),
+        "--evidence-root",
+        str(retained_evidence_root),
+    ]
     if provider_id == "fr_hubeau":
         args += [
             "--availability-ledger",
@@ -194,6 +227,11 @@ def test_native_cli_invokes_shared_recording_verifier(
 def test_native_cli_rejects_raw_byte_substitution(
     tmp_path: Path, provider_id: str, retained_evidence_root: Path
 ) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic selection reaches only the intended failing verification boundary.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
     from importlib import import_module
 
     generator = import_module(f"rivretrieve._internal.providers.{provider_id}.generate_catalogue")
@@ -203,6 +241,8 @@ def test_native_cli_rejects_raw_byte_substitution(
 
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
         args = [
+            "--build-inputs",
+            str(build_inputs_path),
             "--native",
             str(changed),
             "--out",

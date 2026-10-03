@@ -39,6 +39,11 @@ def test_canada_provenance_separates_geomet_from_hydat() -> None:
     "tests/test_data/ca_eccc_terms_licence.html",
 )
 def test_canada_terms_recordings_and_native_bytes_are_verified(retained_evidence_root: Path, tmp_path: Path) -> None:
+    from tests.test_catalogue_build_provenance import _build
+
+    # Synthetic selection reaches only the intended failing verification boundary.
+    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
+    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
     verify_provenance_recordings(build_acquisition_provenance(), retained_evidence_root)
     evidence = Path("tests/test_data/ca_eccc_terms_licence.html")
     target = tmp_path / evidence
@@ -54,7 +59,18 @@ def test_canada_terms_recordings_and_native_bytes_are_verified(retained_evidence
     )
     native.write_bytes(native.read_bytes() + b"x")
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
-        main(["--native", str(native), "--out", str(tmp_path / "out"), "--evidence-root", str(retained_evidence_root)])
+        main(
+            [
+                "--build-inputs",
+                str(build_inputs_path),
+                "--native",
+                str(native),
+                "--out",
+                str(tmp_path / "out"),
+                "--evidence-root",
+                str(retained_evidence_root),
+            ]
+        )
 
 
 def test_canada_canonical_carriers_are_rivretrieve_transformations() -> None:

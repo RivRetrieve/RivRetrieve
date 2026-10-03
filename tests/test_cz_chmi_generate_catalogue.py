@@ -30,6 +30,7 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.cz_chmi import generate_catalogue
+from tests._catalogue import catalogue_recording_paths
 
 FIXTURE_PATH = Path("tests/test_data/cz_chmi_metadata.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
@@ -720,11 +721,19 @@ def test_legacy_canonical_generation_apis_are_removed() -> None:
     "tests/test_data/cz_chmi_terms_licence.html",
     "tests/test_data/cz_meta2.json",
 )
-def test_native_cli_writes_five_artifacts_without_touching_native(retained_evidence_root, tmp_path: Path) -> None:
+@pytest.mark.recorded(*catalogue_recording_paths("cz_chmi"))
+def test_native_cli_writes_five_artifacts_without_touching_native(
+    retained_evidence_root, tmp_path: Path, catalogue_build_inputs_path
+) -> None:
+    from rivretrieve._internal.providers.cz_chmi.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     native_bytes = (retained_evidence_root / NATIVE_PATH).read_bytes()
 
     result = generate_catalogue.main(
         [
+            "--build-inputs",
+            str(build_inputs_path),
             "--native",
             str(retained_evidence_root / NATIVE_PATH),
             "--evidence-root",
@@ -751,6 +760,7 @@ def test_native_cli_writes_five_artifacts_without_touching_native(retained_evide
         "format.json",
         "source_series.json",
         "series_claims.parquet",
+        "station_metadata.parquet",
     }
 
 
@@ -759,11 +769,13 @@ def test_native_cli_writes_five_artifacts_without_touching_native(retained_evide
     "tests/test_data/cz_chmi_terms_licence.html",
     "tests/test_data/cz_meta2.json",
 )
+@pytest.mark.recorded(*catalogue_recording_paths("cz_chmi"))
 def test_native_build_is_network_free_and_byte_deterministic(
-    retained_evidence_root,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    retained_evidence_root, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, catalogue_build_inputs_path
 ) -> None:
+    from rivretrieve._internal.providers.cz_chmi.origins import build_acquisition_provenance
+
+    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     calls: list[str] = []
 
     def fail_network(*args: object, **kwargs: object) -> object:
@@ -775,6 +787,8 @@ def test_native_build_is_network_free_and_byte_deterministic(
 
     result = generate_catalogue.main(
         [
+            "--build-inputs",
+            str(build_inputs_path),
             "--native",
             str(retained_evidence_root / NATIVE_PATH),
             "--evidence-root",

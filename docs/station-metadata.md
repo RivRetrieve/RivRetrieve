@@ -92,3 +92,16 @@ see the [evidence guide](maintenance/evidence.md). Missing or invalid packaged
 metadata raises an error rather than becoming an absence row.
 
 See the [API reference](reference.md#metadata) for the function contract.
+
+## Data rights
+
+Packaged station metadata remains subject to the source provider's terms. RivRetrieve's
+MIT licence applies to its code. Follow the attribution and reuse conditions on the
+[provider pages](README.md#providers). Use `rr.describe(provider)` to read a packaged
+catalogue descriptor offline. Applied metadata notices appear in its `station_metadata`
+record set.
+
+- [LHMT's terms](providers/lt_lhmt.md#terms-and-citation) require source attribution and
+  apply CC BY-SA 4.0 unless stated otherwise. Adaptations must use the same licence.
+- [MLIT's terms](providers/jp_mlit.md#terms-and-citation) explain PDL1.0 and its exceptions,
+  citation with the consultation date, and notices for processing and the responsible party.

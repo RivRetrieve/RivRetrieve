@@ -21,6 +21,14 @@ from rivretrieve._internal.catalogues.station_metadata import MetadataField
 
 # Name mappings require genuine-input validation and owner disclosure approval
 # before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_NOTICE = (
+    "Station metadata from the Lithuanian Hydrometeorological Service (LHMT), distributed through the "
+    "Meteo.lt API (https://api.meteo.lt/). This RivRetrieve projection is distributed under Creative "
+    "Commons Attribution-ShareAlike 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). RivRetrieve "
+    "selected the declared source fields and encoded their values and absence states; source names remain "
+    "unchanged. Processing and publication of this projection: RivRetrieve."
+)
+
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("station_name", "name"),
     MetadataField("river_name", "waterBody"),
@@ -245,6 +253,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/lt_lhmt/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/conversion.py", "convert"),
     ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "TRANSFORMATION_IMPLEMENTATIONS"),

@@ -511,3 +511,19 @@ def _governing_support_locations(provenance):
                 paths[acquisition.acquisition_id] = (acquisition.material.filename,)
         return "fr_hubeau", paths, ("maintenance/catalogue/fr_hubeau/scripts/verify_governing_evidence.py", "main")
     return "", {}, ("", "")
+
+
+@pytest.fixture
+def catalogue_build_inputs_path(catalogue_build_inputs, tmp_path_factory):
+    """Write an adopted selection for the test's explicitly supplied provenance."""
+    directory = tmp_path_factory.mktemp("catalogue-build-inputs")
+    count = 0
+
+    def write(provenance):
+        nonlocal count
+        path = directory / f"{count}.json"
+        count += 1
+        path.write_text(catalogue_build_inputs(provenance).model_dump_json(), encoding="utf-8")
+        return path
+
+    return write

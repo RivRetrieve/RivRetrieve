@@ -166,8 +166,20 @@ def build_catalogue_descriptor(
     evidence: CatalogueEvidence,
     origins: Sequence[OriginDeclarations],
     files: Mapping[str, bytes],
+    *,
+    station_metadata_notice: str | None = None,
 ) -> dict[str, object]:
-    """Describe exact packaged bytes and their recorded historical inputs, without IO."""
+    """Describe exact packaged bytes and their recorded historical inputs, without IO.
+
+    An optional notice describes only the station-metadata record set. It leaves
+    the source's top-level licence and citation quotations unchanged.
+    """
+    if station_metadata_notice is not None and (
+        not isinstance(station_metadata_notice, str)
+        or not station_metadata_notice.strip()
+        or evidence.header.build_inputs is None
+    ):
+        raise FatalContractError("A station metadata notice requires nonblank text and a metadata product")
     expected_files = (*REQUIRED_ARTIFACT_FILES, "provenance.json", *EVIDENCE_FILENAMES.values())
     if "format.json" in files or "source_series.json" in files:
         expected_files += ("format.json", "source_series.json", "series_claims.parquet")
@@ -338,7 +350,10 @@ def build_catalogue_descriptor(
                     "extract": {"column": "name"},
                 }
             fields.append(field)
-        record_sets.append({"@id": "station_metadata", "@type": "cr:RecordSet", "field": fields})
+        metadata_record: dict[str, object] = {"@id": "station_metadata", "@type": "cr:RecordSet", "field": fields}
+        if station_metadata_notice is not None:
+            metadata_record["description"] = station_metadata_notice
+        record_sets.append(metadata_record)
     record_sets.extend(_evidence_record_sets())
     descriptor: dict[str, object] = {
         "@context": _context(),
@@ -401,6 +416,8 @@ def write_catalogue_descriptor(
     evidence: CatalogueEvidence,
     origins: Sequence[OriginDeclarations],
     files: Mapping[str, bytes],
+    *,
+    station_metadata_notice: str | None = None,
 ) -> None:
-    descriptor = build_catalogue_descriptor(evidence, origins, files)
+    descriptor = build_catalogue_descriptor(evidence, origins, files, station_metadata_notice=station_metadata_notice)
     destination.write_text(json.dumps(descriptor, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

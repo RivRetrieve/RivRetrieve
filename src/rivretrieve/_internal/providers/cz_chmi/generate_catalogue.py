@@ -270,6 +270,7 @@ def write_catalogue(
     from rivretrieve._internal.providers.cz_chmi.origins import (
         STATION_CATALOGUE_ORIGINS,
         STATION_METADATA_FIELDS,
+        STATION_METADATA_NOTICE,
         TRANSFORMATION_IMPLEMENTATIONS,
     )
 
@@ -293,6 +294,7 @@ def write_catalogue(
         build_inputs=build_inputs,
         native_table=native_table,
         metadata_fields=STATION_METADATA_FIELDS,
+        station_metadata_notice=STATION_METADATA_NOTICE,
         transformation_implementations=TRANSFORMATION_IMPLEMENTATIONS,
     )
     for name, content in metadata.items():

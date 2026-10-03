@@ -22,6 +22,13 @@ from rivretrieve._internal.catalogues.station_metadata import MetadataField
 
 # Name mappings require genuine-input validation and owner disclosure approval
 # before generated metadata can be packaged. Native presence is insufficient.
+STATION_METADATA_NOTICE = (
+    "Station metadata from Český hydrometeorologický ústav (ČHMÚ), used under Creative Commons "
+    "Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/). RivRetrieve selected the declared "
+    "source fields and encoded their values and absence states; source names remain unchanged. Processing "
+    "and publication of this projection: RivRetrieve."
+)
+
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "PLO_STA", "km²"),
     MetadataField("station_name", "STATION_NAME"),
@@ -266,6 +273,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/cz_chmi/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/cz_chmi/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/cz_chmi/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/cz_chmi/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/cz_chmi/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/conversion.py", "convert"),
     ("src/rivretrieve/_internal/providers/cz_chmi/origins.py", "TRANSFORMATION_IMPLEMENTATIONS"),
