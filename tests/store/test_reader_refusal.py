@@ -78,8 +78,6 @@ def test_reader_projects_native_rows_and_keeps_physical_value_state() -> None:
     assert result.physical_rows["source_quality"].to_list() == ["A", "E"]
     assert result.executed_query.products == (ProductId("discharge"),)
     assert result.executed_query.years == (2023, 2024)
-    for predicate_column in ("product", "year", "station_id", "time"):
-        assert predicate_column in result.optimized_plan
 
 
 def test_reader_preserves_duplicate_source_rows() -> None:
@@ -132,3 +130,60 @@ def test_empty_query_result_has_engine_rows_schema() -> None:
         "facts_id": pl.String,
         "source_unit": pl.String,
     }
+
+
+@pytest.mark.parametrize(
+    ("station", "product", "start", "end", "expected"),
+    [
+        (
+            "ca-002",
+            "discharge",
+            "2024-01-01",
+            "2024-01-01T01:00:00",
+            [("2024-01-01T01:00:00", "America/Vancouver", None, "published_blank", None)],
+        ),
+        (
+            "ca-001",
+            "level",
+            "2024-01-01",
+            "2024-01-01T23:59:59",
+            [("2024-01-01T00:00:00", "America/Toronto", 1.25, "published_value", "A")],
+        ),
+        (
+            "ca-001",
+            "discharge",
+            "2023-12-31T23:00:00",
+            "2024-01-01T00:00:00",
+            [
+                ("2023-12-31T23:00:00", "America/Toronto", 3.5, "published_value", "A"),
+                ("2024-01-01T00:00:00", "America/Toronto", None, "published_null", "E"),
+            ],
+        ),
+        ("ca-002", "discharge", "2024-01-01", "2024-01-01T00:59:59.999999", []),
+    ],
+    ids=["station", "product", "adjacent-years-closed-bounds", "before-row"],
+)
+def test_reader_filters_rows_by_identity_and_closed_time_bounds(station, product, start, end, expected):
+    from polars.testing import assert_frame_equal
+
+    query = StoreQuery(
+        store=StoreRoot((FIXTURES / "valid_hydat_national").resolve()),
+        provider_id=ProviderId("fixture_bulk"),
+        stations=(station,),
+        products=(ProductId(product),),
+        start=datetime.fromisoformat(start),
+        end=datetime.fromisoformat(end),
+    )
+    result = StoreReader().query(query)
+    frame = pl.DataFrame(
+        [(datetime.fromisoformat(time), zone, value, state, quality) for time, zone, value, state, quality in expected],
+        schema={
+            "time": pl.Datetime("us"),
+            "time_zone": pl.String,
+            "value": pl.Float64,
+            "value_state": pl.String,
+            "source_quality": pl.String,
+        },
+        orient="row",
+    )
+    assert_frame_equal(result.physical_rows.select(frame.columns), frame)

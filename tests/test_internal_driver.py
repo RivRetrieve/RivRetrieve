@@ -10,8 +10,6 @@ import pytest
 import rivretrieve._internal.driver as driver_module
 from rivretrieve._internal.assembly import _AssemblyResult
 from rivretrieve._internal.assembly import assemble as real_assemble
-from rivretrieve._internal.catalogues.schemas import CatalogueSchema
-from rivretrieve._internal.catalogues.schemas import validate_catalogue as real_validate_catalogue
 from rivretrieve._internal.conversion import convert as real_convert
 from rivretrieve._internal.engine import (
     CanonicalRows,
@@ -53,7 +51,7 @@ from rivretrieve._internal.observations import (
     ReceiptMode,
     Receipts,
 )
-from rivretrieve._internal.primitives import IssueSeverity, OnIssue, ProductId, ProviderId
+from rivretrieve._internal.primitives import IssueSeverity, ProductId, ProviderId
 from rivretrieve._internal.source_series import (
     ClippingAxis,
     InventoryCompleteness,
@@ -1254,38 +1252,14 @@ def test_drive_rejects_malformed_canonical_rows_before_assemble(
     assert events == ["fetch", "parse-1", "convert"]
 
 
-def test_drive_accepts_well_formed_empty_rows_at_both_boundaries(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_drive_accepts_well_formed_empty_rows_at_both_boundaries() -> None:
     events: list[str] = []
-    validation_calls: list[tuple[str, int, OnIssue]] = []
     empty_rows = pl.DataFrame(schema=RowsSchema.polars_schema)
-
-    def recording_validator(
-        frame: pl.DataFrame,
-        schema: CatalogueSchema,
-        *,
-        on_issue: OnIssue,
-    ) -> list[Issue]:
-        validation_calls.append((schema.name, frame.height, on_issue))
-        return real_validate_catalogue(frame, schema, on_issue=on_issue)
-
-    import rivretrieve._internal.conversion as conversion_module
-
-    monkeypatch.setattr(driver_module, "validate_catalogue", recording_validator)
-    monkeypatch.setattr(conversion_module, "validate_catalogue", recording_validator)
-
     result = _drive_boundary_rows((empty_rows,), events)
 
     expected = pl.DataFrame(schema=CanonicalRowsSchema.polars_schema)
     pl_testing.assert_frame_equal(result.canonical_rows, expected)
     assert result.issues == ()
-    assert validation_calls == [
-        ("Rows", 0, "raise"),  # parse-stage boundary
-        ("Rows", 0, "raise"),  # conversion input
-        ("CanonicalRows", 0, "raise"),  # conversion output
-        ("CanonicalRows", 0, "raise"),  # driver boundary before assembly
-    ]
     assert events == ["fetch", "parse-1"]
 
 

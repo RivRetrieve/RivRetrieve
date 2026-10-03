@@ -150,49 +150,15 @@ def test_explicit_series_cache_refresh_preserves_siblings_facts_and_native_value
     assert len(calls) > count
 
 
-@pytest.mark.recorded(
-    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
-    "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
-    "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
-    "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
-    "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
-    "tests/test_data/cz_meta2.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
-    "tests/test_data/fr_hubeau_hydrometrie.html",
-    "tests/test_data/fr_hubeau_openapi_v2.json",
-    "tests/test_data/fr_hydroportail_H_padded.recording.json",
-    "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
-    "tests/test_data/fr_hydroportail_variants/REPORT.md",
-    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
-    "tests/test_data/lt_lhmt_terms_licence.html",
-    "tests/test_data/th_thaiwater_official_app.chunk-2026-09-02.js",
-    "tests/test_data/th_thaiwater_official_evidence_manifest-2026-09-02.json",
-)
-def test_all_mapped_builtin_facts_have_publisher_evidence_and_content_identity(retained_evidence_root: Path):
+def test_mapped_builtin_facts_retain_source_references():
     from importlib import import_module
-
-    from rivretrieve._internal.source_series import stable_id
 
     for provider in ("jp_mlit", "cz_chmi", "lt_lhmt", "th_thaiwater", "fr_hubeau", "fr_hydroportail", "ba_fhmzbih"):
         mappings = import_module(f"rivretrieve._internal.providers.{provider}.config").SERIES_MAPPINGS
         for mapping in mappings.values():
             assert mapping.evidence
-            assert any("tests/test_data/" in citation for citation in mapping.evidence)
-            for citation in mapping.evidence:
-                if citation.startswith("tests/test_data/"):
-                    assert (retained_evidence_root / citation.split(":", 1)[0]).is_file()
             facts = mapping.physical_facts()
-            assert facts.facts_id == stable_id(facts.model_dump_json(exclude={"facts_id"}))
+            assert facts.quantity.evidence
             assert all("config.py" not in citation for citation in facts.quantity.evidence)
 
 

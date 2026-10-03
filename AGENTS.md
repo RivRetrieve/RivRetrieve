@@ -64,6 +64,9 @@ repositories, logs, caches, artifacts and distribution packages.
 
 ## Contributing tests
 
+Follow the [testing guide](docs/maintenance/testing.md): protect named promises,
+use justified expectations, and choose the simplest sufficient level.
+
 Before adding a test, check existing coverage and identify the distinct behavior or
 architectural rule it protects. Use focused tests for edge cases, and explain why expensive
 end-to-end combinations need separate coverage. Reuse expensive unchanged inputs only when

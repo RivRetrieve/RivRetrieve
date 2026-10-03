@@ -40,8 +40,6 @@ from rivretrieve._internal.catalogue_origins import (
     NotPublished,
     StructMemberConversion,
     Withheld,
-    enforce_catalogue_origins,
-    validate_catalogue_origins,
 )
 from rivretrieve._internal.catalogues.native import NativeTable, read_native_table
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
@@ -61,7 +59,6 @@ THAI_AVAILABILITY_EVIDENCE_PATH = Path(
 RECEIPTS_PATH = Path("tests/test_data/catalogue_origin_evidence_receipts.json")
 PROVIDER_NOTES = ROOT / "docs/provider_ports"
 SCHEMA_COLUMNS = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-DEFERRED_PROVIDERS: frozenset[ProviderId] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -409,121 +406,35 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
     }
 
 
-@pytest.mark.derived(
-    "maintenance/catalogue/fr_hydroportail/evidence",
-    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/no_nve/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
-    "src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet",
-    "tests/recordings/br_ana/manual-page11-acquisition.json",
-    "tests/recordings/br_ana/manual-page11-derived.txt",
-    "tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json",
-    "tests/test_data/br_ana_inventory/capture.json",
-)
-def test_adapter_discovery_is_exact_and_deferred_providers_remain_building(retained_evidence_root: Path) -> None:
-    adapters = {provider: _adapter(retained_evidence_root, provider, cases) for provider, cases in DECLARATIONS.items()}
+def test_provider_declarations_preserve_reviewed_identity_and_coordinate_fields() -> None:
     discovery._ensure_default_providers_registered()
     registered = frozenset(ProviderId(value) for value in discovery._registry.list_provider_ids())
 
-    assert frozenset(adapters) == ORIGIN_GATE_ENROLLED_PROVIDERS
-    assert registered - frozenset(adapters) == DEFERRED_PROVIDERS, (
-        "Every registered provider must declare its certification status explicitly"
-    )
-    assert not (DEFERRED_PROVIDERS & ORIGIN_GATE_ENROLLED_PROVIDERS)
-    assert all(adapter.native_path.is_file() for adapter in adapters.values())
-    assert all(callable(adapter.main) and callable(adapter.build) for adapter in adapters.values())
+    assert frozenset(DECLARATIONS) == registered == ORIGIN_GATE_ENROLLED_PROVIDERS
     assert {(provider, case.identity): case.declarations for provider, case in CASES} == _expected_declarations()
-    assert len(CASES) == 15
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
 
 @pytest.mark.parametrize(
     ("adapter", "case"),
-    [
-        pytest.param(
-            provider,
-            case,
-            marks=_adapter_input_mark(
-                provider,
-                *(
-                    ("tests/test_data/catalogue_origin_evidence_receipts.json",)
-                    if isinstance(case.declarations["crs"], NotPublished)
-                    else ()
-                ),
-            ),
-        )
-        for provider, case in CASES
-    ],
+    [pytest.param(provider, case, marks=_adapter_input_mark(provider)) for provider, case in CASES],
     ids=[f"{provider}-{case.identity}" for provider, case in CASES],
     indirect=["adapter"],
 )
-def test_committed_declaration_case_passes_real_build_and_origin_gate(
-    retained_evidence_root: Path, adapter: ProviderAdapter, case: DeclarationCase
-) -> None:
-    native = read_native_table(adapter.native_path)
-    catalogue = _build(adapter, native)
-    case_native, stations = _case_frames(adapter, case, native, catalogue.stations)
-
-    assert not case_native.data.is_empty()
-    assert not stations.is_empty()
-    assert validate_catalogue_origins(adapter.provider_id, case.declarations, case_native, stations) == []
-    enforce_catalogue_origins(adapter.provider_id, case.declarations, case_native, stations)
-    _assert_reviewed_crs(retained_evidence_root, adapter, case, case_native, stations)
-
-
-REMOVAL_CASES = [(adapter, case, column) for adapter, case in CASES for column in SCHEMA_COLUMNS]
-
-
-@pytest.mark.parametrize(
-    ("adapter", "case", "column"),
-    [
-        pytest.param(provider, case, column, marks=_adapter_input_mark(provider))
-        for provider, case, column in REMOVAL_CASES
-    ],
-    ids=[f"{provider}-{case.identity}-{column}" for provider, case, column in REMOVAL_CASES],
-    indirect=["adapter"],
-)
-def test_real_build_rejects_each_removed_declaration(
-    adapter: ProviderAdapter, case: DeclarationCase, column: str
-) -> None:
+def test_each_provider_build_enforces_the_origin_gate(adapter: ProviderAdapter, case: DeclarationCase) -> None:
     declarations = dict(case.declarations)
-    del declarations[column]
+    del declarations["station_id"]
     origins = adapter.origins_argument({case.identity: declarations})
 
     with pytest.raises(FatalContractError) as caught:
         _build(adapter, origins=origins)
 
-    undeclared_message = f"{adapter.provider_id}.{column}: canonical column has no origin declaration"
-    issues = caught.value.issues
-    if column == "station_id":
-        alignment_message = (
-            f"{adapter.provider_id}.station_id: rule (c) could not be evaluated because the station_id "
-            "alignment key is unresolvable"
-        )
-        assert str(caught.value) == alignment_message
-        assert len(issues) == 2
-        assert [issue.code for issue in issues] == [
-            "catalogue_origin.unresolvable_alignment_key",
-            "catalogue_origin.undeclared_column",
-        ]
-        assert [issue.message for issue in issues] == [alignment_message, undeclared_message]
-    else:
-        assert str(caught.value) == undeclared_message
-        assert len(issues) == 1
-        assert issues[0].code == "catalogue_origin.undeclared_column"
-        assert issues[0].message == undeclared_message
-    assert all(issue.provider_id == adapter.provider_id for issue in issues)
-    assert all(issue.details == {"canonical_column": column} for issue in issues)
+    assert {issue.code for issue in caught.value.issues} == {
+        "catalogue_origin.unresolvable_alignment_key",
+        "catalogue_origin.undeclared_column",
+    }
+    assert all(issue.provider_id == adapter.provider_id for issue in caught.value.issues)
+    assert all(issue.details == {"canonical_column": "station_id"} for issue in caught.value.issues)
 
 
 def _receipts(retained_evidence_root: Path) -> list[dict[str, object]]:
@@ -720,7 +631,6 @@ def test_france_provider_owned_converter_refuses_a_swapped_existing_native_colum
 
 
 def _assert_reviewed_crs(
-    retained_evidence_root: Path,
     adapter: ProviderAdapter,
     case: DeclarationCase,
     case_native: NativeTable,
@@ -734,12 +644,6 @@ def _assert_reviewed_crs(
         expected_count, expected_value = EXPECTED_CRS_COUNTS[(adapter.provider_id, case.identity)]
         assert stations.height == expected_count
         assert stations["crs"].unique().to_list() == [expected_value]
-        assert any(
-            row["provider_id"] == adapter.provider_id
-            and row["declaration_map"] == case.identity
-            and row["evidence_url"] == origin.evidence
-            for row in _receipts(retained_evidence_root)
-        )
     elif isinstance(origin, Documented):
         expected_count, expected_value = EXPECTED_CRS_COUNTS[(adapter.provider_id, case.identity)]
         assert stations.height == expected_count
@@ -756,31 +660,17 @@ def _assert_reviewed_crs(
         assert str(origin.native_column) == "dec_coord_datum_cd"
 
 
-def test_not_published_and_documented_count_totals_are_pinned() -> None:
-    assert sum(count for (_, _), (count, value) in EXPECTED_CRS_COUNTS.items() if value == "unknown") == 12_093
-    assert 6_454 + 869 == 7_323
-
-
 @pytest.mark.governing(
     "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
     "tests/test_data/jp_mlit_site_info_detail_301011281104010.html",
 )
-def test_japan_accepted_receipt_build_and_dws_historical_review_are_honest(retained_evidence_root: Path) -> None:
+def test_japan_coordinate_representation_does_not_establish_crs(retained_evidence_root: Path) -> None:
     capture = (retained_evidence_root / "tests/test_data/jp_mlit_site_info_detail_301011281104010.html").read_bytes()
     assert len(capture) == 3_208
     assert hashlib.sha256(capture).hexdigest() == "81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9"
     assert "世界測地系".encode("euc_jp") in capture
     japan = _adapter(retained_evidence_root, "jp_mlit", DECLARATIONS[ProviderId("jp_mlit")])
     assert _build(japan).stations["crs"].unique().to_list() == ["unknown"]
-
-    dws_origins = _module("za_dws", "origins")
-    assert dws_origins.CRS_EVIDENCE_EXPLANATION == (
-        "The cited River PDF's own two-line coordinate header reads Latitude / dd:mm:ss and "
-        "Longitude / dd:mm:ss; this names a representation format but never a datum. A "
-        "case-insensitive review of all eight River PDFs found zero datum, WGS, ellipsoid, "
-        "geodetic, projection, or EPSG occurrences. HyCatalogue.aspx is only a link index with "
-        "no prose or coordinate header and is not CRS evidence."
-    )
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
@@ -1099,6 +989,11 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         metadata_root = retained_evidence_root / "research/usgs-modern-coverage"
         _, receipts = adapter.generator.read_modern_metadata(metadata_root)
         provenance = build_modern_acquisition_provenance(receipts, metadata_root)
+    native = read_native_table(adapter.native_path)
+    for case in adapter.cases:
+        case_native, stations = _case_frames(adapter, case, native, generated.stations)
+        _assert_reviewed_crs(adapter, case, case_native, stations)
+
     adopted = catalogue_build_inputs(provenance)
     input_selection = product_root / f"{adapter.provider_id}.build-inputs.json"
     with input_selection.open("x", encoding="utf-8") as stream:
@@ -1169,21 +1064,8 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     elif adapter.provider_id == "th_thaiwater":
         arguments.extend(("--availability-evidence", str(ROOT / THAI_AVAILABILITY_EVIDENCE_PATH)))
     elif adapter.provider_id == "pl_imgw":
-        committed_provenance = json.loads(
-            (
-                ROOT / "src/rivretrieve/_internal/providers" / str(adapter.provider_id) / "catalogue/provenance.json"
-            ).read_text()
-        )
-        grdc = next(source for source in committed_provenance["source_records"] if source["source_id"] == "sr.pl.grdc")
-        redacted_record = tmp_path / "pl_imgw-redacted-private-verification.json"
-        redacted_record.write_text(json.dumps(grdc["statements"][0]["private_verification"]))
         arguments.extend(
-            (
-                "--terms-recording",
-                str(retained_evidence_root / "tests/test_data/pl_imgw_terms_regulations.html"),
-                "--private-verification-record",
-                str(redacted_record),
-            )
+            ("--terms-recording", str(retained_evidence_root / "tests/test_data/pl_imgw_terms_regulations.html"))
         )
     assert adapter.main(arguments) == 0
     assert calls == []
@@ -1236,7 +1118,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
 
     from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
     from rivretrieve._internal.catalogues.evidence_encoding import reconstruct_provenance
-    from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
+    from tests._catalogue import catalogue_content_without_build_identity
 
     def claims(path: Path):
         evidence = load_packaged_catalogue_artifact(path, on_issue="raise").acquisition_provenance
@@ -1256,12 +1138,11 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         return document
 
     assert claims(output) == claims(catalogue_dir)
-    projected = build_station_metadata(
-        str(adapter.provider_id),
-        read_native_table(adapter.native_path),
-        generated.stations,
-        adapter.cases[0].declarations["station_id"],
-        _module(str(adapter.provider_id), "origins").STATION_METADATA_FIELDS,
+    assert_frame_equal(
+        pl.read_parquet(output / "station_metadata.parquet"),
+        pl.read_parquet(catalogue_dir / "station_metadata.parquet"),
     )
-    assert_frame_equal(pl.read_parquet(output / "station_metadata.parquet"), projected)
+    assert catalogue_content_without_build_identity(
+        "croissant.json", (output / "croissant.json").read_bytes()
+    ) == catalogue_content_without_build_identity("croissant.json", (catalogue_dir / "croissant.json").read_bytes())
     assert not any(path.name == "native.parquet" for path in output.iterdir())

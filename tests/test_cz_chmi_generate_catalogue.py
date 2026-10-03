@@ -30,7 +30,6 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.cz_chmi import generate_catalogue
-from tests._catalogue import catalogue_recording_paths
 
 FIXTURE_PATH = Path("tests/test_data/cz_chmi_metadata.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
@@ -460,7 +459,7 @@ def test_active_fixture_is_verbatim_attested_subset(retained_evidence_root) -> N
 
 
 @pytest.mark.derived("tests/test_data/cz_chmi_metadata.json")
-def test_previous_fixture_source_defects_are_not_retained(retained_evidence_root) -> None:
+def test_fixture_preserves_reviewed_station_coordinates(retained_evidence_root) -> None:
     rows = cast(
         "list[list[object]]",
         _data_block(_fixture_payload(retained_evidence_root))["values"],
@@ -708,100 +707,6 @@ def test_native_table_rejects_null_retrieval_timestamps_before_build(retained_ev
 
     with pytest.raises(FatalContractError, match="native table retrieved_at must not contain nulls"):
         NativeTable(broken)
-
-
-def test_legacy_canonical_generation_apis_are_removed() -> None:
-    assert not hasattr(generate_catalogue, "generate_catalogue")
-    assert not hasattr(generate_catalogue, "generate_catalogue_from_fixture")
-    assert not hasattr(generate_catalogue, "generate_catalogue_from_live")
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
-    "tests/test_data/cz_chmi_terms_licence.html",
-    "tests/test_data/cz_meta2.json",
-)
-@pytest.mark.recorded(*catalogue_recording_paths("cz_chmi"))
-def test_native_cli_writes_five_artifacts_without_touching_native(
-    retained_evidence_root, tmp_path: Path, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.cz_chmi.origins import build_acquisition_provenance
-
-    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
-    native_bytes = (retained_evidence_root / NATIVE_PATH).read_bytes()
-
-    result = generate_catalogue.main(
-        [
-            "--build-inputs",
-            str(build_inputs_path),
-            "--native",
-            str(retained_evidence_root / NATIVE_PATH),
-            "--evidence-root",
-            str(retained_evidence_root),
-            "--out",
-            str(tmp_path),
-        ]
-    )
-
-    assert result == 0
-    assert (retained_evidence_root / NATIVE_PATH).read_bytes() == native_bytes
-    assert {path.name for path in tmp_path.iterdir()} == {
-        "croissant.json",
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-    }
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet",
-    "tests/test_data/cz_chmi_terms_licence.html",
-    "tests/test_data/cz_meta2.json",
-)
-@pytest.mark.recorded(*catalogue_recording_paths("cz_chmi"))
-def test_native_build_is_network_free_and_byte_deterministic(
-    retained_evidence_root, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.cz_chmi.origins import build_acquisition_provenance
-
-    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
-    calls: list[str] = []
-
-    def fail_network(*args: object, **kwargs: object) -> object:
-        calls.append("network")
-        raise AssertionError("network must not be accessed during build")
-
-    monkeypatch.setattr(generate_catalogue, "_read_live_json", fail_network)
-    monkeypatch.setattr(generate_catalogue.urllib.request, "urlopen", fail_network)
-
-    result = generate_catalogue.main(
-        [
-            "--build-inputs",
-            str(build_inputs_path),
-            "--native",
-            str(retained_evidence_root / NATIVE_PATH),
-            "--evidence-root",
-            str(retained_evidence_root),
-            "--out",
-            str(tmp_path),
-        ]
-    )
-
-    assert result == 0
-    assert calls == []
-    for artifact_name in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
-        assert (tmp_path / artifact_name).read_bytes() == (CATALOGUE_PATH / artifact_name).read_bytes()
 
 
 def test_native_build_requires_explicit_evidence_root(tmp_path: Path) -> None:

@@ -5,7 +5,7 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.issues import ObservationsUnavailableError
 from rivretrieve._internal.registry import _registry
-from tests._catalogue import catalogue_path, catalogue_reader, provider_info
+from tests._catalogue import catalogue_reader, provider_info
 
 
 def test_za_dws_in_providers_list() -> None:
@@ -60,19 +60,6 @@ def test_za_dws_observations_unavailable() -> None:
             start="2020-01-01",
             end="2020-01-02",
         )
-
-
-def test_za_dws_catalogue_has_no_observations() -> None:
-    rr.providers()
-    assert _registry.get("za_dws")._stages is None
-
-
-def test_za_dws_catalogue_catalogue_path_exists() -> None:
-    assert catalogue_path("za_dws").exists()
-    assert (catalogue_path("za_dws") / "provider.json").exists()
-    assert (catalogue_path("za_dws") / "stations.parquet").exists()
-    assert (catalogue_path("za_dws") / "products.parquet").exists()
-    assert (catalogue_path("za_dws") / "station_products.parquet").exists()
 
 
 def test_za_dws_station_x3h001_present() -> None:

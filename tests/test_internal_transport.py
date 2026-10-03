@@ -179,7 +179,7 @@ def test_retryable_sender_failure_is_retried_then_succeeds(failure: Exception) -
     assert response.status_code == 200
 
 
-@pytest.mark.parametrize("status_code", sorted(TRANSPORT_POLICY.retryable_status_codes))
+@pytest.mark.parametrize("status_code", [408, 429, 500, 502, 503, 504])
 def test_retryable_http_status_is_retried_then_succeeds(status_code: int) -> None:
     client, sender, _, _ = make_client([(b"transient", status_code, "text/plain"), (b"ok", 200, "text/plain")])
 

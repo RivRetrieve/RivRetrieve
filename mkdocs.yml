@@ -116,6 +116,7 @@ nav:
       - Product Dictionary: product_dictionary.md
       - Catalogue Evidence: catalogue-evidence.md
       - Verification Evidence: maintenance/evidence.md
+      - Choosing Tests: maintenance/testing.md
       - Catalogue Absence: catalogue-absence.md
       - Catalogue Provenance: catalogue-provenance.md
       - Observation Store Layout: design/observation-store-layout.md

@@ -623,6 +623,8 @@ def _verified_supplied_captures(
             ("origin_url", "manifest-origin-url"),
             ("wayback_timestamp", "manifest-wayback-timestamp"),
             ("http_status", "manifest-http-status"),
+            ("bytes", "manifest-byte-count"),
+            ("sha256", "manifest-sha256"),
         )
         for field, token in checks:
             if entry[field] != expected[field]:

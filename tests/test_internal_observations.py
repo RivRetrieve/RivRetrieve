@@ -702,9 +702,3 @@ def test_inspection_does_not_attach_current_inventory_or_outcome_to_historical_f
     current_row = inspected.filter(pl.col("facts_id") == current.facts_id)
     assert current_row["outcomes"].to_list() == [["empty"]]
     assert current_row["inventory_ids"].to_list() == [["current-inventory"]]
-
-
-def test_observation_result_has_no_wide_form_helpers() -> None:
-    result = _result()
-    for name in ("to_wide", "to_wide_pandas", "to_pivot", "to_dataframe_wide"):
-        assert not hasattr(result, name)

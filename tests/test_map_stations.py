@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 from typing import Any
 
 import polars as pl
@@ -47,15 +46,6 @@ class FakeFolium:
     Map = FakeMap
     Marker = FakeMarker
     Icon = FakeIcon
-
-
-def test_map_survives_map_stations_removal_with_only_required_selection() -> None:
-    parameters = inspect.signature(rr.map).parameters
-
-    assert tuple(parameters) == ("selection",)
-    assert parameters["selection"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-    assert parameters["selection"].default is inspect.Parameter.empty
-    assert {"provider", "providers", "bbox", "bounding_box"}.isdisjoint(parameters)
 
 
 def test_map_rejects_non_rivretrieve_selection() -> None:

@@ -76,29 +76,6 @@ def test_station_own_discharge_fetch_replays_exact_non_sample_station(retained_e
     assert frame["station_id"].unique().to_list() == ["1232000101"]
 
 
-@pytest.mark.recorded("tests/test_data/fr_hydroportail_station_Q_padded.recording.json")
-def test_station_own_discharge_parser_does_not_require_the_old_sample_site(retained_evidence_root):
-    recording = read_recording(retained_evidence_root / DATA / "fr_hydroportail_station_Q_padded.recording.json")
-    assert recording.content_type is not None
-    payload = Payload(
-        config().products[PRODUCT].coordinates,
-        (("1232000101", PRODUCT),),
-        _window("2026-05-30", "2026-06-04T23:59:59"),
-        recording.content,
-        SourceCallOrigin(
-            recording.request.url,
-            dict(recording.request.parameters or {}),
-            recording.status_code,
-            recording.retrieved_at,
-            recording.content_type,
-            UnknownOriginFact(),
-            UnknownOriginFact(),
-        ),
-        recording.prerequisite_calls,
-    )
-    assert not parse(payload, config()).rows.is_empty()
-
-
 @pytest.mark.recorded(
     "tests/test_data/fr_hydroportail_J783301020_empty.body",
     "tests/test_data/fr_hydroportail_J783301020_empty.receipt.json",

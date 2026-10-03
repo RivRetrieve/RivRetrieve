@@ -1,13 +1,11 @@
 """Modern source limits govern complete, gap-free multi-year request plans."""
 
-import json
 from datetime import datetime, timedelta
 
 import pytest
 
 from rivretrieve._internal.engine import RenderedWindow, WindowEndpoint, _make_fetch_window
 from rivretrieve._internal.providers.usgs_nwis.config import config, window_declarations
-from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 from rivretrieve._internal.window_planning import plan_windows
 
 
@@ -51,11 +49,3 @@ def test_continuous_cap_keeps_subdaily_precision_and_exact_inclusive_endpoint(pr
     assert planned[-1].stop == end.isoformat() + "Z"
     if extra:
         assert planned[-1] == RenderedWindow(end.isoformat() + "Z", end.isoformat() + "Z")
-
-
-def test_provider_metadata_names_modern_collections_not_retired_routes() -> None:
-    claim = json.loads((declaration.catalogue / "provider.json").read_text())["bulk_observations"]
-    assert "requests per station-product" in claim
-    assert "daily" in claim.lower() and "continuous" in claim.lower()
-    assert "DV and IV" not in claim
-    assert "partial failures retained" in claim

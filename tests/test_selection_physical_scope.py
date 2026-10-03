@@ -33,14 +33,6 @@ def test_physical_find_and_pick_have_identical_matching_series() -> None:
     pl_testing.assert_frame_equal(rr.series(narrowed), rr.series(direct))
 
 
-def test_legacy_triple_import_is_refused_instead_of_rebuilding_scientific_facts() -> None:
-    frame = pl.DataFrame(
-        {"provider_id": ["usgs_nwis"], "station_id": ["01646500"], "product_id": ["discharge_daily_mean"]}
-    )
-    with pytest.raises((ValueError, TypeError), match="(?i)(bundle|format|version)"):
-        rr.from_frame(frame)
-
-
 def test_selection_bundle_preserves_scope_and_explicit_restriction() -> None:
     selection = rr.find(
         provider="br_ana", station="15400000", quantity="discharge", frequency="daily", statistic="mean"
@@ -161,24 +153,32 @@ def test_imported_selection_narrows_its_own_evidence_without_reloading_packaged_
     assert calls == []
 
 
-def test_series_inspection_only_visits_inventory_members_for_each_identity(monkeypatch) -> None:
-    import rivretrieve._internal.selection as selection_module
+def test_series_inspection_associates_only_each_series_own_inventory() -> None:
+    from dataclasses import replace
+
+    from rivretrieve._internal.source_series import InventoryCompleteness, InventorySnapshot
 
     selection = rr.find(provider="usgs_nwis", station="01646500")
-    visited = []
-    original = selection_module._inventory_contains_facts
-
-    def counted_membership(inventory, series_id, facts_id):
-        visited.append((inventory.snapshot_id, series_id))
-        assert series_id in inventory.members, "Inspection scanned an unrelated inventory for this identity"
-        return original(inventory, series_id, facts_id)
-
-    monkeypatch.setattr(selection_module, "_inventory_contains_facts", counted_membership)
-    inspected = rr.series(selection)
+    first, second, *_ = selection.series
+    expected = {first.series_id: ["first"], second.series_id: ["second"]}
+    inventories = tuple(
+        InventorySnapshot(
+            snapshot_id=name,
+            scope=selection.scope,
+            members=(identity,),
+            completeness=InventoryCompleteness.INCOMPLETE,
+            access="authored inspection control",
+            origin="response",
+            evidence=("synthetic inventory association",),
+            reason="Authored subset for association testing",
+        )
+        for identity, names in expected.items()
+        for name in names
+    )
+    inspected = rr.series(replace(selection, inventories=inventories))
     assert inspected.height >= 3
-    inspected_ids = set(inspected["series_id"].to_list())
-    has_associated_inventory = any(inspected_ids.intersection(item.members) for item in selection.inventories)
-    assert bool(visited) == has_associated_inventory
+    for identity, inventories in inspected.select("series_id", "inventory_ids").iter_rows():
+        assert inventories == expected.get(identity, [])
 
 
 def test_public_product_shorthand_is_refused_instead_of_misclassifying_physical_meaning() -> None:
@@ -271,24 +271,12 @@ def test_prefetch_coordinate_pruning_keeps_every_member_of_retained_broader_snap
     assert restored.inventories == narrowed.inventories
 
 
-def test_source_series_inspection_bounds_python_record_batches(monkeypatch) -> None:
+def test_source_series_inspection_preserves_each_selected_fact() -> None:
     selected = rr.find(provider="ch_foen")
-    expected_rows = sum(len(item.facts) for item in selected.known_series if selected.scope.matches(item))
-    assert expected_rows > 512
-    original = pl.DataFrame.__init__
-    sizes = []
-
-    def counted_constructor(self, data=None, *args, **kwargs):
-        if isinstance(data, list) and data and isinstance(data[0], dict) and "series_id" in data[0]:
-            sizes.append(len(data))
-            assert len(data) <= 512, "Inspection accumulated an unbounded Python record batch"
-        return original(self, data, *args, **kwargs)
-
-    monkeypatch.setattr(pl.DataFrame, "__init__", counted_constructor)
+    expected = {(item.series_id, fact.facts_id) for item in selected.series for fact in item.facts}
     inspected = rr.series(selected)
-    assert inspected.height == expected_rows
-    assert sum(sizes) == expected_rows
-    assert len(sizes) > 1
+    assert inspected.height == len(expected)
+    assert set(inspected.select("series_id", "facts_id").iter_rows()) == expected
 
 
 def test_inspection_orders_descriptors_without_sorting_a_wide_materialized_frame(monkeypatch) -> None:

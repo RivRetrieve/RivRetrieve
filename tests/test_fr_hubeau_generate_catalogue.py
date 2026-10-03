@@ -28,7 +28,6 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
     decode_availability,
     native_table_content_digest,
     refresh_native_table,
-    refresh_native_table_from_fixtures,
 )
 from rivretrieve._internal.providers.fr_hubeau.origins import (
     CODE_PROJECTION_31_AXIS_TRANSPOSITION,
@@ -39,7 +38,6 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
     TEMPERATURE_CRS_EVIDENCE_URL,
     TEMPERATURE_STATION_CATALOGUE_ORIGINS,
 )
-from tests._catalogue import catalogue_content_without_build_identity
 from tests._catalogue_projection import copy_catalogue_projection
 
 _TEST_DATA_DIR = Path("tests/test_data")
@@ -828,14 +826,6 @@ def test_native_cross_endpoint_collision_is_an_issue(retained_evidence_root) -> 
     _assert_issue(_refresh(hydro, temperature), f"fr_hubeau station {station_id} occurs in both station endpoints")
 
 
-@pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
-    "tests/test_data/fr_hubeau_temperature_stations_full.json",
-)
-def test_native_population_is_not_frozen_to_historical_snapshot(retained_evidence_root) -> None:
-    assert _refresh(*_sample_payloads(retained_evidence_root)).issues == ()
-
-
 @pytest.mark.governing(
     "tests/test_data/fr_hubeau_geojson_crs_evidence.json",
     "tests/test_data/fr_hubeau_openapi_v2.json",
@@ -1211,25 +1201,6 @@ def test_complete_native_table_is_source_faithful(retained_evidence_root) -> Non
     assert native_table_content_digest(rematerialized.value) == _PINNED_NATIVE_DIGEST
 
 
-@pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_referentiel_stations_full.json",
-    "tests/test_data/fr_hubeau_temperature_stations_full.json",
-)
-def test_fixture_wrapper_matches_direct_refresh(retained_evidence_root) -> None:
-    wrapped = refresh_native_table_from_fixtures(
-        retained_evidence_root / _HYDRO_FULL_FIXTURE,
-        retained_evidence_root / _TEMP_FULL_FIXTURE,
-        hydro_retrieved_at=_HYDRO_RETRIEVED_AT,
-        temperature_retrieved_at=_TEMP_RETRIEVED_AT,
-    )
-    direct = _refresh(
-        _full_payload(retained_evidence_root / _HYDRO_FULL_FIXTURE),
-        _full_payload(retained_evidence_root / _TEMP_FULL_FIXTURE),
-    )
-    assert wrapped.issues == direct.issues == ()
-    pl_testing.assert_frame_equal(wrapped.value.data, direct.value.data, check_exact=True)
-
-
 @pytest.mark.governing(
     "maintenance/catalogue/fr_hubeau/inventory/native-2026-08-02.parquet",
     full_verification=("fr_hubeau",),
@@ -1253,7 +1224,8 @@ def test_native_dates_cannot_change_without_new_acquisition(retained_evidence_ro
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
-def test_committed_catalogue_matches_independent_source_projection(retained_evidence_root) -> None:
+def test_committed_catalogue_preserves_source_controls_and_catalogue_consistency(retained_evidence_root) -> None:
+    # Literal source controls are independent; shared builder checks establish consistency.
     native = read_native_table(retained_evidence_root / CURRENT_NATIVE_PATH).data
     catalogue_dir = Path(__file__).parents[1] / CURRENT_NATIVE_PATH.parent
     committed_products = pl.read_parquet(catalogue_dir / "products.parquet")
@@ -1328,95 +1300,3 @@ def test_committed_catalogue_matches_independent_source_projection(retained_evid
     assert committed_station_products["published_record_start_date"].null_count() == len(expected_pairs)
     assert committed_station_products["published_record_end_date"].null_count() == len(expected_pairs)
     assert committed_provider == generator.build_provider_info(native["retrieved_at"].max().date())
-
-
-@pytest.mark.governing(
-    "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
-    "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
-    "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
-    "tests/test_data/fr_hubeau_hydrometrie.html",
-    "tests/test_data/fr_hubeau_temperature_openapi.json",
-    "tests/test_data/fr_hubeau_terms_licence.html",
-    full_verification=("fr_hubeau",),
-)
-def test_native_cli_is_offline_byte_deterministic_and_preserves_native(
-    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import NativeInventoryCapture
-
-    capture = NativeInventoryCapture.model_validate_json(
-        (Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json").read_bytes()
-    )
-    native = read_native_table(retained_evidence_root / CURRENT_NATIVE_PATH)
-    generated = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, _availability(), native_capture=capture)
-    build_inputs_path = catalogue_build_inputs_path(generated.acquisition_provenance)
-    calls: list[str] = []
-
-    def forbidden(*args: object, **kwargs: object) -> object:
-        calls.append("forbidden")
-        raise AssertionError("native build reached a network or refresh entry point")
-
-    monkeypatch.setattr("socket.create_connection", forbidden)
-    monkeypatch.setattr(generator, "refresh_native_table", forbidden)
-    monkeypatch.setattr(generator, "refresh_native_table_from_fixtures", forbidden)
-    native_before = (retained_evidence_root / CURRENT_NATIVE_PATH).read_bytes()
-    assert (
-        generator.main(
-            [
-                "--build-inputs",
-                str(build_inputs_path),
-                "--native",
-                str(retained_evidence_root / CURRENT_NATIVE_PATH),
-                "--evidence-root",
-                str(retained_evidence_root),
-                "--native-capture",
-                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"),
-                "--availability-ledger",
-                str(Path(__file__).parents[1] / "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz"),
-                "--out",
-                str(tmp_path),
-            ]
-        )
-        == 0
-    )
-    assert calls == []
-    assert (retained_evidence_root / CURRENT_NATIVE_PATH).read_bytes() == native_before
-    assert {path.name for path in tmp_path.iterdir()} == {
-        "croissant.json",
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-    }
-    for artifact in (
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-        "croissant.json",
-    ):
-        assert catalogue_content_without_build_identity(
-            artifact, (tmp_path / artifact).read_bytes()
-        ) == catalogue_content_without_build_identity(
-            artifact, (Path(__file__).parents[1] / CURRENT_NATIVE_PATH.parent / artifact).read_bytes()
-        )

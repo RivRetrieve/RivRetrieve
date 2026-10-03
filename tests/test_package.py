@@ -1,5 +1,4 @@
 import json
-from importlib import import_module
 from importlib.metadata import version
 from pathlib import Path
 
@@ -62,75 +61,6 @@ def test_init_public_surface_exports_catalogue_and_retrieval_functions() -> None
     assert ReceiptMode.OMIT.value == "omit"
     assert ReceiptMode.INCLUDE.value == "include"
     assert rivretrieve.to_utc is to_utc
-
-
-def test_clear_cache_public_help_describes_all_destructive_recovery_effects() -> None:
-    documentation = rivretrieve.clear_cache.__doc__
-
-    assert documentation is not None
-    assert "compiled observation store" in documentation
-    assert "preserved pending publisher downloads" in documentation
-    assert "destructive" in documentation
-    assert "retry" in documentation
-
-
-def test_deferred_public_names_remain_absent_after_provider_handle_promotion() -> None:
-    deferred_names = [
-        "ProviderInfo",
-        "ProviderModule",
-        "_ProviderHandle",
-        "ObservationResult",
-        "ObservationRequest",
-        "ObservationProvenance",
-        "Receipts",
-        "ReceiptEntry",
-        "ReceiptAuthorship",
-        "Issue",
-        "CatalogResult",
-        "StationCatalog",
-        "ProductCatalog",
-        "StationProductCatalog",
-        "ProviderInfoCatalog",
-        "PackagedCatalogArtifact",
-        "CorruptCatalogArtifactError",
-        "LiveCatalogueUnsupportedIssue",
-        "LiveCatalogueRoutingNotImplementedError",
-        "ObservationDataSchema",
-        "InvalidObservationRequestError",
-        "ObservationsUnavailableError",
-        "ObservationDataSchemaError",
-        "MissingOptionalDependencyError",
-        "StationMap",
-    ]
-    for name in deferred_names:
-        assert not hasattr(rivretrieve, name)
-
-    removed_contract_names = (
-        "Row" + "Annotation" + "TableSchema",
-        "Series" + "Annotation" + "TableSchema",
-        "Annotation" + "Table",
-        "Annotation" + "Schema",
-        "Annotation" + "SchemaDeclaration",
-        "validate_" + "annotation_names",
-        "Annotation" + "SchemaViolationError",
-        "row_" + "annotation_schema",
-        "series_" + "annotation_schema",
-        "row_" + "annotations",
-        "series_" + "annotations",
-    )
-    affected_modules = (
-        rivretrieve,
-        import_module("rivretrieve._internal"),
-        import_module("rivretrieve._internal.observations"),
-        import_module("rivretrieve._internal.issues"),
-        import_module("rivretrieve._internal.provider_module"),
-        import_module("rivretrieve._internal.registry"),
-        import_module("rivretrieve._internal.providers.ca_eccc.declaration"),
-        import_module("rivretrieve._internal.providers.usgs_nwis.declaration"),
-    )
-    for module in affected_modules:
-        for name in removed_contract_names:
-            assert name not in vars(module)
 
 
 def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:

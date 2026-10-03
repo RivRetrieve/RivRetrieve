@@ -14,6 +14,10 @@ from rivretrieve._internal.catalogues.evidence import (
     EVIDENCE_SCHEMAS,
     CatalogueEvidence,
     EvidenceHeader,
+    IssuingSource,
+    TransformationDeclaration,
+    encode_evidence_tables,
+    evidence_file_identities,
     normalize_provenance,
     validate_catalogue_locators,
 )
@@ -49,6 +53,76 @@ def _normalized(provider):
     )
 
 
+def _small_evidence():
+    rows = {
+        "facts": [
+            (0, "source.observation.synthetic_value", None, None, None, None),
+            (1, "observation.synthetic_value", None, None, None, None),
+        ],
+        "acquisitions": [
+            (
+                0,
+                0,
+                0,
+                "authored-request",
+                "http_request",
+                "retrieval",
+                0,
+                ["https://example.org/observations"],
+                "2026-01-01T00:00:00+00:00",
+                None,
+                [],
+                "authored.bin",
+                "a" * 64,
+                1,
+            ),
+        ],
+        "bindings": [
+            (0, "source-value", 0, 0, None),
+            (1, "projected-value", None, None, 0),
+        ],
+        "binding_facts": [(0, 0, 0), (1, 0, 1)],
+        "external_inputs": [(1, 0, 0, 0)],
+    }
+    frames = {name: pl.DataFrame(value, schema=EVIDENCE_SCHEMAS[name], orient="row") for name, value in rows.items()}
+    table_bytes = encode_evidence_tables(frames)
+    header = EvidenceHeader(
+        schema_version=3,
+        provider_id="synthetic",
+        source_records=(IssuingSource(source_id="authored", issuer="Authored test source"),),
+        descriptions=("Authored acquisition for model validation",),
+        transformations=(TransformationDeclaration(name="Authored projection", kind="derived_value"),),
+        files=evidence_file_identities(frames, table_bytes),
+    )
+    return CatalogueEvidence(header=header, **frames)
+
+
+def test_small_evidence_has_explicit_ordered_relations():
+    evidence = _small_evidence()  # full relation validation occurs here
+    encoded = encode_catalogue_evidence(evidence)
+    header = EvidenceHeader.model_validate_json(encoded.pop("provenance.json"))
+    parsed = parse_catalogue_evidence(header, encoded)
+    assert parsed.header.provider_id == "synthetic"
+    assert parsed.facts["name"].to_list() == [
+        "source.observation.synthetic_value",
+        "observation.synthetic_value",
+    ]
+    plt.assert_frame_equal(
+        parsed.bindings,
+        pl.DataFrame(
+            [(0, "source-value", 0, 0, None), (1, "projected-value", None, None, 0)],
+            schema=EVIDENCE_SCHEMAS["bindings"],
+            orient="row",
+        ),
+    )
+    plt.assert_frame_equal(
+        parsed.external_inputs,
+        pl.DataFrame([(1, 0, 0, 0)], schema=EVIDENCE_SCHEMAS["external_inputs"], orient="row"),
+    )
+    for name in EVIDENCE_SCHEMAS:
+        plt.assert_frame_equal(getattr(parsed, name), getattr(evidence, name))
+
+
 @pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
 def test_complete_ordered_provenance_roundtrip(provider):
     old = _legacy(provider)
@@ -70,13 +144,13 @@ def test_complete_ordered_provenance_roundtrip(provider):
 
 
 def test_column_json_roundtrip_and_python_values():
-    evidence = _normalized("pl_imgw")
+    evidence = _small_evidence()
     parsed = CatalogueEvidence.model_validate_json(evidence.model_dump_json())
     assert parsed.header == evidence.header
     assert isinstance(evidence.model_dump()["facts"], pl.DataFrame)
     for name in EVIDENCE_SCHEMAS:
         plt.assert_frame_equal(getattr(parsed, name), getattr(evidence, name))
-    assert "source.station" not in repr(evidence)
+    assert "source.observation.synthetic_value" not in repr(evidence)
 
 
 def _change(evidence, name, frame):
@@ -97,7 +171,7 @@ def _change(evidence, name, frame):
     ],
 )
 def test_relation_keys_fail_closed(relation, column, value):
-    evidence = _normalized("pl_imgw")
+    evidence = _small_evidence()
     frame = getattr(evidence, relation).with_columns(
         pl.when(pl.int_range(pl.len()) == 0)
         .then(pl.lit(value, dtype=pl.UInt32))
@@ -121,7 +195,7 @@ def test_relation_keys_fail_closed(relation, column, value):
     ],
 )
 def test_acquisition_semantics_fail_closed(column, value):
-    evidence = _normalized("usgs_nwis")
+    evidence = _small_evidence()
     frame = evidence.acquisitions.with_columns(
         pl.when(pl.int_range(pl.len()) == 0)
         .then(pl.lit(value, dtype=EVIDENCE_SCHEMAS["acquisitions"][column]))
@@ -133,7 +207,7 @@ def test_acquisition_semantics_fail_closed(column, value):
 
 
 def test_exact_file_authority_and_bytes():
-    evidence = _normalized("usgs_nwis")
+    evidence = _small_evidence()
     files = encode_catalogue_evidence(evidence)
     header = EvidenceHeader.model_validate_json(files.pop("provenance.json"))
     with pytest.raises(ValueError, match="five"):
@@ -239,7 +313,7 @@ def test_statement_requires_exact_request_and_instant(column, value):
 def test_json_column_boundary_rejects_invalid_shapes(mutation):
     import json
 
-    payload = _normalized("usgs_nwis").model_dump(mode="json")
+    payload = _small_evidence().model_dump(mode="json")
     if mutation == "extra":
         payload["facts"]["extra"] = []
     elif mutation == "unequal":
@@ -943,3 +1017,63 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(request: p
         restored = AcquisitionProvenance.model_validate(model)
     ordered = json.dumps(restored.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
     assert sha256(ordered.encode()).hexdigest() == oracle["providers"][provider]["ordered_model_sha256"]
+
+
+@pytest.mark.parametrize(
+    "location",
+    (
+        "https://:",
+        "https://example.com/a b",
+        "http://-",
+        "private://:",
+        "private://grdc-bfg/other",
+        "https://example..com/path",
+        "https:///missing-host",
+        "https://example.com/path\tvalue",
+        "https://example.com:bad/path",
+        "https://example.com:/path",
+        "https://example.com:70000/path",
+        "https://example.com/%ZZ",
+        "https://example.com/a|b",
+        'https://example.com/"x',
+        "https://example.com/\\x",
+        "https://example.com?x=%GG",
+        "https://example.com/a[b]",
+        "https://example.com/path#frag#two",
+        "https://example.com/{",
+        "https://example.com/<>",
+    ),
+)
+def test_acquisition_locations_reject_malformed_authorities_and_paths(location: str) -> None:
+    evidence = _small_evidence()
+    acquisitions = evidence.acquisitions.with_columns(
+        pl.lit([location], dtype=pl.List(pl.String)).alias("requested_from")
+    )
+    with pytest.raises(ValidationError, match="requested_from|location"):
+        CatalogueEvidence.model_validate(_change(evidence, "acquisitions", acquisitions))
+
+
+def test_evidence_rejects_indirect_cycles_after_valid_relation_shapes() -> None:
+    evidence = _small_evidence()
+    extra = {
+        "facts": [(2, "observation.second_value", None, None, None, None)],
+        "bindings": [(2, "second-projection", None, None, 0)],
+        "binding_facts": [(2, 0, 2)],
+        "external_inputs": [(2, 0, None, 1)],
+    }
+    frames = {name: getattr(evidence, name) for name in EVIDENCE_SCHEMAS}
+    for name, rows in extra.items():
+        frames[name] = frames[name].vstack(pl.DataFrame(rows, schema=EVIDENCE_SCHEMAS[name], orient="row"))
+    header = evidence.header.model_copy(
+        update={"files": evidence_file_identities(frames, encode_evidence_tables(frames))}
+    )
+    chain = CatalogueEvidence(header=header, **frames)
+    cyclic = chain.external_inputs.with_columns(
+        pl.when(pl.col("binding_id") == 1)
+        .then(pl.lit(2, dtype=pl.UInt32))
+        .otherwise(pl.col("fact_id"))
+        .alias("fact_id"),
+        pl.when(pl.col("binding_id") == 1).then(None).otherwise(pl.col("source_ordinal")).alias("source_ordinal"),
+    )
+    with pytest.raises(ValidationError, match="cycle"):
+        CatalogueEvidence.model_validate(_change(chain, "external_inputs", cyclic))

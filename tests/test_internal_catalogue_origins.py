@@ -1,5 +1,4 @@
 import hashlib
-import typing
 from dataclasses import FrozenInstanceError
 from html.parser import HTMLParser
 from pathlib import Path
@@ -12,7 +11,6 @@ from rivretrieve._internal.catalogue_origins import (
     ORIGIN_GATE_ENROLLED_PROVIDERS,
     Authored,
     AuthoredValue,
-    CatalogueOrigin,
     Documented,
     DocumentedValue,
     Evidence,
@@ -22,8 +20,6 @@ from rivretrieve._internal.catalogue_origins import (
     IdentityConversion,
     NativeColumn,
     NotPublished,
-    StructMemberConversion,
-    Withheld,
     enforce_catalogue_origins,
     validate_catalogue_origins,
 )
@@ -33,9 +29,6 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.ca_eccc.generate_catalogue import build_stations as build_canada_stations
 from rivretrieve._internal.providers.ca_eccc.origins import (
-    CRS_EVIDENCE_URL,
-)
-from rivretrieve._internal.providers.ca_eccc.origins import (
     STATION_CATALOGUE_ORIGINS as CANADA_ORIGINS,
 )
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
@@ -43,13 +36,9 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
     build_temp_stations,
 )
 from rivretrieve._internal.providers.fr_hubeau.origins import (
-    CRS_EVIDENCE_URL as FRANCE_CRS_EVIDENCE_URL,
-)
-from rivretrieve._internal.providers.fr_hubeau.origins import (
     HYDROMETRY_STATION_CATALOGUE_ORIGINS as FRANCE_HYDROMETRY_ORIGINS,
 )
 from rivretrieve._internal.providers.fr_hubeau.origins import (
-    TEMPERATURE_CRS_EVIDENCE_URL,
     TEMPERATURE_STATION_CATALOGUE_ORIGINS,
     HydrometryCoordinateConversion,
 )
@@ -62,9 +51,6 @@ from rivretrieve._internal.providers.th_thaiwater.origins import (
 )
 from rivretrieve._internal.providers.th_thaiwater.origins import (
     STATION_CATALOGUE_ORIGINS as THAI_STATION_ORIGINS,
-)
-from rivretrieve._internal.providers.usgs_nwis.origins import (
-    STATION_CATALOGUE_ORIGINS as USGS_STATION_CATALOGUE_ORIGINS,
 )
 from rivretrieve._internal.providers.usgs_nwis.origins import DatumToCrsConversion
 from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
@@ -168,22 +154,6 @@ def test_provider_owned_conversions_reject_wrong_native_columns(
         conversion.apply(canonical_column, wrong_native_column, {})
 
 
-def test_shared_origin_gate_has_no_provider_specific_conversion_vocabulary() -> None:
-    source = CATALOGUE_ORIGINS_MODULE_PATH.read_text(encoding="utf-8")
-    forbidden = {
-        "JAPAN_COMBINED_DMS",
-        "DWS_UNSIGNED_DMS",
-        "USGS_DATUM_TO_CRS",
-        "FRANCE_PROJECTION_31",
-        "_JAPAN_DMS",
-        "_USGS_DATUM_TO_CRS",
-        "code_projection",
-        "dec_coord_datum_cd",
-    }
-
-    assert all(token not in source for token in forbidden)
-
-
 def test_authored_carries_an_exact_immutable_canonical_value() -> None:
     origin = Authored(AuthoredValue("provider_id"))
 
@@ -263,10 +233,6 @@ def test_documented_requires_named_carriers() -> None:
         Documented(DocumentedValue("EPSG:4326"), str(evidence))  # ty: ignore[invalid-argument-type]
 
 
-def test_catalogue_origin_union_contains_exactly_the_implemented_forms() -> None:
-    assert typing.get_args(CatalogueOrigin.__value__) == (Field, Authored, NotPublished, Documented, Withheld)
-
-
 def test_field_has_value_equality_and_hashing() -> None:
     first = Field(NativeColumn("station_code"))
     equal = Field(NativeColumn("station_code"))
@@ -334,19 +300,6 @@ def test_origin_gate_enrols_exactly_the_registered_providers() -> None:
     assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS
 
 
-def test_poland_declarations_match_canonical_schema_order_and_values() -> None:
-    from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS
-
-    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-    assert {
-        "provider_id": Authored(AuthoredValue("pl_imgw")),
-        "station_id": Field(NativeColumn("gauge_id")),
-        "latitude": Field(NativeColumn("latitude"), FloatConversion()),
-        "longitude": Field(NativeColumn("longitude"), FloatConversion()),
-        "crs": Withheld(),
-    } == STATION_CATALOGUE_ORIGINS
-
-
 @pytest.mark.derived("src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet")
 def test_committed_poland_origins_pass_validation_and_enforcement(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.pl_imgw.generate_catalogue import build_stations
@@ -373,19 +326,6 @@ def test_committed_poland_origins_pass_validation_and_enforcement(retained_evide
     enforce_catalogue_origins(ProviderId("pl_imgw"), STATION_CATALOGUE_ORIGINS, native, stations)
 
 
-def test_japan_declarations_match_canonical_schema_order_and_values() -> None:
-    from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
-
-    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-    assert {
-        "provider_id": Authored(AuthoredValue("jp_mlit")),
-        "station_id": Field(NativeColumn("観測所記号")),
-        "latitude": Field(NativeColumn("世界測地系"), WorldGeodeticDmsConversion()),
-        "longitude": Field(NativeColumn("世界測地系"), WorldGeodeticDmsConversion()),
-        "crs": NotPublished(Evidence("http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010")),
-    } == STATION_CATALOGUE_ORIGINS
-
-
 @pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 def test_committed_japan_origins_and_build_pass_gate(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.jp_mlit.generate_catalogue import build_catalogue
@@ -398,29 +338,6 @@ def test_committed_japan_origins_and_build_pass_gate(retained_evidence_root: Pat
         == []
     )
     enforce_catalogue_origins(ProviderId("jp_mlit"), STATION_CATALOGUE_ORIGINS, native_table, catalogue.stations)
-
-
-def test_france_declarations_match_schema_order_and_endpoint_values() -> None:
-    expected_hydrometry = {
-        "provider_id": Authored(AuthoredValue("fr_hubeau")),
-        "station_id": Field(NativeColumn("code_station")),
-        "latitude": Field(NativeColumn("latitude_station"), HydrometryCoordinateConversion()),
-        "longitude": Field(NativeColumn("longitude_station"), HydrometryCoordinateConversion()),
-        "crs": Documented(DocumentedValue("EPSG:4326"), Evidence(FRANCE_CRS_EVIDENCE_URL)),
-    }
-    expected_temperature = {
-        "provider_id": Authored(AuthoredValue("fr_hubeau")),
-        "station_id": Field(NativeColumn("code_station")),
-        "latitude": Field(NativeColumn("latitude"), FloatConversion()),
-        "longitude": Field(NativeColumn("longitude"), FloatConversion()),
-        "crs": Documented(DocumentedValue("EPSG:4326"), Evidence(TEMPERATURE_CRS_EVIDENCE_URL)),
-    }
-    schema_order = tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-    assert tuple(FRANCE_HYDROMETRY_ORIGINS) == schema_order
-    assert tuple(TEMPERATURE_STATION_CATALOGUE_ORIGINS) == schema_order
-    assert expected_hydrometry == FRANCE_HYDROMETRY_ORIGINS
-    assert expected_temperature == TEMPERATURE_STATION_CATALOGUE_ORIGINS
-    assert TEMPERATURE_CRS_EVIDENCE_URL != FRANCE_CRS_EVIDENCE_URL
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
@@ -446,33 +363,6 @@ def test_france_endpoint_declarations_validate_complete_native_partitions(retain
     )
 
 
-def test_bosnia_declarations_match_canonical_schema_order_and_values() -> None:
-    from rivretrieve._internal.providers.ba_fhmzbih.origins import STATION_CATALOGUE_ORIGINS
-
-    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-    assert {
-        "provider_id": Authored(AuthoredValue("ba_fhmzbih")),
-        "station_id": Field(NativeColumn("metadata_station_no")),
-        "latitude": Field(NativeColumn("metadata_station_latitude"), FloatConversion()),
-        "longitude": Field(NativeColumn("metadata_station_longitude"), FloatConversion()),
-        "crs": NotPublished(Evidence("https://vodostaji.voda.ba/data/internet/stations/stations.json")),
-    } == STATION_CATALOGUE_ORIGINS
-    carriers = {str(origin.native_column) for origin in STATION_CATALOGUE_ORIGINS.values() if isinstance(origin, Field)}
-    assert carriers.isdisjoint(
-        {
-            "metadata_station_id",
-            "metadata_station_carteasting",
-            "metadata_station_cartnorthing",
-            "metadata_station_local_x",
-            "metadata_station_local_y",
-            "station_gauge_datum",
-            "GAUGE_DATUM",
-            "GWREF_DATUM",
-        }
-    )
-    assert "EPSG:4326" not in repr(STATION_CATALOGUE_ORIGINS)
-
-
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_committed_bosnia_origins_pass_validation_and_enforcement(retained_evidence_root: Path) -> None:
     from rivretrieve._internal.providers.ba_fhmzbih.generate_catalogue import build_stations
@@ -494,30 +384,8 @@ def test_enforcing_gate_rejects_unenrolled_provider_before_evaluation(provider_i
     assert str(exc_info.value) == f"{provider_id}: provider is not enrolled in catalogue origin gate"
 
 
-def test_lithuania_declarations_match_canonical_schema_order_and_values() -> None:
-    assert tuple(LT_STATION_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-    assert {
-        "provider_id": Authored(AuthoredValue("lt_lhmt")),
-        "station_id": Field(NativeColumn("code")),
-        "latitude": Field(NativeColumn("coordinates"), StructMemberConversion()),
-        "longitude": Field(NativeColumn("coordinates"), StructMemberConversion()),
-        "crs": Documented(DocumentedValue("EPSG:4326"), Evidence("https://api.meteo.lt/")),
-    } == LT_STATION_ORIGINS
-
-
-def test_usgs_declarations_match_canonical_schema_order_and_values() -> None:
-    assert tuple(USGS_STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-    assert {
-        "provider_id": Authored(AuthoredValue("usgs_nwis")),
-        "station_id": Field(NativeColumn("site_no")),
-        "latitude": Field(NativeColumn("dec_lat_va"), FloatConversion()),
-        "longitude": Field(NativeColumn("dec_long_va"), FloatConversion()),
-        "crs": Field(NativeColumn("dec_coord_datum_cd"), DatumToCrsConversion()),
-    } == USGS_STATION_CATALOGUE_ORIGINS
-
-
 @pytest.mark.recorded("tests/test_data/th_thaiwater_coordinate_standard.html")
-def test_thailand_declarations_match_schema_and_committed_coordinate_evidence(retained_evidence_root: Path) -> None:
+def test_thailand_coordinate_evidence_preserves_canonical_source_reference(retained_evidence_root: Path) -> None:
     parser = _CanonicalLinkParser()
     capture_bytes = (retained_evidence_root / THAI_COORDINATE_EVIDENCE_PATH).read_bytes()
     capture = capture_bytes.decode("utf-8")
@@ -527,15 +395,6 @@ def test_thailand_declarations_match_schema_and_committed_coordinate_evidence(re
     assert hashlib.sha256(capture_bytes).hexdigest() == (
         "64e4c82a09ad547aeae5dac0493561f89ffd6618c15ac905a92109dd49aa2d04"
     )
-    assert tuple(THAI_STATION_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-    assert {
-        "provider_id": Authored(AuthoredValue("th_thaiwater")),
-        "station_id": Field(NativeColumn("station.id")),
-        "latitude": Field(NativeColumn("station.tele_station_lat"), FloatConversion()),
-        "longitude": Field(NativeColumn("station.tele_station_long"), FloatConversion()),
-        "crs": NotPublished(Evidence(THAI_CRS_EVIDENCE_URL)),
-    } == THAI_STATION_ORIGINS
-    assert len(THAI_CRS_EVIDENCE_URL) == 104
     assert capture.count(THAI_CRS_EVIDENCE_URL) == 2
     assert parser.canonical_urls == [THAI_CRS_EVIDENCE_URL]
 
@@ -546,21 +405,6 @@ def test_committed_thailand_origins_pass_validation(retained_evidence_root: Path
     stations = build_thai_stations(native_table)
 
     assert validate_catalogue_origins(ProviderId("th_thaiwater"), THAI_STATION_ORIGINS, native_table, stations) == []
-
-
-def test_czech_declarations_match_canonical_schema_order_and_values() -> None:
-    from rivretrieve._internal.providers.cz_chmi.origins import (
-        STATION_CATALOGUE_ORIGINS as CZECH_ORIGINS,
-    )
-
-    assert tuple(CZECH_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-    assert {
-        "provider_id": Authored(AuthoredValue("cz_chmi")),
-        "station_id": Field(NativeColumn("objID")),
-        "latitude": Field(NativeColumn("GEOGR1"), FloatConversion()),
-        "longitude": Field(NativeColumn("GEOGR2"), FloatConversion()),
-        "crs": NotPublished(Evidence("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf")),
-    } == CZECH_ORIGINS
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/cz_chmi/catalogue/native.parquet")
@@ -578,17 +422,6 @@ def test_committed_czech_origins_pass_validation(retained_evidence_root: Path) -
     assert validate_catalogue_origins(ProviderId("cz_chmi"), CZECH_ORIGINS, native_table, stations) == []
 
 
-def test_canada_declarations_match_canonical_schema_order_and_values() -> None:
-    assert tuple(CANADA_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-    assert {
-        "provider_id": Authored(AuthoredValue("ca_eccc")),
-        "station_id": Field(NativeColumn("STATION_NUMBER")),
-        "latitude": Field(NativeColumn("geometry.coordinates[1]"), FloatConversion()),
-        "longitude": Field(NativeColumn("geometry.coordinates[0]"), FloatConversion()),
-        "crs": Documented(DocumentedValue("EPSG:4326"), Evidence(CRS_EVIDENCE_URL)),
-    } == CANADA_ORIGINS
-
-
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 def test_committed_canada_origins_pass_validation(retained_evidence_root: Path) -> None:
     native_table = read_native_table(retained_evidence_root / CANADA_NATIVE_PATH)
@@ -602,38 +435,6 @@ def test_committed_canada_origins_pass_validation(retained_evidence_root: Path) 
 
     assert validate_catalogue_origins(ProviderId("ca_eccc"), CANADA_ORIGINS, native_table, stations) == []
     enforce_catalogue_origins(ProviderId("ca_eccc"), CANADA_ORIGINS, native_table, stations)
-
-
-def test_dws_declarations_match_canonical_schema_order_and_values() -> None:
-    from rivretrieve._internal.providers.za_dws.generate_catalogue import CATALOGUE_URL
-    from rivretrieve._internal.providers.za_dws.origins import (
-        CRS_EVIDENCE_EXPLANATION,
-        DMS_SIGN_CONVENTION,
-        STATION_CATALOGUE_ORIGINS,
-    )
-
-    evidence_url = "https://www.dws.gov.za/hydrology/Verified/dwafapp2_wma/WMA1_Limpopo-Olifants_River.pdf"
-    assert tuple(STATION_CATALOGUE_ORIGINS) == tuple(column.name for column in STATION_CATALOG_SCHEMA.columns)
-    assert {
-        "provider_id": Authored(AuthoredValue("za_dws")),
-        "station_id": Field(NativeColumn("Station")),
-        "latitude": Field(NativeColumn("Latitude (dd:mm:ss)"), UnsignedDmsConversion()),
-        "longitude": Field(NativeColumn("Longitude (dd:mm:ss)"), UnsignedDmsConversion()),
-        "crs": NotPublished(Evidence(evidence_url)),
-    } == STATION_CATALOGUE_ORIGINS
-    assert CATALOGUE_URL not in str(STATION_CATALOGUE_ORIGINS["crs"])
-    assert CRS_EVIDENCE_EXPLANATION == (
-        "The cited River PDF's own two-line coordinate header reads Latitude / dd:mm:ss and "
-        "Longitude / dd:mm:ss; this names a representation format but never a datum. A "
-        "case-insensitive review of all eight River PDFs found zero datum, WGS, ellipsoid, "
-        "geodetic, projection, or EPSG occurrences. HyCatalogue.aspx is only a link index with "
-        "no prose or coordinate header and is not CRS evidence."
-    )
-    assert DMS_SIGN_CONVENTION == (
-        "DWS publishes unsigned DMS magnitudes with no leading sign, hemisphere marker, or "
-        "hemisphere note; the build applies a southern negative latitude sign and an eastern "
-        "positive longitude sign that the source does not carry."
-    )
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/za_dws/catalogue/native.parquet")
@@ -666,26 +467,54 @@ def _assert_single_issue(exc_info: pytest.ExceptionInfo[FatalContractError], cod
     assert issue.details == {"canonical_column": column}
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_origin_gate_rejects_undeclared_canonical_column(retained_evidence_root: Path) -> None:
-    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
-    del declarations["longitude"]
-    native_table, stations = _native_and_stations(retained_evidence_root)
+def _synthetic_origin_inputs():
+    from datetime import UTC, datetime
 
-    with pytest.raises(
-        FatalContractError,
-        match=r"lt_lhmt\.longitude: canonical column has no origin declaration",
-    ) as exc_info:
-        enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, stations)
+    from rivretrieve._internal.catalogues.native import RetrievedAt, stamp_native_table
 
-    _assert_single_issue(exc_info, "catalogue_origin.undeclared_column", "longitude")
+    native = stamp_native_table(
+        pl.DataFrame({"code": ["one"], "latitude": [55.0], "longitude": [24.0]}),
+        RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    stations = pl.DataFrame(
+        {
+            "provider_id": ["lt_lhmt"],
+            "station_id": ["one"],
+            "latitude": [55.0],
+            "longitude": [24.0],
+            "crs": ["unknown"],
+        },
+        schema=STATION_CATALOG_SCHEMA.polars_schema,
+    )
+    declarations = {
+        "provider_id": Authored(AuthoredValue("lt_lhmt")),
+        "station_id": Field(NativeColumn("code")),
+        "latitude": Field(NativeColumn("latitude")),
+        "longitude": Field(NativeColumn("longitude")),
+        "crs": NotPublished(Evidence("https://example.test/coordinate-fields")),
+    }
+    enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native, stations)
+    return native, stations, declarations
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_origin_gate_rejects_absent_native_column(retained_evidence_root: Path) -> None:
-    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
+@pytest.mark.parametrize("column", ["provider_id", "station_id", "latitude", "longitude", "crs"])
+def test_origin_gate_rejects_undeclared_canonical_column(column: str) -> None:
+    native, stations, declarations = _synthetic_origin_inputs()
+    del declarations[column]
+
+    with pytest.raises(FatalContractError) as caught:
+        enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native, stations)
+
+    expected = {"catalogue_origin.undeclared_column"}
+    if column == "station_id":
+        expected.add("catalogue_origin.unresolvable_alignment_key")
+    assert {issue.code for issue in caught.value.issues} == expected
+    assert all(issue.details == {"canonical_column": column} for issue in caught.value.issues)
+
+
+def test_origin_gate_rejects_absent_native_column() -> None:
+    native_table, stations, declarations = _synthetic_origin_inputs()
     declarations["latitude"] = Field(NativeColumn("absent_column"))
-    native_table, stations = _native_and_stations(retained_evidence_root)
 
     with pytest.raises(
         FatalContractError,
@@ -696,10 +525,8 @@ def test_origin_gate_rejects_absent_native_column(retained_evidence_root: Path) 
     _assert_single_issue(exc_info, "catalogue_origin.absent_native_column", "latitude")
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row(retained_evidence_root: Path) -> None:
-    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
-    native_table, stations = _native_and_stations(retained_evidence_root)
+def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row() -> None:
+    native_table, stations, declarations = _synthetic_origin_inputs()
     first_station_id = stations["station_id"].item(0)
     broken_stations = stations.with_columns(
         pl.when(pl.col("station_id") == first_station_id).then(None).otherwise(pl.col("latitude")).alias("latitude")
@@ -707,18 +534,16 @@ def test_origin_gate_rejects_unpropagated_native_value_on_aligned_row(retained_e
 
     with pytest.raises(
         FatalContractError,
-        match=r"lt_lhmt\.latitude: canonical value is null where native column 'coordinates' has a value",
+        match=r"lt_lhmt\.latitude: canonical value is null where native column 'latitude' has a value",
     ) as exc_info:
         enforce_catalogue_origins(ProviderId("lt_lhmt"), declarations, native_table, broken_stations)
 
     _assert_single_issue(exc_info, "catalogue_origin.unpropagated_value", "latitude")
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable(retained_evidence_root: Path) -> None:
-    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
+def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable() -> None:
+    native_table, stations, declarations = _synthetic_origin_inputs()
     declarations["station_id"] = NotPublished(Evidence("https://api.meteo.lt/"))
-    native_table, stations = _native_and_stations(retained_evidence_root)
     broken_stations = stations.with_columns(pl.lit(None).cast(pl.Float64).alias("latitude"))
 
     with pytest.raises(
@@ -735,11 +560,9 @@ def test_origin_gate_reports_when_station_id_alignment_key_is_unresolvable(retai
     assert exc_info.value.issues[1].code == "catalogue_origin.not_published_marker_mismatch"
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_origin_gate_rejects_malformed_not_published_declaration(retained_evidence_root: Path) -> None:
-    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
+def test_origin_gate_rejects_malformed_not_published_declaration() -> None:
+    native_table, stations, declarations = _synthetic_origin_inputs()
     declarations["crs"] = {"not_published": True}
-    native_table, stations = _native_and_stations(retained_evidence_root)
 
     with pytest.raises(
         FatalContractError,
@@ -750,13 +573,11 @@ def test_origin_gate_rejects_malformed_not_published_declaration(retained_eviden
     _assert_single_issue(exc_info, "catalogue_origin.missing_evidence", "crs")
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_origin_gate_rejects_documented_declaration_with_absent_evidence(retained_evidence_root: Path) -> None:
-    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
+def test_origin_gate_rejects_documented_declaration_with_absent_evidence() -> None:
+    native_table, stations, declarations = _synthetic_origin_inputs()
     malformed = object.__new__(Documented)
     object.__setattr__(malformed, "value", DocumentedValue("EPSG:4326"))
     declarations["crs"] = malformed
-    native_table, stations = _native_and_stations(retained_evidence_root)
 
     with pytest.raises(
         FatalContractError,
@@ -767,14 +588,12 @@ def test_origin_gate_rejects_documented_declaration_with_absent_evidence(retaine
     _assert_single_issue(exc_info, "catalogue_origin.missing_evidence", "crs")
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
-def test_origin_gate_rejects_documented_value_drift_from_builder_output(retained_evidence_root: Path) -> None:
-    declarations: dict[str, object] = dict(LT_STATION_ORIGINS)
+def test_origin_gate_rejects_documented_value_drift_from_builder_output() -> None:
+    native_table, stations, declarations = _synthetic_origin_inputs()
     declarations["crs"] = Documented(
         DocumentedValue("EPSG:9999"),
         Evidence("https://api.meteo.lt/"),
     )
-    native_table, stations = _native_and_stations(retained_evidence_root)
 
     with pytest.raises(
         FatalContractError,

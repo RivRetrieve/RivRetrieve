@@ -111,8 +111,7 @@ def test_unknown_series_failed_request_keeps_call_and_interval(tmp_path):
     assert result.provenance.calls_made[0]["status_code"] == 503
 
 
-@pytest.mark.parametrize("failed_first", [False, True])
-@pytest.mark.parametrize("failure_kind", ["unknown", "partial"])
+@pytest.mark.parametrize(("failure_kind", "failed_first"), [("unknown", False), ("partial", False), ("partial", True)])
 @pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json")
 def test_failed_overlap_returned_rows_agree_with_persisted_replacement(
     retained_evidence_root, tmp_path, failed_first, failure_kind

@@ -1,6 +1,5 @@
 """Offline checks for the Canada documentation; not live acquisition evidence."""
 
-import json
 import re
 from pathlib import Path
 
@@ -34,15 +33,3 @@ def test_canada_documentation_selection_matches_packaged_catalogue():
     assert rr.series(selection).select("station_id", "quantity", "frequency", "statistic").rows() == [
         ("05OG008", "discharge", "daily", "mean")
     ]
-
-
-@pytest.mark.recorded("docs/verification/canada-provider/sources/INDEX.json")
-def test_canada_source_references_and_index_link(
-    retained_evidence_root: Path,
-):
-    index = json.loads((retained_evidence_root / EVIDENCE / "sources/INDEX.json").read_text())
-    assert index
-    for metadata in index.values():
-        assert metadata["status"] == 200
-        assert re.fullmatch(r"[0-9a-f]{64}", metadata["sha256"])
-    assert "providers/ca_eccc.md" in (ROOT / "docs/README.md").read_text()

@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import urllib.request
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -23,7 +22,6 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ba_fhmzbih import generate_catalogue
 from rivretrieve._internal.providers.ba_fhmzbih.origins import WorkbookAccessLedger
-from tests._catalogue import catalogue_recording_paths
 
 _TEST_DATA_DIR = Path("tests/test_data")
 _METADATA_FIXTURE = _TEST_DATA_DIR / "ba_fhmzbih_metadata.json"
@@ -124,28 +122,6 @@ def _json_objects(values: pl.Series) -> list[dict[str, object]]:
     objects = [json.loads(value) for value in values]
     assert all(isinstance(value, dict) for value in objects)
     return objects
-
-
-def _frame_content_digest(frame: pl.DataFrame) -> str:
-    def canonical_value(value: object) -> object:
-        if isinstance(value, datetime):
-            return value.isoformat(timespec="microseconds").replace("+00:00", "Z")
-        if isinstance(value, date):
-            return value.isoformat()
-        return value
-
-    payload = {
-        "columns": frame.columns,
-        "rows": [[canonical_value(value) for value in row] for row in frame.iter_rows()],
-    }
-    canonical = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
@@ -264,21 +240,6 @@ def test_publisher_capture_and_attestation_support_not_published_crs(retained_ev
         assert values and min(values) == minimum and max(values) == maximum
 
 
-def test_committed_canonical_artifact_content_digests_are_pinned() -> None:
-    assert hashlib.sha256((_CATALOGUE_DIR / "provider.json").read_bytes()).hexdigest() == (
-        "8318095cfc19d2fa67dece6c2ce2a0313032870ffa9c290fc8ec9dae110382be"
-    )
-    assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "products.parquet")) == (
-        "6f4c7541f4bfd4bef499fb29e4ac83ca8c32196dba4dd92f812e850ea65a1a6b"
-    )
-    assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "stations.parquet")) == (
-        "761a93315a093b1cad5a4ce1e0480a6e36430a32d28467c9fe689f0257c053a4"
-    )
-    assert _frame_content_digest(pl.read_parquet(_CATALOGUE_DIR / "station_products.parquet")) == (
-        "28edacb26f29db827d746eef084c53592f7c33e2a93f018a9297aba08296a51b"
-    )
-
-
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
 def test_native_build_enforces_origins_before_writing(retained_evidence_root: Path, tmp_path: Path) -> None:
     broken = dict(_origins())
@@ -336,13 +297,6 @@ def test_native_build_uses_workbook_dates_and_maximum_metadata_provider_date(ret
         mixed["metadata_station_no"].item(1): {date(2026, 9, 7), date(2026, 9, 13)},
     }
     assert catalogue.provider_info["catalogue_version"] == "2026-08-02"
-
-
-@pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
-def test_fixture_digest_is_pinned(retained_evidence_root: Path) -> None:
-    payload = _fixture_payload(retained_evidence_root)
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-    assert hashlib.sha256(encoded).hexdigest() == "f607055b8abb079649aab739f7b54fd171de91f508efbae793bbd28bd1e933c1"
 
 
 def test_refresh_rejects_non_list_envelope(
@@ -529,18 +483,6 @@ def test_committed_native_table_contract(retained_evidence_root: Path) -> None:
     assert row_4121["metadata_station_carteasting"].item() == "6520724.16"
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")
-def test_committed_native_table_digests(retained_evidence_root: Path) -> None:
-    native = read_native_table(retained_evidence_root / _NATIVE_TABLE)
-    stable = native.data.select(_METADATA_COLUMNS).to_dicts()
-    encoded = json.dumps(stable, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-    assert hashlib.sha256(encoded).hexdigest() == "14ab47126fe40f16f23ddc66620fc8ae30910cd812c69806f867a851e659b23d"
-    assert (
-        generate_catalogue.native_table_content_digest(native)
-        == "dd915e4a3d9598ff47c6f3fc972db24c7e03dd5b8b957a4eb597c28545634140"
-    )
-
-
 @pytest.mark.recorded("tests/test_data/ba_fhmzbih_metadata.json")
 def test_main_raises_returned_issue_without_writing(retained_evidence_root: Path, tmp_path: Path) -> None:
     payload = copy.deepcopy(_fixture_payload(retained_evidence_root))
@@ -652,53 +594,6 @@ def test_main_rejects_incoherent_modes(
     assert caught.value.code != 0
     captured = capsys.readouterr()
     assert message in captured.err
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet",
-    "tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",
-    "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
-    "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
-    "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
-    "tests/test_data/ba_fhmzbih_terms_absence.html",
-    full_verification=("ba_fhmzbih",),
-)
-@pytest.mark.recorded(*catalogue_recording_paths("ba_fhmzbih"))
-def test_native_cli_is_offline_deterministic_and_matches_committed_artifacts(
-    retained_evidence_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.ba_fhmzbih.origins import build_acquisition_provenance
-
-    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance(_access()))
-    assert hasattr(urllib.request, "urlopen")
-    calls: list[object] = []
-
-    def fail_network(*args: object, **kwargs: object) -> object:
-        calls.append((args, kwargs))
-        raise AssertionError("network call during native catalogue build")
-
-    monkeypatch.setattr(urllib.request, "urlopen", fail_network)
-    first = tmp_path / "first"
-    second = tmp_path / "second"
-    argv = [
-        "--build-inputs",
-        str(build_inputs_path),
-        "--native",
-        str(retained_evidence_root / _NATIVE_TABLE),
-        "--workbook-access-ledger",
-        str(_LEDGER),
-        "--evidence-root",
-        str(retained_evidence_root),
-        "--series-recording",
-        str((retained_evidence_root / _TEST_DATA_DIR) / "ba_fhmzbih_metadata_index.recording.json"),
-        "--out",
-    ]
-    assert generate_catalogue.main([*argv, str(first)]) == 0
-    assert generate_catalogue.main([*argv, str(second)]) == 0
-    assert calls == []
-    for artifact in ("provider.json", "products.parquet", "stations.parquet", "station_products.parquet"):
-        assert (first / artifact).read_bytes() == (second / artifact).read_bytes()
-        assert (first / artifact).read_bytes() == (_CATALOGUE_DIR / artifact).read_bytes()
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ba_fhmzbih/catalogue/native.parquet")

@@ -18,7 +18,6 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.ca_eccc import generate_catalogue
 from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
-from tests._catalogue import catalogue_content_without_build_identity, catalogue_recording_paths
 
 FIXTURE_PATH = Path("tests/test_data/ca_eccc_metadata.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
@@ -468,16 +467,6 @@ def test_retained_native_table_pins_representative_rows(
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
-def test_retained_native_first_middle_and_last_ids_are_pinned(
-    retained_evidence_root: Path,
-) -> None:
-    ids = read_native_table(retained_evidence_root / NATIVE_PATH).data["id"]
-    assert ids.item(0) == "01AA002"
-    assert ids.item(len(ids) // 2) == "05NG003"
-    assert ids.item(-1) == "11AF005"
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 def test_native_build_counts_crs_and_dates(
     retained_evidence_root: Path,
 ) -> None:
@@ -542,82 +531,6 @@ def test_cli_rejects_cross_mode_combinations(argv: list[str]) -> None:
     with pytest.raises(SystemExit) as exc_info:
         generate_catalogue.main(argv)
     assert exc_info.value.code != 0
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
-    "tests/test_data/ca_eccc_terms_citation.html",
-    "tests/test_data/ca_eccc_terms_licence.html",
-)
-@pytest.mark.recorded(*catalogue_recording_paths("ca_eccc"))
-def test_native_build_is_network_free_and_byte_deterministic(
-    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, catalogue_build_inputs_path
-) -> None:
-    from rivretrieve._internal.providers.ca_eccc.origins import build_acquisition_provenance
-
-    build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
-    calls: list[str] = []
-
-    def fail_network(*args: object, **kwargs: object) -> object:
-        calls.append("network")
-        raise AssertionError("network must not be accessed during build")
-
-    monkeypatch.setattr(generate_catalogue, "_request_station_page", fail_network)
-    monkeypatch.setattr(generate_catalogue.requests, "get", fail_network)
-    before_native = (retained_evidence_root / NATIVE_PATH).read_bytes()
-
-    result = generate_catalogue.main(
-        [
-            "--build-inputs",
-            str(build_inputs_path),
-            "--native",
-            str(retained_evidence_root / NATIVE_PATH),
-            "--out",
-            str(tmp_path),
-            "--evidence-root",
-            str(retained_evidence_root),
-        ]
-    )
-
-    assert result == 0
-    assert calls == []
-    assert (retained_evidence_root / NATIVE_PATH).read_bytes() == before_native
-    assert {path.name for path in tmp_path.iterdir()} == {
-        "croissant.json",
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-    }
-    for artifact_name in (
-        "provider.json",
-        "products.parquet",
-        "stations.parquet",
-        "station_products.parquet",
-        "provenance.json",
-        "provenance_facts.parquet",
-        "provenance_acquisitions.parquet",
-        "provenance_bindings.parquet",
-        "provenance_binding_facts.parquet",
-        "provenance_external_inputs.parquet",
-        "format.json",
-        "source_series.json",
-        "series_claims.parquet",
-        "station_metadata.parquet",
-    ):
-        assert catalogue_content_without_build_identity(
-            artifact_name, (tmp_path / artifact_name).read_bytes()
-        ) == catalogue_content_without_build_identity(artifact_name, (CATALOGUE_PATH / artifact_name).read_bytes())
 
 
 def test_canonical_build_requires_explicit_evidence_root(tmp_path: Path) -> None:

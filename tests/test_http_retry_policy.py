@@ -82,7 +82,7 @@ def authenticated(client):
     return AuthenticatedTransport(client, (CredentialHeader("Authorization", f"Bearer {_SECRET}", (_ORIGIN,)),))
 
 
-@pytest.mark.parametrize("status", sorted(TRANSPORT_POLICY.retryable_status_codes))
+@pytest.mark.parametrize("status", [408, 429, 500, 502, 503, 504])
 def test_head_retries_status_without_a_response_body(status):
     client, sender, clock = client_for([(b"", status, None), (b"", 200, None)])
     response = client.send(TransportRequest(HttpMethod.HEAD, _ORIGIN))

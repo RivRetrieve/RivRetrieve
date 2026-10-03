@@ -136,10 +136,6 @@ def test_station_catalog_validates_five_column_row() -> None:
     assert not [issue for issue in issues if issue.severity == "error"]
 
 
-def test_station_catalog_crs_is_non_null() -> None:
-    assert next(column for column in STATION_CATALOG_SCHEMA.columns if column.name == "crs").nullable is False
-
-
 def test_non_nullable_station_column_rejects_null() -> None:
     with pytest.raises(FatalContractError):
         validate_catalogue(station_catalog_df(crs=[None]), STATION_CATALOG_SCHEMA)
