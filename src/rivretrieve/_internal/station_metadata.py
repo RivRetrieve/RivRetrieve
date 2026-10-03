@@ -37,15 +37,31 @@ STATION_METADATA_SCHEMA = pl.Schema(
     }
 )
 _KEYS = ["provider_id", "station_id"]
+_INTEGER_BOUNDS = {
+    **{f"Int{bits}": (-(2 ** (bits - 1)), 2 ** (bits - 1) - 1) for bits in (8, 16, 32, 64, 128)},
+    **{f"UInt{bits}": (0, 2**bits - 1) for bits in (8, 16, 32, 64, 128)},
+}
+SOURCE_SCALAR_DTYPES = frozenset({"String", "Boolean", "Float32", "Float64", *_INTEGER_BOUNDS})
 
 
-def _scalar(text: str) -> object:
+def _scalar(text: str, dtype: str) -> object:
     try:
         value = json.loads(text)
     except (ValueError, TypeError) as error:
         raise FatalContractError("Packaged station metadata has invalid JSON scalar text") from error
     if value is None or isinstance(value, (list, dict)) or (isinstance(value, float) and not math.isfinite(value)):
         raise FatalContractError("Packaged station metadata requires a non-null finite JSON scalar")
+    if dtype in _INTEGER_BOUNDS:
+        lower, upper = _INTEGER_BOUNDS[dtype]
+        valid = type(value) is int and lower <= value <= upper
+    elif dtype in ("Float32", "Float64"):
+        valid = type(value) is float
+    elif dtype == "Boolean":
+        valid = type(value) is bool
+    else:
+        valid = dtype == "String" and isinstance(value, str)
+    if not valid:
+        raise FatalContractError("Packaged station metadata scalar does not match its source dtype")
     return value
 
 
@@ -68,13 +84,16 @@ def source_metadata_frame(stations: pl.DataFrame, metadata: pl.DataFrame) -> pl.
             continue
         if any(not row[key] or not row[key].strip() for key in ("source_field", "source_dtype", "support_fact")):
             raise FatalContractError("Packaged station metadata lacks field, dtype or support fact")
+        dtype = row["source_dtype"]
+        if dtype not in SOURCE_SCALAR_DTYPES:
+            raise FatalContractError("Packaged station metadata has an unsupported source dtype")
+        if row["attribute_role"] != "drainage_area" and dtype != "String":
+            raise FatalContractError("Packaged source name requires String source dtype")
         if row["state"] == "source_null":
             if row["source_value"] is not None:
                 raise FatalContractError("Packaged source_null row contains a value")
         else:
-            value = _scalar(row["source_value"])
-            if row["attribute_role"] != "drainage_area" and not isinstance(value, str):
-                raise FatalContractError("Packaged source name must be a string")
+            _scalar(row["source_value"], dtype)
     if any("no_metadata" in states and len(states) != 1 for states in groups.values()):
         raise FatalContractError("Packaged no_metadata conflicts with source attributes")
     if metadata.is_duplicated().any():

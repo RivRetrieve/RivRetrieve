@@ -11,7 +11,12 @@ import polars as pl
 from rivretrieve._internal.catalogue_origins import Field
 from rivretrieve._internal.catalogues.native import NativeTable
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.station_metadata import ATTRIBUTE_ROLES, SOURCE_METADATA_SCHEMA, source_metadata_frame
+from rivretrieve._internal.station_metadata import (
+    ATTRIBUTE_ROLES,
+    SOURCE_METADATA_SCHEMA,
+    SOURCE_SCALAR_DTYPES,
+    source_metadata_frame,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +67,7 @@ def build_station_metadata(
     native = native_table.data
     for field in fields:
         dtype = native.schema.get(field.source_field)
-        if dtype is None or not (dtype in (pl.String, pl.Boolean) or dtype.is_integer() or dtype.is_float()):
+        if dtype is None or str(dtype) not in SOURCE_SCALAR_DTYPES:
             raise FatalContractError("Station metadata field requires a supported native scalar dtype")
         if field.attribute_role != "drainage_area" and dtype != pl.String:
             raise FatalContractError("Station metadata name fields require native strings")

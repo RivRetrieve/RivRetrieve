@@ -27,7 +27,10 @@ from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES, l
 from rivretrieve._internal.catalogues.native import NativeTable
 from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
 from rivretrieve._internal.catalogues.source_descriptions import generic_source_descriptions
-from rivretrieve._internal.providers.ca_eccc.origins import STATION_CATALOGUE_ORIGINS
+from rivretrieve._internal.providers.ca_eccc.origins import (
+    STATION_CATALOGUE_ORIGINS,
+    TRANSFORMATION_IMPLEMENTATIONS,
+)
 
 ROOT = Path(__file__).parents[1]
 PACKAGE_ROOT = ROOT / "src" / "rivretrieve"
@@ -73,7 +76,7 @@ def _copy_catalogue_with_provider_id(source: Path, destination: Path, provider_i
         declarations=(
             code(f"{module}/generate_catalogue.py", "build_catalogue"),
             code(f"{module}/origins.py", "build_acquisition_provenance"),
-            code("src/rivretrieve/_internal/assembly.py", "assemble"),
+            *(code(path, symbol) for path, symbol in TRANSFORMATION_IMPLEMENTATIONS.values()),
         ),
         inputs=(
             RetainedInputUse(
@@ -107,6 +110,7 @@ def _copy_catalogue_with_provider_id(source: Path, destination: Path, provider_i
         build_inputs=build_inputs,
         native_table=native,
         metadata_fields=(),
+        transformation_implementations=TRANSFORMATION_IMPLEMENTATIONS,
         source_describer=partial(generic_source_descriptions, config=None),
     )
     for name, content in metadata.items():

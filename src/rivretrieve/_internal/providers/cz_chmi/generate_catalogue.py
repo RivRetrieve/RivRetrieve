@@ -267,7 +267,11 @@ def write_catalogue(
     """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.cz_chmi.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+    from rivretrieve._internal.providers.cz_chmi.origins import (
+        STATION_CATALOGUE_ORIGINS,
+        STATION_METADATA_FIELDS,
+        TRANSFORMATION_IMPLEMENTATIONS,
+    )
 
     if build_inputs is None or native_table is None:
         raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
@@ -289,6 +293,7 @@ def write_catalogue(
         build_inputs=build_inputs,
         native_table=native_table,
         metadata_fields=STATION_METADATA_FIELDS,
+        transformation_implementations=TRANSFORMATION_IMPLEMENTATIONS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

@@ -246,7 +246,8 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/lt_lhmt/generate_catalogue.py", "build_catalogue"),
-    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/conversion.py", "convert"),
+    ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "TRANSFORMATION_IMPLEMENTATIONS"),
     ("src/rivretrieve/_internal/providers/lt_lhmt/config.py", "config"),
     ("src/rivretrieve/_internal/providers/lt_lhmt/config.py", "SERIES_MAPPINGS"),
 )
@@ -254,3 +255,9 @@ CATALOGUE_BUILD_DECLARATIONS = (
 
 # Additional retained declarations used by these source facts; not original-body claims.
 CATALOGUE_SUPPORTING_INPUTS = {}
+
+
+# Exact observation operation responsibility; catalogue publication does not run it.
+TRANSFORMATION_IMPLEMENTATIONS = {
+    "canonical_observation": ("src/rivretrieve/_internal/conversion.py", "convert"),
+}

@@ -315,3 +315,66 @@ def test_metadata_declarations_cover_providers_without_unreviewed_names():
         assert all(isinstance(field, MetadataField) for field in fields)
         if provider in ("ba_fhmzbih", "fr_hydroportail", "th_thaiwater", "ch_foen", "pl_imgw", "za_dws"):
             assert all(field.attribute_role == "drainage_area" for field in fields)
+
+
+@pytest.mark.parametrize(
+    "dtype,value",
+    [
+        ("Float64", '"633.00 km²"'),
+        ("String", "633.0"),
+        ("Boolean", "1"),
+        ("Int64", "true"),
+        ("Float64", "1"),
+        ("Int32", "1.0"),
+        ("Int8", "128"),
+        ("UInt8", "-1"),
+        ("List(Float64)", "1.0"),
+        ("Unknown", "1.0"),
+        ("Unknown", None),
+        ("Date", None),
+    ],
+)
+def test_source_dtype_mismatch_is_fatal(dtype, value):
+    source = (
+        attributes()
+        .with_columns(
+            pl.when(pl.col("attribute_role") == "drainage_area")
+            .then(pl.lit(dtype))
+            .otherwise(pl.col("source_dtype"))
+            .alias("source_dtype"),
+            pl.when(pl.col("attribute_role") == "drainage_area")
+            .then(pl.lit(value))
+            .otherwise(pl.col("source_value"))
+            .alias("source_value"),
+            pl.when(pl.col("attribute_role") == "drainage_area")
+            .then(pl.lit("source_null" if value is None else "value"))
+            .otherwise(pl.col("state"))
+            .alias("state"),
+        )
+        .cast(SOURCE_METADATA_SCHEMA)
+    )
+    with pytest.raises(FatalContractError, match="dtype"):
+        source_metadata_frame(source.select("provider_id", "station_id").unique(), source)
+
+
+def test_source_null_name_requires_string_dtype():
+    source = (
+        attributes()
+        .with_columns(
+            pl.when(pl.col("attribute_role") == "station_name")
+            .then(pl.lit("Float64"))
+            .otherwise(pl.col("source_dtype"))
+            .alias("source_dtype"),
+            pl.when(pl.col("attribute_role") == "station_name")
+            .then(pl.lit(None))
+            .otherwise(pl.col("source_value"))
+            .alias("source_value"),
+            pl.when(pl.col("attribute_role") == "station_name")
+            .then(pl.lit("source_null"))
+            .otherwise(pl.col("state"))
+            .alias("state"),
+        )
+        .cast(SOURCE_METADATA_SCHEMA)
+    )
+    with pytest.raises(FatalContractError, match="name requires String"):
+        source_metadata_frame(source.select("provider_id", "station_id").unique(), source)

@@ -608,7 +608,14 @@ def test_selected_metadata_graph_exposes_only_its_adopted_support_and_separate_c
     assert recording["additionalProperty"]["value"] == "historical/recording.html"
 
 
-def test_publication_distinguishes_authored_constants_catalogue_and_runtime_implementations():
+@pytest.mark.parametrize(
+    "location",
+    [
+        ("src/rivretrieve/_internal/conversion.py", "convert"),
+        ("src/rivretrieve/_internal/providers/ca_eccc/bulk.py", "_unpivot_month"),
+    ],
+)
+def test_publication_distinguishes_authored_constants_catalogue_and_runtime_implementations(location):
     from rivretrieve._internal.catalogues.publication import _bind_catalogue_build_inputs
 
     payload = _provenance().model_dump(mode="python")
@@ -633,14 +640,20 @@ def test_publication_distinguishes_authored_constants_catalogue_and_runtime_impl
         },
     )
     original = AcquisitionProvenance.model_validate(payload)
-    result = _bind_catalogue_build_inputs(original, _publication_build(), _projected_metadata())
+    build = _publication_build().model_dump(mode="python")
+    build["declarations"] += (_code(*location, revision="e" * 40),)
+    result = _bind_catalogue_build_inputs(
+        original,
+        CatalogueBuildInputs.model_validate(build),
+        _projected_metadata(),
+        transformation_implementations={"observation-value": location},
+    )
     catalogue, authored, observation = (result.fact_bindings[index].transformation for index in (1, 2, 3))
     assert catalogue.executable.symbol == "build_catalogue"
     assert catalogue.executable.repository_path.endswith("/synthetic/generate_catalogue.py")
     assert authored.executable is None
     assert authored.declaration.symbol == "build_catalogue"
-    assert observation.executable.symbol == "assemble"
-    assert observation.executable.repository_path == "src/rivretrieve/_internal/assembly.py"
+    assert (observation.executable.repository_path, observation.executable.symbol) == location
     assert observation.declaration.symbol == "build_acquisition_provenance"
     assert result.build_inputs.build.symbol == "build"
 
@@ -888,3 +901,85 @@ def test_republication_replaces_only_metadata_leaf_projection():
     )
     with pytest.raises(FatalContractError, match="nonmetadata dependent"):
         _bind_catalogue_build_inputs(AcquisitionProvenance.model_validate(payload), build, new_metadata)
+
+
+@pytest.mark.parametrize(
+    "provider_id,group,location",
+    [
+        (
+            "ca_eccc",
+            "canonical_observation_shape",
+            ("src/rivretrieve/_internal/providers/ca_eccc/bulk.py", "_unpivot_month"),
+        ),
+        ("ch_foen", "canonical_observation_shape", ("src/rivretrieve/_internal/providers/ch_foen/parse.py", "parse")),
+        ("cz_chmi", "canonical_observation", ("src/rivretrieve/_internal/conversion.py", "convert")),
+        ("lt_lhmt", "canonical_observation", ("src/rivretrieve/_internal/conversion.py", "convert")),
+    ],
+)
+def test_observation_operations_have_explicit_complete_provider_responsibility(provider_id, group, location):
+    from importlib import import_module
+
+    from rivretrieve._internal.catalogues.publication import _bind_catalogue_build_inputs
+    from rivretrieve._internal.issues import FatalContractError
+
+    origins = import_module(f"rivretrieve._internal.providers.{provider_id}.origins")
+    original = origins.build_acquisition_provenance()
+    assert {group: location} == origins.TRANSFORMATION_IMPLEMENTATIONS
+    observation_groups = {
+        binding.fact_group
+        for binding in original.fact_bindings
+        if binding.transformation is not None
+        and any(fact.startswith(("observation.", "canonical.observation.")) for fact in binding.facts)
+    }
+    assert set(origins.TRANSFORMATION_IMPLEMENTATIONS) == observation_groups
+    native = original.native_table
+    native_facts = tuple(
+        fact
+        for binding in original.fact_bindings
+        if binding.acquisition_id in origins.NATIVE_TABLE_ACQUISITION_IDS
+        for fact in binding.facts
+    )
+    reference = _member().model_dump(mode="python")
+    reference.update(sha256=native.sha256, byte_size=native.byte_size)
+    build = CatalogueBuildInputs(
+        build=_code(f"src/rivretrieve/_internal/providers/{provider_id}/generate_catalogue.py", "write_catalogue"),
+        declarations=tuple(_code(path, symbol, "e" * 40) for path, symbol in origins.CATALOGUE_BUILD_DECLARATIONS),
+        inputs=(
+            RetainedInputUse(
+                reference=ArchiveMemberReference.model_validate(reference), usage="native_table", facts=native_facts
+            ),
+        ),
+    )
+    with pytest.raises(FatalContractError, match="responsibility"):
+        _bind_catalogue_build_inputs(original, build, _projected_metadata().clear())
+    result = _bind_catalogue_build_inputs(
+        original,
+        build,
+        _projected_metadata().clear(),
+        transformation_implementations=origins.TRANSFORMATION_IMPLEMENTATIONS,
+    )
+    transform = next(binding.transformation for binding in result.fact_bindings if binding.fact_group == group)
+    assert (transform.executable.repository_path, transform.executable.symbol) == location
+    assert transform.executable.revision == build.build.revision
+    assert transform.declaration.repository_path == f"src/rivretrieve/_internal/providers/{provider_id}/origins.py"
+    assert transform.declaration.symbol == "build_acquisition_provenance"
+    assert result.source_records == original.source_records
+    assert result.native_table == original.native_table
+    assert result.fact_universe == original.fact_universe
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [
+        {"absent-group": ("src/rivretrieve/_internal/conversion.py", "convert")},
+        {"canonical-location": ("src/unlisted.py", "not_declared")},
+    ],
+)
+def test_explicit_transformation_responsibility_requires_known_group_and_declared_code(mapping):
+    from rivretrieve._internal.catalogues.publication import _bind_catalogue_build_inputs
+    from rivretrieve._internal.issues import FatalContractError
+
+    with pytest.raises(FatalContractError):
+        _bind_catalogue_build_inputs(
+            _provenance(), _publication_build(), _projected_metadata(), transformation_implementations=mapping
+        )

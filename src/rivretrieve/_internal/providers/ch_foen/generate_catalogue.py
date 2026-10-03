@@ -292,7 +292,11 @@ def write_catalogue(
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.ch_foen.catalogue_series import describe_catalogue
     from rivretrieve._internal.providers.ch_foen.config import config as source_config
-    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+    from rivretrieve._internal.providers.ch_foen.origins import (
+        STATION_CATALOGUE_ORIGINS,
+        STATION_METADATA_FIELDS,
+        TRANSFORMATION_IMPLEMENTATIONS,
+    )
 
     if build_inputs is None or native_table is None:
         raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
@@ -314,6 +318,7 @@ def write_catalogue(
         build_inputs=build_inputs,
         native_table=native_table,
         metadata_fields=STATION_METADATA_FIELDS,
+        transformation_implementations=TRANSFORMATION_IMPLEMENTATIONS,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)

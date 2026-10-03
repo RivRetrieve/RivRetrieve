@@ -67,9 +67,11 @@ access and genuine-input checks.
 
 Transformation declarations retain separate `executable` and `declaration` code
 references. Catalogue transformations identify the provider's catalogue builder;
-metadata transformations identify the shared projection. Observation references
-identify runtime assembly code, without claiming that observations were processed
-during the catalogue build. Authored constants have a declaration and no executable
+metadata transformations identify the shared projection. Provider declarations
+map each observation transformation group to its actual operation: Canadian HYDAT
+row construction, Swiss parsing, or shared Czech and Lithuanian physical conversion.
+These references do not claim that observations were processed during the catalogue
+build. Authored constants have a declaration and no executable
 reference. The build's composition entry point remains in `build_inputs.build`.
 These code identities do not replace source acquisition methods, times or request
 scopes.

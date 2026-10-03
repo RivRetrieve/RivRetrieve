@@ -305,7 +305,8 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/ca_eccc/generate_catalogue.py", "build_catalogue"),
-    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/bulk.py", "_unpivot_month"),
+    ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "TRANSFORMATION_IMPLEMENTATIONS"),
     ("src/rivretrieve/_internal/providers/ca_eccc/config.py", "config"),
     ("src/rivretrieve/_internal/providers/ca_eccc/catalogue_series.py", "describe_catalogue"),
 )
@@ -313,3 +314,9 @@ CATALOGUE_BUILD_DECLARATIONS = (
 
 # Additional retained declarations used by these source facts; not original-body claims.
 CATALOGUE_SUPPORTING_INPUTS = {}
+
+
+# Exact observation operation responsibility; catalogue publication does not run it.
+TRANSFORMATION_IMPLEMENTATIONS = {
+    "canonical_observation_shape": ("src/rivretrieve/_internal/providers/ca_eccc/bulk.py", "_unpivot_month"),
+}

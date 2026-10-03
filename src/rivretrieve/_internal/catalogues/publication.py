@@ -42,6 +42,7 @@ def build_catalogue_metadata(
     build_inputs: CatalogueBuildInputs | None = None,
     native_table: NativeTable | None = None,
     metadata_fields: tuple[MetadataField, ...] | None = None,
+    transformation_implementations: Mapping[str, tuple[str, str]] | None = None,
     source_descriptions: SourceDescriptions | None = None,
     source_config: ProviderConfig | None = None,
     source_describer: Callable[[PackagedCatalogArtifact], SourceDescriptions] | None = None,
@@ -52,8 +53,11 @@ def build_catalogue_metadata(
 
     ``build_inputs``, ``native_table`` and ``metadata_fields`` are required for every new publication.
     Historical provenance remains readable without these build-only inputs.
-    Missing inputs or ambiguous station identity declarations raise
-    ``FatalContractError`` before publication.
+    ``transformation_implementations`` maps exact non-catalogue fact groups to
+    declared code locations. It records operation responsibility without running
+    those observation operations. Missing inputs, unresolved responsibilities or
+    ambiguous station identity declarations raise ``FatalContractError`` before
+    publication.
     """
     if build_inputs is None or native_table is None:
         raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
@@ -72,7 +76,9 @@ def build_catalogue_metadata(
     for field in station_metadata["source_field"].drop_nulls().unique():
         if field not in native_table.data.columns:
             raise FatalContractError("Metadata projection references an absent native column")
-    bound = _bind_catalogue_build_inputs(provenance, build_inputs, station_metadata)
+    bound = _bind_catalogue_build_inputs(
+        provenance, build_inputs, station_metadata, transformation_implementations=transformation_implementations
+    )
     evidence = normalize_provenance(
         bound,
         stations=stations,
@@ -132,12 +138,15 @@ def _bind_catalogue_build_inputs(
     provenance: AcquisitionProvenance | CatalogueEvidence,
     build_inputs: CatalogueBuildInputs,
     metadata: pl.DataFrame,
+    *,
+    transformation_implementations: Mapping[str, tuple[str, str]] | None = None,
 ) -> AcquisitionProvenance:
     """Bind each transformation to its implementation and authored declaration.
 
-    Catalogue conversion, observation assembly and metadata projection retain
+    Catalogue conversion, observation operations and metadata projection retain
     separate implementation references. Authored constants have no executable
-    reference. Runtime references identify implementations, not build-time runs.
+    reference. Non-catalogue operations require an explicit fact-group mapping.
+    Runtime references identify implementations, not build-time runs.
     Historical source acquisitions, native identities and times remain unchanged.
     """
     original = reconstruct_provenance(provenance) if isinstance(provenance, CatalogueEvidence) else provenance
@@ -182,6 +191,15 @@ def _bind_catalogue_build_inputs(
         raise FatalContractError("Only bound metadata leaf projections can be replaced")
     payload["fact_universe"] = tuple(fact for fact in original.fact_universe if fact not in prior_metadata)
     payload["fact_bindings"] = bindings
+    implementations = transformation_implementations or {}
+    executable_groups = {
+        binding["fact_group"]
+        for binding in bindings
+        if binding.get("transformation") is not None
+        and binding["transformation"].get("kind", "derived_value") != "authored_constant"
+    }
+    if not set(implementations) <= executable_groups:
+        raise FatalContractError("Implementation responsibility must name an existing executable transformation group")
     declared_code = {
         (reference.repository_path, reference.symbol): reference for reference in build_inputs.declarations
     }
@@ -208,8 +226,8 @@ def _bind_catalogue_build_inputs(
         if not (transformation := binding.get("transformation")):
             continue
         facts = binding["facts"]
-        if all(fact.startswith(("observation.", "canonical.observation.")) for fact in facts):
-            implementation_key = ("src/rivretrieve/_internal/assembly.py", "assemble")
+        if binding["fact_group"] in implementations:
+            implementation_key = implementations[binding["fact_group"]]
         elif all(
             fact in canonical_legacy
             or fact.startswith(
