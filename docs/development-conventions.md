@@ -30,7 +30,7 @@ private source bodies, generated environments or local cache data.
 
 ## Documentation
 
-Follow the [documentation language guidelines](AGENTS.md) and the
+Follow the [documentation language guidelines](https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/AGENTS.md) and the
 [public API docstring rule](../AGENTS.md#public-api-docstrings). Edit public NumPy
 docstrings in source; mkdocstrings renders the API reference. Add reference
 directives when the supported public surface grows, without exposing private helpers.
