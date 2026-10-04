@@ -109,11 +109,14 @@ receipt origins exclude request headers.
 Catalogue builds check canonical columns against declared origins and acquisition evidence.
 Canonical station columns describe identity and geometry, not harmonised names, river labels, or quality judgements.
 Native tables are verified archive inputs supplied to catalogue builds. They are not a public wheel API.
-`metadata` reads a packaged projection of approved station names, river names and
-drainage-area fields at provider-station grain. Its summary preserves canonical
-geometry and shows unresolved name alternatives. Its source view preserves source
-vocabulary, exact scalar values, null and no-metadata states, and stable support
-fact references. See [station metadata](station-metadata.md) for interpretation.
+`metadata` reads a packaged projection of approved station names, water-body names,
+drainage areas and elevations at provider-station grain. Its summary preserves
+canonical geometry and the scalar station-name alternatives rule. Water-body names,
+areas and elevations use aligned field/value lists, with units and datums attached
+to the corresponding quantities. Its source view preserves source vocabulary,
+scalar types, source scopes, blank and null values, unexposed roles, and support
+links for values and datum associations. See [station metadata](station-metadata.md)
+for interpretation.
 `describe` reads the packaged Croissant descriptor offline.
 The current evidence representation uses a typed header and five normalized relations, with explicit resolution of individual fact lineage.
 

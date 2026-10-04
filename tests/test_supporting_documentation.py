@@ -20,16 +20,35 @@ def execute(page):
 
 
 def test_station_metadata_markdown():
+    import rivretrieve as rr
+
     scope = execute("docs/station-metadata.md")
-    stations = scope["stations"]
-    source = scope["source"]
+    stations = scope["metadata"]
+    source = rr.metadata(scope["selection"], view="source")
     keys = ["provider_id", "station_id"]
     assert stations.unique(subset=keys).height == stations.height
     assert_frame_equal(stations.select(keys).sort(keys), source.select(keys).unique().sort(keys))
-    areas = scope["areas"].filter(pl.col("station_id") == "02GA010")
-    assert areas.height == 2
-    assert set(areas["state"]) == {"value", "source_null"}
-    assert 1035.0 in scope["values"]
+    assert_frame_equal(
+        scope["areas"],
+        pl.DataFrame(
+            {
+                "station_id": ["05AA003", "05AA003"],
+                "drainage_area_field": ["DRAINAGE_AREA_EFFECT", "DRAINAGE_AREA_GROSS"],
+                "drainage_area_value": ["1129.0", "1130.0"],
+                "drainage_area_unit": ["km2", "km2"],
+            }
+        ),
+    )
+    assert scope["row"]["water_body_name_field"] is None
+    assert scope["row"]["water_body_name_value"] is None
+    missing = scope["missing_areas"]
+    assert missing["drainage_area_value"] == [None, None, None, None]
+    null_source = rr.metadata(rr.pick(scope["norway"], station="16.28.0"), view="source").filter(
+        pl.col("attribute_role") == "drainage_area"
+    )
+    assert null_source["source_field"].to_list() == missing["drainage_area_field"]
+    assert null_source["state"].to_list() == ["source_null"] * 4
+    assert null_source["source_value"].null_count() == 4
 
 
 def test_catalogue_evidence_markdown():
