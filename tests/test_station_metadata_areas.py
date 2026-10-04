@@ -55,7 +55,7 @@ SOURCE_FIELDS = {
             "transferAreaOut": "km2",
         },
     ),
-    "pl_imgw": ("gauge_id", {"area": None}),
+    "pl_imgw": ("gauge_id", {"area": "square kilometre"}),
     "th_thaiwater": ("station.id", {}),
     "usgs_nwis": ("site_no", {"drain_area_va": "sq mi", "contrib_drain_area_va": "sq mi"}),
     "za_dws": ("Station", {"Catchment Area km**2": "km**2"}),
@@ -170,6 +170,54 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
             assert set(rows["source_unit"]) == {unit}
         expected_states = ["source_null" if value is None else "value" for value in native[field]]
         assert rows["state"].to_list() == expected_states
+
+
+def test_poland_area_unit_is_aligned_and_supported_by_the_retained_workbook(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests._provenance import legacy_document
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Poland metadata must work without network or credentials")
+
+    monkeypatch.setattr(socket.socket, "connect", forbidden)
+    monkeypatch.setattr(socket, "create_connection", forbidden)
+    monkeypatch.setattr(discovery, "_resolve_credentials", forbidden)
+    monkeypatch.setattr(discovery, "dotenv_values", forbidden)
+    selection = rr.find(provider="pl_imgw")
+    source = _areas(selection).sort("station_id")
+    assert source.height == 1301
+    assert set(source["source_field"]) == {"area"}
+    assert set(source["source_dtype"]) == {"Float64"}
+    assert set(source["source_unit"]) == {"square kilometre"}
+    summary = rr.metadata(selection)
+    aligned = summary.select(
+        "provider_id",
+        "station_id",
+        "drainage_area_field",
+        "drainage_area_value",
+        "drainage_area_unit",
+    ).explode("drainage_area_field", "drainage_area_value", "drainage_area_unit")
+    assert_frame_equal(
+        aligned.rename(
+            {
+                "drainage_area_field": "source_field",
+                "drainage_area_value": "source_value",
+                "drainage_area_unit": "source_unit",
+            }
+        ).sort("station_id"),
+        source.select("provider_id", "station_id", "source_field", "source_value", "source_unit"),
+    )
+    catalogue = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/pl_imgw/catalogue"
+    provenance = legacy_document(catalogue / "provenance.json")
+    unit_fact = "source.grdc.catchment_area_unit"
+    projection = next(
+        binding for binding in provenance["fact_bindings"] if "metadata.drainage_area.area" in binding["facts"]
+    )
+    assert {"source_id": "sr.pl.grdc", "fact": unit_fact} in projection["transformation"]["external_inputs"]
+    adopted = [item for item in provenance["build_inputs"]["inputs"] if unit_fact in item["facts"]]
+    assert len(adopted) == 1
+    assert adopted[0]["usage"] == "reviewed_support"
+    assert adopted[0]["reference"]["sha256"] == "dfab6ea7de80fb1570f4a8dded8743ed7c7dcb4eb67fe75e2c0e02e9b964b7bf"
+    assert adopted[0]["reference"]["byte_size"] == 116301
 
 
 def test_formatted_string_is_not_parsed() -> None:
