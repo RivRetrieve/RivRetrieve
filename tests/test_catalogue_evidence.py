@@ -349,6 +349,500 @@ def test_v3_parse_never_constructs_old_national_models(monkeypatch):
     plt.assert_frame_equal(parsed.facts, evidence.facts)
 
 
+# Exact published metadata additions from 51607cc4, not historical oracle values.
+_METADATA_FIXED_SOURCE_EXTENSIONS = {
+    "ca_eccc": {
+        "facts": [
+            "source.station.hydat_drainage_area_definitions",
+            "source.station.geomet_hydat_field_mapping",
+            "source.provider.geomet_source_project",
+        ],
+        "bindings": [
+            {
+                "fact_group": "hydat_definition",
+                "facts": ["source.station.hydat_drainage_area_definitions"],
+                "source_id": "ca_eccc_msc",
+                "acquisition_id": "ca_eccc-hydat-field-definition",
+            },
+            {
+                "fact_group": "geomet_loader",
+                "facts": ["source.station.geomet_hydat_field_mapping"],
+                "source_id": "ca_eccc_msc",
+                "acquisition_id": "ca_eccc-publisher-hydat-geomet-loader",
+            },
+            {
+                "fact_group": "geomet_project",
+                "facts": ["source.provider.geomet_source_project"],
+                "source_id": "ca_eccc_msc",
+                "acquisition_id": "ca_eccc-geomet-government-landing",
+            },
+        ],
+        "acquisitions": [
+            {
+                "acquisition_id": "ca_eccc-hydat-field-definition",
+                "method": "http_request",
+                "instant_type": "retrieval",
+                "description": "HYDAT station-field definitions and drainage-area units",
+                "requested_from": ["https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/HYDAT_Definition_EN.pdf"],
+                "retrieved_at_start": "2026-10-04T10:20:43.548131Z",
+                "retrieved_at_end": None,
+                "recording_ids": ["ca_eccc-hydat-field-definition-body"],
+                "material": None,
+            },
+            {
+                "acquisition_id": "ca_eccc-publisher-hydat-geomet-loader",
+                "method": "http_request",
+                "instant_type": "retrieval",
+                "description": "Publisher field mapping from HYDAT stations to GeoMet station properties",
+                "requested_from": [
+                    "https://raw.githubusercontent.com/ECCC-MSC/msc-pygeoapi/dec207e47bc34d060319ded4cf855d5d909de635/msc_pygeoapi/loader/hydat.py"
+                ],
+                "retrieved_at_start": "2026-10-04T10:23:09.914010Z",
+                "retrieved_at_end": None,
+                "recording_ids": ["ca_eccc-publisher-hydat-geomet-loader-body"],
+                "material": None,
+            },
+            {
+                "acquisition_id": "ca_eccc-geomet-government-landing",
+                "method": "http_request",
+                "instant_type": "retrieval",
+                "description": "Government identification of the GeoMet source project",
+                "requested_from": ["https://api.weather.gc.ca/?f=html"],
+                "retrieved_at_start": "2026-10-04T10:23:30.682406Z",
+                "retrieved_at_end": None,
+                "recording_ids": ["ca_eccc-geomet-government-landing-body"],
+                "material": None,
+            },
+        ],
+        "evidence": [
+            {
+                "evidence_id": "ca_eccc-hydat-field-definition-body",
+                "description": "HYDAT station-field definitions and drainage-area units",
+                "recording": {
+                    "recording_id": "ca_eccc-hydat-field-definition-body",
+                    "repository_path": "maintenance/catalogue/station_metadata/sources/ca_eccc/hydat-field-definition/body",
+                    "source_url": "https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/HYDAT_Definition_EN.pdf",
+                    "retrieved_at": "2026-10-04T10:20:43.548131Z",
+                    "media_type": "application/pdf",
+                    "sha256": "b3ab1954bf5aeedb026cebe939764fcfbda0266fb267cb6a7315544c9be8e1ee",
+                },
+            },
+            {
+                "evidence_id": "ca_eccc-publisher-hydat-geomet-loader-body",
+                "description": "Publisher field mapping from HYDAT stations to GeoMet station properties",
+                "recording": {
+                    "recording_id": "ca_eccc-publisher-hydat-geomet-loader-body",
+                    "repository_path": "maintenance/catalogue/station_metadata/sources/ca_eccc/publisher-hydat-geomet-loader/body",
+                    "source_url": "https://raw.githubusercontent.com/ECCC-MSC/msc-pygeoapi/dec207e47bc34d060319ded4cf855d5d909de635/msc_pygeoapi/loader/hydat.py",
+                    "retrieved_at": "2026-10-04T10:23:09.914010Z",
+                    "media_type": "text/plain; charset=utf-8",
+                    "sha256": "e879b6024f6136d76945a157e32b2afcaec93be0f4bbd982c3655bf2804deb92",
+                },
+            },
+            {
+                "evidence_id": "ca_eccc-geomet-government-landing-body",
+                "description": "Government identification of the GeoMet source project",
+                "recording": {
+                    "recording_id": "ca_eccc-geomet-government-landing-body",
+                    "repository_path": "maintenance/catalogue/station_metadata/sources/ca_eccc/geomet-government-landing/body",
+                    "source_url": "https://api.weather.gc.ca/?f=html",
+                    "retrieved_at": "2026-10-04T10:23:30.682406Z",
+                    "media_type": "text/html",
+                    "sha256": "f1ce6e8615936b0aff99e685ad105803fb8072f8b4a12797733cfcb3b09e44e0",
+                },
+            },
+        ],
+    },
+    "usgs_nwis": {
+        "facts": [
+            "source.usgs.sitefile_altitude_definition",
+            "source.usgs.sitefile_altitude_datum_definition",
+            "source.usgs.sitefile_drainage_area_definitions",
+        ],
+        "bindings": [
+            {
+                "fact_group": "sitefile_metadata_definitions",
+                "facts": [
+                    "source.usgs.sitefile_altitude_definition",
+                    "source.usgs.sitefile_altitude_datum_definition",
+                    "source.usgs.sitefile_drainage_area_definitions",
+                ],
+                "source_id": "usgs_nwis",
+                "acquisition_id": "usgs_nwis-nwis-sitefile-manual",
+            }
+        ],
+        "acquisitions": [
+            {
+                "acquisition_id": "usgs_nwis-nwis-sitefile-manual",
+                "method": "http_request",
+                "instant_type": "retrieval",
+                "description": "USGS site-file definitions for altitude, altitude datum and drainage areas",
+                "requested_from": ["https://pubs.usgs.gov/of/2005/1251/pdf/gwcoding_Sect2-1.pdf"],
+                "retrieved_at_start": "2026-10-04T10:38:02.574170Z",
+                "retrieved_at_end": None,
+                "recording_ids": ["usgs_nwis-nwis-sitefile-manual-body"],
+                "material": None,
+            }
+        ],
+        "evidence": [
+            {
+                "evidence_id": "usgs_nwis-nwis-sitefile-manual-body",
+                "description": "USGS site-file metadata definitions",
+                "recording": {
+                    "recording_id": "usgs_nwis-nwis-sitefile-manual-body",
+                    "repository_path": "maintenance/catalogue/station_metadata/sources/usgs_nwis/nwis-sitefile-manual/body",
+                    "source_url": "https://pubs.usgs.gov/of/2005/1251/pdf/gwcoding_Sect2-1.pdf",
+                    "retrieved_at": "2026-10-04T10:38:02.574170Z",
+                    "media_type": "application/pdf",
+                    "sha256": "e711a90861425227879decb13605e5fe7408c81ddb4dd40065692f52e35f86bf",
+                },
+            }
+        ],
+    },
+}
+
+
+def _assert_metadata_source_extensions_and_restore_original(provenance):
+    """Remove only reviewed metadata source additions, not historical assertions.
+
+    These expectations describe published provenance, not retained source bodies.
+    The immutable ordered digest below still checks every surviving source value.
+    """
+    model = provenance.model_dump(mode="json")
+    if provenance.provider_id in _METADATA_FIXED_SOURCE_EXTENSIONS:
+        provider = provenance.provider_id
+        expected = _METADATA_FIXED_SOURCE_EXTENSIONS[provider]
+        fact_start, binding_count, acquisition_start = (5, 3, 0) if provider == "ca_eccc" else (0, 1, 5)
+        source = model["source_records"][0]
+        assert source["source_id"] == ("ca_eccc_msc" if provider == "ca_eccc" else "usgs_nwis")
+        actual = {
+            "facts": model["fact_universe"][fact_start : fact_start + 3],
+            "bindings": model["fact_bindings"][:binding_count],
+            "acquisitions": source["acquisitions"][acquisition_start : acquisition_start + binding_count],
+            "evidence": source["evidence"][:binding_count],
+        }
+        assert actual == expected
+        del model["fact_universe"][fact_start : fact_start + 3]
+        del model["fact_bindings"][:binding_count]
+        del source["acquisitions"][acquisition_start : acquisition_start + binding_count]
+        del source["evidence"][:binding_count]
+        return AcquisitionProvenance.model_validate(model)
+    if provenance.provider_id == "ch_foen":
+        assert len(model["fact_universe"]) == 52
+        assert len(model["fact_bindings"]) == 15
+        assert len(model["source_records"]) == 3
+        source = model["source_records"][2]
+        assert source["source_id"] == "ch_foen.foen_station_reference"
+        assert len(source["acquisitions"]) == 4
+        assert len(source["evidence"]) == 240
+        extension = {
+            "facts": model["fact_universe"][47:52],
+            "bindings": model["fact_bindings"][11:15],
+            "source": source,
+        }
+        # Pin the complete ordered public extension at 51607cc4, including all
+        # 237 page identities. This is not original-source certification and does
+        # not replace or regenerate the unchanged historical oracle below.
+        ordered = json.dumps(extension, ensure_ascii=False, separators=(",", ":"))
+        assert sha256(ordered.encode()).hexdigest() == (
+            "d73f952650bf0bd7737c7049c533802136ecc23ee2b4215d7ca9cc823d931405"
+        )
+        del model["fact_universe"][47:52]
+        del model["fact_bindings"][11:15]
+        del model["source_records"][2]
+        return AcquisitionProvenance.model_validate(model)
+    if provenance.provider_id == "jp_mlit":
+        expected_binding = {
+            "acquisition_id": "station_zero_point_definition_capture_2026_08_02",
+            "fact_group": "mlit_station_zero_point_elevation_definition",
+            "facts": ["source.station.mlit_zero_point_elevation_definition"],
+            "source_id": "jp_mlit",
+        }
+        expected_acquisition = {
+            "acquisition_id": "station_zero_point_definition_capture_2026_08_02",
+            "description": "Original MLIT station-detail recording exposing the zero-point elevation field",
+            "instant_type": "retrieval",
+            "material": None,
+            "method": "http_request",
+            "recording_ids": ["jp_mlit_site_info_detail_301011281104010"],
+            "requested_from": ["http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010"],
+            "retrieved_at_end": None,
+            "retrieved_at_start": "2026-08-02T19:35:42Z",
+        }
+        expected_evidence = {
+            "description": "Original station-detail field context for 零点高; no separate global unit or datum",
+            "evidence_id": "jp_mlit_station_zero_point_definition",
+            "recording": {
+                "media_type": "text/html; charset=EUC-JP",
+                "recording_id": "jp_mlit_site_info_detail_301011281104010",
+                "repository_path": "tests/test_data/jp_mlit_site_info_detail_301011281104010.html",
+                "retrieved_at": "2026-08-02T19:35:42Z",
+                "sha256": "81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9",
+                "source_url": "http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010",
+            },
+        }
+        (source,) = model["source_records"]
+        assert source["source_id"] == "jp_mlit"
+        assert source["acquisitions"].pop(0) == expected_acquisition
+        assert source["evidence"].pop(0) == expected_evidence
+        offset = 8
+    elif provenance.provider_id == "no_nve":
+        expected_binding = {
+            "acquisition_id": "station_schema_capture_2026_09_04",
+            "fact_group": "station_metadata_definitions",
+            "facts": [
+                "source.station_catalogue.masl_definition",
+                "source.station_catalogue.reservoirName_definition",
+                "source.station_catalogue.transferAreaIn_definition",
+                "source.station_catalogue.transferAreaOut_definition",
+            ],
+            "source_id": "no_nve.nve_hydapi",
+        }
+        offset = 6
+    else:
+        return provenance
+    assert model["fact_bindings"].pop(0) == expected_binding
+    facts = expected_binding["facts"]
+    assert model["fact_universe"][offset : offset + len(facts)] == facts
+    del model["fact_universe"][offset : offset + len(facts)]
+    return AcquisitionProvenance.model_validate(model)
+
+
+@pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
+def test_historical_projection_preserves_sources_and_validates_metadata(provider):
+    original = _legacy(provider)
+    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    projected = historical_source_provenance(original, metadata)
+    assert projected.source_records == original.source_records
+    assert not any(fact.startswith("metadata.") for fact in projected.fact_universe)
+
+
+@pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
+def test_historical_projection_rejects_changed_current_producer(provider):
+    original = _legacy(provider)
+    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    payload = original.model_dump(mode="json")
+    # Even metadata-empty forms must validate their declared current producers.
+    transformations = [
+        item["transformation"]
+        for item in payload["fact_bindings"]
+        if item.get("transformation", {}).get("executable") is not None
+    ]
+    assert transformations
+    transformations[-1]["executable"]["symbol"] = "unreviewed_projection"
+    with pytest.raises(AssertionError):
+        historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["producer", "declaration", "support", "review_owner", "review_path", "review_revision", "review_symbol"],
+)
+def test_historical_projection_rejects_changed_metadata_lineage(mutation):
+    original = _legacy("no_nve")
+    metadata = pl.read_parquet(ROOT / "no_nve/catalogue/station_metadata.parquet")
+    payload = original.model_dump(mode="json")
+    transformation = next(
+        item["transformation"] for item in payload["fact_bindings"] if item["fact_group"] == "metadata.elevation.masl"
+    )
+    if mutation == "producer":
+        transformation["executable"]["symbol"] = "other_projection"
+    elif mutation == "declaration":
+        transformation["declaration"] = payload["build_inputs"]["declarations"][1]
+    elif mutation == "support":
+        transformation["external_inputs"].pop()
+    elif mutation == "review_owner":
+        payload["build_inputs"]["declarations"][0]["repository"] = payload["build_inputs"]["build"]["repository"]
+    elif mutation == "review_path":
+        payload["build_inputs"]["declarations"][0]["repository_path"] = "declarations/station_metadata/other.json"
+    elif mutation == "review_revision":
+        payload["build_inputs"]["declarations"][0]["revision"] = "a" * 40
+    else:
+        payload["build_inputs"]["declarations"][0]["symbol"] = "partial_review"
+    with pytest.raises((AssertionError, ValueError)):
+        historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
+
+
+@pytest.mark.parametrize("mutation", ["datum_support", "scope"])
+def test_historical_projection_rejects_changed_datum_or_scope(mutation):
+    from rivretrieve._internal.issues import FatalContractError
+
+    original = _legacy("ch_foen")
+    metadata = pl.read_parquet(ROOT / "ch_foen/catalogue/station_metadata.parquet")
+    payload = original.model_dump(mode="json")
+    if mutation == "datum_support":
+        transformation = next(
+            item["transformation"]
+            for item in payload["fact_bindings"]
+            if item["fact_group"] == "metadata.elevation.station_page.Station altitude.datum"
+        )
+        transformation["external_inputs"].pop()
+    else:
+        metadata = metadata.with_columns(pl.lit("other_scope").alias("source_scope"))
+    with pytest.raises((AssertionError, ValueError, FatalContractError)):
+        historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
+
+
+@pytest.mark.parametrize("mutation", ["binding", "acquisition", "recording"])
+def test_historical_restoration_rejects_changed_metadata_source_extension(mutation):
+    original = _legacy("jp_mlit")
+    metadata = pl.read_parquet(ROOT / "jp_mlit/catalogue/station_metadata.parquet")
+    projected = historical_source_provenance(original, metadata)
+    payload = projected.model_dump(mode="json")
+    if mutation == "binding":
+        payload["fact_bindings"][0]["fact_group"] = "other_definition"
+    elif mutation == "acquisition":
+        payload["source_records"][0]["acquisitions"][0]["description"] = "changed witness"
+    else:
+        payload["source_records"][0]["evidence"][0]["recording"]["sha256"] = "a" * 64
+    with pytest.raises(AssertionError):
+        _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
+
+
+@pytest.mark.parametrize("provider", ["ca_eccc", "ch_foen", "jp_mlit", "no_nve", "usgs_nwis"])
+def test_historical_restoration_removes_only_declared_metadata_source_closure(provider):
+    original = _legacy(provider)
+    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    projected = historical_source_provenance(original, metadata)
+    restored = _assert_metadata_source_extensions_and_restore_original(projected)
+    before = projected.model_dump(mode="json")
+    expected = projected.model_dump(mode="json")
+    fact_start, fact_count, binding_start, binding_count = {
+        "ca_eccc": (5, 3, 0, 3),
+        "ch_foen": (47, 5, 11, 4),
+        "jp_mlit": (8, 1, 0, 1),
+        "no_nve": (6, 4, 0, 1),
+        "usgs_nwis": (0, 3, 0, 1),
+    }[provider]
+    del expected["fact_universe"][fact_start : fact_start + fact_count]
+    del expected["fact_bindings"][binding_start : binding_start + binding_count]
+    if provider == "ch_foen":
+        del expected["source_records"][2]
+    elif provider != "no_nve":
+        source = expected["source_records"][0]
+        acquisition_start = 5 if provider == "usgs_nwis" else 0
+        del source["acquisitions"][acquisition_start : acquisition_start + binding_count]
+        del source["evidence"][:binding_count]
+    assert restored.model_dump(mode="json") == expected
+    assert projected.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("provider", ["ca_eccc", "ch_foen", "jp_mlit", "no_nve", "usgs_nwis"])
+def test_historical_restoration_preserves_changes_outside_the_extension(provider):
+    original = _legacy(provider)
+    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    projected = historical_source_provenance(original, metadata)
+    expected = _assert_metadata_source_extensions_and_restore_original(projected).model_dump(mode="json")
+    payload = projected.model_dump(mode="json")
+    payload["source_records"][0]["issuer"] = "changed historical issuer"
+    restored = _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
+    expected["source_records"][0]["issuer"] = "changed historical issuer"
+    assert restored.model_dump(mode="json") == expected
+    if provider == "jp_mlit":
+        # JP needs no retained intermediate restoration, so exercise the actual
+        # immutable old oracle here, not a digest derived from today's product.
+        oracle = json.loads((Path(__file__).parent / "test_data/catalogue_provenance_ordered_v2.json").read_text())
+        ordered = json.dumps(restored.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
+        assert sha256(ordered.encode()).hexdigest() != oracle["providers"][provider]["ordered_model_sha256"]
+
+
+@pytest.mark.parametrize("provider", ["ca_eccc", "ch_foen", "usgs_nwis"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "acquisition",
+        "binding",
+        "fact_order",
+        "binding_acquisition",
+        "recording_identity",
+        "recording_hash",
+        "recording_path",
+        "recording_time",
+        "evidence_order",
+        "extra_evidence",
+    ],
+)
+def test_historical_restoration_rejects_changed_complete_source_closure(provider, mutation):
+    original = _legacy(provider)
+    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    projected = historical_source_provenance(original, metadata)
+    payload = projected.model_dump(mode="json")
+    source = payload["source_records"][2 if provider == "ch_foen" else 0]
+    binding = payload["fact_bindings"][11 if provider == "ch_foen" else 0]
+    acquisition = source["acquisitions"][5 if provider == "usgs_nwis" else 0]
+    # Include a dynamic Swiss page, not just one of the three fixed documents.
+    evidence = source["evidence"][-1 if provider == "ch_foen" else 0]
+    if mutation == "acquisition":
+        acquisition["description"] = "changed acquisition"
+    elif mutation == "binding":
+        binding["fact_group"] = "changed_group"
+    elif mutation == "fact_order":
+        start = 47 if provider == "ch_foen" else 5 if provider == "ca_eccc" else 0
+        payload["fact_universe"][start : start + 2] = reversed(payload["fact_universe"][start : start + 2])
+    elif mutation == "binding_acquisition":
+        binding["acquisition_id"] = source["acquisitions"][1]["acquisition_id"]
+    elif mutation == "recording_identity":
+        old_id = evidence["recording"]["recording_id"]
+        evidence["recording"]["recording_id"] += "-changed"
+        for item in source["acquisitions"]:
+            item["recording_ids"] = [old + "-changed" if old == old_id else old for old in item["recording_ids"]]
+    elif mutation == "recording_hash":
+        evidence["recording"]["sha256"] = "a" * 64
+    elif mutation == "recording_path":
+        evidence["recording"]["repository_path"] += ".changed"
+    elif mutation == "recording_time":
+        evidence["recording"]["retrieved_at"] = "2000-01-01T00:00:00Z"
+    elif mutation == "evidence_order":
+        source["evidence"][:2] = reversed(source["evidence"][:2])
+    else:
+        import copy
+
+        extra = copy.deepcopy(evidence)
+        extra["evidence_id"] += "-extra"
+        extra["recording"]["recording_id"] += "-extra"
+        # Insert into the declared closure so none can escape validation.
+        source["evidence"].insert(0, extra)
+    with pytest.raises((AssertionError, ValueError)):
+        _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
+
+
+@pytest.mark.parametrize("mutation", ["extra_source", "missing_evidence", "source_header"])
+def test_historical_restoration_rejects_changed_swiss_source_membership(mutation):
+    original = _legacy("ch_foen")
+    metadata = pl.read_parquet(ROOT / "ch_foen/catalogue/station_metadata.parquet")
+    projected = historical_source_provenance(original, metadata)
+    payload = projected.model_dump(mode="json")
+    source = payload["source_records"][2]
+    if mutation == "extra_source":
+        payload["source_records"].append(
+            {
+                "source_id": "extra_source",
+                "issuer": "Unreviewed source",
+                "acquisitions": [
+                    {
+                        "acquisition_id": "extra_request",
+                        "method": "runtime_http_request",
+                        "instant_type": "runtime",
+                        "description": "Unreviewed runtime request",
+                        "requested_from": ["https://example.org/extra"],
+                    }
+                ],
+            }
+        )
+    elif mutation == "missing_evidence":
+        removed = source["evidence"].pop()
+        recording_id = removed["recording"]["recording_id"]
+        # Keep the input model valid, so the closed restoration itself must fail.
+        acquisition = source["acquisitions"][3]
+        acquisition["recording_ids"].remove(recording_id)
+        acquisition["requested_from"].remove(removed["recording"]["source_url"])
+    else:
+        source["issuer"] = "Changed FOEN issuer"
+    changed = AcquisitionProvenance.model_validate(payload)
+    with pytest.raises(AssertionError):
+        _assert_metadata_source_extensions_and_restore_original(changed)
+
+
 # Brazil has new adopted-product acquisitions after this migration oracle.
 # Its current evidence still passes the all-provider lossless roundtrip above;
 # source-material and per-pair assertions live in test_br_ana_catalogue_telemetry.
@@ -990,6 +1484,7 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(request: p
         restored = historical_source_provenance(
             restored, pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
         )
+    restored = _assert_metadata_source_extensions_and_restore_original(restored)
     if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
         restored = _assert_field_source_lineage_repair_and_restore_original(retained_evidence_root, restored)
     if provider == "ch_foen":

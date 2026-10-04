@@ -290,7 +290,10 @@ def _projected_metadata():
         {
             "attribute_role": ["drainage_area"],
             "source_field": ["area"],
+            "source_scope": pl.Series([None], dtype=pl.String),
             "support_fact": ["metadata.drainage_area.area"],
+            "source_datum_field": pl.Series([None], dtype=pl.String),
+            "datum_support_fact": pl.Series([None], dtype=pl.String),
         }
     )
 
@@ -848,8 +851,8 @@ def test_publication_requires_explicit_metadata_fields_and_accepts_empty_scope()
         source_descriptions=descriptions,
     )
     frame = pl.read_parquet(BytesIO(metadata["station_metadata.parquet"]))
-    assert frame["state"].to_list() == ["no_metadata"] * 3
-    assert frame["support_fact"].null_count() == 3
+    assert frame["state"].to_list() == ["no_metadata"] * 4
+    assert frame["support_fact"].null_count() == 4
 
 
 def test_public_consumed_input_rejects_restricted_locator_objects_and_fields():
@@ -1304,3 +1307,538 @@ def test_private_reference_cannot_impersonate_public_transformation_executable()
     transformation["executable"]["repository"] = "https://github.com/RivRetrieve/verification-evidence"
     with pytest.raises(ValidationError, match="owner or revision"):
         AcquisitionProvenance.model_validate(document)
+
+
+def _elevation_publication():
+    from rivretrieve._internal.catalogues.station_metadata import MetadataField
+    from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA
+
+    original = _provenance().model_dump(mode="python")
+    original["fact_universe"] = (*original["fact_universe"], "source.height_unit", "source.height_datum")
+    original["fact_bindings"] = list(original["fact_bindings"])
+    source = original["source_records"][0]
+    source["acquisitions"] = (
+        *source["acquisitions"],
+        {
+            **source["acquisitions"][0],
+            "acquisition_id": "height-definition",
+        },
+    )
+    original["fact_bindings"].append(
+        {
+            "fact_group": "height-definition",
+            "facts": ("source.height_unit", "source.height_datum"),
+            "source_id": "issuer",
+            "acquisition_id": "height-definition",
+        }
+    )
+    build = _publication_build().model_dump(mode="python")
+    build["inputs"] = (
+        *build["inputs"],
+        {
+            "reference": _member(_reference(artifact_id="height-definition", role="publisher_original")),
+            "usage": "reviewed_support",
+            "facts": ("source.height_unit", "source.height_datum"),
+        },
+    )
+    field = MetadataField(
+        "elevation",
+        "height",
+        "m",
+        datum_field="code",
+        datum_support=("source.height_datum",),
+        support_facts=("source.height_unit",),
+    )
+    metadata = pl.DataFrame(
+        [
+            {
+                "provider_id": "synthetic",
+                "station_id": "001",
+                "attribute_role": "elevation",
+                "source_field": "height",
+                "source_value": "3.0",
+                "source_dtype": "Float64",
+                "source_unit": "m",
+                "state": "value",
+                "support_fact": "metadata.elevation.height",
+                "source_datum": "3",
+                "source_datum_field": "code",
+                "source_datum_dtype": "Int64",
+                "datum_support_fact": "metadata.elevation.height.datum",
+            }
+        ],
+        schema=SOURCE_METADATA_SCHEMA,
+    )
+    return AcquisitionProvenance.model_validate(original), CatalogueBuildInputs.model_validate(build), field, metadata
+
+
+def test_publication_binds_value_semantics_and_datum_association_separately():
+    from rivretrieve._internal.catalogues.publication import _bind_catalogue_build_inputs
+
+    original, build, field, metadata = _elevation_publication()
+    bound = _bind_catalogue_build_inputs(original, build, metadata, metadata_fields=(field,))
+    bindings = {binding.fact_group: binding for binding in bound.fact_bindings}
+    value = bindings["metadata.elevation.height"].transformation
+    datum = bindings["metadata.elevation.height.datum"].transformation
+    assert [(item.source_id, item.fact) for item in value.external_inputs] == [
+        ("issuer", "native.latitude"),
+        ("issuer", "source.height_unit"),
+    ]
+    assert [(item.source_id, item.fact) for item in datum.external_inputs] == [
+        ("issuer", "native.latitude"),
+        ("issuer", "source.height_datum"),
+    ]
+    assert datum.name == "associate_elevation_datum"
+    assert datum.declaration.symbol == "STATION_METADATA_FIELDS"
+    assert datum.executable.symbol == "build_station_metadata"
+    assert bound.source_records == original.source_records
+    repeated = _bind_catalogue_build_inputs(_normalize(bound), build, metadata, metadata_fields=(field,))
+    assert repeated == bound
+
+
+@pytest.mark.parametrize("fault", ["missing_declaration", "wrong_datum_field", "missing_fact", "unadopted", "runtime"])
+def test_publication_rejects_unsupported_datum_association(fault):
+    from dataclasses import replace
+
+    from rivretrieve._internal.catalogues.publication import _bind_catalogue_build_inputs
+    from rivretrieve._internal.issues import FatalContractError
+
+    original, build, field, metadata = _elevation_publication()
+    if fault == "wrong_datum_field":
+        field = replace(field, datum_field="other_code")
+    elif fault == "missing_fact":
+        field = replace(field, datum_support=("source.absent",))
+    elif fault == "unadopted":
+        payload = build.model_dump(mode="python")
+        payload["inputs"] = payload["inputs"][:1]
+        build = CatalogueBuildInputs.model_validate(payload)
+        field = replace(field, support_facts=())
+    elif fault == "runtime":
+        payload = original.model_dump(mode="python")
+        acquisition = payload["source_records"][0]["acquisitions"][1]
+        acquisition.update(method="runtime_http_request", instant_type="runtime", retrieved_at_start=None)
+        original = AcquisitionProvenance.model_validate_json(
+            json.dumps(payload, default=str).replace("source.height_", "source.observation.height_")
+        )
+        build = CatalogueBuildInputs.model_validate_json(
+            build.model_dump_json().replace("source.height_", "source.observation.height_")
+        )
+        field = replace(field, support_facts=(), datum_support=("source.observation.height_datum",))
+    with pytest.raises(FatalContractError):
+        _bind_catalogue_build_inputs(
+            original, build, metadata, metadata_fields=() if fault == "missing_declaration" else (field,)
+        )
+
+
+def test_publication_rejects_unbound_field_semantics():
+    from dataclasses import replace
+
+    from rivretrieve._internal.catalogues.publication import _bind_catalogue_build_inputs
+    from rivretrieve._internal.issues import FatalContractError
+
+    original, build, field, metadata = _elevation_publication()
+    with pytest.raises(FatalContractError, match="adopted direct source fact"):
+        _bind_catalogue_build_inputs(
+            original, build, metadata, metadata_fields=(replace(field, support_facts=("source.absent",)),)
+        )
+
+
+def test_descriptor_requires_bound_datum_association_support():
+    from io import BytesIO
+
+    from rivretrieve._internal.catalogues.descriptor import build_catalogue_descriptor
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+    from rivretrieve._internal.catalogues.station_metadata import MetadataField
+    from rivretrieve._internal.issues import FatalContractError
+
+    original, origins, files, native, _ = _publication_components()
+    products = build_catalogue_metadata(
+        original,
+        origins,
+        files,
+        build_inputs=_publication_build(),
+        native_table=native,
+        metadata_fields=(
+            MetadataField("elevation", "area", datum="Synthetic datum", datum_support=("native.latitude",)),
+        ),
+        source_descriptions=SourceDescriptions(provider_id="synthetic", descriptions=()),
+    )
+    header = EvidenceHeader.model_validate_json(products["provenance.json"])
+    evidence = parse_catalogue_evidence(header, {name: products[name] for name in header.files})
+    # Keep a structurally valid native-field association but remove its bound fact.
+    frame = pl.read_parquet(BytesIO(products["station_metadata.parquet"]))
+    assert frame.filter(pl.col("attribute_role") == "elevation")["source_datum"].item() == "Synthetic datum"
+    descriptor = json.loads(products.pop("croissant.json"))
+    record = next(record for record in descriptor["recordSet"] if record["@id"] == "station_metadata")
+    datum = next(field for field in record["field"] if field["@id"] == "station_metadata/datum_support_fact")
+    assert datum["references"]["extract"]["column"] == "name"
+    frame = frame.with_columns(
+        pl.when(pl.col("attribute_role") == "elevation")
+        .then(pl.lit("other"))
+        .otherwise(pl.col("source_field"))
+        .alias("source_field"),
+        pl.when(pl.col("attribute_role") == "elevation")
+        .then(pl.lit("metadata.elevation.other.datum"))
+        .otherwise(pl.col("datum_support_fact"))
+        .alias("datum_support_fact"),
+    )
+    buffer = BytesIO()
+    frame.write_parquet(buffer)
+    products["station_metadata.parquet"] = buffer.getvalue()
+    with pytest.raises(FatalContractError, match="support facts must resolve"):
+        build_catalogue_descriptor(evidence, origins, {**files, **products})
+
+
+_SCOPED_METADATA_IMPLEMENTATION = (
+    "src/rivretrieve/_internal/providers/synthetic/station_metadata.py",
+    "project_station_metadata",
+)
+
+
+def _scoped_metadata_publication():
+    from rivretrieve._internal.catalogue_origins import Field, NativeColumn
+    from rivretrieve._internal.catalogues.native import NativeTable
+    from rivretrieve._internal.catalogues.station_metadata import MetadataField, build_station_metadata
+
+    original, origins, files, native, _ = _publication_components()
+    payload = original.model_dump(mode="python")
+    payload["fact_universe"] = (*payload["fact_universe"], "source.site")
+    payload["fact_bindings"] = (
+        *payload["fact_bindings"],
+        {
+            "fact_group": "site-source",
+            "facts": ("source.site",),
+            "source_id": "issuer",
+            "acquisition_id": "site-acquisition",
+        },
+    )
+    source = payload["source_records"][0]
+    source["acquisitions"] = (
+        *source["acquisitions"],
+        {
+            **source["acquisitions"][0],
+            "acquisition_id": "site-acquisition",
+        },
+    )
+    build = _publication_build().model_dump(mode="python")
+    build["declarations"] = (*build["declarations"], _code(*_SCOPED_METADATA_IMPLEMENTATION, revision="e" * 40))
+    build["inputs"] = (
+        *build["inputs"],
+        {
+            "reference": _member(_reference(artifact_id="site-response", role="publisher_original")),
+            "usage": "original",
+            "facts": ("source.site",),
+        },
+    )
+    native = NativeTable(native.data.with_columns(pl.lit("Station river").alias("name")))
+    site = NativeTable(native.data.with_columns(pl.lit("Site river").alias("name")))
+    fields = (
+        MetadataField("water_body_name", "name", source_scope="station"),
+        MetadataField("water_body_name", "name", source_scope="site", source_facts=("source.site",)),
+    )
+    stations = pl.DataFrame({"station_id": ["001"]})
+    station_rows = build_station_metadata("synthetic", native, stations, Field(NativeColumn("station_id")), fields[:1])
+    site_rows = build_station_metadata("synthetic", site, stations, Field(NativeColumn("station_id")), fields[1:])
+    projection = pl.concat([station_rows, site_rows.filter(pl.col("state") != "no_metadata")])
+    return (
+        AcquisitionProvenance.model_validate(payload),
+        CatalogueBuildInputs.model_validate(build),
+        origins,
+        files,
+        native,
+        fields,
+        projection,
+    )
+
+
+def test_explicit_projection_keeps_scoped_sources_and_their_own_acquisitions():
+    from io import BytesIO
+
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+
+    original, build, origins, files, native, fields, projection = _scoped_metadata_publication()
+    products = build_catalogue_metadata(
+        original,
+        origins,
+        files,
+        build_inputs=build,
+        native_table=native,
+        metadata_fields=fields,
+        station_metadata=projection,
+        metadata_implementation=_SCOPED_METADATA_IMPLEMENTATION,
+        source_descriptions=SourceDescriptions(provider_id="synthetic", descriptions=()),
+    )
+    header = EvidenceHeader.model_validate_json(products["provenance.json"])
+    evidence = parse_catalogue_evidence(header, {name: products[name] for name in header.files})
+    bound = reconstruct_provenance(evidence)
+    bindings = {binding.fact_group: binding for binding in bound.fact_bindings}
+    assert [item.fact for item in bindings["metadata.water_body_name.station.name"].transformation.external_inputs] == [
+        "native.latitude"
+    ]
+    assert [item.fact for item in bindings["metadata.water_body_name.site.name"].transformation.external_inputs] == [
+        "source.site"
+    ]
+    site_binding = next(binding for binding in bound.fact_bindings if "source.site" in binding.facts)
+    assert site_binding.acquisition_id == "site-acquisition"
+    assert bindings["metadata.water_body_name.site.name"].transformation.executable == _code(
+        *_SCOPED_METADATA_IMPLEMENTATION
+    )
+    result = pl.read_parquet(BytesIO(products["station_metadata.parquet"]))
+    assert result.filter(pl.col("attribute_role") == "water_body_name").select(
+        "source_scope", "source_value"
+    ).rows() == [
+        ("site", '"Site river"'),
+        ("station", '"Station river"'),
+    ]
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "missing_projection",
+        "missing_implementation",
+        "undeclared_implementation",
+        "wrong_scope",
+        "missing_declaration",
+        "wrong_unit",
+        "undeclared_source",
+        "unadopted_source",
+        "unknown_source",
+        "outside_station",
+    ],
+)
+def test_explicit_projection_rejects_unmatched_scope_or_source(fault):
+    from dataclasses import replace
+
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+    from rivretrieve._internal.issues import FatalContractError
+
+    original, build, origins, files, native, fields, projection = _scoped_metadata_publication()
+    implementation = _SCOPED_METADATA_IMPLEMENTATION
+    if fault == "missing_projection":
+        projection = None
+        implementation = None
+    elif fault == "missing_implementation":
+        implementation = None
+    elif fault == "undeclared_implementation":
+        implementation = (_SCOPED_METADATA_IMPLEMENTATION[0], "undeclared")
+    elif fault == "wrong_scope":
+        fields = (fields[0], replace(fields[1], source_scope="other"))
+    elif fault == "missing_declaration":
+        fields = fields[:1]
+    elif fault == "wrong_unit":
+        fields = (replace(fields[0], source_unit="unsupported"), fields[1])
+    elif fault == "undeclared_source":
+        fields = (fields[0], replace(fields[1], source_field="supplement", source_facts=()))
+        projection = projection.with_columns(
+            pl.when(pl.col("source_scope") == "site")
+            .then(pl.lit("supplement"))
+            .otherwise(pl.col("source_field"))
+            .alias("source_field"),
+            pl.when(pl.col("source_scope") == "site")
+            .then(pl.lit("metadata.water_body_name.site.supplement"))
+            .otherwise(pl.col("support_fact"))
+            .alias("support_fact"),
+        )
+    elif fault == "unadopted_source":
+        build = build.model_copy(update={"inputs": build.inputs[:1]})
+    elif fault == "unknown_source":
+        fields = (fields[0], replace(fields[1], source_facts=("source.unknown",)))
+    else:
+        projection = projection.with_columns(pl.lit("outside").alias("station_id"))
+    with pytest.raises(FatalContractError):
+        build_catalogue_metadata(
+            original,
+            origins,
+            files,
+            build_inputs=build,
+            native_table=native,
+            metadata_fields=fields,
+            station_metadata=projection,
+            metadata_implementation=implementation,
+            source_descriptions=SourceDescriptions(provider_id="synthetic", descriptions=()),
+        )
+
+
+def test_scoped_datum_binding_uses_its_declared_source():
+    from dataclasses import replace
+
+    from rivretrieve._internal.catalogues.publication import _bind_catalogue_build_inputs
+
+    original, build, field, metadata = _elevation_publication()
+    field = replace(field, source_scope="site", source_facts=("source.height_unit",))
+    metadata = metadata.with_columns(
+        pl.lit("site").alias("source_scope"),
+        pl.lit("metadata.elevation.site.height").alias("support_fact"),
+        pl.lit("metadata.elevation.site.height.datum").alias("datum_support_fact"),
+    )
+    result = _bind_catalogue_build_inputs(original, build, metadata, metadata_fields=(field,))
+    binding = next(
+        binding for binding in result.fact_bindings if binding.fact_group == "metadata.elevation.site.height.datum"
+    )
+    assert [item.fact for item in binding.transformation.external_inputs] == [
+        "source.height_unit",
+        "source.height_datum",
+    ]
+
+
+def _publish_explicit_metadata(components):
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+
+    original, build, origins, files, native, fields, projection = components
+    return build_catalogue_metadata(
+        original,
+        origins,
+        files,
+        build_inputs=build,
+        native_table=native,
+        metadata_fields=fields,
+        station_metadata=projection,
+        metadata_implementation=_SCOPED_METADATA_IMPLEMENTATION,
+        source_descriptions=SourceDescriptions(provider_id="synthetic", descriptions=()),
+    )
+
+
+def test_explicit_projection_rejects_supplementary_value_claiming_native_support():
+    from dataclasses import replace
+
+    from rivretrieve._internal.issues import FatalContractError
+
+    components = list(_scoped_metadata_publication())
+    fields = components[5]
+    components[5] = (fields[0], replace(fields[1], source_facts=()))
+    with pytest.raises(FatalContractError, match="historical native projection"):
+        _publish_explicit_metadata(components)
+
+
+def _native_elevation_projection():
+    from rivretrieve._internal.catalogues.native import NativeTable
+    from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
+
+    original, build, origins, files, native, _, _ = _scoped_metadata_publication()
+    elevation_original, elevation_build, field, _ = _elevation_publication()
+    payload = original.model_dump(mode="python")
+    payload["fact_universe"] = (*payload["fact_universe"], "source.height_unit", "source.height_datum")
+    payload["fact_bindings"] = (*payload["fact_bindings"], elevation_original.fact_bindings[-1])
+    payload["source_records"][0]["acquisitions"] = (
+        *payload["source_records"][0]["acquisitions"],
+        elevation_original.source_records[0].acquisitions[-1],
+    )
+    original = AcquisitionProvenance.model_validate(payload)
+    build = build.model_copy(update={"inputs": (*build.inputs, elevation_build.inputs[-1])})
+    native = NativeTable(native.data.with_columns(pl.lit(3.0).alias("height"), pl.lit(3, dtype=pl.Int64).alias("code")))
+    projection = build_station_metadata(
+        "synthetic",
+        native,
+        pl.DataFrame({"station_id": ["001"]}),
+        origins[0]["station_id"],
+        (field,),
+    )
+    return [original, build, origins, files, native, (field,), projection]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"source_value": "4.0"},
+        {"source_dtype": "Float32"},
+        {"source_value": "3", "source_dtype": "Int64"},
+        {"source_value": None, "state": "source_null"},
+        {"source_datum": "4"},
+        {"source_datum_dtype": "Int32"},
+        {"source_datum": None},
+    ],
+)
+def test_explicit_projection_rejects_native_value_state_or_datum_mismatch(changes):
+    from rivretrieve._internal.issues import FatalContractError
+
+    components = _native_elevation_projection()
+    components[-1] = components[-1].with_columns(
+        pl.when(pl.col("attribute_role") == "elevation")
+        .then(pl.lit(value, dtype=pl.String))
+        .otherwise(pl.col(column))
+        .alias(column)
+        for column, value in changes.items()
+    )
+    with pytest.raises(FatalContractError, match="historical native projection"):
+        _publish_explicit_metadata(components)
+
+
+@pytest.mark.parametrize("source_null", [False, True])
+def test_explicit_projection_preserves_matching_native_elevation(source_null):
+    from io import BytesIO
+
+    from polars.testing import assert_frame_equal
+
+    from rivretrieve._internal.catalogues.native import NativeTable
+
+    components = _native_elevation_projection()
+    if source_null:
+        components[4] = NativeTable(components[4].data.with_columns(pl.lit(None, dtype=pl.Float64).alias("height")))
+        components[-1] = components[-1].with_columns(
+            pl.lit(None, dtype=pl.String).alias("source_value"),
+            pl.when(pl.col("attribute_role") == "elevation")
+            .then(pl.lit("source_null"))
+            .otherwise(pl.col("state"))
+            .alias("state"),
+        )
+    products = _publish_explicit_metadata(components)
+    assert_frame_equal(pl.read_parquet(BytesIO(products["station_metadata.parquet"])), components[-1])
+
+
+@pytest.mark.parametrize("wrong_station", [False, True])
+def test_explicit_projection_matches_converted_station_and_preserves_non_exposure(wrong_station):
+    from io import BytesIO
+
+    from polars.testing import assert_frame_equal
+
+    from rivretrieve._internal.catalogue_origins import ConversionName, Field, FieldConversion, NativeColumn
+    from rivretrieve._internal.catalogues.native import NativeTable
+    from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.station_metadata import source_metadata_frame
+
+    class PaddedIdentity(FieldConversion):
+        @property
+        def name(self):
+            return ConversionName("padded_identity")
+
+        def apply(self, canonical_column, native_column, native_row):
+            return native_row[native_column].zfill(3)
+
+    components = list(_scoped_metadata_publication())
+    _, _, origins, files, _, fields, projection = components
+    origin = Field(NativeColumn("station_id"), PaddedIdentity())
+    components[2] = ({**origins[0], "station_id": origin},)
+    stations = pl.read_parquet(BytesIO(files["stations.parquet"]))
+    stations = pl.concat([stations, stations.with_columns(pl.lit("002").alias("station_id"))])
+    buffer = BytesIO()
+    stations.write_parquet(buffer)
+    components[3] = {**files, "stations.parquet": buffer.getvalue()}
+    native = NativeTable(
+        pl.DataFrame({"station_id": ["2", "1"], "name": ["Other river", "Station river"]}).with_columns(
+            pl.lit(components[4].data["retrieved_at"][0]).alias("retrieved_at")
+        )
+    )
+    components[4] = native
+    second = build_station_metadata("synthetic", native, stations.filter(pl.col("station_id") == "002"), origin, ())
+    # The native field and supplementary field are both unexposed at station 002.
+    components[-1] = source_metadata_frame(
+        stations.select("provider_id", "station_id"), pl.concat([projection, second])
+    )
+    if wrong_station:
+        components[-1] = components[-1].with_columns(
+            pl.when(pl.col("source_scope") == "station")
+            .then(pl.lit('"Other river"'))
+            .otherwise(pl.col("source_value"))
+            .alias("source_value")
+        )
+        with pytest.raises(FatalContractError, match="historical native projection"):
+            _publish_explicit_metadata(components)
+    else:
+        products = _publish_explicit_metadata(components)
+        assert_frame_equal(pl.read_parquet(BytesIO(products["station_metadata.parquet"])), components[-1])

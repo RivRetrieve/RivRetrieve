@@ -334,8 +334,9 @@ def build_catalogue_descriptor(
         if scoped.height != metadata.height:
             raise FatalContractError("Station metadata contains identities outside the canonical catalogue")
         bound_names = set(evidence.facts.join(evidence.binding_facts, on="fact_id")["name"].to_list())
-        if not set(metadata["support_fact"].drop_nulls().to_list()) <= bound_names:
-            raise FatalContractError("Station metadata support facts must resolve bound catalogue facts")
+        for support_column in ("support_fact", "datum_support_fact"):
+            if not set(metadata[support_column].drop_nulls().to_list()) <= bound_names:
+                raise FatalContractError("Station metadata support facts must resolve bound catalogue facts")
         fields = []
         for column, dtype in SOURCE_METADATA_SCHEMA.items():
             field = {
@@ -344,7 +345,7 @@ def build_catalogue_descriptor(
                 "dataType": _data_type(dtype),
                 "source": {"fileObject": _reference("station_metadata.parquet"), "extract": {"column": column}},
             }
-            if column == "support_fact":
+            if column in ("support_fact", "datum_support_fact"):
                 field["references"] = {
                     "fileObject": _reference("provenance_facts.parquet"),
                     "extract": {"column": "name"},

@@ -78,16 +78,16 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "08c8bbc939e15110f3d3827f1f7bd6f5ce8c370be55a2f8e41460871df5aca45",
-      "contentSize": "9410 B"
+      "sha256": "db79811c2c91843bcf50c55d0b1db2abae36daaf9c92b938ed267f5e9c7e50db",
+      "contentSize": "9610 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "bcd30996563cbf22144429e6ca3f77f41f80804829a1987038961dd95b44635b",
-      "contentSize": "2753 B"
+      "sha256": "3cde1cf25031ea7a8c9cb6e5e67a1082d5798c738ee718b92f38ddc94ae28b4f",
+      "contentSize": "2757 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
@@ -102,8 +102,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "0afa079218dbc0a2e66d405be899bc0760c4fe706305dc4d52285c936bcb8060",
-      "contentSize": "2227 B"
+      "sha256": "8321617960278ea78800922e297bc4e9b43579f66134e4daac66d167078e1be7",
+      "contentSize": "2233 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
@@ -150,8 +150,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "station_metadata.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "b2137cf19414897ae99831e8b0949933975a1ff8920706760b29a8deeb13bd28",
-      "contentSize": "6496 B"
+      "sha256": "dfe1df3fb4d8d3a46486df9e87daf5d25dca0d9de72c52a48e2af898a8a9791a",
+      "contentSize": "8162 B"
     }
   ],
   "recordSet": [
@@ -876,6 +876,19 @@
           }
         },
         {
+          "@id": "station_metadata/source_scope",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_scope"
+            }
+          }
+        },
+        {
           "@id": "station_metadata/source_value",
           "@type": "cr:Field",
           "dataType": "sc:Text",
@@ -950,6 +963,66 @@
             },
             "extract": {
               "column": "support_fact"
+            }
+          },
+          "references": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "name"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_datum",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_datum"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_datum_field",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_datum_field"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_datum_dtype",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_datum_dtype"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/datum_support_fact",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "datum_support_fact"
             }
           },
           "references": {

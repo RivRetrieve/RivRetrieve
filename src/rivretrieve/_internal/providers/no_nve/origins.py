@@ -42,8 +42,21 @@ STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "drainageBasinArea", "km2"),
     MetadataField("drainage_area", "drainageBasinAreaNorway", "km2"),
     MetadataField("station_name", "stationName"),
-    MetadataField("river_name", "riverName"),
-    MetadataField("river_name", "lakeName"),
+    MetadataField("water_body_name", "riverName"),
+    MetadataField("water_body_name", "lakeName"),
+    MetadataField(
+        "water_body_name", "reservoirName", None, support_facts=("source.station_catalogue.reservoirName_definition",)
+    ),
+    MetadataField(
+        "drainage_area", "transferAreaIn", "km2", support_facts=("source.station_catalogue.transferAreaIn_definition",)
+    ),
+    MetadataField(
+        "drainage_area",
+        "transferAreaOut",
+        "km2",
+        support_facts=("source.station_catalogue.transferAreaOut_definition",),
+    ),
+    MetadataField("elevation", "masl", "m", support_facts=("source.station_catalogue.masl_definition",)),
 )
 
 STATION_CATALOGUE_ORIGINS = {
@@ -203,8 +216,30 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
     products = tuple(fact for fact in CATALOGUE_FACT_UNIVERSE if fact.startswith("product."))
     stations = tuple(fact for fact in CATALOGUE_FACT_UNIVERSE if fact.startswith("station."))
     station_products = tuple(fact for fact in CATALOGUE_FACT_UNIVERSE if fact.startswith("station_product."))
-    source_facts = (_LICENSE_FACT, _CITATION_FACT, _ACTIVE_1_FACT, _ACTIVE_0_FACT, _PRODUCT_FACT, _CRS_FACT)
+    source_facts = (
+        _LICENSE_FACT,
+        _CITATION_FACT,
+        _ACTIVE_1_FACT,
+        _ACTIVE_0_FACT,
+        _PRODUCT_FACT,
+        _CRS_FACT,
+        "source.station_catalogue.masl_definition",
+        "source.station_catalogue.reservoirName_definition",
+        "source.station_catalogue.transferAreaIn_definition",
+        "source.station_catalogue.transferAreaOut_definition",
+    )
     bindings = (
+        FactBinding(
+            fact_group="station_metadata_definitions",
+            facts=(
+                "source.station_catalogue.masl_definition",
+                "source.station_catalogue.reservoirName_definition",
+                "source.station_catalogue.transferAreaIn_definition",
+                "source.station_catalogue.transferAreaOut_definition",
+            ),
+            source_id=source_id,
+            acquisition_id="station_schema_capture_2026_09_04",
+        ),
         FactBinding(
             fact_group="public_terms",
             facts=(_LICENSE_FACT, _CITATION_FACT),
@@ -316,6 +351,7 @@ NATIVE_TABLE_ACQUISITION_IDS = ("stations_active_1_capture_2026_09_04", "station
 
 # Authored catalogue, physical-fact and support declarations selected at build time.
 CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
     ("src/rivretrieve/_internal/providers/no_nve/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/no_nve/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/no_nve/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
@@ -328,5 +364,10 @@ CATALOGUE_BUILD_DECLARATIONS = (
 )
 
 
-# Additional retained declarations used by these source facts; not original-body claims.
-CATALOGUE_SUPPORTING_INPUTS = {}
+# Retained source documents and acquisition receipts used by these source facts.
+CATALOGUE_SUPPORTING_INPUTS = {
+    "source.station_catalogue.masl_definition": ("tests/test_data/no_nve_swagger.json",),
+    "source.station_catalogue.reservoirName_definition": ("tests/test_data/no_nve_swagger.json",),
+    "source.station_catalogue.transferAreaIn_definition": ("tests/test_data/no_nve_swagger.json",),
+    "source.station_catalogue.transferAreaOut_definition": ("tests/test_data/no_nve_swagger.json",),
+}

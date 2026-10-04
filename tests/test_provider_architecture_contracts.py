@@ -24,6 +24,7 @@ MAINTAINER_ROLES = {
     "capture.py",
     "inventory.py",
     "catalogue_series.py",  # Build-time source-description evidence; never runtime discovery.
+    "station_metadata.py",  # Build-time original metadata readers and projectors, not runtime imports.
 }
 
 

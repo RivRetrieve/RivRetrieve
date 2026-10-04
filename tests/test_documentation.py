@@ -109,3 +109,12 @@ def test_station_map_counts_match_packaged_catalogues():
     total = re.search(r"Explore \*\*([\d,]+)\*\*", text)
     assert total is not None
     assert int(total.group(1).replace(",", "")) == sum(actual.values())
+
+
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+def test_station_metadata_examples_match_documented_output(capsys):
+    scope = {}
+    for index, block in enumerate(python_blocks(ROOT / "docs/station-metadata.md"), start=1):
+        expected = "".join(line[2:] + "\n" for line in block.splitlines() if line.startswith("# "))
+        exec(compile(block, f"station-metadata.md:block-{index}", "exec"), scope)
+        assert capsys.readouterr().out == expected, f"Metadata example {index} output changed"

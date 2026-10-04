@@ -48,8 +48,9 @@ STATION_METADATA_NOTICE = (
 
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "Area_Drenagem"),
+    MetadataField("elevation", "Altitude", support_facts=("source.ana.station_elevation_field_context",)),
     MetadataField("station_name", "Estacao_Nome"),
-    MetadataField("river_name", "Rio_Nome"),
+    MetadataField("water_body_name", "Rio_Nome"),
 )
 
 STATION_CATALOGUE_ORIGINS = {
@@ -121,7 +122,10 @@ def build_acquisition_provenance(capture: InventoryCapture) -> AcquisitionProven
     source_facts = [_SOURCE_FACT]
     for response in capture.responses:
         source_fact = f"source.inventory.{response.recording_id}"
-        source_facts.append(source_fact)
+        response_facts = (source_fact,)
+        if response.recording_id == "inventory_UF_AM":
+            response_facts += ("source.ana.station_elevation_field_context",)
+        source_facts.extend(response_facts)
         parameter_name, parameter_value = next(iter(response.parameters.items()))
         query_name = "Unidade%20Federativa" if parameter_name == "Unidade Federativa" else "C%C3%B3digo%20da%20Bacia"
         requested_from = f"{response.requested_url}?{query_name}={parameter_value}"
@@ -163,7 +167,7 @@ def build_acquisition_provenance(capture: InventoryCapture) -> AcquisitionProven
         bindings.append(
             FactBinding(
                 fact_group=response.recording_id,
-                facts=(source_fact,),
+                facts=response_facts,
                 source_id=source_id,
                 acquisition_id=response.recording_id,
             )
@@ -191,7 +195,11 @@ def build_acquisition_provenance(capture: InventoryCapture) -> AcquisitionProven
             }
         )
     inventory = inventory.model_copy(update={"acquisitions": tuple(acquisitions)})
-    external_inputs = tuple(ExternalFactReference(source_id=source_id, fact=fact) for fact in source_facts[1:])
+    external_inputs = tuple(
+        ExternalFactReference(source_id=source_id, fact=fact)
+        for fact in source_facts
+        if fact.startswith("source.inventory.")
+    )
     authored = tuple(
         f
         for f in CATALOGUE_FACT_UNIVERSE
@@ -637,6 +645,7 @@ NATIVE_TABLE_ACQUISITION_IDS = (
 
 # Authored catalogue, physical-fact and support declarations selected at build time.
 CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
     ("src/rivretrieve/_internal/providers/br_ana/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/br_ana/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/br_ana/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
@@ -651,6 +660,9 @@ CATALOGUE_BUILD_DECLARATIONS = (
 
 # Additional retained declarations used by these source facts; not original-body claims.
 CATALOGUE_SUPPORTING_INPUTS = {
+    "source.ana.station_elevation_field_context": (
+        "tests/test_data/br_ana_inventory/inventory_UF_AM.recording.json.xz",
+    ),
     "source.ana.adopted_field_units_measurement_time": (
         "tests/recordings/br_ana/manual-page11-acquisition.json",
         "tests/recordings/br_ana/manual-page11-derived.txt",

@@ -415,16 +415,10 @@ def source_terms_catalogue_artifact() -> Callable[[str], PackagedCatalogArtifact
 
 
 @pytest.fixture(scope="session")
-def catalogue_build_inputs(retained_evidence_root: Path):
-    """Adopt only explicit catalogue support from the restricted coordinator handoff."""
-    import importlib
-
+def catalogue_input_receipt(retained_evidence_root: Path):
+    """Read the coordinator's explicit member identities without opening source bodies."""
     from rivretrieve._internal.acquisition_provenance import RetainedInputReceipt
-    from rivretrieve._internal.catalogues.inputs import (
-        select_catalogue_build_inputs,
-        verify_recording_envelopes,
-        verify_retained_input_files,
-    )
+    from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
 
     configured = os.environ.get("RIVRETRIEVE_CATALOGUE_INPUT_PROVENANCE")
     if not configured:
@@ -432,13 +426,32 @@ def catalogue_build_inputs(retained_evidence_root: Path):
     receipt = RetainedInputReceipt.model_validate_json(Path(configured).read_bytes())
     if receipt.code_revision != receipt.declaration_revision:
         pytest.fail("Catalogue declarations must use the explicitly selected executed revision.", pytrace=False)
-
     verify_retained_input_files(receipt.model_copy(update={"inputs": (), "support_inputs": ()}), retained_evidence_root)
+    return receipt
+
+
+@pytest.fixture(scope="session")
+def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt):
+    """Adopt only explicit catalogue support from the restricted coordinator handoff."""
+    import importlib
+
+    from rivretrieve._internal.catalogues.inputs import (
+        select_catalogue_build_inputs,
+        verify_recording_envelopes,
+        verify_retained_input_files,
+    )
+
+    receipt = catalogue_input_receipt
 
     def select(provenance):
         origins = importlib.import_module(f"rivretrieve._internal.providers.{provenance.provider_id}.origins")
         supporting_inputs = {}
-        for fact, paths in origins.CATALOGUE_SUPPORTING_INPUTS.items():
+        supporting_declarations = (
+            origins.station_metadata_supporting_inputs(provenance)
+            if provenance.provider_id in {"ch_foen", "fr_hubeau"}
+            else origins.CATALOGUE_SUPPORTING_INPUTS
+        )
+        for fact, paths in supporting_declarations.items():
             if fact in provenance.fact_universe:
                 for path in paths:
                     supporting_inputs.setdefault(path, []).append(fact)

@@ -221,7 +221,11 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
     check(
         "test_native_composition_root_rebuilds_committed_artifacts_without_network[za_dws]",
         ["governing"],
-        [native.format("za_dws"), *(f"tests/test_data/za_dws_terms_licence-{n}.html" for n in (1, 4, 5))],
+        [
+            native.format("za_dws"),
+            "maintenance/catalogue/station_metadata/review.json",
+            *(f"tests/test_data/za_dws_terms_licence-{n}.html" for n in (1, 4, 5)),
+        ],
     )
     for provider in ("cz_chmi", "jp_mlit", "lt_lhmt", "no_nve", "th_thaiwater"):
         check(f"test_all_ordered_source_assertions_match_pinned_original_revision[{provider}]", [], [])

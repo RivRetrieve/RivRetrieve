@@ -31,7 +31,7 @@ STATION_METADATA_NOTICE = (
 
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("station_name", "name"),
-    MetadataField("river_name", "waterBody"),
+    MetadataField("water_body_name", "waterBody"),
 )
 
 STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
@@ -249,6 +249,7 @@ NATIVE_TABLE_ACQUISITION_IDS = ("catalogue_capture_2026_08_01",)
 
 # Authored catalogue, physical-fact and support declarations selected at build time.
 CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
     ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/lt_lhmt/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),

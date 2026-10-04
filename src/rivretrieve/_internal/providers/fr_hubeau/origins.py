@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import datetime
+from pathlib import PurePosixPath
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -38,11 +40,82 @@ STATION_METADATA_NOTICE = (
     "projection: RivRetrieve."
 )
 
+HYDROMETRY_SCOPE = "hydrometrie/referentiel/stations"
+TEMPERATURE_SCOPE = "temperature/station"
+SITE_SCOPE = "hydrometrie/referentiel/sites"
+SITE_METADATA_FACT_PREFIX = "source.station.hubeau_site_metadata."
+HYDROMETRY_METADATA_FACT = "source.station_inventory.hydrometry.metadata"
+TEMPERATURE_METADATA_FACT = "source.station_inventory.temperature.metadata"
+SITE_ASSOCIATION_FACT = "source.station_inventory.hydrometry.site_association"
+HYDROMETRY_DEFINITION_FACT = "source.station.hubeau_hydrometry_metadata_definitions"
+TEMPERATURE_DEFINITION_FACT = "source.station.hubeau_temperature_metadata_definitions"
+STATION_DATUM_FACT = "source.station.hubeau_station_zero_point_datum_definition"
+SITE_DATUM_FACT = "source.station.hubeau_site_altitude_datum_definition"
+SITE_DEFINITION_FACT = "source.station.hubeau_site_metadata_definitions"
+METADATA_TERMS_FACT = "source.provider.hubeau_station_metadata_reuse"
+
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
-    MetadataField("drainage_area", "superficie_topo"),
-    MetadataField("drainage_area", "superficie_reelle"),
-    MetadataField("station_name", "libelle_station"),
-    MetadataField("river_name", "libelle_cours_eau"),
+    *(
+        MetadataField(
+            role,
+            field,
+            source_scope=HYDROMETRY_SCOPE,
+            source_facts=(HYDROMETRY_METADATA_FACT,),
+            support_facts=(HYDROMETRY_DEFINITION_FACT,),
+        )
+        for role, field in (("station_name", "libelle_station"), ("water_body_name", "libelle_cours_eau"))
+    ),
+    MetadataField(
+        "elevation",
+        "altitude_ref_alti_station",
+        "m",
+        source_scope=HYDROMETRY_SCOPE,
+        datum_field="code_systeme_alti_site",
+        datum_support=(STATION_DATUM_FACT,),
+        source_facts=(HYDROMETRY_METADATA_FACT,),
+        support_facts=(HYDROMETRY_DEFINITION_FACT,),
+    ),
+    *(
+        MetadataField(
+            role,
+            field,
+            source_scope=TEMPERATURE_SCOPE,
+            source_facts=(TEMPERATURE_METADATA_FACT,),
+            support_facts=(TEMPERATURE_DEFINITION_FACT,),
+        )
+        for role, field in (
+            ("station_name", "libelle_station"),
+            ("water_body_name", "libelle_cours_eau"),
+            ("water_body_name", "libelle_masse_eau"),
+            ("elevation", "altitude"),
+            ("drainage_area", "superficie_topo"),
+            ("drainage_area", "superficie_reelle"),
+        )
+    ),
+    MetadataField(
+        "elevation",
+        "altitude_site",
+        source_scope=SITE_SCOPE,
+        datum_field="code_systeme_alti_site",
+        datum_support=(SITE_DATUM_FACT,),
+        source_facts=("source.station.hubeau_site_metadata", SITE_ASSOCIATION_FACT),
+        support_facts=(SITE_DEFINITION_FACT,),
+    ),
+    MetadataField(
+        "drainage_area",
+        "surface_bv",
+        "km²",
+        source_scope=SITE_SCOPE,
+        source_facts=("source.station.hubeau_site_metadata", SITE_ASSOCIATION_FACT),
+        support_facts=(SITE_DEFINITION_FACT,),
+    ),
+    MetadataField(
+        "water_body_name",
+        "libelle_cours_eau",
+        source_scope=SITE_SCOPE,
+        source_facts=("source.station.hubeau_site_metadata", SITE_ASSOCIATION_FACT),
+        support_facts=(SITE_DEFINITION_FACT,),
+    ),
 )
 
 if TYPE_CHECKING:
@@ -164,6 +237,37 @@ _TERMS_SHA256 = "82ff424acd31cdff38df4307bb8e8674d2cdc82659c99b4a117455cacd8d19c
 _LICENSE = "La réutilisation des Jeux de données est régie par la licence ouverte Etalab, https://www.etalab.gouv.fr/licence-ouverte-open-licence. Les Jeux de données sont donc librement et gratuitement utilisables et réutilisables, y compris dans un but commercial."
 _CITATION = "L'utilisateur de ces données doit néanmoins veiller à citer l'auteur des Jeux de données."
 
+
+SITE_METADATA_ROOT = "maintenance/catalogue/station_metadata/sources/fr_hubeau/sites"
+SITE_METADATA_MANIFEST_SHA256 = "066fdcee31a53a21b5d680bb78926c76b94522cd1f6559a432e1ad0c527aa537"
+SITE_METADATA_LINEAGE_SHA256 = "dad2ff48c605991456f1b5abc78757704392e79d8e924870d496599c16c41584"
+
+HYDROMETRY_METADATA_REFERENCE = RecordingReference(
+    recording_id="fr_hubeau-hydrometry-api-docs",
+    repository_path="maintenance/catalogue/station_metadata/sources/fr_hubeau/hydrometry-api-docs/body",
+    source_url="https://hubeau.eaufrance.fr/api/v2/hydrometrie/api-docs",
+    retrieved_at=datetime.fromisoformat("2026-10-04T10:21:06.396725+00:00"),
+    media_type="application/json",
+    sha256="98217f1a8987d44682480dd2325482b81fee08de5311163d6eacc6ac883f92af",
+)
+
+TEMPERATURE_METADATA_REFERENCE = RecordingReference(
+    recording_id="fr_hubeau-temperature-api-docs",
+    repository_path="maintenance/catalogue/station_metadata/sources/fr_hubeau/temperature-api-docs/body",
+    source_url="https://hubeau.eaufrance.fr/api/v1/temperature/api-docs",
+    retrieved_at=datetime.fromisoformat("2026-10-04T10:21:06.913791+00:00"),
+    media_type="application/json",
+    sha256="797506a9cf78fbba29fb82eca71ac278d7fe84bd90aa4552ac79a71752c059ef",
+)
+
+METADATA_TERMS_REFERENCE = RecordingReference(
+    recording_id="fr_hubeau-hubeau-current-terms",
+    repository_path="maintenance/catalogue/station_metadata/sources/fr_hubeau/hubeau-current-terms/body",
+    source_url="https://hubeau.eaufrance.fr/page/conditions-generales",
+    retrieved_at=datetime.fromisoformat("2026-10-04T10:25:13.720572+00:00"),
+    media_type="text/html; charset=UTF-8",
+    sha256="a7bcaa263eac40389f73cdfe03d2ec98363287f9742fab3386f6e6194ef54324",
+)
 
 _PUBLICATION_DOCUMENTS = (
     (
@@ -464,6 +568,152 @@ def build_acquisition_provenance(
     )
 
 
+def station_metadata_fields(recording_ids: tuple[str, ...]) -> tuple[MetadataField, ...]:
+    """Bind site values to their selected responses and native station-to-site links."""
+    if not recording_ids or len(set(recording_ids)) != len(recording_ids) or any(not item for item in recording_ids):
+        raise ValueError("Hub’Eau site metadata requires distinct selected recording identities")
+    site_facts = tuple(SITE_METADATA_FACT_PREFIX + item for item in recording_ids)
+    return tuple(
+        replace(field, source_facts=(*site_facts, SITE_ASSOCIATION_FACT)) if field.source_scope == SITE_SCOPE else field
+        for field in STATION_METADATA_FIELDS
+    )
+
+
+def with_station_metadata_sources(
+    provenance: AcquisitionProvenance, site_recordings: tuple[RecordingReference, ...]
+) -> AcquisitionProvenance:
+    """Add source-specific definitions and distinct retained site-response events.
+
+    Site URLs identify the public retrieval context, not exact replay requests.
+    Exact batch filters and requests remain in the private originals and receipts.
+    Neither equal endpoints nor equal bytes merge distinct recorded events.
+    """
+    station_metadata_fields(tuple(item.recording_id for item in site_recordings))
+    sources = list(provenance.source_records)
+    source_index = next(index for index, source in enumerate(sources) if source.source_id == "fr_hubeau")
+    source = sources[source_index]
+    acquisitions = list(source.acquisitions)
+    evidence = list(source.evidence)
+    bindings = []
+    for partition, facts in (
+        ("hydrometry", (HYDROMETRY_METADATA_FACT, SITE_ASSOCIATION_FACT)),
+        ("temperature", (TEMPERATURE_METADATA_FACT,)),
+    ):
+        original = next(
+            binding
+            for binding in provenance.fact_bindings
+            if f"source.station_inventory.{partition}.identity_location_crs" in binding.facts
+        )
+        bindings.append(
+            FactBinding(
+                fact_group=f"hubeau_{partition}_native_metadata",
+                facts=facts,
+                source_id=original.source_id,
+                acquisition_id=original.acquisition_id,
+            )
+        )
+    for recording, facts, description in (
+        (
+            HYDROMETRY_METADATA_REFERENCE,
+            (HYDROMETRY_DEFINITION_FACT, STATION_DATUM_FACT, SITE_DEFINITION_FACT, SITE_DATUM_FACT),
+            "Original Hub’Eau hydrometry station/site field definitions; surface_bv is described as “Superficie du BV en kmÂ²”",
+        ),
+        (
+            TEMPERATURE_METADATA_REFERENCE,
+            (TEMPERATURE_DEFINITION_FACT,),
+            "Original Hub’Eau temperature station field definitions; no separate elevation/area unit is established",
+        ),
+        (
+            METADATA_TERMS_REFERENCE,
+            (METADATA_TERMS_FACT,),
+            "Original Hub’Eau dataset reuse conditions; publisher identity does not establish every original data author",
+        ),
+    ):
+        acquisitions.append(
+            AcquisitionRecord(
+                acquisition_id=recording.recording_id,
+                method="http_request",
+                instant_type="retrieval",
+                description=description,
+                requested_from=(recording.source_url,),
+                retrieved_at_start=recording.retrieved_at,
+                recording_ids=(recording.recording_id,),
+            )
+        )
+        evidence.append(
+            EvidenceReference(evidence_id=recording.recording_id, description=description, recording=recording)
+        )
+        bindings.append(
+            FactBinding(
+                fact_group=recording.recording_id,
+                facts=facts,
+                source_id="fr_hubeau",
+                acquisition_id=recording.recording_id,
+            )
+        )
+    description = (
+        "Filtered Hub’Eau site response. The public endpoint gives retrieval context, not an exact replay URL. "
+        "Exact batch filters and requests remain in the privately retained original response and receipt."
+    )
+    for recording in site_recordings:
+        if recording.source_url != "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/sites":
+            raise ValueError("Hub’Eau site response public context must omit private batch filters")
+        acquisitions.append(
+            AcquisitionRecord(
+                acquisition_id=recording.recording_id,
+                method="http_request",
+                instant_type="retrieval",
+                description=description,
+                requested_from=(recording.source_url,),
+                retrieved_at_start=recording.retrieved_at,
+                recording_ids=(recording.recording_id,),
+            )
+        )
+        evidence.append(
+            EvidenceReference(evidence_id=recording.recording_id, description=description, recording=recording)
+        )
+        bindings.append(
+            FactBinding(
+                fact_group=recording.recording_id,
+                facts=(SITE_METADATA_FACT_PREFIX + recording.recording_id,),
+                source_id="fr_hubeau",
+                acquisition_id=recording.recording_id,
+            )
+        )
+    sources[source_index] = SourceRecord.model_validate(
+        {
+            **source.model_dump(mode="python"),
+            "acquisitions": tuple(acquisitions),
+            "evidence": tuple(evidence),
+        }
+    )
+    return AcquisitionProvenance.model_validate(
+        {
+            **provenance.model_dump(mode="python"),
+            "source_records": tuple(sources),
+            "fact_bindings": (*provenance.fact_bindings, *bindings),
+            "fact_universe": (*provenance.fact_universe, *(fact for binding in bindings for fact in binding.facts)),
+        }
+    )
+
+
+def station_metadata_supporting_inputs(provenance: AcquisitionProvenance) -> dict[str, tuple[str, ...]]:
+    """Bind each response's own receipt and the selected request-set identities."""
+    paths: dict[str, tuple[str, ...]] = dict(CATALOGUE_SUPPORTING_INPUTS)
+    for source in provenance.source_records:
+        if source.source_id != "fr_hubeau":
+            continue
+        for item in source.evidence:
+            recording = item.recording
+            if recording.repository_path.startswith(SITE_METADATA_ROOT + "/"):
+                paths[SITE_METADATA_FACT_PREFIX + recording.recording_id] = (
+                    f"{SITE_METADATA_ROOT}/documents.json",
+                    f"{SITE_METADATA_ROOT}/lineage.json",
+                    str(PurePosixPath(recording.repository_path).with_name("receipt.json")),
+                )
+    return paths
+
+
 # Existing acquisition facts materialised in the retained native table.
 # This declares derived-input support, not preservation of original responses.
 NATIVE_TABLE_ACQUISITION_IDS = ("hydrometry_catalogue_capture_2026_09_21", "temperature_catalogue_capture_2026_09_21")
@@ -473,11 +723,17 @@ NATIVE_TABLE_ACQUISITION_IDS = ("hydrometry_catalogue_capture_2026_09_21", "temp
 # Non-source paths identify explicit authored inputs in the restricted handoff.
 # Their code references resolve to the reviewed private declaration owner.
 CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
     ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "STATION_METADATA_NOTICE"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "with_station_metadata_sources"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "station_metadata_fields"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/origins.py", "station_metadata_supporting_inputs"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/station_metadata.py", "read_station_metadata_sources"),
+    ("src/rivretrieve/_internal/providers/fr_hubeau/station_metadata.py", "project_station_metadata"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/assembly.py", "assemble"),
     ("src/rivretrieve/_internal/providers/fr_hubeau/config.py", "config"),
@@ -488,4 +744,29 @@ CATALOGUE_BUILD_DECLARATIONS = (
 
 
 # Additional retained declarations used by these source facts; not original-body claims.
-CATALOGUE_SUPPORTING_INPUTS = {}
+CATALOGUE_SUPPORTING_INPUTS = {
+    HYDROMETRY_DEFINITION_FACT: (
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/hydrometry-api-docs/body",
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/hydrometry-api-docs/receipt.json",
+    ),
+    STATION_DATUM_FACT: (
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/hydrometry-api-docs/body",
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/hydrometry-api-docs/receipt.json",
+    ),
+    SITE_DEFINITION_FACT: (
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/hydrometry-api-docs/body",
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/hydrometry-api-docs/receipt.json",
+    ),
+    SITE_DATUM_FACT: (
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/hydrometry-api-docs/body",
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/hydrometry-api-docs/receipt.json",
+    ),
+    TEMPERATURE_DEFINITION_FACT: (
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/temperature-api-docs/body",
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/temperature-api-docs/receipt.json",
+    ),
+    METADATA_TERMS_FACT: (
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/hubeau-current-terms/body",
+        "maintenance/catalogue/station_metadata/sources/fr_hubeau/hubeau-current-terms/receipt.json",
+    ),
+}

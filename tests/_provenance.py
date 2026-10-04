@@ -96,7 +96,8 @@ def historical_source_provenance(provenance, metadata):
     from importlib import import_module
 
     from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, CodeReference, ExternalFactReference
-    from rivretrieve._internal.station_metadata import source_metadata_frame
+    from rivretrieve._internal.catalogues.station_metadata import validate_metadata_fields
+    from rivretrieve._internal.station_metadata import metadata_support_fact, source_metadata_frame
 
     provenance = AcquisitionProvenance.model_validate(provenance.model_dump(mode="python"))
     build = provenance.build_inputs
@@ -104,10 +105,30 @@ def historical_source_provenance(provenance, metadata):
         return provenance
     provider = provenance.provider_id
     origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
-    assert (
-        tuple((item.repository_path, item.symbol) for item in build.declarations)
-        == origins.CATALOGUE_BUILD_DECLARATIONS
+    private_declarations = {
+        "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json": "declarations/ba_fhmzbih/baseline_workbook_access.json",
+        "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz": "declarations/fr_hubeau/governing_evidence.json.xz",
+        "maintenance/catalogue/fr_hubeau/inventory/native_capture.json": "declarations/fr_hubeau/native_capture.json",
+        "maintenance/catalogue/station_metadata/review.json": "declarations/station_metadata/review.json",
+        "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv": "declarations/th_thaiwater/governing_station_product_evidence.csv",
+    }
+    expected_declarations = tuple(
+        (
+            "https://github.com/RivRetrieve/verification-evidence"
+            if path in private_declarations
+            else build.build.repository,
+            private_declarations.get(path, path),
+            symbol,
+        )
+        for path, symbol in origins.CATALOGUE_BUILD_DECLARATIONS
     )
+    assert tuple((item.repository, item.repository_path, item.symbol) for item in build.declarations) == (
+        expected_declarations
+    )
+    for declaration in build.declarations:
+        if declaration.repository == "https://github.com/RivRetrieve/verification-evidence":
+            assert declaration.symbol is None
+            assert {item.reference.archive_revision for item in build.inputs} == {declaration.revision}
     assert build.build.repository_path == f"src/rivretrieve/_internal/providers/{provider}/generate_catalogue.py"
     assert build.build.symbol == "write_catalogue"
     declarations = {(item.repository_path, item.symbol): item for item in build.declarations}
@@ -129,18 +150,53 @@ def historical_source_provenance(provenance, metadata):
         if binding.transformation is None
         for fact in binding.facts
     }
-    metadata_inputs = tuple(
-        ExternalFactReference(source_id=direct_sources[fact], fact=fact) for fact in native_use.facts
-    )
+    direct_bindings = {
+        fact: binding
+        for binding in provenance.fact_bindings
+        if binding.transformation is None
+        for fact in binding.facts
+    }
+    acquisitions = {
+        (source.source_id, acquisition.acquisition_id): acquisition
+        for source in provenance.source_records
+        for acquisition in source.acquisitions
+    }
+    adopted = {fact for item in build.inputs for fact in item.facts}
+
+    def inputs_for(field, *, datum=False):
+        facts = tuple(
+            dict.fromkeys(
+                (*(field.source_facts or native_use.facts), *(field.datum_support if datum else field.support_facts))
+            )
+        )
+        for fact in facts:
+            assert fact in adopted
+            binding = direct_bindings[fact]
+            acquisition = acquisitions[(binding.source_id, binding.acquisition_id)]
+            assert acquisition.method != "runtime_http_request" and acquisition.instant_type != "runtime"
+        return tuple(ExternalFactReference(source_id=direct_sources[fact], fact=fact) for fact in facts)
+
     source_metadata_frame(metadata.select("provider_id", "station_id").unique(), metadata)
     assert set(metadata["provider_id"]) == {provider}
-    expected_fields = {(field.attribute_role, field.source_field) for field in origins.STATION_METADATA_FIELDS}
-    actual_fields = set(
-        metadata.filter(metadata["source_field"].is_not_null()).select("attribute_role", "source_field").iter_rows()
-    )
-    assert actual_fields == expected_fields
-    metadata_facts = tuple(metadata["support_fact"].drop_nulls().unique(maintain_order=True))
-    assert set(metadata_facts) == {f"metadata.{role}.{field}" for role, field in expected_fields}
+    fields = origins.STATION_METADATA_FIELDS
+    if provider == "fr_hubeau":
+        recording_ids = tuple(
+            entry.recording.recording_id
+            for source in provenance.source_records
+            if source.source_id == "fr_hubeau"
+            for entry in source.evidence
+            if entry.recording.repository_path.startswith(origins.SITE_METADATA_ROOT + "/")
+        )
+        fields = origins.station_metadata_fields(recording_ids)
+    validate_metadata_fields(metadata, fields)
+    fields_by_fact = {
+        metadata_support_fact(field.attribute_role, field.source_field, field.source_scope): field for field in fields
+    }
+    value_facts = tuple(metadata["support_fact"].drop_nulls().unique(maintain_order=True))
+    datum_facts = tuple(metadata["datum_support_fact"].drop_nulls().unique(maintain_order=True))
+    assert set(value_facts) == set(fields_by_fact)
+    assert set(datum_facts) == {f"{fact}.datum" for fact, field in fields_by_fact.items() if field.datum_support}
+    metadata_facts = (*value_facts, *datum_facts)
     expected_metadata = []
     for binding in provenance.fact_bindings:
         transform = binding.transformation
@@ -148,10 +204,16 @@ def historical_source_provenance(provenance, metadata):
             continue
         if binding.fact_group in metadata_facts:
             assert binding.facts == (binding.fact_group,)
-            assert transform.name == "project_station_metadata"
+            is_datum = binding.fact_group in datum_facts
+            field = fields_by_fact[binding.fact_group.removesuffix(".datum") if is_datum else binding.fact_group]
+            assert transform.name == ("associate_elevation_datum" if is_datum else "project_station_metadata")
             assert transform.kind == "derived_value" and transform.marker_value is None
-            assert transform.external_inputs == metadata_inputs
-            expected_location = ("src/rivretrieve/_internal/catalogues/station_metadata.py", "build_station_metadata")
+            assert transform.external_inputs == inputs_for(field, datum=is_datum)
+            expected_location = (
+                (f"src/rivretrieve/_internal/providers/{provider}/station_metadata.py", "project_station_metadata")
+                if provider in {"ch_foen", "fr_hubeau", "usgs_nwis"}
+                else ("src/rivretrieve/_internal/catalogues/station_metadata.py", "build_station_metadata")
+            )
             expected_declaration = declarations[
                 (f"src/rivretrieve/_internal/providers/{provider}/origins.py", "STATION_METADATA_FIELDS")
             ]

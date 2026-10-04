@@ -64,7 +64,9 @@ def test_japan_source_and_fact_groups_are_externally_observable() -> None:
         "station_product_catalogue",
         "observation_acquisition",
         "metadata.drainage_area.流域面積",
-        "metadata.river_name.河川名",
+        "metadata.water_body_name.河川名",
+        "metadata.elevation.零点高",
+        "mlit_station_zero_point_elevation_definition",
         "metadata.station_name.観測所名",
     }
     observation = next(

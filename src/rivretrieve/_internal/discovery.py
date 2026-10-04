@@ -658,30 +658,48 @@ def metadata(selection: _Selection, *, view: str = "summary") -> pl.DataFrame:
         Selection from find, pick or from_bundle. Multiple providers and series
         are accepted without repeating gauges or their attributes.
     view : {"summary", "source"}, default "summary"
-        Summary returns one row per gauge with station_name, river_name,
-        latitude, longitude, crs and two Boolean name alternatives indicators.
+        Summary returns one row per gauge with canonical geometry, a scalar
+        station name, and aligned lists of water-body, area and elevation fields.
         Source returns separate source attributes with exact values and support.
 
     Returns
     -------
     polars.DataFrame
-        Both views retain provider_id and station_id as strings. Summary names
-        are verbatim strings when exactly one distinct nonblank name exists.
-        Otherwise the name is null; the corresponding ``*_alternatives`` flag
-        is true when multiple distinct nonblank names exist. Coordinates and CRS
-        preserve values and unknowns from the current packaged canonical station
-        catalogue, independently of locations retained in the selection.
+        Both views retain provider_id and station_id as strings. Summary
+        station_name is the verbatim name when exactly one distinct nonblank
+        supported name exists. Otherwise it is null; station_name_alternatives
+        is true when several distinct nonblank names exist. Latitude, longitude
+        and crs preserve the canonical catalogue's values and unknowns,
+        independently of locations retained in the selection.
 
-        Source columns are provider_id, station_id, source_field, source_value,
-        source_dtype, source_unit, state, attribute_role and support_fact.
+        Summary list columns are water_body_name_field, water_body_name_value;
+        drainage_area_field, drainage_area_value, drainage_area_unit; and
+        elevation_field, elevation_value, elevation_unit, elevation_datum.
+        All have List(String) dtype. Within each role, positions align and sort
+        by exact native field name, with source_scope breaking ties without
+        preference. Identical field names from different source scopes remain
+        separate entries. Water-body names are
+        decoded strings. Area and elevation values remain JSON scalar text:
+        json.loads distinguishes numbers from numeric-looking source strings.
+        Units and datum labels or codes are plain strings. Unknowns remain null.
+        No exposed fields gives null list cells; exposed null fields give named
+        entries with null values. Blanks, whitespace, equal values in different
+        fields, placeholders and zero values are retained.
+
+        Source columns are provider_id, station_id, source_field, source_scope, source_value,
+        source_dtype, source_unit, state, attribute_role, support_fact,
+        source_datum, source_datum_field, source_datum_dtype and datum_support_fact.
         All are String except state and attribute_role, which are Enums.
         Decode non-null source_value with json.loads to recover the exact scalar.
-        Blanks and inline units remain unchanged. State is value, source_null
-        (a known field with null), or no_metadata (no exposed field for this
-        role). The latter has null source columns and support_fact. Other rows
-        retain their field, dtype, established unit and stable evidence fact name.
-        Roles are station_name, river_name and drainage_area. Areas remain
-        separate; no preferred field, inferred unit or conversion is applied.
+        State is value, source_null (an exposed field with null), or no_metadata
+        (no exposed field for this role). The latter has null source and support
+        columns. Roles are station_name, water_body_name, drainage_area and
+        elevation. Source scope identifies the source collection or entity when
+        native field names overlap; it is null for an unscoped native projection.
+        Datum fields carry the published label or code and its
+        association support. Native datum fields retain their name and dtype,
+        including when null; documented datum declarations have no native field
+        or dtype. No inferred unit, preferred field or conversion is applied.
         Empty selections retain the chosen view's schema.
 
     Raises

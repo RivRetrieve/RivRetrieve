@@ -85,12 +85,17 @@ schema = pl.Schema({
     "provider_id": pl.String,
     "station_id": pl.String,
     "source_field": pl.String,
+    "source_scope": pl.String,
     "source_value": pl.String,
     "source_dtype": pl.String,
     "source_unit": pl.String,
     "state": pl.Enum(["value", "source_null", "no_metadata"]),
-    "attribute_role": pl.Enum(["station_name", "river_name", "drainage_area"]),
+    "attribute_role": pl.Enum(["station_name", "water_body_name", "drainage_area", "elevation"]),
     "support_fact": pl.String,
+    "source_datum": pl.String,
+    "source_datum_field": pl.String,
+    "source_datum_dtype": pl.String,
+    "datum_support_fact": pl.String,
 })
 assert actual.schema == schema
 assert set(actual["provider_id"]) == set(provider_ids)

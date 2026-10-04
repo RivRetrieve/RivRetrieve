@@ -1450,3 +1450,137 @@ def test_source_response_rebuild_allows_new_external_output_paths(tmp_path):
             "a" * 40,
             build_inputs=_build(),
         )
+
+
+def test_canonical_publication_requires_selected_metadata_receipt_before_file_reads(tmp_path, capsys):
+    with pytest.raises(SystemExit, match="2"):
+        generator.main(
+            [
+                "--native",
+                str(tmp_path / "native.parquet"),
+                "--out",
+                str(tmp_path / "output"),
+                "--evidence-root",
+                str(tmp_path / "inputs"),
+                "--availability-ledger",
+                str(tmp_path / "ledger"),
+                "--build-inputs",
+                str(tmp_path / "build.json"),
+            ]
+        )
+    assert "--out requires --input-receipt" in capsys.readouterr().err
+    assert not (tmp_path / "output").exists()
+
+
+def test_synthetic_metadata_build_keeps_canonical_geometry_products_and_native_capture():
+    from rivretrieve._internal.acquisition_provenance import (
+        AcquisitionRecord,
+        MaterialIdentity,
+        NativeTableIdentity,
+        RecordingReference,
+        SemanticDigest,
+    )
+    from rivretrieve._internal.providers.fr_hubeau.station_metadata import StationMetadataSources
+
+    row = {
+        "code_station": "H001",
+        "code_site": "site",
+        "source_endpoint": "hydrometrie/referentiel/stations",
+        "retrieved_at": datetime(2025, 1, 1, tzinfo=UTC),
+        "latitude_station": 48.0,
+        "longitude_station": 2.0,
+        "code_projection": 26,
+        "libelle_station": " Station ",
+        "libelle_cours_eau": "Station river",
+        "altitude_ref_alti_station": 1.0,
+        "code_systeme_alti_site": 0,
+    }
+    native = NativeTable(pl.DataFrame([row], schema=NATIVE_SCHEMA))
+    capture = generator.NativeInventoryCapture(
+        native_table=NativeTableIdentity(
+            repository_path="synthetic/native.parquet",
+            revision="c" * 40,
+            sha256="a" * 64,
+            byte_size=1,
+            semantic_digest=SemanticDigest(
+                name="fr_hubeau.native_table_content_sha256", sha256=native_table_content_digest(native)
+            ),
+        ),
+        hydrometry=AcquisitionRecord(
+            acquisition_id="synthetic_hydrometry",
+            method="http_request",
+            instant_type="retrieval",
+            description="Synthetic hydrometry capture",
+            requested_from=(generator.HYDRO_STATIONS_URL,),
+            retrieved_at_start=row["retrieved_at"],
+        ),
+        temperature=AcquisitionRecord(
+            acquisition_id="synthetic_temperature",
+            method="http_request",
+            instant_type="retrieval",
+            description="Synthetic temperature capture",
+            requested_from=(generator.TEMP_STATIONS_URL,),
+            retrieved_at_start=row["retrieved_at"],
+        ),
+        evidence=(),
+    )
+    availability = generator.FranceAvailability(
+        native_table=MaterialIdentity(
+            filename="src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
+            sha256=generator.NATIVE_TABLE_SHA256,
+            byte_count=generator.NATIVE_TABLE_BYTE_SIZE,
+        ),
+        pairs=(),
+        research_head="b" * 40,
+        schema_version=1,
+        scope="Synthetic membership",
+        summary=generator.AvailabilitySummary(available=0, by_status={}, pairs=0, stations=0, unknown=0),
+    )
+    original = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, availability, native_capture=capture)
+    site = {
+        "code_site": "site",
+        "libelle_site": "Site label",
+        "altitude_site": 2.0,
+        "code_systeme_alti_site": 57,
+        "surface_bv": 3.0,
+        "libelle_cours_eau": "Site river",
+        "code_cours_eau": None,
+        "uri_cours_eau": None,
+        "date_maj_site": None,
+    }
+    body = json.dumps({"count": 1, "next": None, "data": [site]}).encode()
+    import hashlib
+
+    reference = RecordingReference(
+        recording_id="synthetic-site-response",
+        repository_path="synthetic/site/body",
+        source_url=generator.HYDRO_SITES_URL,
+        retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        media_type="application/json",
+        sha256=hashlib.sha256(body).hexdigest(),
+    )
+    sources = StationMetadataSources(
+        site_bodies={reference.recording_id: body},
+        site_recordings=(reference,),
+        expected_site_codes={reference.recording_id: ("site",)},
+        member_digests={},
+    )
+    built = build_catalogue(
+        native, FRANCE_ORIGIN_DECLARATIONS, availability, native_capture=capture, metadata_sources=sources
+    )
+    for name in ("stations", "products", "station_products"):
+        pl_testing.assert_frame_equal(getattr(built, name), getattr(original, name))
+    assert built.provider_info == original.provider_info
+    assert built.acquisition_provenance.native_table == original.acquisition_provenance.native_table
+    assert built.metadata_sources is sources
+    expected = pl.DataFrame(
+        {
+            "source_scope": ["hydrometrie/referentiel/sites", "hydrometrie/referentiel/stations"],
+            "source_field": ["altitude_site", "altitude_ref_alti_station"],
+            "source_value": ["2.0", "1.0"],
+            "source_unit": [None, "m"],
+            "source_datum": ["57", "0"],
+        }
+    )
+    elevation = built.station_metadata.filter(pl.col("attribute_role") == "elevation").sort("source_scope")
+    pl_testing.assert_frame_equal(elevation.select(expected.columns), expected)

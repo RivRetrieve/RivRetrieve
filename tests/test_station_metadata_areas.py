@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import socket
-from importlib import import_module
 from pathlib import Path
 
 import polars as pl
@@ -13,8 +12,6 @@ from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
 from rivretrieve._internal import discovery
-from rivretrieve._internal.catalogues.native import NativeTable
-from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 
 AREA_SCHEMA = pl.Schema(
@@ -42,17 +39,25 @@ def _areas(selection) -> pl.DataFrame:
 SOURCE_FIELDS = {
     "ba_fhmzbih": ("metadata_station_no", {"metadata_CATCHMENT_SIZE": None}),
     "br_ana": ("codigoestacao", {"Area_Drenagem": None}),
-    "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": None, "DRAINAGE_AREA_EFFECT": None}),
+    "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": "km2", "DRAINAGE_AREA_EFFECT": "km2"}),
     "ch_foen": ("name", {}),
     "cz_chmi": ("objID", {"PLO_STA": "km²"}),
     "fr_hubeau": ("code_station", {"superficie_topo": None, "superficie_reelle": None}),
     "fr_hydroportail": ("bookmarkCode", {}),
     "jp_mlit": ("観測所記号", {"流域面積": None}),
     "lt_lhmt": ("code", {}),
-    "no_nve": ("stationId", {"drainageBasinArea": "km2", "drainageBasinAreaNorway": "km2"}),
+    "no_nve": (
+        "stationId",
+        {
+            "drainageBasinArea": "km2",
+            "drainageBasinAreaNorway": "km2",
+            "transferAreaIn": "km2",
+            "transferAreaOut": "km2",
+        },
+    ),
     "pl_imgw": ("gauge_id", {"area": None}),
     "th_thaiwater": ("station.id", {}),
-    "usgs_nwis": ("site_no", {"drain_area_va": "sq mi", "contrib_drain_area_va": None}),
+    "usgs_nwis": ("site_no", {"drain_area_va": "sq mi", "contrib_drain_area_va": "sq mi"}),
     "za_dws": ("Station", {"Catchment Area km**2": "km**2"}),
 }
 
@@ -62,8 +67,8 @@ def test_canadian_example_and_product_deduplication() -> None:
     gauge = rr.pick(gauges, station="02GA010")
     expected = pl.DataFrame(
         [
-            ("ca_eccc", "02GA010", "DRAINAGE_AREA_EFFECT", None, "Float64", None, "source_null"),
-            ("ca_eccc", "02GA010", "DRAINAGE_AREA_GROSS", "1035.0", "Float64", None, "value"),
+            ("ca_eccc", "02GA010", "DRAINAGE_AREA_EFFECT", None, "Float64", "km2", "source_null"),
+            ("ca_eccc", "02GA010", "DRAINAGE_AREA_GROSS", "1035.0", "Float64", "km2", "value"),
         ],
         schema=AREA_SCHEMA,
         orient="row",
@@ -93,7 +98,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
     assert overlapping.height > 0
-    for provider in ("ch_foen", "lt_lhmt", "th_thaiwater"):
+    for provider in ("lt_lhmt", "th_thaiwater"):
         absent = result.filter(pl.col("provider_id") == provider)
         assert set(absent["state"]) == {"no_metadata"}
         assert (
@@ -122,20 +127,28 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
     )
     stations = pl.read_parquet(catalogue / "stations.parquet").select("station_id")
     projection = pl.read_parquet(catalogue / "station_metadata.parquet")
-    origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
-    if provider == "fr_hubeau":
-        origin = origins.HYDROMETRY_STATION_CATALOGUE_ORIGINS["station_id"]
-        assert origin == origins.TEMPERATURE_STATION_CATALOGUE_ORIGINS["station_id"]
-    else:
-        origin = origins.STATION_CATALOGUE_ORIGINS["station_id"]
-    # Reuse this retained input for both rebuild equality and independent scalar
-    # assertions, instead of reading all providers again in a subprocess test.
-    rebuilt = build_station_metadata(provider, NativeTable(native), stations, origin, origins.STATION_METADATA_FIELDS)
-    assert_frame_equal(rebuilt, projection)
+    # The shared catalogue-origin contract rebuilds the full publication. This
+    # check independently compares each adopted area field held in native bytes.
     actual = _area_columns(projection)
     identity, fields = SOURCE_FIELDS[provider]
     assert_frame_equal(actual.select("station_id").unique().sort("station_id"), stations.sort("station_id"))
-    assert set(actual["source_field"].drop_nulls()) == set(fields)
+    supplementary = {"ch_foen": {"Catchment size"}, "fr_hubeau": {"surface_bv"}}.get(provider, set())
+    assert set(actual["source_field"].drop_nulls()) == set(fields) | supplementary
+    if provider == "ch_foen":
+        direct = actual.filter(pl.col("source_field") == "Catchment size")
+        assert set(direct["source_dtype"]) == {"String"}
+        assert set(direct["source_unit"]) == {"km2"}
+        assert set(direct["state"]) == {"value"}
+    elif provider == "fr_hubeau":
+        # The site response owns surface_bv; the separate original-site test
+        # compares its values. Native union padding is not field exposure.
+        native = native.filter(pl.col("source_endpoint") == "temperature/station")
+        for field in fields:
+            assert set(projection.filter(pl.col("source_field") == field)["source_scope"]) == {"temperature/station"}
+        site = projection.filter(pl.col("source_field") == "surface_bv")
+        assert set(site["source_scope"]) == {"hydrometrie/referentiel/sites"}
+        assert set(site["source_dtype"]) == {"Float64"}
+        assert set(site["source_unit"]) == {"km²"}
     # Canonical scope excludes native-only gauges (notably Brazil).
     native = native.join(stations, left_on=identity, right_on="station_id", how="semi").sort(identity)
     for field, unit in fields.items():
@@ -247,3 +260,154 @@ def test_catalogue_only_station_metadata_without_numeric_admission(monkeypatch: 
         rr.pick(selected, provider="ch_foen"),
     ):
         assert_frame_equal(_areas(narrowed), pl.DataFrame(schema=AREA_SCHEMA))
+
+
+@pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")
+@pytest.mark.governing(
+    "maintenance/catalogue/station_metadata/sources/fr_hubeau/sites/documents.json",
+    "maintenance/catalogue/station_metadata/sources/fr_hubeau/sites/lineage.json",
+    full_verification=("fr_hubeau",),
+)
+def test_france_site_area_values_match_original_responses_and_native_site_links(
+    retained_evidence_root: Path, catalogue_input_receipt
+) -> None:
+    # This expectation reads original scalar values independently of the production
+    # parser/projector. Request and byte integrity are certified before this check.
+    from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+
+    consumer_root = "maintenance/catalogue/station_metadata/sources/fr_hubeau/sites"
+    selected = tuple(
+        item for item in catalogue_input_receipt.inputs if item.consumer_path.startswith(consumer_root + "/")
+    )
+    assert selected
+    verify_retained_input_files(
+        catalogue_input_receipt.model_copy(update={"inputs": selected, "declaration_inputs": (), "support_inputs": ()}),
+        retained_evidence_root,
+    )
+    source_root = retained_evidence_root / consumer_root
+    documents = json.loads((source_root / "documents.json").read_bytes())
+    values = [
+        {"code_site": row["code_site"], "surface_bv": row["surface_bv"]}
+        for document in documents
+        for row in json.loads((source_root / document["id"] / "body").read_bytes())["data"]
+    ]
+    sites = pl.DataFrame(values, schema={"code_site": pl.String, "surface_bv": pl.Float64})
+    assert sites["code_site"].n_unique() == sites.height
+    native = pl.read_parquet(
+        retained_evidence_root / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet"
+    )
+    catalogue = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/fr_hubeau/catalogue"
+    canonical = pl.read_parquet(catalogue / "stations.parquet").select("station_id")
+    associations = (
+        native.filter(pl.col("source_endpoint") == "hydrometrie/referentiel/stations")
+        .select(pl.col("code_station").alias("station_id"), "code_site")
+        .join(canonical, on="station_id", how="semi")
+    )
+    expected = (
+        associations.join(sites, on="code_site", how="inner", validate="m:1")
+        .select("station_id", "surface_bv")
+        .sort("station_id")
+    )
+    source = pl.read_parquet(catalogue / "station_metadata.parquet")
+    actual = source.filter(
+        (pl.col("attribute_role") == "drainage_area")
+        & (pl.col("source_scope") == "hydrometrie/referentiel/sites")
+        & (pl.col("source_field") == "surface_bv")
+    ).sort("station_id")
+    restored = pl.DataFrame(
+        {
+            "station_id": actual["station_id"],
+            "surface_bv": pl.Series(
+                [None if value is None else json.loads(value) for value in actual["source_value"]],
+                dtype=pl.Float64,
+            ),
+        }
+    )
+    assert_frame_equal(restored, expected)
+    assert set(actual["source_dtype"]) == {"Float64"}
+    assert set(actual["source_unit"]) == {"km²"}
+    assert actual["state"].to_list() == [
+        "source_null" if value is None else "value" for value in expected["surface_bv"]
+    ]
+    missing = associations.join(sites.select("code_site"), on="code_site", how="anti")["station_id"]
+    assert source.filter(
+        pl.col("station_id").is_in(missing.implode()) & (pl.col("source_scope") == "hydrometrie/referentiel/sites")
+    ).is_empty()
+
+
+@pytest.mark.parametrize("fault", [None, "hydrometry_padding", "wrong_scope", "changed_scalar", "null_as_zero"])
+def test_native_area_expectation_respects_france_endpoint_exposure(monkeypatch, tmp_path, fault):
+    from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA
+
+    native = pl.DataFrame(
+        {
+            "code_station": ["H", "T"],
+            "source_endpoint": ["hydrometrie/referentiel/stations", "temperature/station"],
+            "superficie_topo": [None, 1.25],
+            "superficie_reelle": [None, None],
+        },
+        schema={
+            "code_station": pl.String,
+            "source_endpoint": pl.String,
+            "superficie_topo": pl.Float64,
+            "superficie_reelle": pl.Float64,
+        },
+    )
+    rows = [
+        {
+            "station_id": "H",
+            "source_field": "surface_bv",
+            "source_value": "2.5",
+            "source_unit": "km²",
+            "source_scope": "hydrometrie/referentiel/sites",
+            "state": "value",
+        },
+        {
+            "station_id": "T",
+            "source_field": "superficie_topo",
+            "source_value": "1.25",
+            "source_scope": "temperature/station",
+            "state": "value",
+        },
+        {
+            "station_id": "T",
+            "source_field": "superficie_reelle",
+            "source_value": None,
+            "source_scope": "temperature/station",
+            "state": "source_null",
+        },
+    ]
+    if fault == "hydrometry_padding":
+        rows.append(
+            {
+                **rows[1],
+                "station_id": "H",
+                "source_value": None,
+                "source_scope": "temperature/station",
+                "state": "source_null",
+            }
+        )
+    elif fault == "wrong_scope":
+        rows[1]["source_scope"] = "hydrometrie/referentiel/stations"
+    elif fault == "changed_scalar":
+        rows[1]["source_value"] = "1.5"
+    elif fault == "null_as_zero":
+        rows[2].update(source_value="0.0", state="value")
+    projection = pl.DataFrame(
+        [
+            {**row, "provider_id": "fr_hubeau", "attribute_role": "drainage_area", "source_dtype": "Float64"}
+            for row in rows
+        ],
+        schema=SOURCE_METADATA_SCHEMA,
+    )
+    tables = {
+        "native.parquet": native,
+        "stations.parquet": pl.DataFrame({"station_id": ["H", "T"]}),
+        "station_metadata.parquet": projection,
+    }
+    monkeypatch.setattr(pl, "read_parquet", lambda path: tables[Path(path).name].clone())
+    if fault is None:
+        test_projection_preserves_every_native_scalar("fr_hubeau", tmp_path)
+    else:
+        with pytest.raises(AssertionError):
+            test_projection_preserves_every_native_scalar("fr_hubeau", tmp_path)
