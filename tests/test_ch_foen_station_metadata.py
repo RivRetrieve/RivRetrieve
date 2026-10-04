@@ -146,7 +146,7 @@ def source_inputs(tmp_path):
 
     page_url = "https://www.hydrodaten.admin.ch/en/seen-und-fluesse/stations/001"
     directory_url = "https://www.hydrodaten.admin.ch/en/stations-and-data"
-    document = {"provider": "ch_foen", "id": "station-001", "station_id": "001", "url": page_url}
+    document = {"provider": "ch_foen", "id": "foen-station-001", "station_id": "001", "url": page_url}
 
     def receipt(body, url, document):
         return json.dumps(
@@ -177,8 +177,8 @@ def source_inputs(tmp_path):
     bodies = {
         "directory/body": directory,
         "directory/receipt.json": receipt(directory, directory_url, {}),
-        "pages/001/body": page,
-        "pages/001/receipt.json": receipt(page, page_url, document),
+        "pages/foen-station-001/body": page,
+        "pages/foen-station-001/receipt.json": receipt(page, page_url, document),
         "pages/documents.json": manifest,
         "pages/acquisition-run.json": json.dumps({"manifest_sha256": manifest_sha}).encode(),
     }
@@ -233,8 +233,11 @@ def test_reader_keeps_original_receipt_filename_and_binds_independent_members(so
     root, arguments = source_inputs
     sources = read_station_metadata_sources(root, **arguments)
     assert sources.station_pages["001"] == station_page()
-    assert sources.page_recordings[0].repository_path == "pages/001/body"
-    assert not (root / "pages/001/hop-0.body").exists()
+    assert sources.page_recordings[0].recording_id == "foen-station-001"
+    assert sources.page_recordings[0].repository_path == "pages/foen-station-001/body"
+    assert sources.page_recordings[0].source_url.endswith("/stations/001")
+    assert not (root / "pages/001").exists()
+    assert not (root / "pages/foen-station-001/hop-0.body").exists()
     adopted = tuple(
         RetainedInputUse(
             reference=ArchiveMemberReference.model_validate(item.model_dump(exclude={"consumer_path"})),
@@ -262,11 +265,11 @@ def test_source_mutation_cannot_hide_behind_self_consistent_receipt_or_previous_
     root, arguments = source_inputs
     read_station_metadata_sources(root, **arguments)
     body = station_page(fields="<dt>Station altitude</dt><dd>Changed value</dd>")
-    (root / "pages/001/body").write_bytes(body)
+    (root / "pages/foen-station-001/body").write_bytes(body)
     if change_receipt:
-        receipt = json.loads((root / "pages/001/receipt.json").read_bytes())
+        receipt = json.loads((root / "pages/foen-station-001/receipt.json").read_bytes())
         receipt["hops"][0].update(sha256=hashlib.sha256(body).hexdigest(), byte_size=len(body))
-        (root / "pages/001/receipt.json").write_text(json.dumps(receipt))
+        (root / "pages/foen-station-001/receipt.json").write_text(json.dumps(receipt))
     with pytest.raises(FatalContractError, match="resolved archive identity"):
         read_station_metadata_sources(root, **arguments)
 
@@ -294,16 +297,18 @@ def test_direct_metadata_sources_remain_separate_from_intermediary_provenance(so
     root, arguments = source_inputs
     sources = read_station_metadata_sources(root, **arguments)
     original = build_acquisition_provenance()
-    page_reference = sources.page_recordings[0].model_copy(update={"repository_path": f"{STATION_PAGE_ROOT}/001/body"})
+    page_reference = sources.page_recordings[0].model_copy(
+        update={"repository_path": f"{STATION_PAGE_ROOT}/foen-station-001/body"}
+    )
     updated = with_station_metadata_sources(original, (page_reference,))
     assert updated.native_table == original.native_table
     assert updated.source_records[:-1] == original.source_records
     direct = updated.source_records[-1]
     assert direct.source_id == "ch_foen.foen_station_reference"
-    assert direct.acquisitions[-1].recording_ids == ("station-001",)
+    assert direct.acquisitions[-1].recording_ids == ("foen-station-001",)
     assert direct.acquisitions[-1].retrieved_at_start == sources.page_recordings[0].retrieved_at
     assert (
-        f"{STATION_PAGE_ROOT}/001/receipt.json"
+        f"{STATION_PAGE_ROOT}/foen-station-001/receipt.json"
         in station_metadata_supporting_inputs(updated)["source.station.foen_reference_altitude_and_catchment"]
     )
 

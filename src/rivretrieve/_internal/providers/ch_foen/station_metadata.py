@@ -351,22 +351,25 @@ def read_station_metadata_sources(
             or station in pages
             or not isinstance(identity, str)
             or not identity.strip()
+            or identity in {".", ".."}
+            or "/" in identity
+            or "\\" in identity
         ):
             raise FatalContractError("FOEN page manifest has invalid or duplicate station identities")
         source_url = f"{origin.scheme}://{origin.netloc}/en/seen-und-fluesse/stations/{station}"
         parsed_url = urlsplit(source_url)
         if document.get("url") != source_url or parsed_url.query or parsed_url.fragment:
             raise FatalContractError("FOEN page manifest has an unsupported source origin or station URL")
-        verify_paths((f"{page_root}/{station}/body", f"{page_root}/{station}/receipt.json"))
-        body = (root / station / "body").read_bytes()
-        receipt_bytes = (root / station / "receipt.json").read_bytes()
+        verify_paths((f"{page_root}/{identity}/body", f"{page_root}/{identity}/receipt.json"))
+        body = (root / identity / "body").read_bytes()
+        receipt_bytes = (root / identity / "receipt.json").read_bytes()
         receipt, retrieved_at, media_type = _response_receipt(receipt_bytes, body, source_url)
         if receipt.get("document") != document:
             raise FatalContractError("FOEN page receipt does not identify its selected manifest document")
         recordings.append(
             RecordingReference(
                 recording_id=identity,
-                repository_path=f"{page_root}/{station}/body",
+                repository_path=f"{page_root}/{identity}/body",
                 source_url=source_url,
                 retrieved_at=retrieved_at,
                 media_type=media_type,
