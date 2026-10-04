@@ -63,7 +63,9 @@ def build_catalogue_metadata(
     Historical provenance remains readable without these build-only inputs.
     ``station_metadata`` can supply an explicit source projection when a provider
     combines supplementary sources. Its canonical scope, value states and field
-    declarations are validated here. Provider projection code establishes actual
+    declarations are validated here. Exposed fields without explicit source facts
+    must match the historical native projection, including scalar types and datum
+    associations. Provider projection code establishes actual
     source exposure; each alternative source uses ``MetadataField.source_facts``.
     An explicit projection requires ``metadata_implementation``, the exact
     (repository path, symbol) of its producer in ``build_inputs.declarations``.
@@ -113,6 +115,10 @@ def build_catalogue_metadata(
             raise FatalContractError(
                 "Metadata fields outside the historical native table require explicit source facts"
             )
+    if metadata_implementation is not None:
+        _validate_native_metadata_projection(
+            provider_id, native_table, stations, station_origin, metadata_fields, station_metadata
+        )
     bound = _bind_catalogue_build_inputs(
         provenance,
         build_inputs,
@@ -173,6 +179,42 @@ def build_catalogue_metadata(
     )
     metadata["croissant.json"] = (json.dumps(descriptor, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     return metadata
+
+
+def _validate_native_metadata_projection(
+    provider_id: str,
+    native_table: NativeTable,
+    stations: pl.DataFrame,
+    station_origin: Field,
+    fields: tuple[MetadataField, ...],
+    metadata: pl.DataFrame,
+) -> None:
+    """Check historical-native support only where a declared field is exposed."""
+    for field in fields:
+        if field.source_facts:
+            continue
+        exposed = metadata.filter(
+            (pl.col("state") != "no_metadata")
+            & (pl.col("attribute_role") == field.attribute_role)
+            & pl.col("source_scope").eq_missing(field.source_scope)
+            & (pl.col("source_field") == field.source_field)
+        )
+        if exposed.is_empty():
+            continue
+        selected_stations = stations.join(exposed.select("station_id"), on="station_id", how="semi")
+        projected = build_station_metadata(provider_id, native_table, selected_stations, station_origin, (field,))
+        expected = {
+            row["station_id"]: row for row in projected.filter(pl.col("state") != "no_metadata").iter_rows(named=True)
+        }
+        for row in exposed.iter_rows(named=True):
+            native_row = expected[row["station_id"]]
+            # Compare JSON scalars, not incidental whitespace or escape spelling.
+            encoded = row.pop("source_value")
+            native_encoded = native_row.pop("source_value")
+            value = json.loads(encoded) if encoded is not None else None
+            native_value = json.loads(native_encoded) if native_encoded is not None else None
+            if row != native_row or type(value) is not type(native_value) or value != native_value:
+                raise FatalContractError("Station metadata conflicts with its historical native projection")
 
 
 _METADATA_MODULE = "src/rivretrieve/_internal/catalogues/station_metadata.py"
