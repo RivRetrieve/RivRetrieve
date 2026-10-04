@@ -24,10 +24,11 @@ strings, including leading zeros. `latitude`, `longitude` and `crs` come togethe
 from the current packaged canonical station catalogue, independently of locations
 saved in a selection. Unknown coordinates and CRS remain unknown.
 
-`station_name` is the one distinct nonblank supported name, when one exists. If
-several distinct nonblank names exist, it is null and `station_name_alternatives`
-is true. Blank names do not populate this scalar, but remain in the source view.
-Spelling, language and surrounding spaces are not normalised.
+`station_name` is the one distinct nonblank supported name, when one exists.
+It is null when no nonblank name exists or several distinct nonblank names exist.
+Use the source view to distinguish these cases. Equal names from separate fields
+count as one name. Blank names do not populate this scalar, but remain in the
+source view. Spelling, language and surrounding spaces are not normalised.
 
 The other attributes use aligned lists:
 
@@ -170,6 +171,31 @@ alignment. Neither case supplies a numeric area or establishes source silence.
 
 ## Interpret elevations
 
+For USGS `alt_va`, the summary removes leading spaces, tabs and nonbreaking spaces
+from complete numeric strings. Signs, decimal spelling and trailing zeros remain
+unchanged. Nulls, blanks, placeholders and qualified or unrecognised text remain
+unchanged. This rule does not apply to other fields.
+
+```python
+usgs = rr.find(provider="usgs_nwis", station="07374000")
+elevation = rr.metadata(usgs).row(0, named=True)
+
+print(elevation["elevation_field"], elevation["elevation_value"])
+# ['alt_va'] ['"0.00"']
+print(elevation["elevation_unit"], elevation["elevation_datum"])
+# ['feet'] ['NAVD88']
+print(repr(json.loads(elevation["elevation_value"][0])))
+# '0.00'
+
+source = rr.metadata(usgs, view="source").filter(pl.col("source_field") == "alt_va")
+print(repr(json.loads(source["source_value"].item())))
+# ' 0.00'
+```
+
+The decoded summary value remains a string. The source view retains its exact
+padding and `String` dtype. Removing padding does not assess whether zero is
+plausible or change the elevation's physical reference point, unit or datum.
+
 The Swiss source publishes station altitude as a string that includes units.
 The summary separates the numeric text from `m a.s.l.` and retains the supported
 datum:
@@ -236,8 +262,8 @@ print(json.loads(site_name["source_value"].item()))
 
 Unlike summary water-body names, source-view strings retain JSON encoding.
 Source quantity values also retain their complete original text, including any
-inline units. For example, Japan's area above decodes to `142.00km2` in the
-source view. Source and summary units agree entry by entry.
+inline units and leading padding. For example, Japan's area above decodes to
+`142.00km2` in the source view. Source and summary units agree entry by entry.
 
 | Column | Meaning |
 | --- | --- |

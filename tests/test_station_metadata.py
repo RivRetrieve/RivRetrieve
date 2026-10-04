@@ -110,7 +110,6 @@ def test_source_scalar_states_and_name_alternatives():
                 "latitude": 1.0,
                 "longitude": 2.0,
                 "crs": "source CRS",
-                "station_name_alternatives": True,
                 "water_body_name_field": ["blank", "river"],
                 "water_body_name_value": ["\u00a0", "River"],
                 "drainage_area_field": ["area", "null_area"],
@@ -129,9 +128,7 @@ def test_no_metadata_and_missing_geometry():
     )
     keys = source.select("provider_id", "station_id").unique()
     actual = station_metadata_frame(keys, source_metadata_frame(keys, source), pl.DataFrame())
-    expected = pl.DataFrame(
-        [{"provider_id": "p", "station_id": "001", "station_name_alternatives": False}], schema=STATION_METADATA_SCHEMA
-    )
+    expected = pl.DataFrame([{"provider_id": "p", "station_id": "001"}], schema=STATION_METADATA_SCHEMA)
     assert_frame_equal(actual, expected)
 
 
@@ -211,6 +208,7 @@ def test_offline_public_api_mixed_scope(tmp_path, monkeypatch):
     assert_frame_equal(rr.metadata(selected, view="source"), expected)
     summary = rr.metadata(selected)
     assert summary.height == keys.height == 2
+    assert "station_name_alternatives" not in summary.columns
     assert summary["station_name"].to_list() == [" Gauge "] * 2
     assert_frame_equal(rr.metadata(replace(selected, locations=()), view="source"), expected)
     expected_geometry = pl.DataFrame(
@@ -227,6 +225,7 @@ def test_offline_public_api_mixed_scope(tmp_path, monkeypatch):
         (tmp_path / provider / "catalogue" / "stations.parquet").unlink()
     assert_frame_equal(rr.metadata(selected, view="source"), expected)
     empty = rr.pick(selected, quantity="not-a-quantity")
+    assert "station_name_alternatives" not in rr.metadata(empty).columns
     assert_frame_equal(rr.metadata(empty), pl.DataFrame(schema=STATION_METADATA_SCHEMA))
     assert_frame_equal(rr.metadata(empty, view="source"), pl.DataFrame(schema=SOURCE_METADATA_SCHEMA))
     with pytest.raises(ValueError, match="view"):
@@ -235,7 +234,15 @@ def test_offline_public_api_mixed_scope(tmp_path, monkeypatch):
         rr.metadata(pl.DataFrame())
 
 
-@pytest.mark.parametrize("values,expected", [(["", "\u00a0"], None), (["Name", "Name", ""], "Name")])
+@pytest.mark.parametrize(
+    "values,expected",
+    [
+        (["", "\u00a0"], None),
+        (["Name", "Name", ""], "Name"),
+        ([" Rivière ", ""], " Rivière "),
+        (["Name", "Other"], None),
+    ],
+)
 def test_blank_names_and_repeated_equal_names(values, expected):
     source = attributes().filter(pl.col("attribute_role") != "station_name")
     names = source_frame(
@@ -258,7 +265,8 @@ def test_blank_names_and_repeated_equal_names(values, expected):
     keys = source.select("provider_id", "station_id").unique()
     result = station_metadata_frame(keys, source_metadata_frame(keys, source), pl.DataFrame())
     assert result["station_name"].item() == expected
-    assert result["station_name_alternatives"].item() is False
+    assert "station_name_alternatives" not in result.columns
+    assert_frame_equal(source_metadata_frame(keys, source).filter(pl.col("attribute_role") == "station_name"), names)
 
 
 @pytest.mark.parametrize(
@@ -495,7 +503,6 @@ def test_public_aligned_lists_preserve_every_source_entry(tmp_path, monkeypatch)
                 "provider_id": "ca_eccc",
                 "station_id": "02GA010",
                 "station_name": " Gauge ",
-                "station_name_alternatives": False,
                 "latitude": 1.0,
                 "longitude": 2.0,
                 "crs": "source CRS",
@@ -1109,6 +1116,7 @@ def test_inline_unit_declarations_reject_conflicting_or_nonquantity_units(role, 
 @pytest.mark.parametrize(
     "provider,station,field,role,raw,numeric,unit,datum",
     [
+        ("usgs_nwis", "07374000", "alt_va", "elevation", " 0.00", "0.00", "feet", "NAVD88"),
         ("jp_mlit", "301011281104010", "流域面積", "drainage_area", "142.00km2", "142.00", "km2", None),
         ("jp_mlit", "301011281104010", "零点高", "elevation", "0.000m", "0.000", "m", None),
         ("ba_fhmzbih", "4024", "metadata_CATCHMENT_SIZE", "drainage_area", "1600.00 km²", "1600.00", "km²", None),
@@ -1116,7 +1124,7 @@ def test_inline_unit_declarations_reject_conflicting_or_nonquantity_units(role, 
         ("ch_foen", "2004", "Station altitude", "elevation", "432 m a.s.l.", "432", "m", "LN02"),
     ],
 )
-def test_public_inline_quantity_examples_are_offline(
+def test_public_quantity_presentation_examples_are_offline(
     provider, station, field, role, raw, numeric, unit, datum, monkeypatch
 ):
     def forbidden(*args, **kwargs):
@@ -1137,3 +1145,101 @@ def test_public_inline_quantity_examples_are_offline(
     assert summary[f"{role}_unit"][index] == unit
     if role == "elevation":
         assert summary["elevation_datum"][index] == source["source_datum"].item() == datum
+
+
+@pytest.mark.parametrize(
+    "value,dtype,expected",
+    [
+        (" 0.00", "String", "0.00"),
+        (" \t\u00a0+001.200", "String", "+001.200"),
+        (" -1,234,567.080", "String", "-1,234,567.080"),
+        (" -.50", "String", "-.50"),
+        ("0.00", "String", "0.00"),
+        (None, "String", None),
+        *[
+            (value, "String", value)
+            for value in (
+                "",
+                " \t\u00a0",
+                "ND",
+                " 1.0 estimated",
+                "about 1.0",
+                " 1 m",
+                " 1-2",
+                " 1,23.0",
+                " 1.2.3",
+                " 1e3",
+                " NaN",
+                " inf",
+                " 1.0 ",
+                " 1.0\n",
+                "\n1.0",
+                " 1.0\t",
+                " 1.0\u00a0",
+            )
+        ],
+        (0, "Int64", 0),
+        (0.0, "Float64", 0.0),
+        (True, "Boolean", True),
+    ],
+)
+def test_usgs_elevation_padding_preserves_complete_numeric_spelling_and_other_states(value, dtype, expected):
+    source = attributes("usgs_nwis", "001").filter(pl.col("attribute_role") != "elevation")
+    encoded = None if value is None else json.dumps(value, ensure_ascii=False)
+    elevation = source_frame(
+        [
+            (
+                "usgs_nwis",
+                "001",
+                "alt_va",
+                encoded,
+                dtype,
+                "feet",
+                "source_null" if value is None else "value",
+                "elevation",
+                "metadata.elevation.alt_va",
+            ),
+        ]
+    ).with_columns(
+        pl.lit("NAVD88").alias("source_datum"),
+        pl.lit("metadata.elevation.alt_va.datum").alias("datum_support_fact"),
+    )
+    source = pl.concat([source, elevation])
+    before = source.clone()
+    keys = source.select("provider_id", "station_id").unique()
+    detailed = source_metadata_frame(keys, source)
+    summary = station_metadata_frame(keys, detailed, pl.DataFrame())
+    expected_text = None if expected is None else json.dumps(expected, ensure_ascii=False)
+    assert summary["elevation_value"].to_list() == [[expected_text]]
+    assert summary["elevation_field"].to_list() == [["alt_va"]]
+    assert summary["elevation_unit"].to_list() == [["feet"]]
+    assert summary["elevation_datum"].to_list() == [["NAVD88"]]
+    assert_frame_equal(detailed.filter(pl.col("attribute_role") == "elevation"), elevation)
+    assert_frame_equal(source, before)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"provider_id": "other"},
+        {"source_field": "other"},
+        {"attribute_role": "drainage_area"},
+        {"source_scope": "other"},
+    ],
+)
+def test_usgs_padding_cleanup_does_not_expand_to_other_quantity_fields(change):
+    item = {
+        "provider_id": "usgs_nwis",
+        "station_id": "001",
+        "attribute_role": "elevation",
+        "source_field": "alt_va",
+        "source_value": '" 001.20"',
+        "source_dtype": "String",
+        "state": "value",
+        "support_fact": "synthetic",
+        **change,
+    }
+    source = pl.DataFrame([item], schema=SOURCE_METADATA_SCHEMA)
+    keys = source.select("provider_id", "station_id")
+    summary = station_metadata_frame(keys, source, pl.DataFrame())
+    assert summary[f"{item['attribute_role']}_value"].to_list() == [['" 001.20"']]
