@@ -72,12 +72,19 @@ Identity and facts are separate. Nullable facts carry explicit evidence states; 
 | `provider_id` | `String` |
 | `station_id` | `String` |
 | `station_name` | `String` |
-| `river_name` | `String` |
 | `latitude` | `Float64` |
 | `longitude` | `Float64` |
 | `crs` | `String` |
 | `station_name_alternatives` | `Boolean` |
-| `river_name_alternatives` | `Boolean` |
+| `water_body_name_field` | `List(String)` |
+| `water_body_name_value` | `List(String)` |
+| `drainage_area_field` | `List(String)` |
+| `drainage_area_value` | `List(String)` |
+| `drainage_area_unit` | `List(String)` |
+| `elevation_field` | `List(String)` |
+| `elevation_value` | `List(String)` |
+| `elevation_unit` | `List(String)` |
+| `elevation_datum` | `List(String)` |
 
 ### Source metadata frame
 
@@ -86,12 +93,17 @@ Identity and facts are separate. Nullable facts carry explicit evidence states; 
 | `provider_id` | `String` |
 | `station_id` | `String` |
 | `source_field` | `String` |
+| `source_scope` | `String` |
 | `source_value` | `String` |
 | `source_dtype` | `String` |
 | `source_unit` | `String` |
 | `state` | `Enum(categories=['value', 'source_null', 'no_metadata'])` |
-| `attribute_role` | `Enum(categories=['station_name', 'river_name', 'drainage_area'])` |
+| `attribute_role` | `Enum(categories=['station_name', 'water_body_name', 'drainage_area', 'elevation'])` |
 | `support_fact` | `String` |
+| `source_datum` | `String` |
+| `source_datum_field` | `String` |
+| `source_datum_dtype` | `String` |
+| `datum_support_fact` | `String` |
 
 See `metadata` above and [station metadata](station-metadata.md) for name alternatives, JSON decoding and absence states.
 

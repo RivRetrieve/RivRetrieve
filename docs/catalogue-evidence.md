@@ -80,7 +80,8 @@ access and genuine-input checks.
 
 Transformation declarations retain separate `executable` and `declaration` code
 references. Catalogue transformations identify the provider's catalogue builder;
-metadata transformations identify the shared projection. Provider declarations
+metadata transformations identify the shared projection or the explicit provider
+implementation that supplies the projected fields. Provider declarations
 map each observation transformation group to its actual operation: Canadian HYDAT
 row construction, Swiss parsing, or shared Czech and Lithuanian physical conversion.
 These references do not claim that observations were processed during the catalogue
@@ -92,18 +93,34 @@ scopes.
 ### Station metadata support
 
 `station_metadata.parquet` contains the supported source attributes used by
-`metadata(selection, view="source")`. Its columns are `provider_id`, `station_id`,
-`source_field`, `source_value`, `source_dtype`, `source_unit`, `state`,
-`attribute_role`, and `support_fact`. Values retain their source scalar encoding,
-dtype, known unit and value or absence state.
+`metadata(selection, view="source")`. Its columns, in physical order, are
+`provider_id`, `station_id`, `source_field`, `source_scope`, `source_value`,
+`source_dtype`, `source_unit`, `state`, `attribute_role`, `support_fact`,
+`source_datum`, `source_datum_field`, `source_datum_dtype`, and `datum_support_fact`.
+Values retain their source scalar encoding, dtype, established unit, and value or
+absence state. `source_scope` distinguishes contexts that publish the same field
+name, such as station and site records. Datum labels or codes remain associated
+with their specific elevation field. Unknown units and datums remain null.
 
 For an exposed field, `support_fact` names an exact
-`metadata.<attribute_role>.<source_field>` fact. Croissant links that column to the
-`name` column of `provenance_facts.parquet`. The metadata fact records the
-projection's executable and field declaration, with dependencies on existing
-native-input facts. It does not invent another source acquisition. A `no_metadata`
-row has no source field or support fact. Every metadata row remains within the
-canonical station identities.
+`metadata.<attribute_role>.<source_field>` fact, or
+`metadata.<attribute_role>.<source_scope>.<source_field>` for a scoped field.
+`datum_support_fact`, when present, names the corresponding fact with a `.datum`
+suffix. Croissant links both support columns to the `name` column of
+`provenance_facts.parquet`.
+
+A metadata fact records the actual projection implementation and field declaration.
+Its dependencies identify the adopted source values and any supporting definitions.
+A default historical-native projection must match the native values exactly.
+An explicit projection names its actual sources instead of inheriting historical
+native lineage. A station-to-site projection also records the native association
+used to link those records. Datum support establishes the association between a
+datum and that particular elevation field; it does not create an elevation value.
+
+A `no_metadata` row has no source attributes or support links. Every metadata row
+remains within the canonical station identities. The [station metadata guide](station-metadata.md)
+explains the aligned lists returned by the summary and the distinction between
+source-null fields and unexposed roles.
 
 ### Fixed physical relations
 
@@ -148,8 +165,12 @@ directly or transitively. Cycles and incompatible absence markers are rejected.
 
 `source_ordinal` indexes `header.source_records`. `description_id` indexes
 `header.descriptions`. `transformation_id` indexes `header.transformations`.
-Acquisitions preserve each exact ordered request location, retrieval instant or
-interval, recording ID and optional material identity. They are not campaign summaries.
+Acquisitions preserve ordered retrieval locations, retrieval instants or intervals,
+recording IDs and optional material identities. A public location can be an
+endpoint used as retrieval context rather than a complete replay URL. For filtered
+Hub'Eau site responses, descriptions state this limit; exact request filters remain
+in the private archive. Equal public endpoints do not merge separate acquisitions.
+These records are not campaign summaries.
 A material identity is all three material columns present or all three null.
 
 ### Exact fact and row location
@@ -230,7 +251,9 @@ through binding nodes and their exact external inputs to acquired materials.
 `hasPart` on each binding retains its ordered multi-output membership. Acquisition
 `about` explicitly links the issuing source. `license`, `citation` and `usageInfo`
 explicitly reference that source's statement nodes; each exact quotation appears
-once. Recording nodes retain exact URLs, instants, digests and source-local IDs.
+once. Recording nodes retain the declared public retrieval URLs, instants, digests and
+source-local IDs. The acquisition description distinguishes retrieval context from
+an exact request URL when private request filters are omitted.
 Their `historical_repository_path` property preserves an acquisition-era path;
 it is not an active relative `contentUrl`.
 
