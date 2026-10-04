@@ -797,7 +797,7 @@ def test_usgs_elevation_scope_keeps_non_usgs_gauges_without_exposing_their_altit
     assert_frame_equal(native.data, before)
 
 
-@pytest.mark.parametrize("provider", ["no_nve", "ca_eccc", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["no_nve", "ca_eccc", "usgs_nwis", "jp_mlit"])
 def test_metadata_definitions_resolve_adopted_nonruntime_source_support(provider):
     from importlib import import_module
 
@@ -880,3 +880,76 @@ def test_ana_elevation_context_keeps_its_existing_inventory_acquisition():
         if binding.transformation is not None
         for reference in binding.transformation.external_inputs
     )
+
+
+def test_mlit_zero_point_semantics_use_one_known_original_without_campaign_inference():
+    from datetime import datetime
+
+    from rivretrieve._internal.providers.jp_mlit.origins import (
+        CATALOGUE_SUPPORTING_INPUTS,
+        NATIVE_TABLE_ACQUISITION_IDS,
+        STATION_METADATA_FIELDS,
+        ZERO_POINT_ELEVATION_FACT,
+        build_acquisition_provenance,
+    )
+
+    provenance = build_acquisition_provenance()
+    binding = next(binding for binding in provenance.fact_bindings if ZERO_POINT_ELEVATION_FACT in binding.facts)
+    source = next(source for source in provenance.source_records if source.source_id == binding.source_id)
+    acquisition = next(item for item in source.acquisitions if item.acquisition_id == binding.acquisition_id)
+    assert acquisition.method == "http_request"
+    assert acquisition.retrieved_at_start == datetime.fromisoformat("2026-08-02T19:35:42Z")
+    assert acquisition.acquisition_id not in NATIVE_TABLE_ACQUISITION_IDS
+    assert len(acquisition.recording_ids) == 1
+    recording = next(
+        item.recording
+        for item in source.evidence
+        if item.recording is not None and item.recording.recording_id in acquisition.recording_ids
+    )
+    assert recording.repository_path == "tests/test_data/jp_mlit_site_info_detail_301011281104010.html"
+    assert recording.media_type == "text/html; charset=EUC-JP"
+    assert recording.sha256 == "81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9"
+    assert CATALOGUE_SUPPORTING_INPUTS[ZERO_POINT_ELEVATION_FACT] == (recording.repository_path,)
+    field = next(field for field in STATION_METADATA_FIELDS if field.source_field == "零点高")
+    assert (field.attribute_role, field.source_unit, field.datum, field.datum_field) == ("elevation", None, None, None)
+    assert field.support_facts == (ZERO_POINT_ELEVATION_FACT,)
+    assert all(
+        reference.fact != ZERO_POINT_ELEVATION_FACT
+        for binding in provenance.fact_bindings
+        if binding.transformation is not None
+        for reference in binding.transformation.external_inputs
+    )
+
+
+@pytest.mark.parametrize("value", ["T.P. +1.230 m", " ", "", None])
+def test_mlit_zero_point_keeps_inline_text_without_inventing_unit_or_datum(value):
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt, stamp_native_table
+    from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
+    from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+
+    fields = tuple(field for field in STATION_METADATA_FIELDS if field.source_field == "零点高")
+    native = stamp_native_table(
+        pl.DataFrame({"観測所記号": ["001"], "零点高": [value]}, schema={"観測所記号": pl.String, "零点高": pl.String}),
+        RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    projected = build_station_metadata(
+        "jp_mlit", native, pl.DataFrame({"station_id": ["001"]}), STATION_CATALOGUE_ORIGINS["station_id"], fields
+    ).filter(pl.col("attribute_role") == "elevation")
+    expected = pl.DataFrame(
+        [
+            {
+                "provider_id": "jp_mlit",
+                "station_id": "001",
+                "attribute_role": "elevation",
+                "source_field": "零点高",
+                "source_dtype": "String",
+                "source_value": None if value is None else json.dumps(value, ensure_ascii=False),
+                "state": "source_null" if value is None else "value",
+                "support_fact": "metadata.elevation.零点高",
+            }
+        ],
+        schema=SOURCE_METADATA_SCHEMA,
+    )
+    assert_frame_equal(projected, expected)

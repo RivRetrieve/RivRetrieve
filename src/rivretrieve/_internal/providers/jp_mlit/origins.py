@@ -42,6 +42,11 @@ STATION_METADATA_NOTICE = (
 
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "流域面積"),
+    MetadataField(
+        "elevation",
+        "零点高",
+        support_facts=("source.station.mlit_zero_point_elevation_definition",),
+    ),
     MetadataField("station_name", "観測所名"),
     MetadataField("water_body_name", "河川名"),
 )
@@ -175,8 +180,10 @@ SOURCE_FACTS = (
     "source.station.horizontal_crs_not_published",
     "source.station_product.availability_not_published",
 )
+ZERO_POINT_ELEVATION_FACT = "source.station.mlit_zero_point_elevation_definition"
 JAPAN_FACT_UNIVERSE = (
     *SOURCE_FACTS,
+    ZERO_POINT_ELEVATION_FACT,
     *PROVIDER_FACTS,
     *PRODUCT_FACTS,
     *STATION_FACTS,
@@ -193,6 +200,14 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
     AcquisitionProvenance
         Immutable source records and fact bindings for the Japan provider.
     """
+    zero_point_recording = RecordingReference(
+        recording_id="jp_mlit_site_info_detail_301011281104010",
+        repository_path="tests/test_data/jp_mlit_site_info_detail_301011281104010.html",
+        source_url="http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010",
+        retrieved_at=datetime.fromisoformat("2026-08-02T19:35:42Z"),
+        media_type="text/html; charset=EUC-JP",
+        sha256="81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9",
+    )
     licence_recording = RecordingReference(
         recording_id="jp_mlit_terms_licence_euc_jp",
         repository_path="tests/test_data/jp_mlit_terms_licence_euc_jp.html",
@@ -296,6 +311,15 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                 operator="MLIT Water Information System",
                 acquisitions=(
                     AcquisitionRecord(
+                        acquisition_id="station_zero_point_definition_capture_2026_08_02",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Original MLIT station-detail recording exposing the zero-point elevation field",
+                        requested_from=(zero_point_recording.source_url,),
+                        retrieved_at_start=zero_point_recording.retrieved_at,
+                        recording_ids=(zero_point_recording.recording_id,),
+                    ),
+                    AcquisitionRecord(
                         acquisition_id="station_register_capture_2026_08_02",
                         method="http_campaign",
                         instant_type="retrieval_interval",
@@ -357,6 +381,11 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                 ),
                 evidence=(
                     EvidenceReference(
+                        evidence_id="jp_mlit_station_zero_point_definition",
+                        description="Original station-detail field context for 零点高; no separate global unit or datum",
+                        recording=zero_point_recording,
+                    ),
+                    EvidenceReference(
                         evidence_id="jp_mlit_licence_statement",
                         description="MLIT Water Information System terms page recording",
                         recording=licence_recording,
@@ -399,6 +428,12 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
             ),
         ),
         fact_bindings=(
+            FactBinding(
+                fact_group="mlit_station_zero_point_elevation_definition",
+                facts=(ZERO_POINT_ELEVATION_FACT,),
+                source_id="jp_mlit",
+                acquisition_id="station_zero_point_definition_capture_2026_08_02",
+            ),
             FactBinding(
                 fact_group="mlit_service_identity",
                 facts=(SOURCE_FACTS[0],),
@@ -536,4 +571,6 @@ CATALOGUE_BUILD_DECLARATIONS = (
 
 
 # Additional retained declarations used by these source facts; not original-body claims.
-CATALOGUE_SUPPORTING_INPUTS = {}
+CATALOGUE_SUPPORTING_INPUTS = {
+    ZERO_POINT_ELEVATION_FACT: ("tests/test_data/jp_mlit_site_info_detail_301011281104010.html",),
+}
