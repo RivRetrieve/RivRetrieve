@@ -23,6 +23,7 @@ def test_installed_station_metadata_offline(installed_distribution: InstalledDis
         with open_tar(installed_distribution.sdist, "r:gz") as archive:
             names = archive.getnames()
             assert not any(name.endswith("/native.parquet") for name in names)
+            assert not any(name.endswith((".xlsx", ".eml")) for name in names)
             assert not any(name.endswith("/src/" + _OBSOLETE_PROJECTION) for name in names)
             for projection in _PROJECTIONS:
                 assert any(name.endswith("/src/" + projection) for name in names)
@@ -30,6 +31,7 @@ def test_installed_station_metadata_offline(installed_distribution: InstalledDis
         assert _OBSOLETE_PROJECTION not in wheel.namelist()
         assert set(_PROJECTIONS) <= set(wheel.namelist())
         assert not any(name.endswith("/native.parquet") for name in wheel.namelist())
+        assert not any(name.endswith((".xlsx", ".eml")) for name in wheel.namelist())
     installed_distribution.verify(_VERIFICATION)
 
 
@@ -80,6 +82,19 @@ for provider_id in provider_ids:
         metadata_record = next(record for record in descriptor["recordSet"] if record["@id"] == "station_metadata")
         assert metadata_record["description"] == expected_notice
 
+poland = rr.from_bundle(rr.to_bundle(rr.find(provider="pl_imgw")))
+poland_source = rr.metadata(poland, view="source").filter(pl.col("attribute_role") == "drainage_area")
+assert poland_source.height == 1301
+assert set(poland_source["source_unit"]) == {"square kilometre"}
+poland_summary = rr.metadata(poland)
+assert poland_summary["drainage_area_unit"].to_list() == [["square kilometre"]] * 1301
+assert_frame_equal(
+    poland_summary.select("station_id", "drainage_area_field", "drainage_area_value", "drainage_area_unit")
+    .explode("drainage_area_field", "drainage_area_value", "drainage_area_unit")
+    .rename({"drainage_area_field": "source_field", "drainage_area_value": "source_value", "drainage_area_unit": "source_unit"})
+    .sort("station_id"),
+    poland_source.select("station_id", "source_field", "source_value", "source_unit").sort("station_id"),
+)
 actual = pl.concat(frames)
 schema = pl.Schema({
     "provider_id": pl.String,
