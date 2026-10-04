@@ -672,3 +672,55 @@ def test_duplicate_elevation_field_cannot_carry_conflicting_datums():
     )
     with pytest.raises(FatalContractError, match="duplicate source fields"):
         source_metadata_frame(source.select("provider_id", "station_id").unique(), source)
+
+
+@pytest.mark.parametrize("site_value,exposed", [("Other river", True), ("River", True), (None, True), (None, False)])
+def test_public_same_native_field_remains_distinct_between_source_scopes(tmp_path, monkeypatch, site_value, exposed):
+    selected = rr.find(provider="ca_eccc", station="02GA010")
+    source = attributes()
+    station = source.filter(pl.col("attribute_role") == "water_body_name").with_columns(
+        pl.lit("station").alias("source_scope"),
+        pl.lit("metadata.water_body_name.station.river").alias("support_fact"),
+    )
+    frames = [source.filter(pl.col("attribute_role") != "water_body_name"), station]
+    if exposed:
+        frames.append(
+            station.with_columns(
+                pl.lit("site").alias("source_scope"),
+                pl.lit("metadata.water_body_name.site.river").alias("support_fact"),
+                pl.lit(None if site_value is None else json.dumps(site_value), dtype=pl.String).alias("source_value"),
+                pl.lit("source_null" if site_value is None else "value")
+                .cast(SOURCE_METADATA_SCHEMA["state"])
+                .alias("state"),
+            )
+        )
+    directory = tmp_path / "ca_eccc" / "catalogue"
+    directory.mkdir(parents=True)
+    pl.concat(frames).write_parquet(directory / "station_metadata.parquet")
+    pl.DataFrame(
+        {
+            "provider_id": ["ca_eccc"],
+            "station_id": ["02GA010"],
+            "latitude": [1.0],
+            "longitude": [2.0],
+            "crs": ["source CRS"],
+        }
+    ).write_parquet(directory / "stations.parquet")
+    monkeypatch.setattr(discovery, "files", lambda package: tmp_path)
+    expected = pl.DataFrame(
+        {
+            "water_body_name_field": [["river", "river"] if exposed else ["river"]],
+            "water_body_name_value": [[site_value, "River"] if exposed else ["River"]],
+        },
+        schema={"water_body_name_field": pl.List(pl.String), "water_body_name_value": pl.List(pl.String)},
+    )
+    assert_frame_equal(rr.metadata(selected).select(expected.columns), expected)
+    detailed = rr.metadata(selected, view="source").filter(pl.col("attribute_role") == "water_body_name")
+    assert detailed["source_scope"].to_list() == (["site", "station"] if exposed else ["station"])
+    assert detailed["state"].to_list() == (
+        ["source_null" if site_value is None else "value", "value"] if exposed else ["value"]
+    )
+    # A second fact inside one scope remains a conflict, unlike the two scopes.
+    pl.concat([*frames, station]).write_parquet(directory / "station_metadata.parquet")
+    with pytest.raises(FatalContractError, match="duplicate source fields"):
+        rr.metadata(selected)

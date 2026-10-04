@@ -16,6 +16,7 @@ from rivretrieve._internal.station_metadata import (
     SOURCE_DATUM_DTYPES,
     SOURCE_METADATA_SCHEMA,
     SOURCE_SCALAR_DTYPES,
+    metadata_support_fact,
     source_metadata_frame,
 )
 
@@ -30,7 +31,10 @@ class MetadataField:
     facts establishing the datum's meaning and applicability to this field.
     Publication requires those facts for either kind of association.
     ``support_facts`` names additional adopted source facts establishing the
-    field's meaning or unit. Native values always retain their native support.
+    field's meaning or unit. ``source_scope`` identifies the source collection or
+    entity when native field names overlap. ``source_facts`` selects adopted
+    source facts for this field instead of the historical native-table support.
+    An empty tuple uses that historical native support.
     """
 
     attribute_role: Literal["station_name", "water_body_name", "drainage_area", "elevation"]
@@ -40,12 +44,16 @@ class MetadataField:
     datum: str | None = None
     datum_support: tuple[str, ...] = ()
     support_facts: tuple[str, ...] = ()
+    source_scope: str | None = None
+    source_facts: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.attribute_role not in ATTRIBUTE_ROLES:
             raise ValueError("Metadata field has an invalid attribute role")
         if not isinstance(self.source_field, str) or not self.source_field.strip():
             raise ValueError("Metadata field requires an exact nonblank source field")
+        if self.source_scope is not None and (not isinstance(self.source_scope, str) or not self.source_scope.strip()):
+            raise ValueError("Metadata source scope must be a nonblank string or None")
         if self.source_unit is not None and not isinstance(self.source_unit, str):
             raise TypeError("Metadata source unit must be a string or None")
         if self.datum_field is not None and (not isinstance(self.datum_field, str) or not self.datum_field.strip()):
@@ -57,7 +65,7 @@ class MetadataField:
         associated = self.datum_field is not None or self.datum is not None
         if (associated or self.datum_support) and self.attribute_role != "elevation":
             raise ValueError("Only elevation metadata can declare a datum association")
-        for support in (self.support_facts, self.datum_support):
+        for support in (self.source_facts, self.support_facts, self.datum_support):
             if (
                 not isinstance(support, tuple)
                 or any(not isinstance(fact, str) or not fact.strip() for fact in support)
@@ -95,7 +103,7 @@ def build_station_metadata(
     identities = stations["station_id"].to_list()
     if any(not identity for identity in identities) or len(set(identities)) != len(identities):
         raise FatalContractError("Station metadata has invalid or duplicate canonical identities")
-    declarations = [(field.attribute_role, field.source_field) for field in fields]
+    declarations = [(field.attribute_role, field.source_scope, field.source_field) for field in fields]
     if len(set(declarations)) != len(declarations):
         raise FatalContractError("Station metadata has duplicate field declarations")
     native = native_table.data
@@ -139,18 +147,21 @@ def build_station_metadata(
                         "station_id": station,
                         "attribute_role": role,
                         "source_field": field.source_field,
+                        "source_scope": field.source_scope,
                         "source_value": encoded,
                         "source_dtype": str(native.schema[field.source_field]),
                         "source_unit": field.source_unit,
                         "state": "source_null" if value is None else "value",
-                        "support_fact": f"metadata.{role}.{field.source_field}",
+                        "support_fact": metadata_support_fact(role, field.source_field, field.source_scope),
                         "source_datum": None if datum is None else str(datum),
                         "source_datum_field": field.datum_field,
                         "source_datum_dtype": str(native.schema[field.datum_field])
                         if field.datum_field is not None
                         else None,
                         "datum_support_fact": (
-                            f"metadata.{role}.{field.source_field}.datum" if field.datum_support else None
+                            f"{metadata_support_fact(role, field.source_field, field.source_scope)}.datum"
+                            if field.datum_support
+                            else None
                         ),
                     }
                 )
@@ -160,3 +171,25 @@ def build_station_metadata(
         schema={"provider_id": pl.String, "station_id": pl.String},
     )
     return source_metadata_frame(keys, result)
+
+
+def validate_metadata_fields(metadata: pl.DataFrame, fields: tuple[MetadataField, ...]) -> None:
+    """Check that emitted fields and associations match their publication declarations."""
+    declarations = {(field.attribute_role, field.source_scope, field.source_field): field for field in fields}
+    if len(declarations) != len(fields):
+        raise FatalContractError("Station metadata has duplicate field declarations")
+    exposed = metadata.filter(pl.col("state") != "no_metadata")
+    identities = set(exposed.select("attribute_role", "source_scope", "source_field").iter_rows())
+    if metadata.height and identities != set(declarations):
+        raise FatalContractError("Station metadata fields do not match publication declarations")
+    for row in exposed.iter_rows(named=True):
+        field = declarations[(row["attribute_role"], row["source_scope"], row["source_field"])]
+        fact = metadata_support_fact(field.attribute_role, field.source_field, field.source_scope)
+        if (
+            row["support_fact"] != fact
+            or row["source_unit"] != field.source_unit
+            or row["source_datum_field"] != field.datum_field
+            or row["datum_support_fact"] != (f"{fact}.datum" if field.datum_support else None)
+            or (field.datum_field is None and row["source_datum"] != field.datum)
+        ):
+            raise FatalContractError("Station metadata values or associations conflict with their declaration")

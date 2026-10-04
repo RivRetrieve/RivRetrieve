@@ -85,6 +85,7 @@ schema = pl.Schema({
     "provider_id": pl.String,
     "station_id": pl.String,
     "source_field": pl.String,
+    "source_scope": pl.String,
     "source_value": pl.String,
     "source_dtype": pl.String,
     "source_unit": pl.String,

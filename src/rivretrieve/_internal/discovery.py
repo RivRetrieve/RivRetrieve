@@ -676,7 +676,9 @@ def metadata(selection: _Selection, *, view: str = "summary") -> pl.DataFrame:
         drainage_area_field, drainage_area_value, drainage_area_unit; and
         elevation_field, elevation_value, elevation_unit, elevation_datum.
         All have List(String) dtype. Within each role, positions align and sort
-        by exact native field name, without preference. Water-body names are
+        by exact native field name, with source_scope breaking ties without
+        preference. Identical field names from different source scopes remain
+        separate entries. Water-body names are
         decoded strings. Area and elevation values remain JSON scalar text:
         json.loads distinguishes numbers from numeric-looking source strings.
         Units and datum labels or codes are plain strings. Unknowns remain null.
@@ -684,7 +686,7 @@ def metadata(selection: _Selection, *, view: str = "summary") -> pl.DataFrame:
         entries with null values. Blanks, whitespace, equal values in different
         fields, placeholders and zero values are retained.
 
-        Source columns are provider_id, station_id, source_field, source_value,
+        Source columns are provider_id, station_id, source_field, source_scope, source_value,
         source_dtype, source_unit, state, attribute_role, support_fact,
         source_datum, source_datum_field, source_datum_dtype and datum_support_fact.
         All are String except state and attribute_role, which are Enums.
@@ -692,7 +694,9 @@ def metadata(selection: _Selection, *, view: str = "summary") -> pl.DataFrame:
         State is value, source_null (an exposed field with null), or no_metadata
         (no exposed field for this role). The latter has null source and support
         columns. Roles are station_name, water_body_name, drainage_area and
-        elevation. Datum fields carry the published label or code and its
+        elevation. Source scope identifies the source collection or entity when
+        native field names overlap; it is null for an unscoped native projection.
+        Datum fields carry the published label or code and its
         association support. Native datum fields retain their name and dtype,
         including when null; documented datum declarations have no native field
         or dtype. No inferred unit, preferred field or conversion is applied.

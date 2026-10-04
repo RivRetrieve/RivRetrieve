@@ -15,6 +15,7 @@ SOURCE_METADATA_SCHEMA = pl.Schema(
         "provider_id": pl.String,
         "station_id": pl.String,
         "source_field": pl.String,
+        "source_scope": pl.String,
         "source_value": pl.String,
         "source_dtype": pl.String,
         "source_unit": pl.String,
@@ -77,6 +78,12 @@ def _scalar(text: str, dtype: str) -> object:
     return value
 
 
+def metadata_support_fact(attribute_role: str, source_field: str, source_scope: str | None = None) -> str:
+    """Name a projection fact without changing its native field or source scope."""
+    scope = "" if source_scope is None else f"{source_scope}."
+    return f"metadata.{attribute_role}.{scope}{source_field}"
+
+
 def source_metadata_frame(stations: pl.DataFrame, metadata: pl.DataFrame) -> pl.DataFrame:
     """Validate the packaged projection and select each gauge's attributes once."""
     if metadata.schema != SOURCE_METADATA_SCHEMA:
@@ -92,6 +99,7 @@ def source_metadata_frame(stations: pl.DataFrame, metadata: pl.DataFrame) -> pl.
                 row[key] is not None
                 for key in (
                     "source_field",
+                    "source_scope",
                     "source_value",
                     "source_dtype",
                     "source_unit",
@@ -106,6 +114,8 @@ def source_metadata_frame(stations: pl.DataFrame, metadata: pl.DataFrame) -> pl.
             continue
         if any(not row[key] or not row[key].strip() for key in ("source_field", "source_dtype", "support_fact")):
             raise FatalContractError("Packaged station metadata lacks field, dtype or support fact")
+        if row["source_scope"] is not None and not row["source_scope"].strip():
+            raise FatalContractError("Packaged station metadata has an empty source scope")
         dtype = row["source_dtype"]
         if dtype not in SOURCE_SCALAR_DTYPES:
             raise FatalContractError("Packaged station metadata has an unsupported source dtype")
@@ -118,7 +128,8 @@ def source_metadata_frame(stations: pl.DataFrame, metadata: pl.DataFrame) -> pl.
             if row["source_datum"] is not None or row["source_datum_field"] is not None:
                 raise FatalContractError("Packaged datum association lacks its support fact")
         elif (
-            row["datum_support_fact"] != f"metadata.elevation.{row['source_field']}.datum"
+            row["datum_support_fact"]
+            != f"{metadata_support_fact('elevation', row['source_field'], row['source_scope'])}.datum"
             or (row["source_datum"] is None and row["source_datum_field"] is None)
             or (row["source_datum_field"] is not None and not row["source_datum_field"].strip())
         ):
@@ -144,13 +155,13 @@ def source_metadata_frame(stations: pl.DataFrame, metadata: pl.DataFrame) -> pl.
             _scalar(row["source_value"], dtype)
     if any("no_metadata" in states and len(states) != 1 for states in groups.values()):
         raise FatalContractError("Packaged no_metadata conflicts with source attributes")
-    if metadata.select(*_KEYS, "attribute_role", "source_field").is_duplicated().any():
+    if metadata.select(*_KEYS, "attribute_role", "source_scope", "source_field").is_duplicated().any():
         raise FatalContractError("Packaged station metadata contains duplicate source fields")
     for provider, station in stations.unique().iter_rows():
         if any((provider, station, role) not in groups for role in ATTRIBUTE_ROLES):
             raise FatalContractError("Selected station role is absent from packaged station metadata")
     return metadata.join(stations.unique(), on=_KEYS, how="semi").sort(
-        *_KEYS, "attribute_role", "source_field", "source_value", "support_fact"
+        *_KEYS, "attribute_role", "source_field", "source_scope", "source_value", "support_fact"
     )
 
 
@@ -158,7 +169,7 @@ def station_metadata_frame(stations: pl.DataFrame, source: pl.DataFrame, locatio
     """Summarise validated source rows with aligned lists ordered by native field."""
     rows = []
     attributes: dict[tuple[str, str, str], list[dict]] = {}
-    for item in source.sort("source_field").iter_rows(named=True):
+    for item in source.sort("source_field", "source_scope").iter_rows(named=True):
         if item["state"] != "no_metadata":
             attributes.setdefault((item["provider_id"], item["station_id"], item["attribute_role"]), []).append(item)
     geometry = {(row["provider_id"], row["station_id"]): row for row in locations.iter_rows(named=True)}

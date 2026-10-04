@@ -29,9 +29,14 @@ from rivretrieve._internal.catalogues.evidence_encoding import encode_catalogue_
 from rivretrieve._internal.catalogues.native import NativeTable
 from rivretrieve._internal.catalogues.schemas import CATALOGUE_SERIES_CLAIMS_SCHEMA
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions, encode_source_descriptions
-from rivretrieve._internal.catalogues.station_metadata import MetadataField, build_station_metadata
+from rivretrieve._internal.catalogues.station_metadata import (
+    MetadataField,
+    build_station_metadata,
+    validate_metadata_fields,
+)
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.publication_identity import publication_identity_fields
+from rivretrieve._internal.station_metadata import metadata_support_fact, source_metadata_frame
 
 
 def build_catalogue_metadata(
@@ -42,6 +47,8 @@ def build_catalogue_metadata(
     build_inputs: CatalogueBuildInputs | None = None,
     native_table: NativeTable | None = None,
     metadata_fields: tuple[MetadataField, ...] | None = None,
+    station_metadata: pl.DataFrame | None = None,
+    metadata_implementation: tuple[str, str] | None = None,
     station_metadata_notice: str | None = None,
     transformation_implementations: Mapping[str, tuple[str, str]] | None = None,
     source_descriptions: SourceDescriptions | None = None,
@@ -54,6 +61,14 @@ def build_catalogue_metadata(
 
     ``build_inputs``, ``native_table`` and ``metadata_fields`` are required for every new publication.
     Historical provenance remains readable without these build-only inputs.
+    ``station_metadata`` can supply an explicit source projection when a provider
+    combines supplementary sources. Its canonical scope, value states and field
+    declarations are validated here. Provider projection code establishes actual
+    source exposure; each alternative source uses ``MetadataField.source_facts``.
+    An explicit projection requires ``metadata_implementation``, the exact
+    (repository path, symbol) of its producer in ``build_inputs.declarations``.
+    Without this projection, fields are built from ``native_table`` by the
+    shared implementation; an alternate implementation cannot be supplied.
     ``transformation_implementations`` maps exact non-catalogue fact groups to
     declared code locations. It records operation responsibility without running
     those observation operations. ``station_metadata_notice`` is retained verbatim
@@ -75,15 +90,35 @@ def build_catalogue_metadata(
     provider_id = (
         provenance.provider_id if isinstance(provenance, AcquisitionProvenance) else provenance.header.provider_id
     )
-    station_metadata = build_station_metadata(provider_id, native_table, stations, station_origin, metadata_fields)
-    for field in station_metadata["source_field"].drop_nulls().unique():
-        if field not in native_table.data.columns:
-            raise FatalContractError("Metadata projection references an absent native column")
+    if station_metadata is None:
+        if metadata_implementation is not None:
+            raise FatalContractError("A metadata implementation requires an explicit station metadata projection")
+        if any(field.source_facts for field in metadata_fields):
+            raise FatalContractError("Alternate metadata sources require an explicit station metadata projection")
+        station_metadata = build_station_metadata(provider_id, native_table, stations, station_origin, metadata_fields)
+    else:
+        if metadata_implementation is None:
+            raise FatalContractError("An explicit station metadata projection requires its implementation declaration")
+        validated = source_metadata_frame(stations.select("provider_id", "station_id"), station_metadata)
+        if validated.height != station_metadata.height:
+            raise FatalContractError("Station metadata contains identities outside the canonical catalogue")
+        station_metadata = validated
+    validate_metadata_fields(station_metadata, metadata_fields)
+    for field in metadata_fields:
+        if not field.source_facts and any(
+            name not in native_table.data.columns
+            for name in (field.source_field, field.datum_field)
+            if name is not None
+        ):
+            raise FatalContractError(
+                "Metadata fields outside the historical native table require explicit source facts"
+            )
     bound = _bind_catalogue_build_inputs(
         provenance,
         build_inputs,
         station_metadata,
         metadata_fields=metadata_fields,
+        metadata_implementation=metadata_implementation,
         transformation_implementations=transformation_implementations,
     )
     evidence = normalize_provenance(
@@ -149,6 +184,7 @@ def _bind_catalogue_build_inputs(
     metadata: pl.DataFrame,
     *,
     metadata_fields: tuple[MetadataField, ...] = (),
+    metadata_implementation: tuple[str, str] | None = None,
     transformation_implementations: Mapping[str, tuple[str, str]] | None = None,
 ) -> AcquisitionProvenance:
     """Bind each transformation to its implementation and authored declaration.
@@ -216,6 +252,9 @@ def _bind_catalogue_build_inputs(
         for reference in build_inputs.declarations
         if reference.repository == build_inputs.build.repository
     }
+    metadata_producer = None if metadata_implementation is None else declared_code.get(metadata_implementation)
+    if metadata_implementation is not None and metadata_producer is None:
+        raise FatalContractError("Metadata projection requires its exact implementation declaration reference")
     catalogue_builders = tuple(
         reference
         for reference in build_inputs.declarations
@@ -268,7 +307,7 @@ def _bind_catalogue_build_inputs(
             transformation["declaration"] = declarations[0]
     supported = (
         metadata.filter(pl.col("support_fact").is_not_null())
-        .select("attribute_role", "source_field", "support_fact")
+        .select("attribute_role", "source_scope", "source_field", "support_fact")
         .unique(maintain_order=True)
     )
     if supported.height:
@@ -304,15 +343,19 @@ def _bind_catalogue_build_inputs(
         executable = CodeReference(
             repository=build_inputs.build.repository,
             revision=build_inputs.build.revision,
-            repository_path=_METADATA_MODULE,
-            symbol="build_station_metadata",
+            repository_path=_METADATA_MODULE if metadata_producer is None else metadata_producer.repository_path,
+            symbol="build_station_metadata" if metadata_producer is None else metadata_producer.symbol,
         )
-        declared_fields = {(field.attribute_role, field.source_field): field for field in metadata_fields}
+        declared_fields = {
+            (field.attribute_role, field.source_scope, field.source_field): field for field in metadata_fields
+        }
         adopted_facts = {fact for item in build_inputs.inputs for fact in item.facts}
 
-        def supported_inputs(extra_facts: tuple[str, ...]) -> tuple[ExternalFactReference, ...]:
-            references = list(support)
-            for support_fact in extra_facts:
+        def supported_inputs(
+            extra_facts: tuple[str, ...], source_facts: tuple[str, ...] = ()
+        ) -> tuple[ExternalFactReference, ...]:
+            references = [] if source_facts else list(support)
+            for support_fact in (*source_facts, *extra_facts):
                 binding = direct.get(support_fact)
                 if (
                     binding is None
@@ -330,8 +373,9 @@ def _bind_catalogue_build_inputs(
             return tuple(references)
 
         facts = list(payload["fact_universe"])
-        for role, field, fact in supported.iter_rows():
-            if field is None or fact != f"metadata.{role}.{field}" or fact in facts:
+        for role, scope, field, fact in supported.iter_rows():
+            declaration = declared_fields.get((role, scope, field))
+            if field is None or fact != metadata_support_fact(role, field, scope) or fact in facts:
                 raise FatalContractError("Metadata support facts must be exact, unique projection outputs")
             facts.append(fact)
             bindings.append(
@@ -343,7 +387,8 @@ def _bind_catalogue_build_inputs(
                     transformation=Transformation(
                         name="project_station_metadata",
                         external_inputs=supported_inputs(
-                            declared_fields[(role, field)].support_facts if (role, field) in declared_fields else ()
+                            declaration.support_facts if declaration is not None else (),
+                            declaration.source_facts if declaration is not None else (),
                         ),
                         executable=executable,
                         declaration=mapping_declarations[0],
@@ -352,16 +397,16 @@ def _bind_catalogue_build_inputs(
             )
         datum_rows = (
             metadata.filter(pl.col("datum_support_fact").is_not_null())
-            .select("source_field", "source_datum_field", "datum_support_fact")
+            .select("source_scope", "source_field", "source_datum_field", "datum_support_fact")
             .unique(maintain_order=True)
         )
-        for field_name, datum_field, fact in datum_rows.iter_rows():
-            field = declared_fields.get(("elevation", field_name))
+        for scope, field_name, datum_field, fact in datum_rows.iter_rows():
+            field = declared_fields.get(("elevation", scope, field_name))
             if (
                 field is None
                 or not field.datum_support
                 or field.datum_field != datum_field
-                or fact != f"metadata.elevation.{field_name}.datum"
+                or fact != f"{metadata_support_fact('elevation', field_name, scope)}.datum"
                 or fact in facts
             ):
                 raise FatalContractError("Metadata datum association requires its exact field declaration")
@@ -374,7 +419,7 @@ def _bind_catalogue_build_inputs(
                     acquisition_id=None,
                     transformation=Transformation(
                         name="associate_elevation_datum",
-                        external_inputs=supported_inputs(field.datum_support),
+                        external_inputs=supported_inputs(field.datum_support, field.source_facts),
                         executable=executable,
                         declaration=mapping_declarations[0],
                     ),
