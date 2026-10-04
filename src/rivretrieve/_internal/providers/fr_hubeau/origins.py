@@ -42,7 +42,7 @@ STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "superficie_topo"),
     MetadataField("drainage_area", "superficie_reelle"),
     MetadataField("station_name", "libelle_station"),
-    MetadataField("river_name", "libelle_cours_eau"),
+    MetadataField("water_body_name", "libelle_cours_eau"),
 )
 
 if TYPE_CHECKING:

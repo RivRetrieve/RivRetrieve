@@ -31,7 +31,7 @@ STATION_METADATA_NOTICE = (
 
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("station_name", "name"),
-    MetadataField("river_name", "waterBody"),
+    MetadataField("water_body_name", "waterBody"),
 )
 
 STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {

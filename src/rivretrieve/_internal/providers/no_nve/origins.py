@@ -42,8 +42,8 @@ STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "drainageBasinArea", "km2"),
     MetadataField("drainage_area", "drainageBasinAreaNorway", "km2"),
     MetadataField("station_name", "stationName"),
-    MetadataField("river_name", "riverName"),
-    MetadataField("river_name", "lakeName"),
+    MetadataField("water_body_name", "riverName"),
+    MetadataField("water_body_name", "lakeName"),
 )
 
 STATION_CATALOGUE_ORIGINS = {

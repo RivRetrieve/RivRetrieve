@@ -13,6 +13,7 @@ from rivretrieve._internal.catalogues.native import NativeTable
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.station_metadata import (
     ATTRIBUTE_ROLES,
+    SOURCE_DATUM_DTYPES,
     SOURCE_METADATA_SCHEMA,
     SOURCE_SCALAR_DTYPES,
     source_metadata_frame,
@@ -21,9 +22,24 @@ from rivretrieve._internal.station_metadata import (
 
 @dataclass(frozen=True, slots=True)
 class MetadataField:
-    attribute_role: Literal["station_name", "river_name", "drainage_area"]
+    """An approved native field and its established unit and elevation datum.
+
+    ``datum_field`` names a native string or integer code column. ``datum`` instead declares a
+    published datum that applies to every projected station. These are mutually
+    exclusive and apply only to elevation. ``datum_support`` names provenance
+    facts establishing the datum's meaning and applicability to this field.
+    Publication requires those facts for either kind of association.
+    ``support_facts`` names additional adopted source facts establishing the
+    field's meaning or unit. Native values always retain their native support.
+    """
+
+    attribute_role: Literal["station_name", "water_body_name", "drainage_area", "elevation"]
     source_field: str
     source_unit: str | None = None
+    datum_field: str | None = None
+    datum: str | None = None
+    datum_support: tuple[str, ...] = ()
+    support_facts: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.attribute_role not in ATTRIBUTE_ROLES:
@@ -32,6 +48,24 @@ class MetadataField:
             raise ValueError("Metadata field requires an exact nonblank source field")
         if self.source_unit is not None and not isinstance(self.source_unit, str):
             raise TypeError("Metadata source unit must be a string or None")
+        if self.datum_field is not None and (not isinstance(self.datum_field, str) or not self.datum_field.strip()):
+            raise ValueError("Metadata datum field requires an exact nonblank source field")
+        if self.datum is not None and not isinstance(self.datum, str):
+            raise TypeError("Metadata datum must be a string or None")
+        if self.datum_field is not None and self.datum is not None:
+            raise ValueError("Metadata datum field and declaration are mutually exclusive")
+        associated = self.datum_field is not None or self.datum is not None
+        if (associated or self.datum_support) and self.attribute_role != "elevation":
+            raise ValueError("Only elevation metadata can declare a datum association")
+        for support in (self.support_facts, self.datum_support):
+            if (
+                not isinstance(support, tuple)
+                or any(not isinstance(fact, str) or not fact.strip() for fact in support)
+                or len(set(support)) != len(support)
+            ):
+                raise ValueError("Metadata support requires distinct nonblank fact names")
+        if bool(self.datum_support) != associated:
+            raise ValueError("Metadata datum associations require explicit support facts")
 
 
 def build_station_metadata(
@@ -69,8 +103,10 @@ def build_station_metadata(
         dtype = native.schema.get(field.source_field)
         if dtype is None or str(dtype) not in SOURCE_SCALAR_DTYPES:
             raise FatalContractError("Station metadata field requires a supported native scalar dtype")
-        if field.attribute_role != "drainage_area" and dtype != pl.String:
+        if field.attribute_role in ("station_name", "water_body_name") and dtype != pl.String:
             raise FatalContractError("Station metadata name fields require native strings")
+        if field.datum_field is not None and str(native.schema.get(field.datum_field)) not in SOURCE_DATUM_DTYPES:
+            raise FatalContractError("Station metadata datum fields require native string or integer codes")
     native_rows = {}
     for row in native.iter_rows(named=True):
         try:
@@ -96,6 +132,7 @@ def build_station_metadata(
                     encoded = None if value is None else json.dumps(value, ensure_ascii=False, allow_nan=False)
                 except (TypeError, ValueError) as error:
                     raise FatalContractError("Station metadata value is not a finite JSON scalar") from error
+                datum = native_rows[station][field.datum_field] if field.datum_field is not None else field.datum
                 rows.append(
                     {
                         "provider_id": provider_id,
@@ -107,6 +144,14 @@ def build_station_metadata(
                         "source_unit": field.source_unit,
                         "state": "source_null" if value is None else "value",
                         "support_fact": f"metadata.{role}.{field.source_field}",
+                        "source_datum": None if datum is None else str(datum),
+                        "source_datum_field": field.datum_field,
+                        "source_datum_dtype": str(native.schema[field.datum_field])
+                        if field.datum_field is not None
+                        else None,
+                        "datum_support_fact": (
+                            f"metadata.{role}.{field.source_field}.datum" if field.datum_support else None
+                        ),
                     }
                 )
     result = pl.DataFrame(rows, schema=SOURCE_METADATA_SCHEMA)

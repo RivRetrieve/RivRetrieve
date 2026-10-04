@@ -49,7 +49,7 @@ STATION_METADATA_NOTICE = (
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "Area_Drenagem"),
     MetadataField("station_name", "Estacao_Nome"),
-    MetadataField("river_name", "Rio_Nome"),
+    MetadataField("water_body_name", "Rio_Nome"),
 )
 
 STATION_CATALOGUE_ORIGINS = {

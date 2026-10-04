@@ -20,18 +20,44 @@ from rivretrieve._internal.station_metadata import (
 )
 
 
+def source_frame(rows):
+    columns = [
+        "provider_id",
+        "station_id",
+        "source_field",
+        "source_value",
+        "source_dtype",
+        "source_unit",
+        "state",
+        "attribute_role",
+        "support_fact",
+    ]
+    return pl.DataFrame([dict(zip(columns, row, strict=True)) for row in rows], schema=SOURCE_METADATA_SCHEMA)
+
+
 def attributes(provider="ca_eccc", station="02GA010"):
     rows = [
         (provider, station, "label", json.dumps(" Gauge "), "String", None, "value", "station_name", "station.label"),
-        (provider, station, "river", json.dumps("River"), "String", None, "value", "river_name", "station.river"),
-        (provider, station, "area", json.dumps("633.00 km²"), "String", None, "value", "drainage_area", "station.area"),
+        (provider, station, "river", json.dumps("River"), "String", None, "value", "water_body_name", "station.river"),
+        (
+            provider,
+            station,
+            "area",
+            json.dumps("633.00 km²", ensure_ascii=False),
+            "String",
+            None,
+            "value",
+            "drainage_area",
+            "station.area",
+        ),
     ]
-    return pl.DataFrame(rows, schema=SOURCE_METADATA_SCHEMA, orient="row")
+    rows.append((provider, station, None, None, None, None, "no_metadata", "elevation", None))
+    return source_frame(rows)
 
 
 def test_source_scalar_states_and_name_alternatives():
     source = attributes()
-    extra = pl.DataFrame(
+    extra = source_frame(
         [
             (
                 "ca_eccc",
@@ -44,7 +70,7 @@ def test_source_scalar_states_and_name_alternatives():
                 "station_name",
                 "station.other_label",
             ),
-            ("ca_eccc", "02GA010", "blank", '"\u00a0"', "String", None, "value", "river_name", "station.blank"),
+            ("ca_eccc", "02GA010", "blank", '"\u00a0"', "String", None, "value", "water_body_name", "station.blank"),
             (
                 "ca_eccc",
                 "02GA010",
@@ -57,8 +83,6 @@ def test_source_scalar_states_and_name_alternatives():
                 "station.null_area",
             ),
         ],
-        schema=SOURCE_METADATA_SCHEMA,
-        orient="row",
     )
     source = pl.concat([source, extra])
     keys = source.select("provider_id", "station_id").unique()
@@ -78,23 +102,35 @@ def test_source_scalar_states_and_name_alternatives():
     )
     summary = station_metadata_frame(keys, actual, locations)
     expected = pl.DataFrame(
-        [("ca_eccc", "02GA010", None, "River", 1.0, 2.0, "source CRS", True, False)],
+        [
+            {
+                "provider_id": "ca_eccc",
+                "station_id": "02GA010",
+                "station_name": None,
+                "latitude": 1.0,
+                "longitude": 2.0,
+                "crs": "source CRS",
+                "station_name_alternatives": True,
+                "water_body_name_field": ["blank", "river"],
+                "water_body_name_value": ["\u00a0", "River"],
+                "drainage_area_field": ["area", "null_area"],
+                "drainage_area_value": ['"633.00 km²"', None],
+                "drainage_area_unit": [None, "km²"],
+            }
+        ],
         schema=STATION_METADATA_SCHEMA,
-        orient="row",
     )
     assert_frame_equal(summary, expected)
 
 
 def test_no_metadata_and_missing_geometry():
-    source = pl.DataFrame(
+    source = source_frame(
         [("p", "001", None, None, None, None, "no_metadata", role, None) for role in ATTRIBUTE_ROLES],
-        schema=SOURCE_METADATA_SCHEMA,
-        orient="row",
     )
     keys = source.select("provider_id", "station_id").unique()
     actual = station_metadata_frame(keys, source_metadata_frame(keys, source), pl.DataFrame())
     expected = pl.DataFrame(
-        [("p", "001", None, None, None, None, None, False, False)], schema=STATION_METADATA_SCHEMA, orient="row"
+        [{"provider_id": "p", "station_id": "001", "station_name_alternatives": False}], schema=STATION_METADATA_SCHEMA
     )
     assert_frame_equal(actual, expected)
 
@@ -131,7 +167,7 @@ def test_missing_role_and_bad_schema_are_fatal():
     source = attributes()
     keys = source.select("provider_id", "station_id").unique()
     with pytest.raises(FatalContractError, match="absent"):
-        source_metadata_frame(keys, source.filter(pl.col("attribute_role") != "river_name"))
+        source_metadata_frame(keys, source.filter(pl.col("attribute_role") != "water_body_name"))
     with pytest.raises(FatalContractError, match="schema"):
         source_metadata_frame(keys, pl.DataFrame())
 
@@ -202,7 +238,7 @@ def test_offline_public_api_mixed_scope(tmp_path, monkeypatch):
 @pytest.mark.parametrize("values,expected", [(["", "\u00a0"], None), (["Name", "Name", ""], "Name")])
 def test_blank_names_and_repeated_equal_names(values, expected):
     source = attributes().filter(pl.col("attribute_role") != "station_name")
-    names = pl.DataFrame(
+    names = source_frame(
         [
             (
                 "ca_eccc",
@@ -217,8 +253,6 @@ def test_blank_names_and_repeated_equal_names(values, expected):
             )
             for index, value in enumerate(values)
         ],
-        schema=SOURCE_METADATA_SCHEMA,
-        orient="row",
     )
     source = pl.concat([source, names])
     keys = source.select("provider_id", "station_id").unique()
@@ -271,7 +305,7 @@ def test_projector_preserves_native_scalar_types(dtype, values):
     assert areas["source_unit"].to_list() == ["source unit"] * 4
     assert areas["support_fact"].to_list() == ["metadata.drainage_area.area"] * 4
     assert areas["state"].to_list() == ["value"] * 3 + ["source_null"]
-    assert result.filter(pl.col("state") == "no_metadata").height == 8
+    assert result.filter(pl.col("state") == "no_metadata").height == 12
     empty = build_station_metadata("synthetic", native, stations.clear(), Field(NativeColumn("id")), ())
     assert_frame_equal(empty, pl.DataFrame(schema=SOURCE_METADATA_SCHEMA))
 
@@ -377,4 +411,264 @@ def test_source_null_name_requires_string_dtype():
         .cast(SOURCE_METADATA_SCHEMA)
     )
     with pytest.raises(FatalContractError, match="name requires String"):
+        source_metadata_frame(source.select("provider_id", "station_id").unique(), source)
+
+
+def test_public_aligned_lists_preserve_every_source_entry(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogue_origins import Field, NativeColumn
+    from rivretrieve._internal.catalogues.native import RetrievedAt, stamp_native_table
+    from rivretrieve._internal.catalogues.station_metadata import MetadataField, build_station_metadata
+
+    selected = rr.find(provider="ca_eccc", station="02GA010")
+    assert len(selected.series) > 1
+    native = stamp_native_table(
+        pl.DataFrame(
+            {
+                "id": ["02GA010"],
+                "station": [" Gauge "],
+                "riverName": ["Mår"],
+                "lakeName": ["Mår"],
+                "blankName": [""],
+                "nullName": pl.Series([None], dtype=pl.String),
+                "spaceName": [" \u00a0"],
+                "numericArea": [0],
+                "stringArea": ["0"],
+                "inlineArea": ["633.00 km²"],
+                "height": [10000000.0],
+                "zero": [0],
+                "formatted": [" 001.20 m"],
+                "placeholder": ["ND"],
+                "blank": [""],
+                "space": [" \u00a0"],
+                "missing": pl.Series([None], dtype=pl.Float64),
+                "code": [3],
+                "codeText": ["03"],
+                "nullCode": pl.Series([None], dtype=pl.String),
+            }
+        ),
+        RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    fields = (
+        MetadataField("station_name", "station"),
+        *(
+            MetadataField("water_body_name", name)
+            for name in ("riverName", "lakeName", "blankName", "nullName", "spaceName")
+        ),
+        MetadataField("drainage_area", "numericArea", "km²"),
+        MetadataField("drainage_area", "stringArea"),
+        MetadataField("drainage_area", "inlineArea"),
+        MetadataField("elevation", "height", "m", datum_field="code", datum_support=("source.datum",)),
+        MetadataField("elevation", "zero", "m", datum_field="codeText", datum_support=("source.datum",)),
+        MetadataField("elevation", "formatted", datum="Published datum", datum_support=("source.datum",)),
+        MetadataField("elevation", "missing", datum_field="nullCode", datum_support=("source.datum",)),
+        *(MetadataField("elevation", name) for name in ("placeholder", "blank", "space")),
+    )
+    source = build_station_metadata(
+        "ca_eccc",
+        native,
+        pl.DataFrame({"station_id": ["02GA010"]}),
+        Field(NativeColumn("id")),
+        fields,
+    )
+    directory = tmp_path / "ca_eccc" / "catalogue"
+    directory.mkdir(parents=True)
+    source.write_parquet(directory / "station_metadata.parquet")
+    pl.DataFrame(
+        {
+            "provider_id": ["ca_eccc"],
+            "station_id": ["02GA010"],
+            "latitude": [1.0],
+            "longitude": [2.0],
+            "crs": ["source CRS"],
+        }
+    ).write_parquet(directory / "stations.parquet")
+    monkeypatch.setattr(discovery, "files", lambda package: tmp_path)
+    actual = rr.metadata(selected)
+    expected = pl.DataFrame(
+        [
+            {
+                "provider_id": "ca_eccc",
+                "station_id": "02GA010",
+                "station_name": " Gauge ",
+                "station_name_alternatives": False,
+                "latitude": 1.0,
+                "longitude": 2.0,
+                "crs": "source CRS",
+                "water_body_name_field": ["blankName", "lakeName", "nullName", "riverName", "spaceName"],
+                "water_body_name_value": ["", "Mår", None, "Mår", " \u00a0"],
+                "drainage_area_field": ["inlineArea", "numericArea", "stringArea"],
+                "drainage_area_value": ['"633.00 km²"', "0", '"0"'],
+                "drainage_area_unit": [None, "km²", None],
+                "elevation_field": ["blank", "formatted", "height", "missing", "placeholder", "space", "zero"],
+                "elevation_value": ['""', '" 001.20 m"', "10000000.0", None, '"ND"', '" \u00a0"', "0"],
+                "elevation_unit": [None, None, "m", None, None, None, "m"],
+                "elevation_datum": [None, "Published datum", "3", None, None, None, "03"],
+            }
+        ],
+        schema=STATION_METADATA_SCHEMA,
+    )
+    assert_frame_equal(actual, expected)
+    detailed = rr.metadata(selected, view="source")
+    assert_frame_equal(detailed, source)
+    elevation = detailed.filter(pl.col("attribute_role") == "elevation")
+    assert elevation["source_datum_dtype"].to_list() == [None, None, "Int64", "String", None, None, "String"]
+    assert elevation.filter(pl.col("source_field") == "missing").select(
+        "source_datum", "source_datum_field", "datum_support_fact"
+    ).row(0) == (None, "nullCode", "metadata.elevation.missing.datum")
+    exploded = actual.select("elevation_field", "elevation_value", "elevation_unit", "elevation_datum").explode(
+        "elevation_field", "elevation_value", "elevation_unit", "elevation_datum"
+    )
+    assert_frame_equal(
+        exploded,
+        elevation.select(
+            pl.col("source_field").alias("elevation_field"),
+            pl.col("source_value").alias("elevation_value"),
+            pl.col("source_unit").alias("elevation_unit"),
+            pl.col("source_datum").alias("elevation_datum"),
+        ),
+    )
+
+
+@pytest.mark.parametrize("difference", [{}, {"source_value": '"Different"'}, {"support_fact": "different.support"}])
+def test_duplicate_source_field_is_fatal_even_when_values_or_support_differ(difference):
+    source = attributes()
+    duplicate = source.filter(pl.col("attribute_role") == "station_name").with_columns(
+        *(pl.lit(value).alias(column) for column, value in difference.items())
+    )
+    with pytest.raises(FatalContractError, match="duplicate source fields"):
+        source_metadata_frame(source.select("provider_id", "station_id").unique(), pl.concat([source, duplicate]))
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"source_datum": "datum"},
+        {"source_datum_field": "code"},
+        {"source_datum_dtype": "String"},
+        {"datum_support_fact": "metadata.elevation.height.datum"},
+        {"source_datum": "datum", "datum_support_fact": "other"},
+        {
+            "source_datum": "3",
+            "source_datum_field": "code",
+            "source_datum_dtype": "Float64",
+            "datum_support_fact": "metadata.elevation.height.datum",
+        },
+        {
+            "source_datum": "03",
+            "source_datum_field": "code",
+            "source_datum_dtype": "Int64",
+            "datum_support_fact": "metadata.elevation.height.datum",
+        },
+        {
+            "source_datum": "256",
+            "source_datum_field": "code",
+            "source_datum_dtype": "UInt8",
+            "datum_support_fact": "metadata.elevation.height.datum",
+        },
+    ],
+)
+def test_invalid_datum_associations_are_fatal(changes):
+    source = attributes().filter(pl.col("attribute_role") != "elevation")
+    elevation = pl.DataFrame(
+        [
+            {
+                "provider_id": "ca_eccc",
+                "station_id": "02GA010",
+                "attribute_role": "elevation",
+                "source_field": "height",
+                "source_value": "1.0",
+                "source_dtype": "Float64",
+                "state": "value",
+                "support_fact": "metadata.elevation.height",
+                **changes,
+            }
+        ],
+        schema=SOURCE_METADATA_SCHEMA,
+    )
+    with pytest.raises(FatalContractError):
+        source_metadata_frame(source.select("provider_id", "station_id").unique(), pl.concat([source, elevation]))
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"datum": "datum"},
+        {"datum_field": "code"},
+        {"datum_support": ("source.datum",)},
+        {"datum": "datum", "datum_field": "code", "datum_support": ("source.datum",)},
+        {"datum": "datum", "datum_support": ("source.datum", "source.datum")},
+        {"datum": 3, "datum_support": ("source.datum",)},
+        {"datum_field": " ", "datum_support": ("source.datum",)},
+        {"support_facts": ("",)},
+    ],
+)
+def test_invalid_datum_declarations_are_rejected(kwargs):
+    from rivretrieve._internal.catalogues.station_metadata import MetadataField
+
+    with pytest.raises((ValueError, TypeError)):
+        MetadataField("elevation", "height", **kwargs)
+
+
+def test_datum_associations_are_elevation_only():
+    from rivretrieve._internal.catalogues.station_metadata import MetadataField
+
+    with pytest.raises(ValueError, match="Only elevation"):
+        MetadataField("drainage_area", "area", datum="datum", datum_support=("source.datum",))
+    source = attributes().with_columns(pl.lit("datum").alias("source_datum"))
+    with pytest.raises(FatalContractError, match="elevation"):
+        source_metadata_frame(source.select("provider_id", "station_id").unique(), source)
+
+
+@pytest.mark.parametrize("role", ["water_body_name", "drainage_area", "elevation"])
+def test_exposed_null_fields_are_lists_not_absence(role):
+    source = pl.DataFrame(
+        [
+            {"provider_id": "p", "station_id": "001", "attribute_role": item, "state": "no_metadata"}
+            for item in ATTRIBUTE_ROLES
+            if item != role
+        ]
+        + [
+            {
+                "provider_id": "p",
+                "station_id": "001",
+                "attribute_role": role,
+                "state": "source_null",
+                "source_field": "field",
+                "source_dtype": "String",
+                "support_fact": f"metadata.{role}.field",
+            }
+        ],
+        schema=SOURCE_METADATA_SCHEMA,
+    )
+    keys = source.select("provider_id", "station_id").unique()
+    summary = station_metadata_frame(keys, source_metadata_frame(keys, source), pl.DataFrame())
+    assert summary[f"{role}_field"].to_list() == [["field"]]
+    assert summary[f"{role}_value"].to_list() == [[None]]
+    for absent in {"water_body_name", "drainage_area", "elevation"} - {role}:
+        assert summary[f"{absent}_field"].to_list() == [None]
+        assert summary[f"{absent}_value"].to_list() == [None]
+
+
+def test_duplicate_elevation_field_cannot_carry_conflicting_datums():
+    source = pl.DataFrame(
+        [
+            {
+                "provider_id": "p",
+                "station_id": "001",
+                "attribute_role": "elevation",
+                "state": "value",
+                "source_field": "height",
+                "source_value": "1.0",
+                "source_dtype": "Float64",
+                "support_fact": "metadata.elevation.height",
+                "source_datum": datum,
+                "datum_support_fact": "metadata.elevation.height.datum",
+            }
+            for datum in ("datum A", "datum B")
+        ],
+        schema=SOURCE_METADATA_SCHEMA,
+    )
+    with pytest.raises(FatalContractError, match="duplicate source fields"):
         source_metadata_frame(source.select("provider_id", "station_id").unique(), source)

@@ -9,7 +9,7 @@ import polars as pl
 
 from rivretrieve._internal.issues import FatalContractError
 
-ATTRIBUTE_ROLES = ("station_name", "river_name", "drainage_area")
+ATTRIBUTE_ROLES = ("station_name", "water_body_name", "drainage_area", "elevation")
 SOURCE_METADATA_SCHEMA = pl.Schema(
     {
         "provider_id": pl.String,
@@ -21,6 +21,10 @@ SOURCE_METADATA_SCHEMA = pl.Schema(
         "state": pl.Enum(["value", "source_null", "no_metadata"]),
         "attribute_role": pl.Enum(ATTRIBUTE_ROLES),
         "support_fact": pl.String,
+        "source_datum": pl.String,
+        "source_datum_field": pl.String,
+        "source_datum_dtype": pl.String,
+        "datum_support_fact": pl.String,
     }
 )
 STATION_METADATA_SCHEMA = pl.Schema(
@@ -28,12 +32,19 @@ STATION_METADATA_SCHEMA = pl.Schema(
         "provider_id": pl.String,
         "station_id": pl.String,
         "station_name": pl.String,
-        "river_name": pl.String,
         "latitude": pl.Float64,
         "longitude": pl.Float64,
         "crs": pl.String,
         "station_name_alternatives": pl.Boolean,
-        "river_name_alternatives": pl.Boolean,
+        "water_body_name_field": pl.List(pl.String),
+        "water_body_name_value": pl.List(pl.String),
+        "drainage_area_field": pl.List(pl.String),
+        "drainage_area_value": pl.List(pl.String),
+        "drainage_area_unit": pl.List(pl.String),
+        "elevation_field": pl.List(pl.String),
+        "elevation_value": pl.List(pl.String),
+        "elevation_unit": pl.List(pl.String),
+        "elevation_datum": pl.List(pl.String),
     }
 )
 _KEYS = ["provider_id", "station_id"]
@@ -41,6 +52,7 @@ _INTEGER_BOUNDS = {
     **{f"Int{bits}": (-(2 ** (bits - 1)), 2 ** (bits - 1) - 1) for bits in (8, 16, 32, 64, 128)},
     **{f"UInt{bits}": (0, 2**bits - 1) for bits in (8, 16, 32, 64, 128)},
 }
+SOURCE_DATUM_DTYPES = frozenset({"String", *_INTEGER_BOUNDS})
 SOURCE_SCALAR_DTYPES = frozenset({"String", "Boolean", "Float32", "Float64", *_INTEGER_BOUNDS})
 
 
@@ -78,7 +90,17 @@ def source_metadata_frame(stations: pl.DataFrame, metadata: pl.DataFrame) -> pl.
         if row["state"] == "no_metadata":
             if any(
                 row[key] is not None
-                for key in ("source_field", "source_value", "source_dtype", "source_unit", "support_fact")
+                for key in (
+                    "source_field",
+                    "source_value",
+                    "source_dtype",
+                    "source_unit",
+                    "support_fact",
+                    "source_datum",
+                    "source_datum_field",
+                    "source_datum_dtype",
+                    "datum_support_fact",
+                )
             ):
                 raise FatalContractError("Packaged no_metadata row contains source attributes")
             continue
@@ -87,8 +109,34 @@ def source_metadata_frame(stations: pl.DataFrame, metadata: pl.DataFrame) -> pl.
         dtype = row["source_dtype"]
         if dtype not in SOURCE_SCALAR_DTYPES:
             raise FatalContractError("Packaged station metadata has an unsupported source dtype")
-        if row["attribute_role"] != "drainage_area" and dtype != "String":
+        if row["attribute_role"] in ("station_name", "water_body_name") and dtype != "String":
             raise FatalContractError("Packaged source name requires String source dtype")
+        datum_columns = ("source_datum", "source_datum_field", "source_datum_dtype", "datum_support_fact")
+        if row["attribute_role"] != "elevation" and any(row[key] is not None for key in datum_columns):
+            raise FatalContractError("Packaged datum association requires an elevation field")
+        if row["datum_support_fact"] is None:
+            if row["source_datum"] is not None or row["source_datum_field"] is not None:
+                raise FatalContractError("Packaged datum association lacks its support fact")
+        elif (
+            row["datum_support_fact"] != f"metadata.elevation.{row['source_field']}.datum"
+            or (row["source_datum"] is None and row["source_datum_field"] is None)
+            or (row["source_datum_field"] is not None and not row["source_datum_field"].strip())
+        ):
+            raise FatalContractError("Packaged datum association has invalid field or support")
+        if row["source_datum_field"] is None:
+            if row["source_datum_dtype"] is not None:
+                raise FatalContractError("Packaged declared datum cannot have a native dtype")
+        else:
+            datum_dtype = row["source_datum_dtype"]
+            if datum_dtype not in SOURCE_DATUM_DTYPES:
+                raise FatalContractError("Packaged native datum requires a string or integer dtype")
+            datum_value = row["source_datum"]
+            if (
+                datum_value is not None
+                and datum_dtype != "String"
+                and str(_scalar(datum_value, datum_dtype)) != datum_value
+            ):
+                raise FatalContractError("Packaged datum code does not match its native dtype")
         if row["state"] == "source_null":
             if row["source_value"] is not None:
                 raise FatalContractError("Packaged source_null row contains a value")
@@ -96,8 +144,8 @@ def source_metadata_frame(stations: pl.DataFrame, metadata: pl.DataFrame) -> pl.
             _scalar(row["source_value"], dtype)
     if any("no_metadata" in states and len(states) != 1 for states in groups.values()):
         raise FatalContractError("Packaged no_metadata conflicts with source attributes")
-    if metadata.is_duplicated().any():
-        raise FatalContractError("Packaged station metadata contains duplicate rows")
+    if metadata.select(*_KEYS, "attribute_role", "source_field").is_duplicated().any():
+        raise FatalContractError("Packaged station metadata contains duplicate source fields")
     for provider, station in stations.unique().iter_rows():
         if any((provider, station, role) not in groups for role in ATTRIBUTE_ROLES):
             raise FatalContractError("Selected station role is absent from packaged station metadata")
@@ -107,22 +155,40 @@ def source_metadata_frame(stations: pl.DataFrame, metadata: pl.DataFrame) -> pl.
 
 
 def station_metadata_frame(stations: pl.DataFrame, source: pl.DataFrame, locations: pl.DataFrame) -> pl.DataFrame:
-    """Summarise validated source rows without choosing between distinct names."""
+    """Summarise validated source rows with aligned lists ordered by native field."""
     rows = []
-    names: dict[tuple[str, str, str], set[str]] = {}
-    for row in source.filter(pl.col("attribute_role") != "drainage_area").iter_rows(named=True):
-        if row["state"] == "value":
-            value = json.loads(row["source_value"])
-            if value.strip():
-                names.setdefault((row["provider_id"], row["station_id"], row["attribute_role"]), set()).add(value)
+    attributes: dict[tuple[str, str, str], list[dict]] = {}
+    for item in source.sort("source_field").iter_rows(named=True):
+        if item["state"] != "no_metadata":
+            attributes.setdefault((item["provider_id"], item["station_id"], item["attribute_role"]), []).append(item)
     geometry = {(row["provider_id"], row["station_id"]): row for row in locations.iter_rows(named=True)}
     for provider, station in stations.unique().sort(_KEYS).iter_rows():
         row = {"provider_id": provider, "station_id": station}
         location = geometry.get((provider, station), {})
         row.update({key: location.get(key) for key in ("latitude", "longitude", "crs")})
-        for role in ("station_name", "river_name"):
-            alternatives = names.get((provider, station, role), set())
-            row[role] = next(iter(alternatives)) if len(alternatives) == 1 else None
-            row[f"{role}_alternatives"] = len(alternatives) > 1
+        names = {
+            json.loads(item["source_value"])
+            for item in attributes.get((provider, station, "station_name"), [])
+            if item["state"] == "value" and json.loads(item["source_value"]).strip()
+        }
+        row["station_name"] = next(iter(names)) if len(names) == 1 else None
+        row["station_name_alternatives"] = len(names) > 1
+        for role in ("water_body_name", "drainage_area", "elevation"):
+            fields = attributes.get((provider, station, role), [])
+            row[f"{role}_field"] = [item["source_field"] for item in fields] if fields else None
+            row[f"{role}_value"] = (
+                [
+                    json.loads(item["source_value"])
+                    if role == "water_body_name" and item["source_value"] is not None
+                    else item["source_value"]
+                    for item in fields
+                ]
+                if fields
+                else None
+            )
+            if role in ("drainage_area", "elevation"):
+                row[f"{role}_unit"] = [item["source_unit"] for item in fields] if fields else None
+            if role == "elevation":
+                row["elevation_datum"] = [item["source_datum"] for item in fields] if fields else None
         rows.append(row)
     return pl.DataFrame(rows, schema=STATION_METADATA_SCHEMA)

@@ -80,7 +80,11 @@ def build_catalogue_metadata(
         if field not in native_table.data.columns:
             raise FatalContractError("Metadata projection references an absent native column")
     bound = _bind_catalogue_build_inputs(
-        provenance, build_inputs, station_metadata, transformation_implementations=transformation_implementations
+        provenance,
+        build_inputs,
+        station_metadata,
+        metadata_fields=metadata_fields,
+        transformation_implementations=transformation_implementations,
     )
     evidence = normalize_provenance(
         bound,
@@ -144,6 +148,7 @@ def _bind_catalogue_build_inputs(
     build_inputs: CatalogueBuildInputs,
     metadata: pl.DataFrame,
     *,
+    metadata_fields: tuple[MetadataField, ...] = (),
     transformation_implementations: Mapping[str, tuple[str, str]] | None = None,
 ) -> AcquisitionProvenance:
     """Bind each transformation to its implementation and authored declaration.
@@ -302,6 +307,28 @@ def _bind_catalogue_build_inputs(
             repository_path=_METADATA_MODULE,
             symbol="build_station_metadata",
         )
+        declared_fields = {(field.attribute_role, field.source_field): field for field in metadata_fields}
+        adopted_facts = {fact for item in build_inputs.inputs for fact in item.facts}
+
+        def supported_inputs(extra_facts: tuple[str, ...]) -> tuple[ExternalFactReference, ...]:
+            references = list(support)
+            for support_fact in extra_facts:
+                binding = direct.get(support_fact)
+                if (
+                    binding is None
+                    or binding.source_id is None
+                    or binding.acquisition_id is None
+                    or support_fact not in adopted_facts
+                ):
+                    raise FatalContractError("Metadata support must resolve an adopted direct source fact")
+                acquisition = acquisitions[(binding.source_id, binding.acquisition_id)]
+                if acquisition.method == "runtime_http_request" or acquisition.instant_type == "runtime":
+                    raise FatalContractError("Metadata support cannot use a runtime acquisition")
+                reference = ExternalFactReference(source_id=binding.source_id, fact=support_fact)
+                if reference not in references:
+                    references.append(reference)
+            return tuple(references)
+
         facts = list(payload["fact_universe"])
         for role, field, fact in supported.iter_rows():
             if field is None or fact != f"metadata.{role}.{field}" or fact in facts:
@@ -315,7 +342,39 @@ def _bind_catalogue_build_inputs(
                     acquisition_id=None,
                     transformation=Transformation(
                         name="project_station_metadata",
-                        external_inputs=tuple(support),
+                        external_inputs=supported_inputs(
+                            declared_fields[(role, field)].support_facts if (role, field) in declared_fields else ()
+                        ),
+                        executable=executable,
+                        declaration=mapping_declarations[0],
+                    ),
+                ).model_dump(mode="python")
+            )
+        datum_rows = (
+            metadata.filter(pl.col("datum_support_fact").is_not_null())
+            .select("source_field", "source_datum_field", "datum_support_fact")
+            .unique(maintain_order=True)
+        )
+        for field_name, datum_field, fact in datum_rows.iter_rows():
+            field = declared_fields.get(("elevation", field_name))
+            if (
+                field is None
+                or not field.datum_support
+                or field.datum_field != datum_field
+                or fact != f"metadata.elevation.{field_name}.datum"
+                or fact in facts
+            ):
+                raise FatalContractError("Metadata datum association requires its exact field declaration")
+            facts.append(fact)
+            bindings.append(
+                FactBinding(
+                    fact_group=fact,
+                    facts=(fact,),
+                    source_id=None,
+                    acquisition_id=None,
+                    transformation=Transformation(
+                        name="associate_elevation_datum",
+                        external_inputs=supported_inputs(field.datum_support),
                         executable=executable,
                         declaration=mapping_declarations[0],
                     ),

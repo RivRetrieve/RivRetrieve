@@ -43,7 +43,7 @@ STATION_METADATA_NOTICE = (
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "流域面積"),
     MetadataField("station_name", "観測所名"),
-    MetadataField("river_name", "河川名"),
+    MetadataField("water_body_name", "河川名"),
 )
 
 _WORLD_GEODETIC_DMS = re.compile(r"北緯\s*(\d+)度(\d+)分(\d+)秒\s*東経\s*(\d+)度(\d+)分(\d+)秒")
