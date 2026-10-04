@@ -482,6 +482,7 @@ NATIVE_TABLE_ACQUISITION_IDS = ("recovered_upstream_import_f67f6d8",)
 
 # Authored catalogue, physical-fact and support declarations selected at build time.
 CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
     ("src/rivretrieve/_internal/providers/pl_imgw/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/pl_imgw/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/pl_imgw/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),

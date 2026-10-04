@@ -16,6 +16,7 @@ import polars as pl
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
     CatalogueBuildInputs,
+    RetainedInputReceipt,
     verify_provenance_recordings,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -45,6 +46,12 @@ from rivretrieve._internal.providers.ch_foen.origins import (
     NATIVE_TABLE_BYTE_SIZE,
     NATIVE_TABLE_SHA256,
     build_acquisition_provenance,
+)
+from rivretrieve._internal.providers.ch_foen.station_metadata import (
+    StationMetadataSources,
+    project_station_metadata,
+    read_station_metadata_sources,
+    verify_adopted_station_metadata,
 )
 
 PROVIDER_ID = ProviderId("ch_foen")
@@ -82,6 +89,8 @@ class GeneratedChFoenCatalogue:
     stations: StationCatalog
     station_products: StationProductCatalog
     acquisition_provenance: AcquisitionProvenance
+    metadata_sources: StationMetadataSources | None = None
+    station_metadata: pl.DataFrame | None = None
 
 
 @dataclass(frozen=True)
@@ -166,6 +175,8 @@ def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[N
 def build_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
+    *,
+    metadata_sources: StationMetadataSources | None = None,
 ) -> GeneratedChFoenCatalogue:
     if native_table.data.is_empty():
         raise FatalContractError("Swiss native table must not be empty")
@@ -184,12 +195,32 @@ def build_catalogue(
     provider_info = build_provider_info(maximum_retrieved_at.date(), envelope)
 
     validate_generated_catalogue(provider_info, products, stations, station_products)
+    provenance = build_acquisition_provenance()
+    station_metadata = None
+    if metadata_sources is not None:
+        from rivretrieve._internal.providers.ch_foen.origins import (
+            STATION_DIRECTORY_REFERENCE,
+            STATION_METADATA_FIELDS,
+            with_station_metadata_sources,
+        )
+
+        if metadata_sources.directory_reference != STATION_DIRECTORY_REFERENCE:
+            raise FatalContractError("FOEN directory source differs from the declared catalogue acquisition")
+        provenance = with_station_metadata_sources(provenance, metadata_sources.page_recordings)
+        station_metadata = project_station_metadata(
+            stations,
+            metadata_sources.directory_body,
+            metadata_sources.station_pages,
+            STATION_METADATA_FIELDS,
+        )
     return GeneratedChFoenCatalogue(
         provider_info=provider_info,
         products=products,
         stations=stations,
         station_products=station_products,
-        acquisition_provenance=build_acquisition_provenance(),
+        acquisition_provenance=provenance,
+        metadata_sources=metadata_sources,
+        station_metadata=station_metadata,
     )
 
 
@@ -295,11 +326,16 @@ def write_catalogue(
     from rivretrieve._internal.providers.ch_foen.origins import (
         STATION_CATALOGUE_ORIGINS,
         STATION_METADATA_FIELDS,
+        STATION_METADATA_NOTICE,
         TRANSFORMATION_IMPLEMENTATIONS,
     )
 
     if build_inputs is None or native_table is None:
         raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
+
+    if catalogue.metadata_sources is None or catalogue.station_metadata is None:
+        raise FatalContractError("Swiss metadata publication requires its selected direct FOEN sources")
+    verify_adopted_station_metadata(catalogue.metadata_sources, build_inputs.inputs)
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -318,6 +354,12 @@ def write_catalogue(
         build_inputs=build_inputs,
         native_table=native_table,
         metadata_fields=STATION_METADATA_FIELDS,
+        station_metadata=catalogue.station_metadata,
+        metadata_implementation=(
+            "src/rivretrieve/_internal/providers/ch_foen/station_metadata.py",
+            "project_station_metadata",
+        ),
+        station_metadata_notice=STATION_METADATA_NOTICE,
         transformation_implementations=TRANSFORMATION_IMPLEMENTATIONS,
     )
     for name, content in metadata.items():
@@ -530,6 +572,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--evidence-root", type=Path, help="External root containing repository-relative retained inputs."
     )
     parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
+    parser.add_argument(
+        "--input-receipt", type=Path, help="Resolved archive member identities for the retained source files."
+    )
     args = parser.parse_args(argv)
 
     if args.native_out is not None:
@@ -552,9 +597,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--evidence-root is required with --out")
     if args.build_inputs is None:
         parser.error("--out requires --build-inputs")
+    if args.input_receipt is None:
+        parser.error("--out requires --input-receipt")
     build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
-    verify_provenance_recordings(build_acquisition_provenance(), args.evidence_root)
-    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
+    input_receipt = RetainedInputReceipt.model_validate_json(args.input_receipt.read_bytes())
+    from rivretrieve._internal.providers.ch_foen.origins import (
+        STATION_CATALOGUE_ORIGINS,
+        STATION_DIRECTORY_REFERENCE,
+        STATION_PAGE_MANIFEST_SHA256,
+        STATION_PAGE_ROOT,
+    )
+
+    metadata_sources = read_station_metadata_sources(
+        args.evidence_root,
+        directory_reference=STATION_DIRECTORY_REFERENCE,
+        input_receipt=input_receipt,
+        page_root=STATION_PAGE_ROOT,
+        manifest_sha256=STATION_PAGE_MANIFEST_SHA256,
+    )
 
     native_table = read_native_table(
         args.native, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE
@@ -562,7 +622,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     catalogue = build_catalogue(
         native_table,
         STATION_CATALOGUE_ORIGINS,
+        metadata_sources=metadata_sources,
     )
+    verify_provenance_recordings(catalogue.acquisition_provenance, args.evidence_root)
     write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)
     return 0
 

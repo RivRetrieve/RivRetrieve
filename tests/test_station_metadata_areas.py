@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import socket
-from importlib import import_module
 from pathlib import Path
 
 import polars as pl
@@ -13,8 +12,6 @@ from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
 from rivretrieve._internal import discovery
-from rivretrieve._internal.catalogues.native import NativeTable
-from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 
 AREA_SCHEMA = pl.Schema(
@@ -101,7 +98,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
     assert overlapping.height > 0
-    for provider in ("ch_foen", "lt_lhmt", "th_thaiwater"):
+    for provider in ("lt_lhmt", "th_thaiwater"):
         absent = result.filter(pl.col("provider_id") == provider)
         assert set(absent["state"]) == {"no_metadata"}
         assert (
@@ -130,27 +127,18 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
     )
     stations = pl.read_parquet(catalogue / "stations.parquet").select("station_id")
     projection = pl.read_parquet(catalogue / "station_metadata.parquet")
-    origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
-    if provider == "fr_hubeau":
-        origin = origins.HYDROMETRY_STATION_CATALOGUE_ORIGINS["station_id"]
-        assert origin == origins.TEMPERATURE_STATION_CATALOGUE_ORIGINS["station_id"]
-    else:
-        origin = origins.STATION_CATALOGUE_ORIGINS["station_id"]
-    # Reuse this retained input for both rebuild equality and independent scalar
-    # assertions, instead of reading all providers again in a subprocess test.
-    if provider == "usgs_nwis":
-        from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
-
-        rebuilt = project_station_metadata(NativeTable(native), stations, origin, origins.STATION_METADATA_FIELDS)
-    else:
-        rebuilt = build_station_metadata(
-            provider, NativeTable(native), stations, origin, origins.STATION_METADATA_FIELDS
-        )
-    assert_frame_equal(rebuilt, projection)
+    # The shared catalogue-origin contract rebuilds the full publication. This
+    # check independently compares each adopted area field held in native bytes.
     actual = _area_columns(projection)
     identity, fields = SOURCE_FIELDS[provider]
     assert_frame_equal(actual.select("station_id").unique().sort("station_id"), stations.sort("station_id"))
-    assert set(actual["source_field"].drop_nulls()) == set(fields)
+    supplementary = {"Catchment size"} if provider == "ch_foen" else set()
+    assert set(actual["source_field"].drop_nulls()) == set(fields) | supplementary
+    if supplementary:
+        direct = actual.filter(pl.col("source_field") == "Catchment size")
+        assert set(direct["source_dtype"]) == {"String"}
+        assert set(direct["source_unit"]) == {"km2"}
+        assert set(direct["state"]) == {"value"}
     # Canonical scope excludes native-only gauges (notably Brazil).
     native = native.join(stations, left_on=identity, right_on="station_id", how="semi").sort(identity)
     for field, unit in fields.items():

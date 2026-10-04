@@ -290,6 +290,7 @@ NATIVE_TABLE_ACQUISITION_IDS = ("verified_hydrology_archive_campaign_2026_08_02"
 
 # Authored catalogue, physical-fact and support declarations selected at build time.
 CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
     ("src/rivretrieve/_internal/providers/za_dws/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/za_dws/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/za_dws/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),

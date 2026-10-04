@@ -757,6 +757,12 @@ def _catalogue_recording_paths(provider: str, *, scopes: tuple[str, ...] = ()) -
     header = json.loads(
         (ROOT / "src/rivretrieve/_internal/providers" / provider / "catalogue/provenance.json").read_text()
     )
+    origins = _module(provider, "origins") if provider in ORIGIN_GATE_ENROLLED_PROVIDERS else None
+    declared_support = (
+        {path for paths in origins.CATALOGUE_SUPPORTING_INPUTS.values() for path in paths}
+        if origins is not None
+        else set()
+    )
     return tuple(
         sorted(
             {
@@ -765,6 +771,8 @@ def _catalogue_recording_paths(provider: str, *, scopes: tuple[str, ...] = ()) -
                 for evidence in source["evidence"]
                 if not any(evidence["recording"]["repository_path"].startswith(scope + "/") for scope in scopes)
             }
+            | {path for path in declared_support if not any(path.startswith(scope + "/") for scope in scopes)}
+            | ({"maintenance/catalogue/station_metadata/review.json"} if origins is not None else set())
             | set(scopes)
         )
     )
@@ -840,7 +848,9 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
         pytest.param(
             "ch_foen",
             marks=pytest.mark.governing(
-                *_catalogue_recording_paths("ch_foen"),
+                *_catalogue_recording_paths(
+                    "ch_foen", scopes=("maintenance/catalogue/station_metadata/sources/ch_foen",)
+                ),
                 "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
                 "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
                 "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
@@ -961,6 +971,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     catalogue_build_inputs,
+    catalogue_input_receipt,
 ) -> None:
     calls: list[str] = []
 
@@ -998,6 +1009,32 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
 
         *_, provenance, generated = read_catalogue_inputs(retained_evidence_root)
+    elif adapter.provider_id == "ch_foen":
+        from rivretrieve._internal.providers.ch_foen.origins import (
+            STATION_DIRECTORY_REFERENCE,
+            STATION_PAGE_MANIFEST_SHA256,
+            STATION_PAGE_ROOT,
+        )
+        from rivretrieve._internal.providers.ch_foen.station_metadata import read_station_metadata_sources
+
+        metadata_sources = read_station_metadata_sources(
+            retained_evidence_root,
+            directory_reference=STATION_DIRECTORY_REFERENCE,
+            input_receipt=catalogue_input_receipt,
+            page_root=STATION_PAGE_ROOT,
+            manifest_sha256=STATION_PAGE_MANIFEST_SHA256,
+        )
+        generated = adapter.generator.build_catalogue(
+            read_native_table(adapter.native_path),
+            adapter.origins_argument(),
+            metadata_sources=metadata_sources,
+        )
+        provenance = generated.acquisition_provenance
+        source_inputs_before = {
+            retained_evidence_root / item.consumer_path: (retained_evidence_root / item.consumer_path).read_bytes()
+            for item in catalogue_input_receipt.inputs
+            if item.consumer_path.startswith("maintenance/catalogue/station_metadata/sources/ch_foen/")
+        }
     else:
         generated = _build(adapter)
         provenance = generated.acquisition_provenance if adapter.provider_id != "usgs_nwis" else None
@@ -1028,6 +1065,10 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "za_dws",
     }:
         arguments.extend(("--evidence-root", str(retained_evidence_root)))
+    if adapter.provider_id == "ch_foen":
+        selected_receipt = product_root / "ch_foen.input-receipt.json"
+        selected_receipt.write_text(catalogue_input_receipt.model_dump_json())
+        arguments.extend(("--input-receipt", str(selected_receipt)))
     if adapter.provider_id == "br_ana":
         arguments.extend(
             (

@@ -421,6 +421,7 @@ NATIVE_TABLE_ACQUISITION_IDS = ("catalogue_capture_2026_08_02",)
 # Non-source paths identify explicit authored inputs in the restricted handoff.
 # Their code references resolve to the reviewed private declaration owner.
 CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
     ("src/rivretrieve/_internal/providers/ba_fhmzbih/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/ba_fhmzbih/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/ba_fhmzbih/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),

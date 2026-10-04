@@ -399,6 +399,7 @@ NATIVE_TABLE_ACQUISITION_IDS = ("station_registry_capture_2026_08_02",)
 
 # Authored catalogue, physical-fact and support declarations selected at build time.
 CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
     ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/ca_eccc/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
