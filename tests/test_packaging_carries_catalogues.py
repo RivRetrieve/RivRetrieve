@@ -365,6 +365,14 @@ def historical_closure_evidence(provider, evidence):
         unit_header = ". Its header Catchment area (square kilometre) establishes the existing area field unit"
         assert workbook["description"].endswith(unit_header)
         workbook["description"] = workbook["description"].removesuffix(unit_header)
+        unit_binding = next(item for item in model["fact_bindings"]
+                            if item["fact_group"] == "grdc_catchment_area_unit")
+        assert unit_binding == {
+            "fact_group": "grdc_catchment_area_unit", "facts": ["source.grdc.catchment_area_unit"],
+            "source_id": "sr.pl.grdc", "acquisition_id": "grdc_workbook_corroboration_private_receipt",
+        }
+        model["fact_bindings"].remove(unit_binding)
+        model["fact_universe"].remove("source.grdc.catchment_area_unit")
     return normalize_provenance(AcquisitionProvenance.model_validate(model), stations=catalogue.stations,
                                 station_products=catalogue.station_products)
 
