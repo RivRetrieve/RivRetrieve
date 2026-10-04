@@ -667,8 +667,9 @@ def metadata(selection: _Selection, *, view: str = "summary") -> pl.DataFrame:
     polars.DataFrame
         Both views retain provider_id and station_id as strings. Summary
         station_name is the verbatim name when exactly one distinct nonblank
-        supported name exists. Otherwise it is null; station_name_alternatives
-        is true when several distinct nonblank names exist. Latitude, longitude
+        supported name exists. It is null when none or several exist; the source
+        view distinguishes these cases. Equal names from separate fields count
+        as one name. Latitude, longitude
         and crs preserve the canonical catalogue's values and unknowns,
         independently of locations retained in the selection.
 
@@ -685,6 +686,9 @@ def metadata(selection: _Selection, *, view: str = "summary") -> pl.DataFrame:
         numeric strings with explicit units keep their numeric text separately
         from the unit. For example, '"142.00km2"' becomes '"142.00"' with unit
         'km2'. Numeric spelling is preserved and still needs parsing for arithmetic.
+        In USGS alt_va, leading spaces, tabs and nonbreaking spaces are removed
+        only from complete numeric strings: '" 0.00"' becomes '"0.00"', still a
+        JSON string with unchanged numeric spelling, unit and datum.
         Qualified or unrecognised text stays unchanged. The source view always
         retains the exact original scalar.
         Units and datum labels or codes are plain strings. Unknowns remain null.

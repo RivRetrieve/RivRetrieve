@@ -75,7 +75,6 @@ Identity and facts are separate. Nullable facts carry explicit evidence states; 
 | `latitude` | `Float64` |
 | `longitude` | `Float64` |
 | `crs` | `String` |
-| `station_name_alternatives` | `Boolean` |
 | `water_body_name_field` | `List(String)` |
 | `water_body_name_value` | `List(String)` |
 | `drainage_area_field` | `List(String)` |

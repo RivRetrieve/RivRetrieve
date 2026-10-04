@@ -111,9 +111,11 @@ Canonical station columns describe identity and geometry, not harmonised names, 
 Native tables are verified archive inputs supplied to catalogue builds. They are not a public wheel API.
 `metadata` reads a packaged projection of approved station names, water-body names,
 drainage areas and elevations at provider-station grain. Its summary preserves
-canonical geometry and the scalar station-name alternatives rule. Water-body names,
-areas and elevations use aligned field/value lists, with units and datums attached
-to the corresponding quantities. Its source view preserves source vocabulary,
+canonical geometry and the one distinct nonblank station name, or null when no
+such name or several distinct names exist. Water-body names, areas and elevations
+use aligned field/value lists, with units and datums attached to the corresponding
+quantities. Scoped summary rules separate explicit inline units and remove leading
+padding from complete numeric strings in USGS `alt_va`, preserving numeric spelling. Its source view preserves source vocabulary,
 scalar types, source scopes, blank and null values, unexposed roles, and support
 links for values and datum associations. See [station metadata](station-metadata.md)
 for interpretation.

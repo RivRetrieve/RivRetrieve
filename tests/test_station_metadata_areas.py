@@ -89,7 +89,25 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(discovery, "dotenv_values", forbidden)
     selection = rr.find()
     before = rr.as_frame(selection)
-    result = _areas(selection)
+    source = rr.metadata(selection, view="source")
+    result = _area_columns(source)
+    # Current approved metadata exposes at most one name per gauge. Derive the
+    # expected scalar directly from those source rows, without the summary rule.
+    names = source.filter((pl.col("attribute_role") == "station_name") & (pl.col("state") != "no_metadata"))
+    assert not names.select("provider_id", "station_id").is_duplicated().any()
+    decoded = [None if value is None else json.loads(value) for value in names["source_value"]]
+    expected_names = names.select("provider_id", "station_id").with_columns(
+        pl.Series("station_name", [name if name and name.strip() else None for name in decoded], dtype=pl.String)
+    )
+    expected_names = (
+        before.select("provider_id", "station_id")
+        .unique()
+        .join(expected_names, on=["provider_id", "station_id"], how="left")
+        .sort("provider_id", "station_id")
+    )
+    summary = rr.metadata(selection)
+    assert "station_name_alternatives" not in summary.columns
+    assert_frame_equal(summary.select(expected_names.columns), expected_names)
     keys = ["provider_id", "station_id"]
     assert_frame_equal(result.select(keys).unique().sort(keys), before.select(keys).unique().sort(keys))
     assert result.select(*keys, "source_field").is_duplicated().sum() == 0

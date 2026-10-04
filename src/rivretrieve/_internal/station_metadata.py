@@ -37,7 +37,6 @@ STATION_METADATA_SCHEMA = pl.Schema(
         "latitude": pl.Float64,
         "longitude": pl.Float64,
         "crs": pl.String,
-        "station_name_alternatives": pl.Boolean,
         "water_body_name_field": pl.List(pl.String),
         "water_body_name_value": pl.List(pl.String),
         "drainage_area_field": pl.List(pl.String),
@@ -86,6 +85,10 @@ def split_inline_quantity(value: object, suffix: str) -> str | None:
 def _summary_quantity_value(item: dict) -> str | None:
     encoded = item["source_value"]
     key = tuple(item[name] for name in ("provider_id", "attribute_role", "source_scope", "source_field"))
+    if key == ("usgs_nwis", "elevation", None, "alt_va") and encoded is not None and item["source_dtype"] == "String":
+        value = json.loads(encoded)
+        if re.fullmatch(_NUMBER_TEXT, value) is not None:
+            return json.dumps(value.lstrip(" \t\u00a0"), ensure_ascii=False)
     rule = _INLINE_QUANTITY_FIELDS.get(key)
     if rule is not None and encoded is not None and item["source_dtype"] == "String":
         unit, suffix = rule
@@ -221,7 +224,6 @@ def station_metadata_frame(stations: pl.DataFrame, source: pl.DataFrame, locatio
             if item["state"] == "value" and json.loads(item["source_value"]).strip()
         }
         row["station_name"] = next(iter(names)) if len(names) == 1 else None
-        row["station_name_alternatives"] = len(names) > 1
         for role in ("water_body_name", "drainage_area", "elevation"):
             fields = attributes.get((provider, station, role), [])
             row[f"{role}_field"] = [item["source_field"] for item in fields] if fields else None

@@ -119,6 +119,7 @@ assert effective["source_dtype"] == "Float64"
 assert effective["source_value"] is None
 assert effective["state"] == "source_null"
 for provider, station, role, field, raw, numeric, unit, datum in [
+    ("usgs_nwis", "07374000", "elevation", "alt_va", " 0.00", "0.00", "feet", "NAVD88"),
     ("jp_mlit", "301011281104010", "drainage_area", "流域面積", "142.00km2", "142.00", "km2", None),
     ("jp_mlit", "301011281104010", "elevation", "零点高", "0.000m", "0.000", "m", None),
     ("ba_fhmzbih", "4024", "drainage_area", "metadata_CATCHMENT_SIZE", "1600.00 km²", "1600.00", "km²", None),
@@ -128,6 +129,7 @@ for provider, station, role, field, raw, numeric, unit, datum in [
     gauge = rr.find(provider=provider, station=station)
     source = rr.metadata(gauge, view="source").filter(pl.col("source_field") == field).row(0, named=True)
     summary = rr.metadata(gauge).row(0, named=True)
+    assert "station_name_alternatives" not in summary
     index = summary[f"{role}_field"].index(field)
     assert json.loads(source["source_value"]) == raw
     assert source["source_dtype"] == "String"
@@ -138,4 +140,6 @@ for provider, station, role, field, raw, numeric, unit, datum in [
 
 empty = rr.pick(rr.pick(selection, quantity="discharge"), quantity="stage")
 assert_frame_equal(rr.metadata(empty, view="source"), pl.DataFrame(schema=schema))
+assert rr.metadata(empty).is_empty()
+assert "station_name_alternatives" not in rr.metadata(empty).columns
 """
