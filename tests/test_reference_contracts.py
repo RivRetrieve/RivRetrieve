@@ -46,7 +46,7 @@ def documentation_workspace():
 
 
 @pytest.fixture(scope="module")
-def reference(tmp_path_factory, documentation_workspace):
+def documentation_site(tmp_path_factory, documentation_workspace):
     from mkdocs.commands.build import build
     from mkdocs.config import load_config
 
@@ -78,7 +78,12 @@ def reference(tmp_path_factory, documentation_workspace):
             build(config)
         finally:
             assert {path: path.read_bytes() if path.exists() else None for path in outputs} == before
-    return (site / "reference/index.html").read_text()
+    return site
+
+
+@pytest.fixture(scope="module")
+def reference(documentation_site):
+    return (documentation_site / "reference/index.html").read_text()
 
 
 def section(reference, name):
@@ -136,3 +141,34 @@ def test_reference_renders_numpy_sections_examples_and_links(reference):
     assert "&gt;&gt;&gt;" in rendered
     assert 'href="#rivretrieve._internal.issues.MissingCredentialError"' in rendered
     assert "::: rivretrieve.fetch" not in rendered
+
+
+def test_homepage_preserves_approved_agent_prompt(documentation_site):
+    vision = (ROOT / "planning/visions/2026-10-04-agent-onboarding-prompt.md").read_text()
+    approved = vision.split("```text\n", 1)[1].split("```", 1)[0]
+    readme = (ROOT / "README.md").read_text()
+    assert readme.index("## Install") < readme.index("## Use with a coding agent") < readme.index("## Quick start")
+    assert readme.split("```text\n", 1)[1].split("```", 1)[0] == approved
+
+    homepage = (documentation_site / "index.html").read_text()
+    disclosure = re.search(r'<details id="agent-prompt">(.*?)</details>', homepage, re.DOTALL)
+    assert disclosure is not None
+    code = re.search(r"<code[^>]*>(.*?)</code>", disclosure[1], re.DOTALL)
+    assert code is not None
+    assert html.unescape(re.sub("<[^>]+>", "", code[1])) == approved
+    assert '<script src="javascripts/extra.js"></script>' in homepage
+
+
+@pytest.mark.parametrize("page", ["index.html", "development-conventions/index.html"])
+def test_page_copy_embeds_raw_markdown_without_double_escaping(documentation_site, page):
+    rendered = (documentation_site / page).read_text()
+    raw = re.search(r'<textarea[^>]*id="__raw_page_markdown__"[^>]*>(.*?)</textarea>', rendered, re.DOTALL)
+    assert raw is not None
+    markdown = html.unescape(raw[1])
+    assert "uv " in markdown
+    assert "```" in markdown
+    assert "Copy page text" not in markdown
+    if page == "index.html":
+        assert '<details id="agent-prompt">' in markdown
+        assert "&lt;details" not in markdown
+        assert "## Install" in markdown

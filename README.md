@@ -83,6 +83,57 @@ It also installs with pip: `pip install rivretrieve`.
 
 For optional station maps, install the `map` extra: `uv add "rivretrieve[map]"`.
 
+## Use with a coding agent
+
+Copy the prompt below into your coding agent after installing RivRetrieve.
+
+<details id="agent-prompt">
+<summary>Show agent prompt</summary>
+
+```text
+Use RivRetrieve to find and retrieve river discharge, stage, and water
+temperature observations from national and regional agencies.
+
+Check that rivretrieve imports in the project's Python environment and
+note its version. If setup fails, report the error. Do not upgrade it
+automatically.
+
+Typical workflow:
+import rivretrieve as rr
+
+gauges = rr.find(
+    provider="usgs_nwis", quantity="discharge",
+    frequency="daily", statistic="mean",
+)
+selected = rr.pick(gauges, station=["07374000"])
+result = rr.fetch(selected, start="2023-01-01", end="2023-01-01")
+
+# Inspect observations, retrieval issues, and source-series outcomes.
+result.data
+result.issues
+rr.series(result)
+
+This illustrates the API; only retrieve data needed for the user's task.
+Catalogue searches are offline; fetching contacts providers.
+
+RivRetrieve harmonises units and structure. It does not perform quality
+control, gap filling, or aggregation. Read timestamps with their time-zone
+information. Returned rows do not imply complete coverage or no failures.
+
+Consult documentation as needed:
+- Usage, selections, results, credentials:
+  https://rivretrieve.github.io/usage/
+- Exact API signatures and returned types:
+  https://rivretrieve.github.io/reference/
+- Provider-specific access and interpretation:
+  follow the relevant provider page from https://rivretrieve.github.io/
+
+Continue the user's task without onboarding questions. If no task was
+given, briefly confirm readiness.
+```
+
+</details>
+
 ## Quick start
 
 The packaged catalogue contains station locations and known source-series facts.
@@ -179,19 +230,6 @@ Start with the [documentation index](docs/README.md).
 - [Example: Recent streamflow for CAMELS-US gauges](docs/examples/camels-us.md).
 - [Public API and software reference](docs/reference.md).
 - [Architecture](docs/architecture.md): responsibilities, a traced request and contracts.
-
-## Development tests
-
-Run source-independent checks without archive access:
-
-```sh
-uv run pytest --logic-only
-```
-
-Checks that replay retained recordings or verify source inputs use the reviewed
-[private archive test command](docs/maintenance/evidence.md#run-tests).
-It selects and verifies the required inputs automatically. Archive access and
-reviewed code are required; runtime package users need neither.
 
 ## Data rights
 
