@@ -42,17 +42,25 @@ def _areas(selection) -> pl.DataFrame:
 SOURCE_FIELDS = {
     "ba_fhmzbih": ("metadata_station_no", {"metadata_CATCHMENT_SIZE": None}),
     "br_ana": ("codigoestacao", {"Area_Drenagem": None}),
-    "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": None, "DRAINAGE_AREA_EFFECT": None}),
+    "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": "km2", "DRAINAGE_AREA_EFFECT": "km2"}),
     "ch_foen": ("name", {}),
     "cz_chmi": ("objID", {"PLO_STA": "km²"}),
     "fr_hubeau": ("code_station", {"superficie_topo": None, "superficie_reelle": None}),
     "fr_hydroportail": ("bookmarkCode", {}),
     "jp_mlit": ("観測所記号", {"流域面積": None}),
     "lt_lhmt": ("code", {}),
-    "no_nve": ("stationId", {"drainageBasinArea": "km2", "drainageBasinAreaNorway": "km2"}),
+    "no_nve": (
+        "stationId",
+        {
+            "drainageBasinArea": "km2",
+            "drainageBasinAreaNorway": "km2",
+            "transferAreaIn": "km2",
+            "transferAreaOut": "km2",
+        },
+    ),
     "pl_imgw": ("gauge_id", {"area": None}),
     "th_thaiwater": ("station.id", {}),
-    "usgs_nwis": ("site_no", {"drain_area_va": "sq mi", "contrib_drain_area_va": None}),
+    "usgs_nwis": ("site_no", {"drain_area_va": "sq mi", "contrib_drain_area_va": "sq mi"}),
     "za_dws": ("Station", {"Catchment Area km**2": "km**2"}),
 }
 
@@ -62,8 +70,8 @@ def test_canadian_example_and_product_deduplication() -> None:
     gauge = rr.pick(gauges, station="02GA010")
     expected = pl.DataFrame(
         [
-            ("ca_eccc", "02GA010", "DRAINAGE_AREA_EFFECT", None, "Float64", None, "source_null"),
-            ("ca_eccc", "02GA010", "DRAINAGE_AREA_GROSS", "1035.0", "Float64", None, "value"),
+            ("ca_eccc", "02GA010", "DRAINAGE_AREA_EFFECT", None, "Float64", "km2", "source_null"),
+            ("ca_eccc", "02GA010", "DRAINAGE_AREA_GROSS", "1035.0", "Float64", "km2", "value"),
         ],
         schema=AREA_SCHEMA,
         orient="row",
@@ -130,7 +138,14 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         origin = origins.STATION_CATALOGUE_ORIGINS["station_id"]
     # Reuse this retained input for both rebuild equality and independent scalar
     # assertions, instead of reading all providers again in a subprocess test.
-    rebuilt = build_station_metadata(provider, NativeTable(native), stations, origin, origins.STATION_METADATA_FIELDS)
+    if provider == "usgs_nwis":
+        from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
+
+        rebuilt = project_station_metadata(NativeTable(native), stations, origin, origins.STATION_METADATA_FIELDS)
+    else:
+        rebuilt = build_station_metadata(
+            provider, NativeTable(native), stations, origin, origins.STATION_METADATA_FIELDS
+        )
     assert_frame_equal(rebuilt, projection)
     actual = _area_columns(projection)
     identity, fields = SOURCE_FIELDS[provider]

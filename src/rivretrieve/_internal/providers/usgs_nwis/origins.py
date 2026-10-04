@@ -34,7 +34,20 @@ STATION_METADATA_NOTICE = (
 
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "drain_area_va", "sq mi"),
-    MetadataField("drainage_area", "contrib_drain_area_va"),
+    MetadataField(
+        "drainage_area",
+        "contrib_drain_area_va",
+        "sq mi",
+        support_facts=("source.usgs.sitefile_drainage_area_definitions",),
+    ),
+    MetadataField(
+        "elevation",
+        "alt_va",
+        "feet",
+        datum_field="alt_datum_cd",
+        support_facts=("source.usgs.sitefile_altitude_definition",),
+        datum_support=("source.usgs.sitefile_altitude_datum_definition",),
+    ),
     MetadataField("station_name", "station_nm"),
 )
 
@@ -121,6 +134,23 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         media_type="text/html; charset=UTF-8",
         sha256="1cec37f8cec8173f635d4afaba2d08814347d9cff672b25c29d427b004d0b3a2",
     )
+    sitefile_definition = RecordingReference(
+        recording_id="usgs_nwis-nwis-sitefile-manual-body",
+        repository_path="maintenance/catalogue/station_metadata/sources/usgs_nwis/nwis-sitefile-manual/body",
+        source_url="https://pubs.usgs.gov/of/2005/1251/pdf/gwcoding_Sect2-1.pdf",
+        retrieved_at=datetime.fromisoformat("2026-10-04T10:38:02.574170+00:00"),
+        media_type="application/pdf",
+        sha256="e711a90861425227879decb13605e5fe7408c81ddb4dd40065692f52e35f86bf",
+    )
+    sitefile_definition_capture = AcquisitionRecord(
+        acquisition_id="usgs_nwis-nwis-sitefile-manual",
+        method="http_request",
+        instant_type="retrieval",
+        description="USGS site-file definitions for altitude, altitude datum and drainage areas",
+        requested_from=(sitefile_definition.source_url,),
+        retrieved_at_start=sitefile_definition.retrieved_at,
+        recording_ids=(sitefile_definition.recording_id,),
+    )
     instantaneous_definition_capture = AcquisitionRecord(
         acquisition_id="instantaneous_values_definition_capture_2026_09_19",
         method="http_request",
@@ -170,8 +200,20 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         source_id="usgs_nwis",
         issuer="U.S. Geological Survey",
         operator="National Water Information System",
-        acquisitions=(catalogue, runtime, licence_terms, citation_terms, instantaneous_definition_capture),
+        acquisitions=(
+            catalogue,
+            runtime,
+            licence_terms,
+            citation_terms,
+            instantaneous_definition_capture,
+            sitefile_definition_capture,
+        ),
         evidence=(
+            EvidenceReference(
+                evidence_id=sitefile_definition.recording_id,
+                description="USGS site-file metadata definitions",
+                recording=sitefile_definition,
+            ),
             EvidenceReference(
                 evidence_id="usgs_instantaneous_value_definition",
                 description='Publisher service documentation: "most recent instantaneous value"; the service request URL is /nwis/iv/.',
@@ -204,6 +246,16 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         ),
     )
     bindings = (
+        FactBinding(
+            fact_group="sitefile_metadata_definitions",
+            facts=(
+                "source.usgs.sitefile_altitude_definition",
+                "source.usgs.sitefile_altitude_datum_definition",
+                "source.usgs.sitefile_drainage_area_definitions",
+            ),
+            source_id="usgs_nwis",
+            acquisition_id=sitefile_definition_capture.acquisition_id,
+        ),
         FactBinding(
             fact_group="instantaneous_value_definition",
             facts=("source.usgs.instantaneous_value_definition",),
@@ -401,11 +453,25 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py", "project_station_metadata"),
     ("src/rivretrieve/_internal/assembly.py", "assemble"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/config.py", "config"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "modern_source_descriptions"),
 )
 
 
-# Additional retained declarations used by these source facts; not original-body claims.
-CATALOGUE_SUPPORTING_INPUTS = {}
+# Retained source documents and acquisition receipts used by these source facts.
+CATALOGUE_SUPPORTING_INPUTS = {
+    "source.usgs.sitefile_altitude_definition": (
+        "maintenance/catalogue/station_metadata/sources/usgs_nwis/nwis-sitefile-manual/body",
+        "maintenance/catalogue/station_metadata/sources/usgs_nwis/nwis-sitefile-manual/receipt.json",
+    ),
+    "source.usgs.sitefile_altitude_datum_definition": (
+        "maintenance/catalogue/station_metadata/sources/usgs_nwis/nwis-sitefile-manual/body",
+        "maintenance/catalogue/station_metadata/sources/usgs_nwis/nwis-sitefile-manual/receipt.json",
+    ),
+    "source.usgs.sitefile_drainage_area_definitions": (
+        "maintenance/catalogue/station_metadata/sources/usgs_nwis/nwis-sitefile-manual/body",
+        "maintenance/catalogue/station_metadata/sources/usgs_nwis/nwis-sitefile-manual/receipt.json",
+    ),
+}

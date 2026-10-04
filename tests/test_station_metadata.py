@@ -273,7 +273,8 @@ def test_blank_names_and_repeated_equal_names(values, expected):
         (pl.Boolean, [True, False, True, None]),
     ],
 )
-def test_projector_preserves_native_scalar_types(dtype, values):
+@pytest.mark.parametrize("role", ["drainage_area", "elevation"])
+def test_projector_preserves_native_scalar_types(dtype, values, role):
     from datetime import UTC, datetime
 
     from rivretrieve._internal.catalogue_origins import Field, NativeColumn
@@ -295,15 +296,15 @@ def test_projector_preserves_native_scalar_types(dtype, values):
         native,
         stations,
         Field(NativeColumn("id")),
-        (MetadataField("drainage_area", "area", "source unit"),),
+        (MetadataField(role, "area", "source unit"),),
     )
-    areas = result.filter(pl.col("attribute_role") == "drainage_area")
+    areas = result.filter(pl.col("attribute_role") == role)
     decoded = [None if item is None else json.loads(item) for item in areas["source_value"]]
     restored = pl.DataFrame({"id": areas["station_id"], "area": pl.Series(decoded, dtype=dtype)})
     assert_frame_equal(restored, native.data.select("id", "area").filter(pl.col("id") != "outside"))
     assert areas["source_dtype"].to_list() == [str(dtype)] * 4
     assert areas["source_unit"].to_list() == ["source unit"] * 4
-    assert areas["support_fact"].to_list() == ["metadata.drainage_area.area"] * 4
+    assert areas["support_fact"].to_list() == [f"metadata.{role}.area"] * 4
     assert areas["state"].to_list() == ["value"] * 3 + ["source_null"]
     assert result.filter(pl.col("state") == "no_metadata").height == 12
     empty = build_station_metadata("synthetic", native, stations.clear(), Field(NativeColumn("id")), ())
@@ -724,3 +725,98 @@ def test_public_same_native_field_remains_distinct_between_source_scopes(tmp_pat
     pl.concat([*frames, station]).write_parquet(directory / "station_metadata.parquet")
     with pytest.raises(FatalContractError, match="duplicate source fields"):
         rr.metadata(selected)
+
+
+def test_usgs_elevation_scope_keeps_non_usgs_gauges_without_exposing_their_altitudes():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogue_origins import Field, NativeColumn
+    from rivretrieve._internal.catalogues.native import RetrievedAt, stamp_native_table
+    from rivretrieve._internal.providers.usgs_nwis.origins import STATION_METADATA_FIELDS
+    from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
+
+    native = stamp_native_table(
+        pl.DataFrame(
+            {
+                "site_no": ["001", "002", "003", "outside"],
+                "agency_cd": ["USGS", "OTHER", "ANOTHER", "USGS"],
+                "station_nm": ["One", "Two", "Three", "Outside"],
+                "drain_area_va": ["1.0", "2.0", "3.0", "9.0"],
+                "contrib_drain_area_va": ["0", "1.0", "2.0", "8.0"],
+                "alt_va": [" 002.30", "forbidden altitude A", "forbidden altitude B", "outside altitude"],
+                "alt_datum_cd": ["Published code", "forbidden datum A", "forbidden datum B", "outside datum"],
+            }
+        ),
+        RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    stations = pl.DataFrame({"station_id": ["001", "002", "003"]})
+    before = native.data.clone()
+    result = project_station_metadata(native, stations, Field(NativeColumn("site_no")), STATION_METADATA_FIELDS)
+    assert_frame_equal(result.select("station_id").unique().sort("station_id"), stations)
+    expected = pl.DataFrame(
+        [
+            {
+                "provider_id": "usgs_nwis",
+                "station_id": "001",
+                "attribute_role": "elevation",
+                "state": "value",
+                "source_field": "alt_va",
+                "source_value": '" 002.30"',
+                "source_dtype": "String",
+                "source_unit": "feet",
+                "support_fact": "metadata.elevation.alt_va",
+                "source_datum": "Published code",
+                "source_datum_field": "alt_datum_cd",
+                "source_datum_dtype": "String",
+                "datum_support_fact": "metadata.elevation.alt_va.datum",
+            },
+            *(
+                {
+                    "provider_id": "usgs_nwis",
+                    "station_id": station,
+                    "attribute_role": "elevation",
+                    "state": "no_metadata",
+                }
+                for station in ("002", "003")
+            ),
+        ],
+        schema=SOURCE_METADATA_SCHEMA,
+    )
+    assert_frame_equal(result.filter(pl.col("attribute_role") == "elevation"), expected)
+    baseline = result.filter(pl.col("attribute_role") == "drainage_area")
+    assert baseline["station_id"].to_list() == ["001", "001", "002", "002", "003", "003"]
+    assert baseline["source_value"].to_list() == ['"0"', '"1.0"', '"1.0"', '"2.0"', '"2.0"', '"3.0"']
+    assert baseline["source_unit"].to_list() == ["sq mi"] * 6
+    assert result.filter(pl.col("attribute_role") == "station_name")["source_value"].to_list() == [
+        '"One"',
+        '"Two"',
+        '"Three"',
+    ]
+    assert_frame_equal(native.data, before)
+
+
+@pytest.mark.parametrize("provider", ["no_nve", "ca_eccc", "usgs_nwis"])
+def test_metadata_definitions_resolve_adopted_nonruntime_source_support(provider):
+    from importlib import import_module
+
+    origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
+    provenance = origins.build_acquisition_provenance()
+    direct = {
+        fact: binding
+        for binding in provenance.fact_bindings
+        if binding.transformation is None
+        for fact in binding.facts
+    }
+    acquisitions = {
+        (source.source_id, item.acquisition_id): item
+        for source in provenance.source_records
+        for item in source.acquisitions
+    }
+    facts = {fact for field in origins.STATION_METADATA_FIELDS for fact in (*field.support_facts, *field.datum_support)}
+    assert facts
+    for fact in facts:
+        binding = direct[fact]
+        acquisition = acquisitions[(binding.source_id, binding.acquisition_id)]
+        assert acquisition.method != "runtime_http_request"
+        assert acquisition.instant_type != "runtime"
+        assert origins.CATALOGUE_SUPPORTING_INPUTS[fact]

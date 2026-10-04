@@ -17,7 +17,7 @@ from typing import cast
 import polars as pl
 
 from rivretrieve._internal.acquisition_provenance import CatalogueBuildInputs, verify_provenance_recordings
-from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
+from rivretrieve._internal.catalogue_origins import Field, OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
     NativeTable,
@@ -1007,6 +1007,14 @@ def write_catalogue(
     locations = monitoring_locations(NativeTable(catalogue.source_native))
     descriptions = modern_source_descriptions(features, locations)
     provenance = build_modern_acquisition_provenance(receipts, catalogue.modern_metadata)
+    from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
+
+    station_origin = STATION_CATALOGUE_ORIGINS["station_id"]
+    if not isinstance(station_origin, Field):
+        raise FatalContractError("USGS metadata requires a native station identity field")
+    station_metadata = project_station_metadata(
+        native_table, catalogue.stations, station_origin, STATION_METADATA_FIELDS
+    )
     metadata = build_catalogue_metadata(
         provenance,
         (STATION_CATALOGUE_ORIGINS,),
@@ -1015,6 +1023,11 @@ def write_catalogue(
         build_inputs=build_inputs,
         native_table=native_table,
         metadata_fields=STATION_METADATA_FIELDS,
+        station_metadata=station_metadata,
+        metadata_implementation=(
+            "src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py",
+            "project_station_metadata",
+        ),
         station_metadata_notice=STATION_METADATA_NOTICE,
     )
     from rivretrieve._internal.catalogues.source_series import decode_source_descriptions, encode_source_descriptions

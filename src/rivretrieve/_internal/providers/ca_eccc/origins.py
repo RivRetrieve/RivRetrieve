@@ -39,9 +39,15 @@ STATION_METADATA_NOTICE = (
     "publication of this projection: RivRetrieve."
 )
 
+_DRAINAGE_AREA_SUPPORT = (
+    "source.station.hydat_drainage_area_definitions",
+    "source.station.geomet_hydat_field_mapping",
+    "source.provider.geomet_source_project",
+)
+
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
-    MetadataField("drainage_area", "DRAINAGE_AREA_GROSS"),
-    MetadataField("drainage_area", "DRAINAGE_AREA_EFFECT"),
+    MetadataField("drainage_area", "DRAINAGE_AREA_GROSS", "km2", support_facts=_DRAINAGE_AREA_SUPPORT),
+    MetadataField("drainage_area", "DRAINAGE_AREA_EFFECT", "km2", support_facts=_DRAINAGE_AREA_SUPPORT),
     MetadataField("station_name", "STATION_NAME"),
 )
 
@@ -79,6 +85,30 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         media_type="text/html; charset=UTF-8",
         sha256="0b64429355f7114725ddae6a77ceb53c19709f13a0e0b43d8dbb0f9a9958311d",
     )
+    hydat_definition = RecordingReference(
+        recording_id="ca_eccc-hydat-field-definition-body",
+        repository_path="maintenance/catalogue/station_metadata/sources/ca_eccc/hydat-field-definition/body",
+        source_url="https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/HYDAT_Definition_EN.pdf",
+        retrieved_at=datetime.fromisoformat("2026-10-04T10:20:43.548131+00:00"),
+        media_type="application/pdf",
+        sha256="b3ab1954bf5aeedb026cebe939764fcfbda0266fb267cb6a7315544c9be8e1ee",
+    )
+    geomet_loader = RecordingReference(
+        recording_id="ca_eccc-publisher-hydat-geomet-loader-body",
+        repository_path="maintenance/catalogue/station_metadata/sources/ca_eccc/publisher-hydat-geomet-loader/body",
+        source_url="https://raw.githubusercontent.com/ECCC-MSC/msc-pygeoapi/dec207e47bc34d060319ded4cf855d5d909de635/msc_pygeoapi/loader/hydat.py",
+        retrieved_at=datetime.fromisoformat("2026-10-04T10:23:09.914010+00:00"),
+        media_type="text/plain; charset=utf-8",
+        sha256="e879b6024f6136d76945a157e32b2afcaec93be0f4bbd982c3655bf2804deb92",
+    )
+    geomet_project = RecordingReference(
+        recording_id="ca_eccc-geomet-government-landing-body",
+        repository_path="maintenance/catalogue/station_metadata/sources/ca_eccc/geomet-government-landing/body",
+        source_url="https://api.weather.gc.ca/?f=html",
+        retrieved_at=datetime.fromisoformat("2026-10-04T10:23:30.682406+00:00"),
+        media_type="text/html",
+        sha256="f1ce6e8615936b0aff99e685ad105803fb8072f8b4a12797733cfcb3b09e44e0",
+    )
     station_facts = (
         "source.provider.canonical_identity",
         "source.station.native_identity",
@@ -110,6 +140,33 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                 operator="MSC GeoMet",
                 acquisitions=(
                     AcquisitionRecord(
+                        acquisition_id="ca_eccc-hydat-field-definition",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="HYDAT station-field definitions and drainage-area units",
+                        requested_from=(hydat_definition.source_url,),
+                        retrieved_at_start=hydat_definition.retrieved_at,
+                        recording_ids=(hydat_definition.recording_id,),
+                    ),
+                    AcquisitionRecord(
+                        acquisition_id="ca_eccc-publisher-hydat-geomet-loader",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Publisher field mapping from HYDAT stations to GeoMet station properties",
+                        requested_from=(geomet_loader.source_url,),
+                        retrieved_at_start=geomet_loader.retrieved_at,
+                        recording_ids=(geomet_loader.recording_id,),
+                    ),
+                    AcquisitionRecord(
+                        acquisition_id="ca_eccc-geomet-government-landing",
+                        method="http_request",
+                        instant_type="retrieval",
+                        description="Government identification of the GeoMet source project",
+                        requested_from=(geomet_project.source_url,),
+                        retrieved_at_start=geomet_project.retrieved_at,
+                        recording_ids=(geomet_project.recording_id,),
+                    ),
+                    AcquisitionRecord(
                         acquisition_id="station_registry_capture_2026_08_02",
                         method="http_campaign",
                         instant_type="retrieval_interval",
@@ -131,6 +188,21 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
                     ),
                 ),
                 evidence=(
+                    EvidenceReference(
+                        evidence_id=hydat_definition.recording_id,
+                        description="HYDAT station-field definitions and drainage-area units",
+                        recording=hydat_definition,
+                    ),
+                    EvidenceReference(
+                        evidence_id=geomet_loader.recording_id,
+                        description="Publisher field mapping from HYDAT stations to GeoMet station properties",
+                        recording=geomet_loader,
+                    ),
+                    EvidenceReference(
+                        evidence_id=geomet_project.recording_id,
+                        description="Government identification of the GeoMet source project",
+                        recording=geomet_project,
+                    ),
                     EvidenceReference(
                         evidence_id="eccc_data_server_licence",
                         description="ECCC Data Servers End-use Licence",
@@ -189,6 +261,24 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         ),
         fact_bindings=(
             FactBinding(
+                fact_group="hydat_definition",
+                facts=("source.station.hydat_drainage_area_definitions",),
+                source_id="ca_eccc_msc",
+                acquisition_id="ca_eccc-hydat-field-definition",
+            ),
+            FactBinding(
+                fact_group="geomet_loader",
+                facts=("source.station.geomet_hydat_field_mapping",),
+                source_id="ca_eccc_msc",
+                acquisition_id="ca_eccc-publisher-hydat-geomet-loader",
+            ),
+            FactBinding(
+                fact_group="geomet_project",
+                facts=("source.provider.geomet_source_project",),
+                source_id="ca_eccc_msc",
+                acquisition_id="ca_eccc-geomet-government-landing",
+            ),
+            FactBinding(
                 fact_group="msc_licence_statement",
                 facts=("source.provider.license_statement",),
                 source_id="ca_eccc_msc",
@@ -227,6 +317,7 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
             ),
         ),
         fact_universe=station_facts
+        + _DRAINAGE_AREA_SUPPORT
         + obs_facts
         + canonical_observation_facts
         + ("source.provider.license_statement", "source.provider.citation_statement"),
@@ -321,8 +412,21 @@ CATALOGUE_BUILD_DECLARATIONS = (
 )
 
 
-# Additional retained declarations used by these source facts; not original-body claims.
-CATALOGUE_SUPPORTING_INPUTS = {}
+# Retained source documents and acquisition receipts used by these source facts.
+CATALOGUE_SUPPORTING_INPUTS = {
+    "source.station.hydat_drainage_area_definitions": (
+        "maintenance/catalogue/station_metadata/sources/ca_eccc/hydat-field-definition/body",
+        "maintenance/catalogue/station_metadata/sources/ca_eccc/hydat-field-definition/receipt.json",
+    ),
+    "source.station.geomet_hydat_field_mapping": (
+        "maintenance/catalogue/station_metadata/sources/ca_eccc/publisher-hydat-geomet-loader/body",
+        "maintenance/catalogue/station_metadata/sources/ca_eccc/publisher-hydat-geomet-loader/receipt.json",
+    ),
+    "source.provider.geomet_source_project": (
+        "maintenance/catalogue/station_metadata/sources/ca_eccc/geomet-government-landing/body",
+        "maintenance/catalogue/station_metadata/sources/ca_eccc/geomet-government-landing/receipt.json",
+    ),
+}
 
 
 # Exact observation operation responsibility; catalogue publication does not run it.
