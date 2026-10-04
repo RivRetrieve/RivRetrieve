@@ -820,3 +820,61 @@ def test_metadata_definitions_resolve_adopted_nonruntime_source_support(provider
         assert acquisition.method != "runtime_http_request"
         assert acquisition.instant_type != "runtime"
         assert origins.CATALOGUE_SUPPORTING_INPUTS[fact]
+
+
+def test_ana_elevation_context_keeps_its_existing_inventory_acquisition():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.acquisition_provenance import NativeTableIdentity
+    from rivretrieve._internal.providers.br_ana.capture import CapturedInventoryResponse, InventoryCapture
+    from rivretrieve._internal.providers.br_ana.inventory import BRAZILIAN_UNITS, INVENTORY_URL
+    from rivretrieve._internal.providers.br_ana.origins import STATION_METADATA_FIELDS, build_acquisition_provenance
+
+    requests = [(f"inventory_UF_{unit}", {"Unidade Federativa": unit}) for unit in BRAZILIAN_UNITS]
+    requests += [(f"inventory_basin_{basin}", {"Código da Bacia": basin}) for basin in range(1, 10)]
+    responses = tuple(
+        CapturedInventoryResponse(
+            recording_id=identity,
+            repository_path=f"synthetic/{identity}.json.xz",
+            recording_sha256="a" * 64,
+            recording_byte_size=1,
+            requested_url=INVENTORY_URL,
+            parameters=parameters,
+            retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+            media_type="application/json",
+            payload_sha256="b" * 64,
+            byte_size=1,
+            row_count=1,
+            distinct_station_count=1,
+        )
+        for identity, parameters in requests
+    )
+    capture = InventoryCapture(
+        schema_version=1,
+        responses=responses,
+        native_table=NativeTableIdentity(
+            repository_path="synthetic/native.parquet", revision="c" * 40, sha256="d" * 64
+        ),
+        response_row_count=36,
+        distinct_station_count=1,
+        fluviometric_station_count=1,
+        pluviometric_station_count=0,
+        canonicalization=("synthetic union",),
+        population_scope="Synthetic inventory",
+        attempt_record_paths=(),
+        supporting_evidence=(),
+    )
+    provenance = build_acquisition_provenance(capture)
+    fact = "source.ana.station_elevation_field_context"
+    binding = next(binding for binding in provenance.fact_bindings if fact in binding.facts)
+    assert binding.acquisition_id == "inventory_UF_AM"
+    assert binding.source_id == "br_ana.hidro_inventory"
+    field = next(field for field in STATION_METADATA_FIELDS if field.attribute_role == "elevation")
+    assert (field.source_field, field.source_unit, field.datum, field.datum_field) == ("Altitude", None, None, None)
+    assert field.support_facts == (fact,)
+    assert all(
+        reference.fact != fact
+        for binding in provenance.fact_bindings
+        if binding.transformation is not None
+        for reference in binding.transformation.external_inputs
+    )
