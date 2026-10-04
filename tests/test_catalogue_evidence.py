@@ -349,6 +349,144 @@ def test_v3_parse_never_constructs_old_national_models(monkeypatch):
     plt.assert_frame_equal(parsed.facts, evidence.facts)
 
 
+def _assert_metadata_source_extensions_and_restore_original(provenance):
+    """Remove only reviewed metadata source additions, not historical assertions.
+
+    These expectations describe published provenance, not retained source bodies.
+    The immutable ordered digest below still checks every surviving source value.
+    """
+    model = provenance.model_dump(mode="json")
+    if provenance.provider_id == "jp_mlit":
+        expected_binding = {
+            "acquisition_id": "station_zero_point_definition_capture_2026_08_02",
+            "fact_group": "mlit_station_zero_point_elevation_definition",
+            "facts": ["source.station.mlit_zero_point_elevation_definition"],
+            "source_id": "jp_mlit",
+        }
+        expected_acquisition = {
+            "acquisition_id": "station_zero_point_definition_capture_2026_08_02",
+            "description": "Original MLIT station-detail recording exposing the zero-point elevation field",
+            "instant_type": "retrieval",
+            "material": None,
+            "method": "http_request",
+            "recording_ids": ["jp_mlit_site_info_detail_301011281104010"],
+            "requested_from": ["http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010"],
+            "retrieved_at_end": None,
+            "retrieved_at_start": "2026-08-02T19:35:42Z",
+        }
+        expected_evidence = {
+            "description": "Original station-detail field context for 零点高; no separate global unit or datum",
+            "evidence_id": "jp_mlit_station_zero_point_definition",
+            "recording": {
+                "media_type": "text/html; charset=EUC-JP",
+                "recording_id": "jp_mlit_site_info_detail_301011281104010",
+                "repository_path": "tests/test_data/jp_mlit_site_info_detail_301011281104010.html",
+                "retrieved_at": "2026-08-02T19:35:42Z",
+                "sha256": "81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9",
+                "source_url": "http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010",
+            },
+        }
+        (source,) = model["source_records"]
+        assert source["source_id"] == "jp_mlit"
+        assert source["acquisitions"].pop(0) == expected_acquisition
+        assert source["evidence"].pop(0) == expected_evidence
+        offset = 8
+    elif provenance.provider_id == "no_nve":
+        expected_binding = {
+            "acquisition_id": "station_schema_capture_2026_09_04",
+            "fact_group": "station_metadata_definitions",
+            "facts": [
+                "source.station_catalogue.masl_definition",
+                "source.station_catalogue.reservoirName_definition",
+                "source.station_catalogue.transferAreaIn_definition",
+                "source.station_catalogue.transferAreaOut_definition",
+            ],
+            "source_id": "no_nve.nve_hydapi",
+        }
+        offset = 6
+    else:
+        return provenance
+    assert model["fact_bindings"].pop(0) == expected_binding
+    facts = expected_binding["facts"]
+    assert model["fact_universe"][offset : offset + len(facts)] == facts
+    del model["fact_universe"][offset : offset + len(facts)]
+    return AcquisitionProvenance.model_validate(model)
+
+
+@pytest.mark.parametrize("provider", ["ba_fhmzbih", "ch_foen", "fr_hubeau", "pl_imgw", "usgs_nwis"])
+def test_historical_projection_preserves_sources_and_validates_metadata(provider):
+    original = _legacy(provider)
+    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    projected = historical_source_provenance(original, metadata)
+    assert projected.source_records == original.source_records
+    assert not any(fact.startswith("metadata.") for fact in projected.fact_universe)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["producer", "declaration", "support", "review_owner", "review_path", "review_revision", "review_symbol"],
+)
+def test_historical_projection_rejects_changed_metadata_lineage(mutation):
+    original = _legacy("no_nve")
+    metadata = pl.read_parquet(ROOT / "no_nve/catalogue/station_metadata.parquet")
+    payload = original.model_dump(mode="json")
+    transformation = next(
+        item["transformation"] for item in payload["fact_bindings"] if item["fact_group"] == "metadata.elevation.masl"
+    )
+    if mutation == "producer":
+        transformation["executable"]["symbol"] = "other_projection"
+    elif mutation == "declaration":
+        transformation["declaration"] = payload["build_inputs"]["declarations"][1]
+    elif mutation == "support":
+        transformation["external_inputs"].pop()
+    elif mutation == "review_owner":
+        payload["build_inputs"]["declarations"][0]["repository"] = payload["build_inputs"]["build"]["repository"]
+    elif mutation == "review_path":
+        payload["build_inputs"]["declarations"][0]["repository_path"] = "declarations/station_metadata/other.json"
+    elif mutation == "review_revision":
+        payload["build_inputs"]["declarations"][0]["revision"] = "a" * 40
+    else:
+        payload["build_inputs"]["declarations"][0]["symbol"] = "partial_review"
+    with pytest.raises((AssertionError, ValueError)):
+        historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
+
+
+@pytest.mark.parametrize("mutation", ["datum_support", "scope"])
+def test_historical_projection_rejects_changed_datum_or_scope(mutation):
+    from rivretrieve._internal.issues import FatalContractError
+
+    original = _legacy("ch_foen")
+    metadata = pl.read_parquet(ROOT / "ch_foen/catalogue/station_metadata.parquet")
+    payload = original.model_dump(mode="json")
+    if mutation == "datum_support":
+        transformation = next(
+            item["transformation"]
+            for item in payload["fact_bindings"]
+            if item["fact_group"] == "metadata.elevation.station_page.Station altitude.datum"
+        )
+        transformation["external_inputs"].pop()
+    else:
+        metadata = metadata.with_columns(pl.lit("other_scope").alias("source_scope"))
+    with pytest.raises((AssertionError, ValueError, FatalContractError)):
+        historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
+
+
+@pytest.mark.parametrize("mutation", ["binding", "acquisition", "recording"])
+def test_historical_restoration_rejects_changed_metadata_source_extension(mutation):
+    original = _legacy("jp_mlit")
+    metadata = pl.read_parquet(ROOT / "jp_mlit/catalogue/station_metadata.parquet")
+    projected = historical_source_provenance(original, metadata)
+    payload = projected.model_dump(mode="json")
+    if mutation == "binding":
+        payload["fact_bindings"][0]["fact_group"] = "other_definition"
+    elif mutation == "acquisition":
+        payload["source_records"][0]["acquisitions"][0]["description"] = "changed witness"
+    else:
+        payload["source_records"][0]["evidence"][0]["recording"]["sha256"] = "a" * 64
+    with pytest.raises(AssertionError):
+        _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
+
+
 # Brazil has new adopted-product acquisitions after this migration oracle.
 # Its current evidence still passes the all-provider lossless roundtrip above;
 # source-material and per-pair assertions live in test_br_ana_catalogue_telemetry.
@@ -990,6 +1128,7 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(request: p
         restored = historical_source_provenance(
             restored, pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
         )
+    restored = _assert_metadata_source_extensions_and_restore_original(restored)
     if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
         restored = _assert_field_source_lineage_repair_and_restore_original(retained_evidence_root, restored)
     if provider == "ch_foen":

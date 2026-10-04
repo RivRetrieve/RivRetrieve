@@ -277,8 +277,9 @@ def test_public_statement_rejects_recording_claimed_by_an_unrelated_acquisition(
     document = _document("jp_mlit")
     statement = document["source_records"][0]["statements"][0]
     statement["fact"] = "source.provider.license_terms"
-    license_acquisition = document["source_records"][0]["acquisitions"][1]
-    unrelated = document["source_records"][0]["acquisitions"][2]
+    acquisitions = {item["acquisition_id"]: item for item in document["source_records"][0]["acquisitions"]}
+    license_acquisition = acquisitions["license_terms_capture_2026_08_21"]
+    unrelated = acquisitions["citation_terms_capture_2026_08_21"]
     unrelated["recording_ids"].append(statement["recording_id"])
     license_acquisition["recording_ids"].remove(statement["recording_id"])
     with pytest.raises(ValidationError, match="statement recording must be claimed by its fact acquisition"):

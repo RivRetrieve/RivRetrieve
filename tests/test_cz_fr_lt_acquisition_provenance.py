@@ -177,14 +177,21 @@ def test_native_cli_rejects_raw_byte_substitution(
 
 
 def test_france_binds_official_publication_without_original_producer_overclaims() -> None:
-    provenance = rr.find(provider="fr_hubeau").acquisition_provenance[0]
+    selected = rr.find(provider="fr_hubeau")
+    provenance = selected.acquisition_provenance[0]
     assert provenance is not None
     provenance = legacy_provenance(provenance)
     assert not provenance.withheld_facts
     bound_station_facts = {
-        fact for binding in provenance.fact_bindings for fact in binding.facts if fact.startswith("source.station.")
+        fact
+        for binding in provenance.fact_bindings
+        for fact in binding.facts
+        if fact.startswith("source.station.") and fact.endswith(".identity_location_crs")
     }
     assert len(bound_station_facts) == 7347
+    assert bound_station_facts == {
+        f"source.station.{station}.identity_location_crs" for station in rr.as_frame(selected)["station_id"].unique()
+    }
     assert {source.source_id for source in provenance.source_records} == {"fr_hubeau"}
     acquisitions = {
         (source.source_id, acquisition.acquisition_id): acquisition
