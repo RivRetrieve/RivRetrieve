@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 
 import polars as pl
 
@@ -55,6 +56,43 @@ _INTEGER_BOUNDS = {
 }
 SOURCE_DATUM_DTYPES = frozenset({"String", *_INTEGER_BOUNDS})
 SOURCE_SCALAR_DTYPES = frozenset({"String", "Boolean", "Float32", "Float64", *_INTEGER_BOUNDS})
+
+
+# Only these source fields have reviewed inline-unit summary presentation.
+_INLINE_QUANTITY_FIELDS = {
+    ("jp_mlit", "drainage_area", None, "流域面積"): ("km2", "km2"),
+    ("jp_mlit", "elevation", None, "零点高"): ("m", "m"),
+    ("ba_fhmzbih", "drainage_area", None, "metadata_CATCHMENT_SIZE"): ("km²", "km²"),
+    ("ch_foen", "drainage_area", "station_page", "Catchment size"): ("km2", "km2"),
+    ("ch_foen", "elevation", "station_page", "Station altitude"): ("m", "m a.s.l."),
+}
+_NUMBER_TEXT = r"[ \t\u00a0]*[+-]?(?:(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?|\.[0-9]+)"
+_SEPARATOR = r"[ \t\u00a0]*"
+
+
+def split_inline_quantity(value: object, suffix: str) -> str | None:
+    """Return unchanged numeric text only when the whole string has the given suffix.
+
+    Decimal signs, leading spaces and grouped thousands remain unchanged.
+    Only horizontal spaces separating or following the suffix are removed.
+    Qualified text, placeholders and non-string scalars do not match.
+    """
+    if not isinstance(value, str):
+        return None
+    match = re.fullmatch(rf"({_NUMBER_TEXT}){_SEPARATOR}{re.escape(suffix)}{_SEPARATOR}", value)
+    return match[1] if match is not None else None
+
+
+def _summary_quantity_value(item: dict) -> str | None:
+    encoded = item["source_value"]
+    key = tuple(item[name] for name in ("provider_id", "attribute_role", "source_scope", "source_field"))
+    rule = _INLINE_QUANTITY_FIELDS.get(key)
+    if rule is not None and encoded is not None and item["source_dtype"] == "String":
+        unit, suffix = rule
+        numeric = split_inline_quantity(json.loads(encoded), suffix)
+        if item["source_unit"] == unit and numeric is not None:
+            return json.dumps(numeric, ensure_ascii=False)
+    return encoded
 
 
 def _scalar(text: str, dtype: str) -> object:
@@ -191,7 +229,7 @@ def station_metadata_frame(stations: pl.DataFrame, source: pl.DataFrame, locatio
                 [
                     json.loads(item["source_value"])
                     if role == "water_body_name" and item["source_value"] is not None
-                    else item["source_value"]
+                    else _summary_quantity_value(item)
                     for item in fields
                 ]
                 if fields

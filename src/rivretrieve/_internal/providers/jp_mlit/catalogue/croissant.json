@@ -78,7 +78,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "d1b90b2d0ca904c76fc2442b500c92ccbab4916f4ac496be17e0932ad4a0190d",
+      "sha256": "79001cf87d14d58bfc51ae38be4ba0b45f7ac3538f4919c93236745dfae457e1",
       "contentSize": "22540 B"
     },
     {
@@ -150,8 +150,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "station_metadata.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "b5d28fe85fdbd66e41f12e7045b3fe2b91a88beae2d56bc72b564f7b889f8b87",
-      "contentSize": "40946 B"
+      "sha256": "5240aeb88f2bb9a769096653f0a53dceecaac7d980902c34192dcbee8ae1c7c9",
+      "contentSize": "41195 B"
     }
   ],
   "recordSet": [

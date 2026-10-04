@@ -36,7 +36,9 @@ from rivretrieve._internal.catalogues.station_metadata import MetadataField
 
 # Name mappings require genuine-input validation and owner disclosure approval
 # before generated metadata can be packaged. Native presence is insufficient.
-STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (MetadataField("drainage_area", "metadata_CATCHMENT_SIZE"),)
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+    MetadataField("drainage_area", "metadata_CATCHMENT_SIZE", inline_unit="km²"),
+)
 
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("ba_fhmzbih")),

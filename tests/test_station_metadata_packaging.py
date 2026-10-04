@@ -133,6 +133,24 @@ effective = canada.filter(pl.col("source_field") == "DRAINAGE_AREA_EFFECT").row(
 assert effective["source_dtype"] == "Float64"
 assert effective["source_value"] is None
 assert effective["state"] == "source_null"
+for provider, station, role, field, raw, numeric, unit, datum in [
+    ("jp_mlit", "301011281104010", "drainage_area", "流域面積", "142.00km2", "142.00", "km2", None),
+    ("jp_mlit", "301011281104010", "elevation", "零点高", "0.000m", "0.000", "m", None),
+    ("ba_fhmzbih", "4024", "drainage_area", "metadata_CATCHMENT_SIZE", "1600.00 km²", "1600.00", "km²", None),
+    ("ch_foen", "2004", "drainage_area", "Catchment size", "713 km2", "713", "km2", None),
+    ("ch_foen", "2004", "elevation", "Station altitude", "432 m a.s.l.", "432", "m", "LN02"),
+]:
+    gauge = rr.find(provider=provider, station=station)
+    source = rr.metadata(gauge, view="source").filter(pl.col("source_field") == field).row(0, named=True)
+    summary = rr.metadata(gauge).row(0, named=True)
+    index = summary[f"{role}_field"].index(field)
+    assert json.loads(source["source_value"]) == raw
+    assert source["source_dtype"] == "String"
+    assert summary[f"{role}_value"][index] == json.dumps(numeric)
+    assert summary[f"{role}_unit"][index] == source["source_unit"] == unit
+    if role == "elevation":
+        assert summary["elevation_datum"][index] == source["source_datum"] == datum
+
 empty = rr.pick(rr.pick(selection, quantity="discharge"), quantity="stage")
 assert_frame_equal(rr.metadata(empty, view="source"), pl.DataFrame(schema=schema))
 """

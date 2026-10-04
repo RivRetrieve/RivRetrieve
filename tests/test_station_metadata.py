@@ -953,3 +953,187 @@ def test_mlit_zero_point_keeps_inline_text_without_inventing_unit_or_datum(value
         schema=SOURCE_METADATA_SCHEMA,
     )
     assert_frame_equal(projected, expected)
+
+
+_INLINE_FIELDS = [
+    ("jp_mlit", "流域面積", "drainage_area", "km2", "km2", None),
+    ("jp_mlit", "零点高", "elevation", "m", "m", None),
+    ("ba_fhmzbih", "metadata_CATCHMENT_SIZE", "drainage_area", "km²", "km²", None),
+    ("ch_foen", "Catchment size", "drainage_area", "km2", "km2", None),
+    ("ch_foen", "Station altitude", "elevation", "m", "m a.s.l.", "LN02"),
+]
+
+
+@pytest.mark.parametrize("provider,name,role,unit,suffix,datum", _INLINE_FIELDS)
+def test_inline_quantities_preserve_source_scalars_and_clean_only_complete_values(
+    provider, name, role, unit, suffix, datum
+):
+    from datetime import UTC, datetime
+    from importlib import import_module
+
+    from rivretrieve._internal.catalogue_origins import Field, NativeColumn
+    from rivretrieve._internal.catalogues.native import RetrievedAt, stamp_native_table
+    from rivretrieve._internal.catalogues.station_metadata import build_station_metadata, validate_metadata_fields
+
+    field = next(
+        item
+        for item in import_module(f"rivretrieve._internal.providers.{provider}.origins").STATION_METADATA_FIELDS
+        if item.source_field == name
+    )
+    # Each pair is an independent expected spelling, not a second parser.
+    pairs = [
+        (f"142.00{suffix}", "142.00"),
+        (f"0.000 {suffix}", "0.000"),
+        (f"+1,719.00 {suffix}", "+1,719.00"),
+        (f"-1,234,567.080\u00a0{suffix}", "-1,234,567.080"),
+        (f" 001.20 {suffix}", " 001.20"),
+        (f"-.5\t{suffix} \u00a0", "-.5"),
+        (f"10000000 {suffix}", "10000000"),
+    ]
+    unchanged = [
+        None,
+        "",
+        " \u00a0",
+        "ND",
+        "0",
+        "1.20",
+        f"T.P. +1.230 {suffix}",
+        f"1 {suffix} estimated",
+        f"about 1 {suffix}",
+        f"1-2 {suffix}",
+        f"1,71.00 {suffix}",
+        f"1,2345 {suffix}",
+        f"1.2.3 {suffix}",
+        f"1e3 {suffix}",
+        f"NaN {suffix}",
+        f"inf {suffix}",
+        f"1 {suffix}\n",
+        f"1 {suffix}/{suffix}",
+        "1 unknown",  # No partial stripping or guessed unit.
+    ]
+    values = [value for value, _ in pairs] + unchanged
+    expected_values = [value for _, value in pairs] + unchanged
+    ids = [f"{index:03}" for index in range(len(values))]
+    native = stamp_native_table(
+        pl.DataFrame({"id": ids, name: pl.Series(values, dtype=pl.String)}),
+        RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    before = native.data.clone()
+    projected = build_station_metadata(
+        provider, native, pl.DataFrame({"station_id": ids}), Field(NativeColumn("id")), (field,)
+    )
+    validate_metadata_fields(projected, (field,))
+    keys = projected.select("provider_id", "station_id").unique()
+    source = source_metadata_frame(keys, projected)
+    actual = source.filter(pl.col("attribute_role") == role)
+
+    def encode(value):
+        return None if value is None else json.dumps(value, ensure_ascii=False)
+
+    assert actual["source_value"].to_list() == [encode(value) for value in values]
+    assert actual["source_dtype"].to_list() == ["String"] * len(values)
+    assert actual["state"].to_list() == ["source_null" if value is None else "value" for value in values]
+    expected_units = [unit] * len(values) if provider == "ch_foen" else [unit] * len(pairs) + [None] * len(unchanged)
+    assert actual["source_unit"].to_list() == expected_units
+    summary = station_metadata_frame(keys, source, pl.DataFrame())
+    assert summary[f"{role}_value"].to_list() == [[encode(value)] for value in expected_values]
+    assert summary[f"{role}_unit"].to_list() == [[value] for value in expected_units]
+    assert summary[f"{role}_field"].to_list() == [[name]] * len(values)
+    if role == "elevation":
+        assert summary["elevation_datum"].to_list() == [[datum]] * len(values)
+    for absent in {"drainage_area", "elevation", "water_body_name"} - {role}:
+        assert summary[f"{absent}_field"].to_list() == [None] * len(values)
+    assert_frame_equal(native.data, before)
+    assert_frame_equal(source_metadata_frame(keys, projected), source)
+    # Corruption must be caught for a populated row, a blank and a named null.
+    for index in (0, len(pairs), len(pairs) + 1):
+        corrupt = projected.with_columns(
+            pl.when((pl.col("station_id") == ids[index]) & (pl.col("attribute_role") == role))
+            .then(pl.lit("invented"))
+            .otherwise(pl.col("source_unit"))
+            .alias("source_unit")
+        )
+        with pytest.raises(FatalContractError, match="declaration"):
+            validate_metadata_fields(corrupt, (field,))
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"provider_id": "other"},
+        {"source_field": "other"},
+        {"source_scope": "other"},
+        {"attribute_role": "elevation"},
+        {"source_unit": None},
+        {"source_unit": "km²"},
+        {"source_value": "142.0", "source_dtype": "Float64"},
+    ],
+)
+def test_inline_summary_cleanup_does_not_expand_to_other_fields_or_scalars(change):
+    item = {
+        "provider_id": "jp_mlit",
+        "station_id": "001",
+        "attribute_role": "drainage_area",
+        "source_field": "流域面積",
+        "source_scope": None,
+        "source_unit": "km2",
+        "source_value": '"142.00km2"',
+        "source_dtype": "String",
+        "state": "value",
+        "support_fact": "synthetic",
+        **change,
+    }
+    source = pl.DataFrame([item], schema=SOURCE_METADATA_SCHEMA)
+    keys = source.select("provider_id", "station_id")
+    summary = station_metadata_frame(keys, source, pl.DataFrame())
+    assert summary[f"{item['attribute_role']}_value"].to_list() == [[item["source_value"]]]
+    assert summary[f"{item['attribute_role']}_unit"].to_list() == [[item["source_unit"]]]
+
+
+@pytest.mark.parametrize(
+    "role,kwargs",
+    [
+        ("drainage_area", {"inline_unit": "unknown"}),
+        ("drainage_area", {"inline_unit": "km2", "source_unit": "km2"}),
+        ("station_name", {"inline_unit": "m"}),
+        ("water_body_name", {"inline_unit": "m"}),
+    ],
+)
+def test_inline_unit_declarations_reject_conflicting_or_nonquantity_units(role, kwargs):
+    from rivretrieve._internal.catalogues.station_metadata import MetadataField
+
+    with pytest.raises(ValueError, match="inline unit"):
+        MetadataField(role, "field", **kwargs)
+
+
+@pytest.mark.parametrize(
+    "provider,station,field,role,raw,numeric,unit,datum",
+    [
+        ("jp_mlit", "301011281104010", "流域面積", "drainage_area", "142.00km2", "142.00", "km2", None),
+        ("jp_mlit", "301011281104010", "零点高", "elevation", "0.000m", "0.000", "m", None),
+        ("ba_fhmzbih", "4024", "metadata_CATCHMENT_SIZE", "drainage_area", "1600.00 km²", "1600.00", "km²", None),
+        ("ch_foen", "2004", "Catchment size", "drainage_area", "713 km2", "713", "km2", None),
+        ("ch_foen", "2004", "Station altitude", "elevation", "432 m a.s.l.", "432", "m", "LN02"),
+    ],
+)
+def test_public_inline_quantity_examples_are_offline(
+    provider, station, field, role, raw, numeric, unit, datum, monkeypatch
+):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Metadata must remain offline")
+
+    monkeypatch.setattr(socket.socket, "connect", forbidden)
+    monkeypatch.setattr(discovery, "_resolve_credentials", forbidden)
+    monkeypatch.setattr(discovery, "dotenv_values", forbidden)
+    selected = rr.find(provider=provider, station=station)
+    source = rr.metadata(selected, view="source").filter(pl.col("source_field") == field)
+    assert source["source_value"].item() == json.dumps(raw, ensure_ascii=False)
+    assert source["source_dtype"].item() == "String"
+    assert source["source_unit"].item() == unit
+    summary = rr.metadata(selected).row(0, named=True)
+    index = summary[f"{role}_field"].index(field)
+    assert summary[f"{role}_value"][index] == json.dumps(numeric)
+    assert json.loads(summary[f"{role}_value"][index]) == numeric
+    assert summary[f"{role}_unit"][index] == unit
+    if role == "elevation":
+        assert summary["elevation_datum"][index] == source["source_datum"].item() == datum

@@ -681,6 +681,12 @@ def metadata(selection: _Selection, *, view: str = "summary") -> pl.DataFrame:
         separate entries. Water-body names are
         decoded strings. Area and elevation values remain JSON scalar text:
         json.loads distinguishes numbers from numeric-looking source strings.
+        In the supported Japanese, Bosnian and Swiss quantity fields, complete
+        numeric strings with explicit units keep their numeric text separately
+        from the unit. For example, '"142.00km2"' becomes '"142.00"' with unit
+        'km2'. Numeric spelling is preserved and still needs parsing for arithmetic.
+        Qualified or unrecognised text stays unchanged. The source view always
+        retains the exact original scalar.
         Units and datum labels or codes are plain strings. Unknowns remain null.
         No exposed fields gives null list cells; exposed null fields give named
         entries with null values. Blanks, whitespace, equal values in different
