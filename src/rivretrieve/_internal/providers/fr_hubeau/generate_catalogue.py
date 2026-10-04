@@ -26,6 +26,7 @@ from rivretrieve._internal.acquisition_provenance import (
     EvidenceReference,
     MaterialIdentity,
     NativeTableIdentity,
+    RetainedInputReceipt,
     verify_provenance_recordings,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
@@ -63,6 +64,14 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
     Projection31PreconditionError,
     build_acquisition_provenance,
     hydrometry_coordinates,
+    station_metadata_fields,
+    with_station_metadata_sources,
+)
+from rivretrieve._internal.providers.fr_hubeau.station_metadata import (
+    StationMetadataSources,
+    project_station_metadata,
+    read_station_metadata_sources,
+    verify_adopted_station_metadata,
 )
 
 
@@ -692,12 +701,20 @@ NATIVE_SCHEMA = pl.Schema(
 
 @dataclass(frozen=True)
 class GeneratedFrHubeauCatalogue:
+    """Canonical products and optional source-scoped station metadata.
+
+    Without ``metadata_sources``, ``station_metadata`` is None. Such a result can
+    validate canonical products, but publication requires the original site inputs.
+    """
+
     provider_info: dict[str, object]
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
     acquisition_provenance: AcquisitionProvenance
     public_artifact: PackagedCatalogArtifact
+    station_metadata: pl.DataFrame | None = None
+    metadata_sources: StationMetadataSources | None = None
 
 
 @dataclass(frozen=True)
@@ -957,7 +974,13 @@ def build_catalogue(
     availability: FranceAvailability,
     *,
     native_capture: NativeInventoryCapture | None = None,
+    metadata_sources: StationMetadataSources | None = None,
 ) -> GeneratedFrHubeauCatalogue:
+    """Build canonical products and metadata from explicitly supplied originals.
+
+    Metadata inputs do not change station identity, coordinates or observation
+    products. Omit them only for canonical checks; publication requires them.
+    """
     endpoints = native_table.data["source_endpoint"].unique().sort().to_list()
     expected = frozenset({"hydrometrie/referentiel/stations", "temperature/station"})
     unknown = sorted(value for value in endpoints if value not in expected)
@@ -1001,6 +1024,11 @@ def build_catalogue(
         availability=availability,
         native_capture=native_capture,
     )
+    metadata = None
+    if metadata_sources is not None:
+        acquisition_provenance = with_station_metadata_sources(acquisition_provenance, metadata_sources.site_recordings)
+        fields = station_metadata_fields(tuple(item.recording_id for item in metadata_sources.site_recordings))
+        metadata = project_station_metadata(native_table, stations, metadata_sources, fields)
     artifact = validate_generated_catalogue(provider_info, products, stations, station_products, acquisition_provenance)
     return GeneratedFrHubeauCatalogue(
         provider_info,
@@ -1009,6 +1037,8 @@ def build_catalogue(
         station_products,
         acquisition_provenance,
         artifact,
+        metadata,
+        metadata_sources,
     )
 
 
@@ -1207,12 +1237,16 @@ def write_catalogue(
     from rivretrieve._internal.providers.fr_hubeau.config import config as source_config
     from rivretrieve._internal.providers.fr_hubeau.origins import (
         FRANCE_ORIGIN_DECLARATIONS,
-        STATION_METADATA_FIELDS,
         STATION_METADATA_NOTICE,
     )
 
     if build_inputs is None or native_table is None:
         raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
+
+    if catalogue.metadata_sources is None or catalogue.station_metadata is None:
+        raise FatalContractError("France metadata publication requires its selected original site responses")
+    verify_adopted_station_metadata(catalogue.metadata_sources, build_inputs.inputs)
+    fields = station_metadata_fields(tuple(item.recording_id for item in catalogue.metadata_sources.site_recordings))
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -1230,7 +1264,12 @@ def write_catalogue(
         source_mappings=SERIES_MAPPINGS,
         build_inputs=build_inputs,
         native_table=native_table,
-        metadata_fields=STATION_METADATA_FIELDS,
+        metadata_fields=fields,
+        station_metadata=catalogue.station_metadata,
+        metadata_implementation=(
+            "src/rivretrieve/_internal/providers/fr_hubeau/station_metadata.py",
+            "project_station_metadata",
+        ),
         station_metadata_notice=STATION_METADATA_NOTICE,
     )
     for name, content in metadata.items():
@@ -1273,6 +1312,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--hydro-retrieved-at", type=_parse_retrieved_at)
     parser.add_argument("--temperature-retrieved-at", type=_parse_retrieved_at)
     parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
+    parser.add_argument("--input-receipt", type=Path, help="Independently selected archive input identities JSON.")
     args = parser.parse_args(argv)
 
     refresh_requested = any(
@@ -1296,9 +1336,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--evidence-root is required for canonical build")
         if args.build_inputs is None:
             parser.error("--out requires --build-inputs")
+        if args.input_receipt is None:
+            parser.error("--out requires --input-receipt")
+        input_receipt = RetainedInputReceipt.model_validate_json(args.input_receipt.read_bytes())
         build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
         availability = decode_availability(lzma.decompress(args.availability_ledger.read_bytes()))
-        from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
+        from rivretrieve._internal.providers.fr_hubeau.origins import (
+            FRANCE_ORIGIN_DECLARATIONS,
+            SITE_METADATA_LINEAGE_SHA256,
+            SITE_METADATA_MANIFEST_SHA256,
+            SITE_METADATA_ROOT,
+        )
+
+        metadata_sources = read_station_metadata_sources(
+            args.evidence_root,
+            input_receipt=input_receipt,
+            site_root=SITE_METADATA_ROOT,
+            manifest_sha256=SITE_METADATA_MANIFEST_SHA256,
+            lineage_sha256=SITE_METADATA_LINEAGE_SHA256,
+        )
 
         capture = (
             NativeInventoryCapture.model_validate_json(args.native_capture.read_bytes())
@@ -1315,6 +1371,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             FRANCE_ORIGIN_DECLARATIONS,
             availability,
             native_capture=capture,
+            metadata_sources=metadata_sources,
         )
         verify_provenance_recordings(catalogue.acquisition_provenance, args.evidence_root)
         write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)

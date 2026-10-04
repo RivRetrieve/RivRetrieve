@@ -448,7 +448,7 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
         supporting_inputs = {}
         supporting_declarations = (
             origins.station_metadata_supporting_inputs(provenance)
-            if provenance.provider_id == "ch_foen"
+            if provenance.provider_id in {"ch_foen", "fr_hubeau"}
             else origins.CATALOGUE_SUPPORTING_INPUTS
         )
         for fact, paths in supporting_declarations.items():

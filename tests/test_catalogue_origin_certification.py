@@ -952,7 +952,9 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             marks=pytest.mark.governing(
                 "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
                 "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
-                *_catalogue_recording_paths("fr_hubeau"),
+                *_catalogue_recording_paths(
+                    "fr_hubeau", scopes=("maintenance/catalogue/station_metadata/sources/fr_hubeau",)
+                ),
                 "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
                 "maintenance/catalogue/fr_hubeau/inventory/hydrometry-stations-2026-09-21.json.xz",
                 "maintenance/catalogue/fr_hubeau/inventory/temperature-stations-2026-09-21.json.xz",
@@ -1035,6 +1037,32 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
             for item in catalogue_input_receipt.inputs
             if item.consumer_path.startswith("maintenance/catalogue/station_metadata/sources/ch_foen/")
         }
+    elif adapter.provider_id == "fr_hubeau":
+        from rivretrieve._internal.providers.fr_hubeau.origins import (
+            SITE_METADATA_LINEAGE_SHA256,
+            SITE_METADATA_MANIFEST_SHA256,
+            SITE_METADATA_ROOT,
+        )
+        from rivretrieve._internal.providers.fr_hubeau.station_metadata import read_station_metadata_sources
+
+        metadata_sources = read_station_metadata_sources(
+            retained_evidence_root,
+            input_receipt=catalogue_input_receipt,
+            site_root=SITE_METADATA_ROOT,
+            manifest_sha256=SITE_METADATA_MANIFEST_SHA256,
+            lineage_sha256=SITE_METADATA_LINEAGE_SHA256,
+        )
+        generated = adapter.build(
+            read_native_table(adapter.native_path),
+            adapter.origins_argument(),
+            metadata_sources=metadata_sources,
+        )
+        provenance = generated.acquisition_provenance
+        source_inputs_before = {
+            retained_evidence_root / item.consumer_path: (retained_evidence_root / item.consumer_path).read_bytes()
+            for item in catalogue_input_receipt.inputs
+            if item.consumer_path.startswith("maintenance/catalogue/station_metadata/sources/fr_hubeau/")
+        }
     else:
         generated = _build(adapter)
         provenance = generated.acquisition_provenance if adapter.provider_id != "usgs_nwis" else None
@@ -1065,8 +1093,8 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "za_dws",
     }:
         arguments.extend(("--evidence-root", str(retained_evidence_root)))
-    if adapter.provider_id == "ch_foen":
-        selected_receipt = product_root / "ch_foen.input-receipt.json"
+    if adapter.provider_id in {"ch_foen", "fr_hubeau"}:
+        selected_receipt = product_root / f"{adapter.provider_id}.input-receipt.json"
         selected_receipt.write_text(catalogue_input_receipt.model_dump_json())
         arguments.extend(("--input-receipt", str(selected_receipt)))
     if adapter.provider_id == "br_ana":
