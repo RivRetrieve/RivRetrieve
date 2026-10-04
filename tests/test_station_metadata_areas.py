@@ -160,8 +160,8 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         assert_frame_equal(restored, native.select(identity, field))
         assert set(rows["source_dtype"]) == {str(native.schema[field])}
         if provider in ("jp_mlit", "ba_fhmzbih"):
-            # These retained area columns contain only complete quantities or
-            # blanks/nulls. Governing checks independently certify the originals.
+            # These retained native area columns contain only complete quantities
+            # or blanks/nulls. This check does not certify missing source originals.
             inline_unit = "km2" if provider == "jp_mlit" else "km²"
             assert rows["source_unit"].to_list() == [
                 inline_unit if value is not None and value.strip() else None for value in native[field]
