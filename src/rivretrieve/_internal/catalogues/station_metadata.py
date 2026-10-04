@@ -18,6 +18,7 @@ from rivretrieve._internal.station_metadata import (
     SOURCE_SCALAR_DTYPES,
     metadata_support_fact,
     source_metadata_frame,
+    split_inline_quantity,
 )
 
 
@@ -34,7 +35,9 @@ class MetadataField:
     field's meaning or unit. ``source_scope`` identifies the source collection or
     entity when native field names overlap. ``source_facts`` selects adopted
     source facts for this field instead of the historical native-table support.
-    An empty tuple uses that historical native support.
+    An empty tuple uses that historical native support. ``inline_unit`` reads
+    that exact unit from each complete numeric string instead of assigning a
+    field-wide ``source_unit``. Unmatched values retain an unknown unit.
     """
 
     attribute_role: Literal["station_name", "water_body_name", "drainage_area", "elevation"]
@@ -46,6 +49,7 @@ class MetadataField:
     support_facts: tuple[str, ...] = ()
     source_scope: str | None = None
     source_facts: tuple[str, ...] = ()
+    inline_unit: Literal["km2", "km²", "m"] | None = None
 
     def __post_init__(self) -> None:
         if self.attribute_role not in ATTRIBUTE_ROLES:
@@ -56,6 +60,11 @@ class MetadataField:
             raise ValueError("Metadata source scope must be a nonblank string or None")
         if self.source_unit is not None and not isinstance(self.source_unit, str):
             raise TypeError("Metadata source unit must be a string or None")
+        if self.inline_unit is not None:
+            if self.inline_unit not in ("km2", "km²", "m"):
+                raise ValueError("Metadata inline unit is unsupported")
+            if self.source_unit is not None or self.attribute_role not in ("drainage_area", "elevation"):
+                raise ValueError("Metadata inline units require a quantity without a field-wide unit")
         if self.datum_field is not None and (not isinstance(self.datum_field, str) or not self.datum_field.strip()):
             raise ValueError("Metadata datum field requires an exact nonblank source field")
         if self.datum is not None and not isinstance(self.datum, str):
@@ -76,6 +85,12 @@ class MetadataField:
             raise ValueError("Metadata datum associations require explicit support facts")
 
 
+def _source_unit(field: MetadataField, value: object) -> str | None:
+    if field.inline_unit is not None:
+        return field.inline_unit if split_inline_quantity(value, field.inline_unit) is not None else None
+    return field.source_unit
+
+
 def build_station_metadata(
     provider_id: str,
     native_table: NativeTable,
@@ -87,7 +102,8 @@ def build_station_metadata(
 
     Native identity uses the station catalogue's declared conversion. Only
     canonical station IDs are emitted. Each absent role receives a no_metadata
-    row. Null fields retain their dtype, unit and stable support fact name.
+    row. Null fields retain their dtype, independently established unit and
+    stable support fact name. Inline units are read only from matching values.
     Invalid identities, unsupported scalar types and inconsistent declarations
     raise FatalContractError. This function does not read or write files.
     """
@@ -150,7 +166,7 @@ def build_station_metadata(
                         "source_scope": field.source_scope,
                         "source_value": encoded,
                         "source_dtype": str(native.schema[field.source_field]),
-                        "source_unit": field.source_unit,
+                        "source_unit": _source_unit(field, value),
                         "state": "source_null" if value is None else "value",
                         "support_fact": metadata_support_fact(role, field.source_field, field.source_scope),
                         "source_datum": None if datum is None else str(datum),
@@ -187,7 +203,8 @@ def validate_metadata_fields(metadata: pl.DataFrame, fields: tuple[MetadataField
         fact = metadata_support_fact(field.attribute_role, field.source_field, field.source_scope)
         if (
             row["support_fact"] != fact
-            or row["source_unit"] != field.source_unit
+            or row["source_unit"]
+            != _source_unit(field, None if row["source_value"] is None else json.loads(row["source_value"]))
             or row["source_datum_field"] != field.datum_field
             or row["datum_support_fact"] != (f"{fact}.datum" if field.datum_support else None)
             or (field.datum_field is None and row["source_datum"] != field.datum)

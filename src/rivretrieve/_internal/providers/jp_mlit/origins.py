@@ -41,10 +41,11 @@ STATION_METADATA_NOTICE = (
 )
 
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
-    MetadataField("drainage_area", "流域面積"),
+    MetadataField("drainage_area", "流域面積", inline_unit="km2"),
     MetadataField(
         "elevation",
         "零点高",
+        inline_unit="m",
         support_facts=("source.station.mlit_zero_point_elevation_definition",),
     ),
     MetadataField("station_name", "観測所名"),
