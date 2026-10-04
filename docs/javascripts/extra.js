@@ -42,9 +42,39 @@ function initCopyPageButton() {
   });
 }
 
+/** Add a site-only shortcut while keeping the README disclosure usable on GitHub. */
+function initCopyAgentPromptButton() {
+  const disclosure = document.getElementById("agent-prompt");
+  const code = disclosure?.querySelector("pre code");
+  if (!code || document.getElementById("copy-agent-prompt-btn")) return;
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.id = "copy-agent-prompt-btn";
+  btn.className = "md-button";
+  btn.textContent = "Copy agent prompt";
+  btn.setAttribute("aria-live", "polite");
+  disclosure.before(btn);
+  btn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(code.textContent);
+      btn.textContent = "Copied!";
+    } catch (err) {
+      btn.textContent = "Copy failed. Open the prompt to copy it manually.";
+      console.error("Failed to copy agent prompt to clipboard:", err);
+    }
+    setTimeout(() => { btn.textContent = "Copy agent prompt"; }, 2000);
+  });
+}
+
+function initCopyButtons() {
+  initCopyPageButton();
+  initCopyAgentPromptButton();
+}
+
 // Support both instant navigation (document$) and standard DOMContentLoaded
 if (typeof document$ !== "undefined") {
-  document$.subscribe(initCopyPageButton);
+  document$.subscribe(initCopyButtons);
 } else {
-  document.addEventListener("DOMContentLoaded", initCopyPageButton);
+  document.addEventListener("DOMContentLoaded", initCopyButtons);
 }
