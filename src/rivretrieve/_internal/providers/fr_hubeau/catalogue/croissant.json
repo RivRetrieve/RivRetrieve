@@ -78,48 +78,48 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "277b9be9e3f48d88a7b976a2a3c6c2df1025a7ed690bb4f97072669c6a423d05",
-      "contentSize": "4682041 B"
+      "sha256": "a82958e59a4fab51db94787e3b2f08c130a4504a54ec1efe9a90d9a0cc6e0292",
+      "contentSize": "4901519 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "b4a915329bc40f6142628312e1241803e09f7175c73c3774e65d5a8652ce0428",
-      "contentSize": "419784 B"
+      "sha256": "9be0031949a4292a0a483ab91b179507657dc1f24a44c24a5b4c3d6d58647c0e",
+      "contentSize": "420747 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_acquisitions.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "3511a6d2db677041eb150d64fd008f32dbb92756c6df3a2ef56491e70a468c51",
-      "contentSize": "1149463 B"
+      "sha256": "fff758d1c16e6e2a692c622eaf714dac0c9853a3345869a90ad73cf24d689184",
+      "contentSize": "1151554 B"
     },
     {
       "@id": "provenance_bindings.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "34824794f2fd5cadb6e4b4e6748817aabeb274f72782da014db2df7324c7674c",
-      "contentSize": "291653 B"
+      "sha256": "43c75c21ef5d91e406743f4691795477672e76b709a270c15052c59ef34b4368",
+      "contentSize": "292872 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "a3b850db4c8a56a66007f447bf6c3e31d689008907a09fae4843076b5d2c511a",
-      "contentSize": "436122 B"
+      "sha256": "38995af2273c99bf8842ea7cbc81520390e068b57241e0583090e247e1d279f1",
+      "contentSize": "437008 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "55b067dd267afed8b3e237a35e42fb1c37424373a6f5e8cb62d8f5c979a31b51",
-      "contentSize": "314861 B"
+      "sha256": "bf604e3e4ec32b2dc0d937f67e95e9260de06a03232343c7bef28451f8d5e2a0",
+      "contentSize": "105491 B"
     },
     {
       "@id": "format.json",
@@ -150,8 +150,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "station_metadata.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "961e89f77b636d00ecfba45cd3ae70d30ab0b4751b2467efcb287bc6086639d5",
-      "contentSize": "201548 B"
+      "sha256": "7705c5312021fab9692f04049787107a7e2dc0b2db35d3c70c45691827ed0346",
+      "contentSize": "295643 B"
     }
   ],
   "recordSet": [
@@ -876,6 +876,19 @@
           }
         },
         {
+          "@id": "station_metadata/source_scope",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_scope"
+            }
+          }
+        },
+        {
           "@id": "station_metadata/source_value",
           "@type": "cr:Field",
           "dataType": "sc:Text",
@@ -950,6 +963,66 @@
             },
             "extract": {
               "column": "support_fact"
+            }
+          },
+          "references": {
+            "fileObject": {
+              "@id": "provenance_facts.parquet"
+            },
+            "extract": {
+              "column": "name"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_datum",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_datum"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_datum_field",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_datum_field"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/source_datum_dtype",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "source_datum_dtype"
+            }
+          }
+        },
+        {
+          "@id": "station_metadata/datum_support_fact",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "station_metadata.parquet"
+            },
+            "extract": {
+              "column": "datum_support_fact"
             }
           },
           "references": {
