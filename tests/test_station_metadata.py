@@ -797,7 +797,7 @@ def test_usgs_elevation_scope_keeps_non_usgs_gauges_without_exposing_their_altit
     assert_frame_equal(native.data, before)
 
 
-@pytest.mark.parametrize("provider", ["no_nve", "ca_eccc", "usgs_nwis", "jp_mlit"])
+@pytest.mark.parametrize("provider", ["no_nve", "ca_eccc", "usgs_nwis", "jp_mlit", "pl_imgw"])
 def test_metadata_definitions_resolve_adopted_nonruntime_source_support(provider):
     from importlib import import_module
 

@@ -32,7 +32,14 @@ from rivretrieve._internal.issues import FatalContractError
 
 # Name mappings require genuine-input validation and owner disclosure approval
 # before generated metadata can be packaged. Native presence is insufficient.
-STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (MetadataField("drainage_area", "area"),)
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+    MetadataField(
+        "drainage_area",
+        "area",
+        "square kilometre",
+        support_facts=("source.grdc.catchment_area_unit",),
+    ),
+)
 
 CRS_EVIDENCE_URL = "https://danepubliczne.imgw.pl/pl/apiinfo"
 """Retained IMGW evidence URL; it is not authority for GRDC-issued geometry."""
@@ -140,6 +147,7 @@ POLAND_FACT_UNIVERSE = (
     *STATION_PRODUCT_FACTS,
     *OBSERVATION_FACTS,
     *GRDC_NATIVE_FACTS,
+    "source.grdc.catchment_area_unit",
     "source.grdc.horizontal_crs",
 )
 
@@ -332,7 +340,8 @@ def build_acquisition_provenance(
                         instant_type="private_redacted_corroborating_receipt",
                         description=(
                             "Later GRDC workbook receipt corroborates every recovered field but is not "
-                            "established as the historical acquisition that produced the recovered import"
+                            "established as the historical acquisition that produced the recovered import. "
+                            "Its header Catchment area (square kilometre) establishes the existing area field unit"
                         ),
                         requested_from=("private://grdc-bfg/correspondence",),
                         material=MaterialIdentity(
@@ -369,6 +378,12 @@ def build_acquisition_provenance(
                 facts=IMGW_STATEMENT_FACTS,
                 source_id="sr.pl.imgw",
                 acquisition_id="imgw_regulations_capture_2026_08_20",
+            ),
+            FactBinding(
+                fact_group="grdc_catchment_area_unit",
+                facts=("source.grdc.catchment_area_unit",),
+                source_id="sr.pl.grdc",
+                acquisition_id="grdc_workbook_corroboration_private_receipt",
             ),
             FactBinding(
                 fact_group="grdc_native_station_fields",
@@ -495,4 +510,8 @@ CATALOGUE_BUILD_DECLARATIONS = (
 
 
 # Additional retained declarations used by these source facts; not original-body claims.
-CATALOGUE_SUPPORTING_INPUTS = {}
+CATALOGUE_SUPPORTING_INPUTS = {
+    "source.grdc.catchment_area_unit": (
+        "maintenance/catalogue/station_metadata/sources/pl_imgw/grdc-workbook/Metadata_GRDC_30.10.2025.xlsx",
+    ),
+}
