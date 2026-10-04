@@ -146,6 +146,11 @@ reported as an issue.
 
 ## Requests
 
+If you request a period extending into the future, ThaiWater can return future
+timestamps with null values. RivRetrieve preserves these source-published rows.
+They are not future measurements, and null does not mean zero. Omit `end` to
+request through the caller machine's current local date.
+
 RivRetrieve requests two extra days on each side of the requested dates, then returns
 only the requested period. The three-day example above therefore asked ThaiWater for
 May 30 to June 5, 2024. Each request to ThaiWater covers at most 365 calendar dates,
