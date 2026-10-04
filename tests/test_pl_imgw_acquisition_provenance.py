@@ -219,6 +219,34 @@ def test_poland_withheld_crs_origin_rejects_an_asserted_crs(retained_evidence_ro
     assert [issue.code for issue in issues] == ["catalogue_origin.withheld_marker_mismatch"]
 
 
+def test_poland_area_unit_uses_workbook_without_replacing_native_authority() -> None:
+    from rivretrieve._internal.providers.pl_imgw.origins import STATION_METADATA_FIELDS
+
+    assert len(STATION_METADATA_FIELDS) == 1
+    field = STATION_METADATA_FIELDS[0]
+    assert (field.attribute_role, field.source_field, field.source_unit, field.source_scope) == (
+        "drainage_area",
+        "area",
+        "square kilometre",
+        None,
+    )
+    assert field.support_facts == ("source.grdc.catchment_area_unit",)
+    assert field.source_facts == ()
+    provenance = build_acquisition_provenance()
+    bindings = {fact: binding for binding in provenance.fact_bindings for fact in binding.facts}
+    assert bindings["native.area"].acquisition_id == "recovered_upstream_import_f67f6d8"
+    unit = bindings["source.grdc.catchment_area_unit"]
+    assert unit.source_id == "sr.pl.grdc"
+    assert unit.acquisition_id == "grdc_workbook_corroboration_private_receipt"
+    workbook = next(
+        item
+        for source in provenance.source_records
+        for item in source.acquisitions
+        if item.acquisition_id == unit.acquisition_id
+    )
+    assert "Catchment area (square kilometre)" in workbook.description
+
+
 def test_poland_recovery_and_corroboration_are_distinct_acquisitions() -> None:
     provenance = build_acquisition_provenance()
     grdc = next(source for source in provenance.source_records if source.source_id == "sr.pl.grdc")
