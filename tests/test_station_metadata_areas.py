@@ -159,7 +159,15 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         )
         assert_frame_equal(restored, native.select(identity, field))
         assert set(rows["source_dtype"]) == {str(native.schema[field])}
-        assert set(rows["source_unit"]) == {unit}
+        if provider in ("jp_mlit", "ba_fhmzbih"):
+            # These retained area columns contain only complete quantities or
+            # blanks/nulls. Governing checks independently certify the originals.
+            inline_unit = "km2" if provider == "jp_mlit" else "km²"
+            assert rows["source_unit"].to_list() == [
+                inline_unit if value is not None and value.strip() else None for value in native[field]
+            ]
+        else:
+            assert set(rows["source_unit"]) == {unit}
         expected_states = ["source_null" if value is None else "value" for value in native[field]]
         assert rows["state"].to_list() == expected_states
 
@@ -168,7 +176,7 @@ def test_formatted_string_is_not_parsed() -> None:
     result = _areas(rr.find(provider="ba_fhmzbih", station="4510"))
     assert result["source_value"].item() == '"633.00 km²"'
     assert result["source_dtype"].item() == "String"
-    assert result["source_unit"].item() is None
+    assert result["source_unit"].item() == "km²"
 
 
 def test_nonbreaking_space_and_blank_are_values() -> None:

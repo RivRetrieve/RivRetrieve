@@ -100,8 +100,33 @@ print(json.loads(gross["drainage_area_value"].item()))
 
 Quantity values use JSON scalar text so that a number and a source string that
 looks numeric remain distinguishable. `json.loads` restores that source scalar
-type. It does not extract a number from a string containing units or interpret a
-placeholder as missing data.
+type. It does not turn numeric text into a number or interpret a placeholder as
+missing data.
+
+For Japan's `流域面積` and `零点高`, Bosnia's `metadata_CATCHMENT_SIZE`, and
+Switzerland's `Catchment size` and `Station altitude`, the summary separates a
+recognised numeric string from its explicit unit. It preserves numeric spelling,
+including signs, trailing zeros and thousands separators. The unit remains in
+its source spelling, such as `km2` or `km²`.
+
+```python
+japan = rr.find(provider="jp_mlit", station="301011281104010")
+area = rr.metadata(japan).row(0, named=True)
+
+print(area["drainage_area_value"], area["drainage_area_unit"])
+# ['"142.00"'] ['km2']
+
+numeric_text = json.loads(area["drainage_area_value"][0])
+print(repr(numeric_text))
+# '142.00'
+```
+
+Numeric text still needs user parsing for arithmetic. For example, a Japanese
+value `1,719.00km2` becomes the JSON string `"1,719.00"`, not the number `1719.0`.
+Blanks, nulls, placeholders and qualified text such as `T.P. +1.230 m` stay
+unchanged. Japan and Bosnia receive a unit only when the individual value can be
+separated unambiguously. Existing independently supported units remain attached
+even when a value cannot be separated.
 
 ### Water-body names
 
@@ -146,7 +171,8 @@ alignment. Neither case supplies a numeric area or establishes source silence.
 ## Interpret elevations
 
 The Swiss source publishes station altitude as a string that includes units.
-The summary retains that string's JSON encoding and the supported datum:
+The summary separates the numeric text from `m a.s.l.` and retains the supported
+datum:
 
 ```python
 swiss = rr.find(provider="ch_foen", station="2004")
@@ -155,15 +181,16 @@ altitude = rr.metadata(swiss).row(0, named=True)
 print(altitude["elevation_field"])
 # ['Station altitude']
 print(altitude["elevation_value"])
-# ['"432 m a.s.l."']
+# ['"432"']
 print(altitude["elevation_unit"], altitude["elevation_datum"])
 # ['m'] ['LN02']
 print(json.loads(altitude["elevation_value"][0]))
-# 432 m a.s.l.
+# 432
 ```
 
-Decoding restores a string, not the number `432`. The separate unit and datum
-columns do not change its source representation.
+Decoding restores the string `"432"`, not the number `432`. The source view still
+returns `"432 m a.s.l."` when decoded. Separating this suffix does not change the
+published datum association.
 
 Elevations can describe different physical reference points. Station altitude
 can locate the station, ground level can describe the ground surface, and gauge
@@ -208,6 +235,9 @@ print(json.loads(site_name["source_value"].item()))
 ```
 
 Unlike summary water-body names, source-view strings retain JSON encoding.
+Source quantity values also retain their complete original text, including any
+inline units. For example, Japan's area above decodes to `142.00km2` in the
+source view. Source and summary units agree entry by entry.
 
 | Column | Meaning |
 | --- | --- |
