@@ -65,6 +65,7 @@ _INLINE_QUANTITY_FIELDS = {
     ("ch_foen", "drainage_area", "station_page", "Catchment size"): ("km2", "km2"),
     ("ch_foen", "elevation", "station_page", "Station altitude"): ("m", "m a.s.l."),
 }
+_PADDED_QUANTITY_FIELDS = {("usgs_nwis", "elevation", None, "alt_va")}
 _NUMBER_TEXT = r"[ \t\u00a0]*[+-]?(?:(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?|\.[0-9]+)"
 _SEPARATOR = r"[ \t\u00a0]*"
 
@@ -85,7 +86,7 @@ def split_inline_quantity(value: object, suffix: str) -> str | None:
 def _summary_quantity_value(item: dict) -> str | None:
     encoded = item["source_value"]
     key = tuple(item[name] for name in ("provider_id", "attribute_role", "source_scope", "source_field"))
-    if key == ("usgs_nwis", "elevation", None, "alt_va") and encoded is not None and item["source_dtype"] == "String":
+    if key in _PADDED_QUANTITY_FIELDS and encoded is not None and item["source_dtype"] == "String":
         value = json.loads(encoded)
         if re.fullmatch(_NUMBER_TEXT, value) is not None:
             return json.dumps(value.lstrip(" \t\u00a0"), ensure_ascii=False)
