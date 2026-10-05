@@ -357,11 +357,27 @@ def historical_closure_evidence(provider, evidence):
         roster = next(item for item in model["fact_bindings"] if item["fact_group"] == "imgw_catalogue_inputs")
         assert "source.imgw.observation_archive_product_semantics" not in roster["facts"]
         roster["facts"].insert(1, "source.imgw.observation_archive_product_semantics")
-        # The immutable closure predates the adopted area-unit header. Validate
-        # that exact addition before restoring only its historical description.
+        # The immutable closure predates adopted workbook quantity support.
+        # Validate each exact addition before restoring its historical description.
         grdc = next(item for item in model["source_records"] if item["source_id"] == "sr.pl.grdc")
         workbook = next(item for item in grdc["acquisitions"]
                         if item["acquisition_id"] == "grdc_workbook_corroboration_private_receipt")
+        elevation_support = (
+            ". The gauge-zero height header establishes metres, and each station row supplies its "
+            "vertical reference. These references do not establish historical stage applicability"
+        )
+        assert workbook["description"].endswith(elevation_support)
+        workbook["description"] = workbook["description"].removesuffix(elevation_support)
+        elevation_binding = next(item for item in model["fact_bindings"]
+                                 if item["fact_group"] == "grdc_gauge_zero_support")
+        assert elevation_binding == {
+            "fact_group": "grdc_gauge_zero_support",
+            "facts": ["source.grdc.gauge_zero_height_unit", "source.grdc.vertical_reference"],
+            "source_id": "sr.pl.grdc", "acquisition_id": "grdc_workbook_corroboration_private_receipt",
+        }
+        model["fact_bindings"].remove(elevation_binding)
+        for fact in elevation_binding["facts"]:
+            model["fact_universe"].remove(fact)
         unit_header = ". Its header Catchment area (square kilometre) establishes the existing area field unit"
         assert workbook["description"].endswith(unit_header)
         workbook["description"] = workbook["description"].removesuffix(unit_header)
