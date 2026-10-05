@@ -629,3 +629,22 @@ def test_single_payload_independent_facts_can_have_different_acquisition_axes(fa
         ("mean", TimeAxis.NATIVE),
         ("max", TimeAxis.UTC),
     }
+
+
+@pytest.mark.parametrize("source_status", [OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY])
+def test_failure_veto_preserves_nonempty_and_successful_empty_source_answers(fact_cache, source_status):
+    stages, selection, root = fact_cache
+    stages.status["mean"] = source_status
+    stages.status["max"] = OutcomeStatus.FAILED
+    stages.unknown_failure_facts = True
+    result = _fetch(selection)
+    assert result.data.is_empty()
+    assert _saved(root).is_empty()
+    source = next(item for item in result.outcomes if item.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY))
+    assert source.status is source_status
+    assert source.facts_ids == ("mean",)
+    assert source.calls == ("1-mean",)
+    assert source.retrieved_at == OLD
+    manifest = rr.cache_status(PROVIDER).manifest
+    assert manifest.coverage == ()
+    assert all(item.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY) for item in manifest.outcomes)

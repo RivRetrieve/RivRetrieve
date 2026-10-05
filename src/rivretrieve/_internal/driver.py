@@ -2433,12 +2433,6 @@ def drive(
                 fact.facts_id for item in parsed.series for fact in item.facts if pair_scope.matches_facts(fact)
             }
             native = native.filter(pl.col("series_id").is_in(selected_ids) & pl.col("facts_id").is_in(selected_facts))
-            failures = (
-                *(fetched.outcomes if isinstance(fetched, SourceAcquisition) else ()),
-                *(item for result in transaction_parsed for item in result.outcomes),
-                *fresh_outcomes[acquisition_outcome_start:],
-            )
-            native = _exclude_failed_rows(native, parsed.series, failures)
             # Coverage/outcome evidence describes the current source page even
             # when reuse serves held values instead of overlapping partial rows.
             coverage_native = (
@@ -2446,6 +2440,12 @@ def drive(
                 if any(item.window.axis is TimeAxis.UTC for item in parsed.outcomes)
                 else native
             )
+            failures = (
+                *(fetched.outcomes if isinstance(fetched, SourceAcquisition) else ()),
+                *(item for result in transaction_parsed for item in result.outcomes),
+                *fresh_outcomes[acquisition_outcome_start:],
+            )
+            native = _exclude_failed_rows(native, parsed.series, failures)
             rows.append(native)
             identity_scope = pair_scope.model_copy(update={"predicates": ()})
             requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
