@@ -214,6 +214,10 @@ def historical_source_provenance(provenance, metadata):
                 if provider in {"ch_foen", "fr_hubeau", "usgs_nwis"}
                 else ("src/rivretrieve/_internal/catalogues/station_metadata.py", "build_station_metadata")
             )
+            if provider == "pl_imgw":
+                expected_location = (
+                    "src/rivretrieve/_internal/providers/pl_imgw/station_metadata.py", "build_station_metadata"
+                )
             expected_declaration = declarations[
                 (f"src/rivretrieve/_internal/providers/{provider}/origins.py", "STATION_METADATA_FIELDS")
             ]
