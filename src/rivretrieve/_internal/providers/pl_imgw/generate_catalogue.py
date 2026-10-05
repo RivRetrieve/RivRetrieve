@@ -10,8 +10,9 @@ The packaged 1,301-row geometry is a recovered historical import. The complete
 live IMGW roster independently checks its identifier set but carries no geometry.
 IMGW's coordinate routes are partial, coarser corroborating sources.
 
-Canonical artifacts are generated only from committed ``native.parquet`` plus
-the provider's origin declarations.
+Canonical artifacts use the retained historical native table and the provider's
+origin declarations. Station metadata also use the retained GRDC workbook for
+per-station vertical references without replacing historical height strings.
 """
 
 from __future__ import annotations
@@ -59,6 +60,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.engine import WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.pl_imgw.station_metadata import GaugeZeroElevation
 
 PROVIDER_ID = ProviderId("pl_imgw")
 PROVIDER_NAME = "Poland Institute of Meteorology and Water Management (IMGW)"
@@ -452,17 +454,20 @@ def write_catalogue(
     *,
     build_inputs: CatalogueBuildInputs | None = None,
     native_table: NativeTable | None = None,
+    elevations: tuple[GaugeZeroElevation, ...] | None = None,
 ) -> None:
-    """Write a catalogue using adopted build inputs and its verified native table."""
+    """Write a catalogue using the verified native table and workbook elevations."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.pl_imgw.catalogue_series import describe_catalogue
     from rivretrieve._internal.providers.pl_imgw.config import config as source_config
     from rivretrieve._internal.providers.pl_imgw.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
 
-    if build_inputs is None or native_table is None:
-        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
+    if build_inputs is None or native_table is None or elevations is None:
+        raise FatalContractError("Polish publication requires build_inputs, native_table and workbook elevations")
+    from rivretrieve._internal.providers.pl_imgw.station_metadata import build_station_metadata
 
+    station_metadata = build_station_metadata(native_table, catalogue.stations, elevations)
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     with (output_path / "provider.json").open("w", encoding="utf-8") as fh:
@@ -480,6 +485,11 @@ def write_catalogue(
         build_inputs=build_inputs,
         native_table=native_table,
         metadata_fields=STATION_METADATA_FIELDS,
+        station_metadata=station_metadata,
+        metadata_implementation=(
+            "src/rivretrieve/_internal/providers/pl_imgw/station_metadata.py",
+            "build_station_metadata",
+        ),
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
@@ -556,6 +566,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         help="Private exact source words; read locally and included only after verification.",
     )
+    parser.add_argument("--grdc-workbook", type=Path, help="Exact retained workbook supporting gauge-zero metadata.")
     parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     args = parser.parse_args(argv)
 
@@ -677,7 +688,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         native_table,
         STATION_CATALOGUE_ORIGINS,
     )
-    write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)
+    if args.grdc_workbook is None:
+        parser.error("canonical generation requires --grdc-workbook")
+    from rivretrieve._internal.providers.pl_imgw.station_metadata import read_workbook_elevations
+
+    elevations = read_workbook_elevations(args.grdc_workbook)
+    write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table, elevations=elevations)
     print(
         f"pl_imgw catalogue written to {args.out}: "
         f"{catalogue.stations.height} stations, "

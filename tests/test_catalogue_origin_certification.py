@@ -912,6 +912,7 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
                 *_catalogue_recording_paths("pl_imgw", scopes=("tests/test_data/pl_imgw_annual",)),
                 "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
                 "tests/test_data/pl_imgw_terms_regulations.html",
+                "maintenance/catalogue/station_metadata/sources/pl_imgw/grdc-workbook/Metadata_GRDC_30.10.2025.xlsx",
             ),
         ),
         pytest.param(
@@ -1151,8 +1152,17 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     elif adapter.provider_id == "th_thaiwater":
         arguments.extend(("--availability-evidence", str(retained_evidence_root / THAI_AVAILABILITY_EVIDENCE_PATH)))
     elif adapter.provider_id == "pl_imgw":
+        from rivretrieve._internal.providers.pl_imgw.origins import WORKBOOK_CONSUMER_PATH
+
+        workbook = retained_evidence_root / WORKBOOK_CONSUMER_PATH
+        source_inputs_before = {workbook: workbook.read_bytes()}
         arguments.extend(
-            ("--terms-recording", str(retained_evidence_root / "tests/test_data/pl_imgw_terms_regulations.html"))
+            (
+                "--terms-recording",
+                str(retained_evidence_root / "tests/test_data/pl_imgw_terms_regulations.html"),
+                "--grdc-workbook",
+                str(workbook),
+            )
         )
     assert adapter.main(arguments) == 0
     assert calls == []

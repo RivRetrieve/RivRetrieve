@@ -222,8 +222,7 @@ def test_poland_withheld_crs_origin_rejects_an_asserted_crs(retained_evidence_ro
 def test_poland_area_unit_uses_workbook_without_replacing_native_authority() -> None:
     from rivretrieve._internal.providers.pl_imgw.origins import STATION_METADATA_FIELDS
 
-    assert len(STATION_METADATA_FIELDS) == 1
-    field = STATION_METADATA_FIELDS[0]
+    (field,) = (field for field in STATION_METADATA_FIELDS if field.attribute_role == "drainage_area")
     assert (field.attribute_role, field.source_field, field.source_unit, field.source_scope) == (
         "drainage_area",
         "area",
@@ -311,12 +310,13 @@ def test_poland_native_identity_and_raw_substitution_refusal(retained_evidence_r
 @pytest.mark.governing(
     "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
     "tests/test_data/pl_imgw_terms_regulations.html",
+    "maintenance/catalogue/station_metadata/sources/pl_imgw/grdc-workbook/Metadata_GRDC_30.10.2025.xlsx",
 )
 @pytest.mark.recorded(*_catalogue_recording_paths("pl_imgw", scopes=("tests/test_data/pl_imgw_annual",)))
 def test_poland_terms_are_verified_in_real_generation_path(
     retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs_path
 ) -> None:
-    from rivretrieve._internal.providers.pl_imgw.origins import build_acquisition_provenance
+    from rivretrieve._internal.providers.pl_imgw.origins import WORKBOOK_CONSUMER_PATH, build_acquisition_provenance
 
     build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     assert (
@@ -330,6 +330,8 @@ def test_poland_terms_are_verified_in_real_generation_path(
                 str(tmp_path),
                 "--terms-recording",
                 str(retained_evidence_root / TERMS),
+                "--grdc-workbook",
+                str(retained_evidence_root / WORKBOOK_CONSUMER_PATH),
             ]
         )
         == 0
@@ -459,12 +461,13 @@ def test_private_verification_record_is_redacted_and_not_packaged() -> None:
 @pytest.mark.governing(
     "src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet",
     "tests/test_data/pl_imgw_terms_regulations.html",
+    "maintenance/catalogue/station_metadata/sources/pl_imgw/grdc-workbook/Metadata_GRDC_30.10.2025.xlsx",
 )
 @pytest.mark.recorded(*_catalogue_recording_paths("pl_imgw", scopes=("tests/test_data/pl_imgw_annual",)))
 def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
     retained_evidence_root: Path, tmp_path: Path, catalogue_build_inputs_path
 ) -> None:
-    from rivretrieve._internal.providers.pl_imgw.origins import build_acquisition_provenance
+    from rivretrieve._internal.providers.pl_imgw.origins import WORKBOOK_CONSUMER_PATH, build_acquisition_provenance
 
     build_inputs_path = catalogue_build_inputs_path(build_acquisition_provenance())
     record = PrivateEmailVerificationRecord(
@@ -499,6 +502,8 @@ def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
                 str(tmp_path / "substituted"),
                 "--terms-recording",
                 str(retained_evidence_root / TERMS),
+                "--grdc-workbook",
+                str(retained_evidence_root / WORKBOOK_CONSUMER_PATH),
                 "--private-verification-record",
                 str(substituted_path),
             ]
@@ -515,6 +520,8 @@ def test_canonical_build_accepts_only_the_exact_committed_reverification_record(
             str(output),
             "--terms-recording",
             str(retained_evidence_root / TERMS),
+            "--grdc-workbook",
+            str(retained_evidence_root / WORKBOOK_CONSUMER_PATH),
             "--private-verification-record",
             str(record_path),
         ]

@@ -172,6 +172,19 @@ reported separately as [issues](../usage.md#issues).
 These are unofficial English translations. Other values, including `999`, are returned
 as published.
 
+## Station metadata
+
+Station metadata supplied through the Global Runoff Data Centre (GRDC) describe
+gauge-zero height in metres. `rr.metadata` returns these heights as elevation
+metadata, with each station's published vertical reference: `EVRF2007`,
+`Kronsztadt` or the source placeholder `ND`. Height strings and `ND` placeholders
+remain as supplied.
+
+Gauge-zero height is not ground height. These metadata do not establish which
+vertical reference applies to historical water-level observations, so they do not
+by themselves support conversion of those observations to elevations. See the
+[station metadata guide](../station-metadata.md) for API usage and returned fields.
+
 ## Station coordinates
 
 IMGW-PIB's station list contains the 1,301 station identifiers, names and rivers, but

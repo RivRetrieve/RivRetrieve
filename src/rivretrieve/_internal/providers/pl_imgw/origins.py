@@ -30,6 +30,11 @@ from rivretrieve._internal.catalogue_origins import (
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
 
+GAUGE_ZERO_HEADER = "Height of gauge zero (m above sea level)"
+VERTICAL_REFERENCE_HEADER = "Vertical reference system"
+WORKBOOK_SHA256 = "dfab6ea7de80fb1570f4a8dded8743ed7c7dcb4eb67fe75e2c0e02e9b964b7bf"
+WORKBOOK_BYTE_SIZE = 116301
+
 # Name mappings require genuine-input validation and owner disclosure approval
 # before generated metadata can be packaged. Native presence is insufficient.
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
@@ -38,6 +43,15 @@ STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
         "area",
         "square kilometre",
         support_facts=("source.grdc.catchment_area_unit",),
+    ),
+    MetadataField(
+        "elevation",
+        "gauge_altitude",
+        "m",
+        datum_field=VERTICAL_REFERENCE_HEADER,
+        source_facts=("native.gauge_altitude",),
+        support_facts=("source.grdc.gauge_zero_height_unit",),
+        datum_support=("source.grdc.vertical_reference",),
     ),
 )
 
@@ -148,6 +162,8 @@ POLAND_FACT_UNIVERSE = (
     *OBSERVATION_FACTS,
     *GRDC_NATIVE_FACTS,
     "source.grdc.catchment_area_unit",
+    "source.grdc.gauge_zero_height_unit",
+    "source.grdc.vertical_reference",
     "source.grdc.horizontal_crs",
 )
 
@@ -341,7 +357,9 @@ def build_acquisition_provenance(
                         description=(
                             "Later GRDC workbook receipt corroborates every recovered field but is not "
                             "established as the historical acquisition that produced the recovered import. "
-                            "Its header Catchment area (square kilometre) establishes the existing area field unit"
+                            "Its header Catchment area (square kilometre) establishes the existing area field unit. "
+                            "The gauge-zero height header establishes metres, and each station row supplies its "
+                            "vertical reference. These references do not establish historical stage applicability"
                         ),
                         requested_from=("private://grdc-bfg/correspondence",),
                         material=MaterialIdentity(
@@ -382,6 +400,12 @@ def build_acquisition_provenance(
             FactBinding(
                 fact_group="grdc_catchment_area_unit",
                 facts=("source.grdc.catchment_area_unit",),
+                source_id="sr.pl.grdc",
+                acquisition_id="grdc_workbook_corroboration_private_receipt",
+            ),
+            FactBinding(
+                fact_group="grdc_gauge_zero_support",
+                facts=("source.grdc.gauge_zero_height_unit", "source.grdc.vertical_reference"),
                 source_id="sr.pl.grdc",
                 acquisition_id="grdc_workbook_corroboration_private_receipt",
             ),
@@ -503,6 +527,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/pl_imgw/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/pl_imgw/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/pl_imgw/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/pl_imgw/station_metadata.py", "build_station_metadata"),
     ("src/rivretrieve/_internal/assembly.py", "assemble"),
     ("src/rivretrieve/_internal/providers/pl_imgw/config.py", "config"),
     ("src/rivretrieve/_internal/providers/pl_imgw/catalogue_series.py", "describe_catalogue"),
@@ -510,8 +535,10 @@ CATALOGUE_BUILD_DECLARATIONS = (
 
 
 # Additional retained declarations used by these source facts; not original-body claims.
-CATALOGUE_SUPPORTING_INPUTS = {
-    "source.grdc.catchment_area_unit": (
-        "maintenance/catalogue/station_metadata/sources/pl_imgw/grdc-workbook/Metadata_GRDC_30.10.2025.xlsx",
-    ),
-}
+WORKBOOK_CONSUMER_PATH = (
+    "maintenance/catalogue/station_metadata/sources/pl_imgw/grdc-workbook/Metadata_GRDC_30.10.2025.xlsx"
+)
+CATALOGUE_SUPPORTING_INPUTS = dict.fromkeys(
+    ("source.grdc.catchment_area_unit", "source.grdc.gauge_zero_height_unit", "source.grdc.vertical_reference"),
+    (WORKBOOK_CONSUMER_PATH,),
+)
