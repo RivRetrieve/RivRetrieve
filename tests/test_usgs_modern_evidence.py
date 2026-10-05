@@ -14,38 +14,58 @@ from tests.usgs_modern_recordings import body, manifest
 
 @pytest.mark.recorded("tests/test_data/usgs_modern")
 def test_every_retained_source_body_has_exact_hash_and_acquisition_manifest(retained_evidence_root):
-    hashes = dict(
-        line.split("  ", 1)[::-1]
-        for path in (retained_evidence_root / "tests/test_data/usgs_modern").glob("*SHA256SUMS")
-        for line in path.read_text().splitlines()
-    )
-    records = [
-        *manifest(retained_evidence_root).values(),
-        *json.loads(((retained_evidence_root / "tests/test_data/usgs_modern") / "curated-manifest.json").read_text()),
-        *json.loads(
-            ((retained_evidence_root / "tests/test_data/usgs_modern") / "historical-manifest.json").read_text()
-        ),
+    directory = retained_evidence_root / "tests/test_data/usgs_modern"
+    supplemental = [
+        json.loads(line) for line in (directory / "camels-2015-2026-manifest.jsonl").read_text().splitlines()
     ]
+    supplemental_names = {
+        "daily-camels-01013500-2015-2026",
+        "daily-camels-01022500-2015-2026",
+        "daily-camels-01030500-2015-2026",
+    }
+    assert len(supplemental) == 3
+    assert {item["name"] for item in supplemental} == supplemental_names
+    supplemental_files = {item["file"] for item in supplemental}
+    assert len(supplemental_files) == 3
+    captures = manifest(retained_evidence_root)
+    assert {name: captures[name] for name in supplemental_names} == {item["name"]: item for item in supplemental}
+    legacy_captures = [item for name, item in captures.items() if name not in supplemental_names]
+    hashes = dict(
+        line.split("  ", 1)[::-1] for path in directory.glob("*SHA256SUMS") for line in path.read_text().splitlines()
+    )
+    historical = json.loads((directory / "historical-manifest.json").read_text())
+    records = [
+        *legacy_captures,
+        *json.loads((directory / "curated-manifest.json").read_text()),
+        *historical,
+    ]
+    # The original cohort retains its independent checksum-file proof.
     assert len(records) == 53
     assert len(hashes) == len({item["file"] for item in records}) == 47
     assert set(hashes) == {item["file"] for item in records}
+    assert set(hashes).isdisjoint(supplemental_files)
+    assert len([*records, *supplemental]) == 56
+    assert len(set(hashes) | supplemental_files) == 50
     for item in records:
-        content = ((retained_evidence_root / "tests/test_data/usgs_modern") / item["file"]).read_bytes()
+        content = (directory / item["file"]).read_bytes()
         assert hashlib.sha256(content).hexdigest() == item["sha256"] == hashes[item["file"]]
         assert len(content) == item["bytes"]
     for name, digest in hashes.items():
-        assert (
-            hashlib.sha256(((retained_evidence_root / "tests/test_data/usgs_modern") / name).read_bytes()).hexdigest()
-            == digest
-        )
-    for item in manifest(retained_evidence_root).values():
+        assert hashlib.sha256((directory / name).read_bytes()).hexdigest() == digest
+    # These separately archived originals have manifest identities, but no
+    # separate checksum list or recorded request headers/time. Keep those unknown.
+    for item in supplemental:
+        content = (directory / item["file"]).read_bytes()
+        assert hashlib.sha256(content).hexdigest() == item["sha256"]
+        assert len(content) == item["bytes"]
+        assert "request_headers" not in item
+        assert "requested_utc" not in item
+    for item in captures.values():
         assert item["authorship"] == "publisher_response"
         assert datetime.fromisoformat(item["acquired_utc"]).utcoffset().total_seconds() == 0
         assert item["final_url"]
+    for item in legacy_captures:
         assert item["request_headers"]["User-Agent"] == "RivRetrieve-source-evidence"
-    historical = json.loads(
-        ((retained_evidence_root / "tests/test_data/usgs_modern") / "historical-manifest.json").read_text()
-    )
     assert all(item["final_url"] is None for item in historical)
 
 

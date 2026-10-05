@@ -33,6 +33,7 @@ def test_swiss_provenance_separates_bafu_from_existenz() -> None:
 
 @pytest.mark.governing(
     "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
+    "maintenance/catalogue/station_metadata/sources/ch_foen",
     "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
     "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
     "tests/test_data/ch_foen_bafu_current_hydrological_data.html",
@@ -41,7 +42,9 @@ def test_swiss_provenance_separates_bafu_from_existenz() -> None:
     "tests/test_data/ch_foen_terms_bafu.html",
     "tests/test_data/ch_foen_terms_existenz.html",
 )
-def test_swiss_terms_recordings_and_native_bytes_are_verified(retained_evidence_root: Path, tmp_path: Path) -> None:
+def test_swiss_terms_recordings_and_native_bytes_are_verified(
+    retained_evidence_root: Path, tmp_path: Path, catalogue_input_receipt
+) -> None:
     from tests.test_catalogue_build_provenance import _build
 
     # Synthetic selection reaches only the intended failing verification boundary.
@@ -70,10 +73,12 @@ def test_swiss_terms_recordings_and_native_bytes_are_verified(retained_evidence_
         retained_evidence_root / "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet", native
     )
     native.write_bytes(native.read_bytes() + b"x")
+    receipt_path = tmp_path / "input-receipt.json"
+    receipt_path.write_text(catalogue_input_receipt.model_dump_json())
     with pytest.raises(FatalContractError, match="native table digest mismatch"):
         main(
             ["--build-inputs", str(build_inputs_path), "--native", str(native), "--out", str(tmp_path / "out")]
-            + ["--evidence-root", str(retained_evidence_root)]
+            + ["--evidence-root", str(retained_evidence_root), "--input-receipt", str(receipt_path)]
         )
 
 

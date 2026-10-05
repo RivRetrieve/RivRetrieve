@@ -17,6 +17,7 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.ca_eccc.generate_catalogue import main
 from rivretrieve._internal.providers.ca_eccc.origins import build_acquisition_provenance
 from tests._provenance import remove_external_inputs, write_evidence_table
+from tests.test_catalogue_origin_certification import _catalogue_recording_paths
 
 
 def test_canada_provenance_separates_geomet_from_hydat() -> None:
@@ -34,9 +35,8 @@ def test_canada_provenance_separates_geomet_from_hydat() -> None:
 
 
 @pytest.mark.governing(
+    *_catalogue_recording_paths("ca_eccc"),
     "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet",
-    "tests/test_data/ca_eccc_terms_citation.html",
-    "tests/test_data/ca_eccc_terms_licence.html",
 )
 def test_canada_terms_recordings_and_native_bytes_are_verified(retained_evidence_root: Path, tmp_path: Path) -> None:
     from tests.test_catalogue_build_provenance import _build
@@ -44,15 +44,18 @@ def test_canada_terms_recordings_and_native_bytes_are_verified(retained_evidence
     # Synthetic selection reaches only the intended failing verification boundary.
     build_inputs_path = tmp_path / "synthetic-build-inputs.json"
     build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
-    verify_provenance_recordings(build_acquisition_provenance(), retained_evidence_root)
-    evidence = Path("tests/test_data/ca_eccc_terms_licence.html")
-    target = tmp_path / evidence
-    target.parent.mkdir(parents=True)
-    target.write_bytes((retained_evidence_root / evidence).read_bytes().replace(b"worldwide", b"worldwidX", 1))
-    citation = Path("tests/test_data/ca_eccc_terms_citation.html")
-    (tmp_path / citation).write_bytes((retained_evidence_root / citation).read_bytes())
+    provenance = build_acquisition_provenance()
+    for source in provenance.source_records:
+        for item in source.evidence:
+            path = Path(item.recording.repository_path)
+            target = tmp_path / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(retained_evidence_root / path, target)
+    verify_provenance_recordings(provenance, tmp_path)
+    target = tmp_path / "tests/test_data/ca_eccc_terms_licence.html"
+    target.write_bytes(target.read_bytes() + b"changed")
     with pytest.raises(FatalContractError, match="ca_eccc_terms_licence digest mismatch"):
-        verify_provenance_recordings(build_acquisition_provenance(), tmp_path)
+        verify_provenance_recordings(provenance, tmp_path)
     native = tmp_path / "native.parquet"
     shutil.copy2(
         retained_evidence_root / "src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet", native

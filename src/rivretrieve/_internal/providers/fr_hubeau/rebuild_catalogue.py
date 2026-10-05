@@ -16,6 +16,7 @@ from rivretrieve._internal.acquisition_provenance import (
     EvidenceReference,
     NativeTableIdentity,
     RecordingReference,
+    RetainedInputReceipt,
     SemanticDigest,
     verify_provenance_recordings,
 )
@@ -28,7 +29,16 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import (
     refresh_native_table,
     write_catalogue,
 )
-from rivretrieve._internal.providers.fr_hubeau.origins import FRANCE_ORIGIN_DECLARATIONS
+from rivretrieve._internal.providers.fr_hubeau.origins import (
+    FRANCE_ORIGIN_DECLARATIONS,
+    SITE_METADATA_LINEAGE_SHA256,
+    SITE_METADATA_MANIFEST_SHA256,
+    SITE_METADATA_ROOT,
+)
+from rivretrieve._internal.providers.fr_hubeau.station_metadata import (
+    StationMetadataSources,
+    read_station_metadata_sources,
+)
 
 
 def rebuild(
@@ -39,13 +49,18 @@ def rebuild(
     revision: str,
     *,
     build_inputs: CatalogueBuildInputs,
+    metadata_sources: StationMetadataSources,
 ) -> None:
     """Rebuild native and catalogue products from explicit retained station responses.
 
     ``revision`` identifies the retained native input, not the executing code.
     Outputs and the capture record must be outside source checkouts and separate
     from ``evidence_root``. Missing inputs or changed publisher receipts raise
-    before publication. No network requests are made.
+    before publication. No network requests are made. ``metadata_sources`` must
+    contain the verified original site responses and their selected-member
+    identities. ``build_inputs`` must adopt their supporting members.
+    Destinations must be new, separate paths; existing products are never replaced.
+    Native and capture outputs can remain if a later publication check fails.
     """
     evidence_root = evidence_root.resolve(strict=True)
     output = output.resolve()
@@ -55,6 +70,13 @@ def rebuild(
             raise ValueError("Outputs must be outside source checkouts")
         if destination.is_relative_to(evidence_root):
             raise ValueError("Outputs must be separate from retained evidence")
+    if output.exists() or capture_output.exists():
+        raise ValueError("Rebuild destinations must be new paths")
+    if capture_output.is_relative_to(output) or output.is_relative_to(capture_output):
+        raise ValueError("Native catalogue and capture destinations must be separate")
+    ledger = availability_ledger.resolve()
+    if evidence_root.is_relative_to(output) or ledger.is_relative_to(output) or ledger == capture_output:
+        raise ValueError("Outputs must not contain or replace retained inputs")
     inventory = evidence_root / "maintenance/catalogue/fr_hubeau/inventory"
     payloads, instants, acquisitions, evidence = [], [], [], []
     for endpoint in ("hydrometry", "temperature"):
@@ -126,12 +148,19 @@ def rebuild(
     )
     capture_output.write_text(capture.model_dump_json(indent=2) + "\n")
     availability = decode_availability(lzma.decompress(availability_ledger.read_bytes()))
-    catalogue = build_catalogue(native, FRANCE_ORIGIN_DECLARATIONS, availability, native_capture=capture)
+    catalogue = build_catalogue(
+        native,
+        FRANCE_ORIGIN_DECLARATIONS,
+        availability,
+        native_capture=capture,
+        metadata_sources=metadata_sources,
+    )
     verify_provenance_recordings(catalogue.acquisition_provenance, evidence_root)
     write_catalogue(catalogue, output, build_inputs=build_inputs, native_table=native)
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> int:
+    """Compose a complete offline rebuild from reviewed local inputs."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument(
@@ -139,11 +168,20 @@ if __name__ == "__main__":
         type=Path,
         required=True,
     )
+    parser.add_argument("--input-receipt", type=Path, required=True, help="Verified RetainedInputReceipt JSON.")
     parser.add_argument("--build-inputs", type=Path, required=True, help="Reviewed adopted CatalogueBuildInputs JSON.")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--capture-output", type=Path, required=True)
     parser.add_argument("--revision", required=True, help="Repository revision containing the retained native input")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    input_receipt = RetainedInputReceipt.model_validate_json(args.input_receipt.read_bytes())
+    metadata_sources = read_station_metadata_sources(
+        args.evidence_root.resolve(),
+        input_receipt=input_receipt,
+        site_root=SITE_METADATA_ROOT,
+        manifest_sha256=SITE_METADATA_MANIFEST_SHA256,
+        lineage_sha256=SITE_METADATA_LINEAGE_SHA256,
+    )
     rebuild(
         args.evidence_root.resolve(),
         args.availability_ledger.resolve(),
@@ -151,4 +189,10 @@ if __name__ == "__main__":
         args.capture_output.resolve(),
         args.revision,
         build_inputs=CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes()),
+        metadata_sources=metadata_sources,
     )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
