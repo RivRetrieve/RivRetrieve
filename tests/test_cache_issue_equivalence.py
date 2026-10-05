@@ -108,7 +108,13 @@ def test_explicit_members_reuse_independent_inventories_despite_all_uncertainty(
     selected, versions, transport = authored_cache
     assert len(versions) >= member_count
     transport.metadata_failed = True
-    initial = _fetch(selected, cache="refresh", on_issue="ignore")
+    counts = []
+    for _ in range(3):
+        initial = _fetch(selected, cache="refresh", on_issue="ignore")
+        manifest = rr.cache_status("no_nve").manifest
+        assert manifest is not None
+        counts.append((len(manifest.inventories), len(manifest.outcomes), len(manifest.source_calls)))
+    assert counts[1:] == counts[:1] * 2
     inventory_issues = tuple(issue for issue in initial.issues if issue.code == "source.inventory_unresolved")
     assert inventory_issues
     explicit = rr.pick(selected, variant=tuple(str(version) for version in versions[:member_count]))
@@ -136,8 +142,10 @@ def test_all_and_unknown_scopes_keep_inventory_uncertainty(authored_cache):
     transport.metadata_failed = True
     initial = _fetch(selected, cache="refresh", on_issue="ignore")
     assert any(issue.code == "source.inventory_unresolved" for issue in initial.issues)
+    before_all = len(transport.calls)
     with pytest.raises(IssuePolicyError) as all_error:
         _fetch(selected, cache="reuse", on_issue="raise")
+    assert len(transport.calls) > before_all
     assert any(issue.code == "source.inventory_unresolved" for issue in all_error.value.issues)
     unknown = rr.pick(selected, series_id="authored-unknown-member", on_issue="ignore")
     before = len(transport.calls)
