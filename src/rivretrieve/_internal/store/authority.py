@@ -8,6 +8,7 @@ acquisition-history archive. Unknown diagnostic scope is retained conservatively
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval, remainder
 from rivretrieve._internal.issues import FatalContractError, Issue
@@ -49,6 +50,18 @@ def _same_scope(first: RetrievalOutcome, second: RetrievalOutcome) -> bool:
 
 def _interval(item: RetrievalOutcome) -> RequestedInterval:
     return RequestedInterval(item.window.start, item.window.end, axis=item.window.axis)
+
+
+def retained_snapshot_outcome(item: RetrievalOutcome, keys: tuple[tuple[str, datetime, str], ...]) -> RetrievalOutcome:
+    """Identify a retained-key projection without changing its acquisition facts."""
+    if keys == item.observation_keys:
+        return item
+    return item.model_copy(
+        update={
+            "observation_keys": keys,
+            "outcome_id": stable_id(item.outcome_id, "retained-observation-keys", repr(keys)),
+        }
+    )
 
 
 def _snapshot_keys(item: RetrievalOutcome, later: list[RetrievalOutcome]) -> tuple:
@@ -358,20 +371,7 @@ def compact_evidence(
         if item.status in _SUCCESS:
             if item.coverage == "observations":
                 keys = _snapshot_keys(item, later)
-                parts = (
-                    (
-                        item.model_copy(
-                            update={
-                                "observation_keys": keys,
-                                "outcome_id": item.outcome_id
-                                if keys == item.observation_keys
-                                else stable_id(item.outcome_id, "retained-observation-keys", repr(keys)),
-                            }
-                        ),
-                    )
-                    if keys
-                    else ()
-                )
+                parts = (retained_snapshot_outcome(item, keys),) if keys else ()
             else:
                 parts = (item,) if item.outcome_id in supported else ()
         else:

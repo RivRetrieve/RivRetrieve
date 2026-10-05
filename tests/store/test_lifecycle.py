@@ -769,3 +769,61 @@ def test_retained_workspace_wraps_source_failure_without_changing_source_fields(
     assert not isinstance(error, life.StorePostCommitCleanupError)
     assert tx.workspace in error.residue_paths
     assert validate(root) == "old"
+
+
+@pytest.mark.parametrize("reentrant", [False, True])
+@pytest.mark.parametrize("transaction_failure", [False, True])
+def test_idle_owner_failure_retains_publication_identity(tmp_path, monkeypatch, reentrant, transaction_failure):
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    root = tmp_path / "store"
+    install(root)
+    owner_cleanup = PermissionError("owner idle write failed")
+    original = OSError("postcommit operation failed")
+    transaction_cleanup = PermissionError("previous generation deletion failed")
+    write = life._write_owner
+    remove = life._remove
+    artifact = tmp_path / "caller-input"
+    artifact.write_text("source")
+
+    def failed_owner(stream, value):
+        if value == {"state": "idle"}:
+            raise owner_cleanup
+        write(stream, value)
+
+    def failed_remove(path):
+        if transaction_failure and path.name.startswith(".store.previous-"):
+            raise transaction_cleanup
+        remove(path)
+
+    def validated(path):
+        assert validate(path) == "new"
+        return SimpleNamespace(generation_id="new-generation")
+
+    monkeypatch.setattr(life, "_write_owner", failed_owner)
+    monkeypatch.setattr(life, "_remove", failed_remove)
+    with (
+        pytest.raises(life.StorePostCommitCleanupError) as caught,
+        life.store_lease(root) if reentrant else nullcontext() as lease,
+        life.store_transaction(root, lease=lease) as tx,
+    ):
+        tx.register_cleanup((artifact,))
+        tx.stage.mkdir()
+        (tx.stage / "data").write_text("new")
+        tx.publish(validated)
+        if transaction_failure:
+            raise original
+
+    error = caught.value
+    assert error.original is (original if transaction_failure else owner_cleanup)
+    assert error.cleanup_errors == ((transaction_cleanup, owner_cleanup) if transaction_failure else (owner_cleanup,))
+    assert error.transaction_id == tx.transaction_id
+    assert error.generation_id == "new-generation"
+    assert error.committed_path == root
+    assert tmp_path / ".store.owner" in error.residue_paths
+    if transaction_failure:
+        assert artifact in error.residue_paths
+        assert tx.previous in error.residue_paths
+    assert validate(root) == "new"
+    assert life.inspect_lifecycle(root).ownership == life.Ownership.ABANDONED

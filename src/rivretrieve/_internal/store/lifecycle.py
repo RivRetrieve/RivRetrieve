@@ -79,6 +79,7 @@ class StoreLease:
     root: Path
     stream: IO[str]
     pid: int
+    _committed_transaction: StoreTransaction | None = None
 
     def check(self, root: Path) -> None:
         if self.root != _root(root) or self.stream.closed or self.pid != os.getpid():
@@ -191,8 +192,9 @@ def store_lease(root: Path, *, lease: StoreLease | None = None, recovery: bool =
                 raise StoreLifecycleError(f"Store ownership requires recovery: {owner}")
             _write_owner(stream, {"host": socket.gethostname(), "pid": os.getpid(), "token": uuid4().hex})
             original: BaseException | None = None
+            acquired = StoreLease(root, stream, os.getpid())
             try:
-                yield StoreLease(root, stream, os.getpid())
+                yield acquired
             except BaseException as error:
                 original = error
                 raise
@@ -200,16 +202,31 @@ def store_lease(root: Path, *, lease: StoreLease | None = None, recovery: bool =
                 try:
                     _write_owner(stream, {"state": "idle"})
                 except OSError as cleanup:
+                    prior = original if isinstance(original, StoreTransactionError) else None
+                    committed = acquired._committed_transaction
                     kind = (
                         StorePostCommitCleanupError
-                        if isinstance(original, StorePostCommitCleanupError)
+                        if isinstance(prior, StorePostCommitCleanupError) or committed is not None
                         else StoreTransactionError
                     )
+                    cause = prior.original if prior is not None else original or cleanup
                     raise kind(
-                        original or cleanup,
-                        cleanup_errors=(cleanup,),
-                        committed_path=root if root.exists() else None,
-                        residue_paths=(*_residue(root), lock),
+                        cause,
+                        cleanup_errors=(*(prior.cleanup_errors if prior is not None else ()), cleanup),
+                        committed_path=prior.committed_path if prior is not None else root if root.exists() else None,
+                        transaction_id=(
+                            prior.transaction_id
+                            if prior is not None
+                            else committed.transaction_id
+                            if committed
+                            else None
+                        ),
+                        generation_id=(
+                            prior.generation_id if prior is not None else committed.generation_id if committed else None
+                        ),
+                        residue_paths=tuple(
+                            dict.fromkeys((*(prior.residue_paths if prior is not None else ()), *_residue(root), lock))
+                        ),
                     ) from (original or cleanup)
         finally:
             _flock(stream, unlock=True)
@@ -366,6 +383,8 @@ class StoreTransaction:
             self.record["phase"] in {"replacing", "committed"} and not _exists(self.stage) and self.root.exists()
         )
         self.committed = committed
+        if committed:
+            self.lease._committed_transaction = self
         if not committed and self.previous.exists() and not self.root.exists():
             try:
                 os.replace(self.previous, self.root)
@@ -407,17 +426,24 @@ class StoreTransaction:
                     _remove(path)
                 except OSError as error:
                     errors.append(error)
-        if errors or (original is not None and (committed or retain_workspace)):
+        prior = original if isinstance(original, StoreTransactionError) else None
+        if errors or prior is not None or (original is not None and (committed or retain_workspace)):
             kind = StorePostCommitCleanupError if committed else StoreTransactionError
-            cause = original or errors[0]
+            cause = prior.original if prior is not None else original or errors[0]
             raise kind(
                 cause,
-                cleanup_errors=tuple(errors),
+                cleanup_errors=(*(prior.cleanup_errors if prior is not None else ()), *errors),
                 committed_path=self.root if self.root.exists() else self.previous if self.previous.exists() else None,
                 transaction_id=self.transaction_id,
                 generation_id=self.generation_id if committed else None,
                 residue_paths=tuple(
-                    dict.fromkeys((*_residue(self.root), *(p for p in self.cleanup_paths if _exists(p))))
+                    dict.fromkeys(
+                        (
+                            *(p for p in (prior.residue_paths if prior is not None else ()) if _exists(p)),
+                            *_residue(self.root),
+                            *(p for p in self.cleanup_paths if _exists(p)),
+                        )
+                    )
                 ),
             ) from cause
 

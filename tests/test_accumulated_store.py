@@ -387,3 +387,108 @@ def test_failed_update_cannot_bless_preexisting_ctime_only_corruption(tmp_path):
                 store, _PROVIDER, _rows([datetime(2020, 1, 1)], [2.0]), _coverage("2020-01-01", "2020-12-31", _T2)
             )
         assert (store / "integrity.json").read_bytes() == seal
+
+
+@pytest.mark.parametrize("years", [(2020, 2021), (2020, 2021, 2022)])
+def test_rolling_snapshot_reuses_untouched_year_with_original_acquisition(tmp_path, monkeypatch, years):
+    from dataclasses import replace
+
+    import rivretrieve._internal.store.integrity as integrity
+    import rivretrieve._internal.store.validation as validation
+
+    def snapshot(times, values, start, end, acquired):
+        rows = _rows(times, values)
+        update = _rows_update(_PROVIDER, rows, _coverage(start, end, acquired))
+        outcome = update.outcomes[0].model_copy(
+            update={
+                "coverage": "observations",
+                "observation_keys": tuple(rows.select("facts_id", "time", "time_zone").iter_rows()),
+            }
+        )
+        return replace(update, outcomes=(outcome,))
+
+    store = StoreRoot(tmp_path / "store")
+    times = [datetime(2020, 12, 31), *(datetime(year, 1, 1) for year in years[1:])]
+    initial = snapshot(times, [1.0] * len(times), "2020-12-31", f"{years[-1]}-01-01", _T1)
+    accumulate(store, _PROVIDER, initial)
+    original = initial.outcomes[0]
+    held = next((store / "product=level/year=2020").glob("*.parquet"))
+    inode = held.stat().st_ino
+
+    def guard(operation):
+        def checked(path, *args, **kwargs):
+            assert "year=2020" not in str(path), "Untouched snapshot partition was read, hashed or copied"
+            return operation(path, *args, **kwargs)
+
+        return checked
+
+    with monkeypatch.context() as patch:
+        patch.setattr(integrity, "_digest", guard(integrity._digest))
+        patch.setattr(validation, "_open_parquet", guard(validation._open_parquet))
+        patch.setattr(pl, "read_parquet", guard(pl.read_parquet))
+        patch.setattr(shutil, "copyfile", guard(shutil.copyfile))
+        for index, year in enumerate(years[1:], 1):
+            manifest = accumulate(
+                store,
+                _PROVIDER,
+                snapshot(
+                    [datetime(year, 1, 1)],
+                    [float(index + 1)],
+                    f"{year}-01-01",
+                    f"{year}-01-02",
+                    _T1 + timedelta(days=index),
+                ),
+            )
+            retained = next(item for item in manifest.outcomes if original.observation_keys[0] in item.observation_keys)
+            assert retained.model_dump(exclude={"outcome_id", "observation_keys"}) == original.model_dump(
+                exclude={"outcome_id", "observation_keys"}
+            )
+            assert retained.retrieved_at == _T1
+            assert held.stat().st_ino == inode
+
+    assert_frame_equal(_read(store), _rows(times, [float(index + 1) for index in range(len(times))]))
+    integrity.audit_store(store, _PROVIDER)
+
+
+@pytest.mark.parametrize(
+    "defect", ["time", "calls", "window", "foreign_id", "rewritten_id", "missing_key", "extra_key"]
+)
+def test_rolling_snapshot_reuse_rejects_changed_acquisition_or_key_support(tmp_path, defect):
+    from dataclasses import replace
+
+    from rivretrieve._internal.store import PartitionIdentifier
+    from rivretrieve._internal.store.authority import retained_snapshot_outcome
+    from rivretrieve._internal.store.integrity import _preserves_support, inspect_integrity
+
+    store = StoreRoot(tmp_path / "store")
+    rows = _rows([datetime(2020, 12, 31), datetime(2021, 1, 1)], [1.0, 2.0])
+    update = _rows_update(_PROVIDER, rows, _coverage("2020-12-31", "2021-01-01"))
+    original = update.outcomes[0].model_copy(
+        update={
+            "coverage": "observations",
+            "observation_keys": tuple(rows.select("facts_id", "time", "time_zone").iter_rows()),
+        }
+    )
+    accumulate(store, _PROVIDER, replace(update, outcomes=(original,)))
+    previous = inspect_integrity(store, _PROVIDER).store
+    retained = retained_snapshot_outcome(original, original.observation_keys[:1])
+    if defect == "time":
+        retained = retained.model_copy(update={"retrieved_at": _T2})
+    elif defect == "calls":
+        retained = retained.model_copy(update={"calls": ("other-acquisition",)})
+    elif defect == "window":
+        retained = retained.model_copy(
+            update={"window": original.window.model_copy(update={"start": original.window.start - timedelta(days=1)})}
+        )
+    elif defect == "foreign_id":
+        retained = retained.model_copy(update={"outcome_id": "unrelated-acquisition"})
+    elif defect == "rewritten_id":
+        retained = retained.model_copy(update={"outcome_id": original.outcome_id})
+    elif defect == "missing_key":
+        retained = retained_snapshot_outcome(original, original.observation_keys[1:])
+    else:
+        extra = (original.observation_keys[0][0], datetime(2020, 12, 30), "unknown")
+        retained = retained_snapshot_outcome(original, (*original.observation_keys[:1], extra))
+    candidate = replace(previous, manifest=replace(previous.manifest, outcomes=(retained,)))
+    with pytest.raises(ObservationStoreRefusedError, match="reuse_observations"):
+        _preserves_support(previous, candidate, {PartitionIdentifier("product=level/year=2020")})

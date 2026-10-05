@@ -28,6 +28,7 @@ from typing import NoReturn
 
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.source_series import OutcomeStatus, RetrievalOutcome
+from rivretrieve._internal.store.authority import retained_snapshot_outcome
 from rivretrieve._internal.store.validation import (
     AccumulatedStoreManifest,
     PartitionIdentifier,
@@ -363,12 +364,11 @@ def _preserves_support(previous: ValidatedStore, candidate: ValidatedStore, reus
                     cursor = right + timedelta(microseconds=1)
                 if not covered:
                     _fail(candidate.root, new.provider_id, f"reuse_coverage:{product}/{year}")
-    keys = {
-        (outcome.outcome_id, *key)
-        for outcome in new.outcomes
-        if outcome.status is OutcomeStatus.SUCCESS and outcome.coverage == "observations"
-        for key in outcome.observation_keys
-    }
+    snapshots: dict[str, list[RetrievalOutcome]] = defaultdict(list)
+    for outcome in new.outcomes:
+        if outcome.status is OutcomeStatus.SUCCESS and outcome.coverage == "observations":
+            signature = outcome.model_dump_json(exclude={"outcome_id", "observation_keys"})
+            snapshots[signature].append(outcome)
     for outcome in old.outcomes:
         if (
             outcome.coverage != "observations"
@@ -381,13 +381,13 @@ def _preserves_support(previous: ValidatedStore, candidate: ValidatedStore, reus
         relevant_keys = [key for key in outcome.observation_keys if key[1].year in retained_years]
         if not relevant_keys:
             continue
-        retained_outcome = new_outcomes.get(outcome.outcome_id)
-        if (
-            retained_outcome is None
-            or retained_outcome.model_dump(exclude={"observation_keys"})
-            != outcome.model_dump(exclude={"observation_keys"})
-            or any((outcome.outcome_id, *key) not in keys for key in relevant_keys)
-        ):
+        signature = outcome.model_dump_json(exclude={"outcome_id", "observation_keys"})
+        for retained in snapshots.get(signature, ()):
+            retained_keys = set(retained.observation_keys)
+            projection = tuple(key for key in outcome.observation_keys if key in retained_keys)
+            if retained == retained_snapshot_outcome(outcome, projection) and set(relevant_keys) <= retained_keys:
+                break
+        else:
             _fail(candidate.root, new.provider_id, f"reuse_observations:{outcome.series_id}")
 
 
