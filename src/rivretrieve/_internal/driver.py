@@ -2483,7 +2483,9 @@ def drive(
                     OutcomeStatus.SUCCESS,
                     OutcomeStatus.EMPTY,
                 ):
-                    candidate = coverage_native.filter(pl.col("series_id") == original.series_id)
+                    candidate = coverage_native.filter(
+                        (pl.col("series_id") == original.series_id) & pl.col("facts_id").is_in(original.facts_ids)
+                    )
                     if candidate.select(axis_time_expression(TimeAxis.UTC).is_null().any()).item():
                         raise FatalContractError("UTC acquisition rows require published fixed offsets")
                 concrete = (

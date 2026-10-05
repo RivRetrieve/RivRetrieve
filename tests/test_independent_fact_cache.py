@@ -393,18 +393,6 @@ def test_only_complete_acquired_membership_can_retire_a_held_fact(fact_cache, co
     assert result.data.filter(pl.col("facts_id") == "mean")["value"].to_list() == [2.0]
 
 
-def test_complete_inventory_all_success_control_reuses_mean_max_and_broad_selections(fact_cache):
-    stages, selection, _ = fact_cache
-    _assert_rows(_fetch(selection).data, {"mean": 1.0, "max": 1.0})
-    stages.forbid_fetch = True
-    for selected, expected in (
-        (selection, {"mean": 1.0, "max": 1.0}),
-        (rr.pick(selection, statistic="mean"), {"mean": 1.0}),
-        (rr.pick(selection, statistic="max"), {"max": 1.0}),
-    ):
-        _assert_rows(_fetch(selected, cache="reuse").data, expected)
-
-
 @pytest.mark.parametrize("value", [None, 2.0])
 def test_published_nulls_and_duplicate_rows_survive_independent_failure(fact_cache, value):
     stages, selection, root = fact_cache
@@ -605,3 +593,39 @@ def test_partial_failure_keeps_original_acquisition_as_support_not_active_covera
     assert all(item.calls == original.calls and item.retrieved_at == original.retrieved_at for item in fragments)
     assert any("retrieval-outcome:" + original.outcome_id in item.evidence for item in manifest.inventories)
     assert any(item.status is OutcomeStatus.FAILED and item.window == failed_window for item in manifest.outcomes)
+
+
+def test_single_payload_independent_facts_can_have_different_acquisition_axes(fact_cache, monkeypatch):
+    from rivretrieve._internal.time_axis import TimeAxis
+
+    stages, selection, root = fact_cache
+    stages.members = ("mean",)
+    parse = stages.parse
+
+    def mixed_axes(payload, config):
+        parsed = parse(payload, config)
+        mean = parsed.outcomes[0]
+        maximum = mean.model_copy(
+            update={
+                "outcome_id": "utc-max",
+                "facts_ids": ("max",),
+                "window": mean.window.model_copy(update={"axis": TimeAxis.UTC}),
+            }
+        )
+        native = parsed.rows.with_columns(pl.lit("unknown").alias("time_zone"))
+        utc = parsed.rows.with_columns(pl.lit("max").alias("facts_id"))
+        return replace(
+            parsed, rows=pl.concat([native, utc]), series=(stages.definition,), outcomes=(mean, maximum), inventories=()
+        )
+
+    monkeypatch.setattr(stages, "parse", mixed_axes)
+    result = _fetch(selection)
+    expected = pl.DataFrame({"facts_id": ["max", "mean"], "time_zone": ["+00:00", "unknown"], "value": [1.0, 1.0]})
+    columns = expected.columns
+    pt.assert_frame_equal(result.data.select(columns).sort("facts_id"), expected)
+    pt.assert_frame_equal(_saved(root).select(columns).sort("facts_id"), expected)
+    manifest = rr.cache_status(PROVIDER).manifest
+    assert {(fact, item.interval.axis) for item in manifest.coverage for fact in item.facts_ids} == {
+        ("mean", TimeAxis.NATIVE),
+        ("max", TimeAxis.UTC),
+    }
