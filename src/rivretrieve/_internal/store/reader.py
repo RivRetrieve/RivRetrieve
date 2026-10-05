@@ -16,6 +16,8 @@ from rivretrieve._internal.coverage import CoverageInterval
 from rivretrieve._internal.engine import Rows, RowsSchema, WindowEndpoint
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.source_series import SeriesWindow
+from rivretrieve._internal.store.authority import CurrentEvidence
+from rivretrieve._internal.store.integrity import SealedStore
 from rivretrieve._internal.store.lifecycle import Ownership, StoreLifecycleError, inspect_lifecycle
 from rivretrieve._internal.store.validation import (
     AccumulatedStoreManifest,
@@ -24,7 +26,6 @@ from rivretrieve._internal.store.validation import (
     SourceSchemaFingerprint,
     StoreManifest,
     StoreRoot,
-    validate_store,
 )
 
 
@@ -267,20 +268,68 @@ class CacheRecoveryResult:
 
 
 class StoreReader:
-    """The shared reader for compiled and accumulated observation stores."""
+    """Read stores with shared preparation for one retrieval request.
+
+    Metadata and selected byte checks can be reused only while the closed file
+    inventory and filesystem witnesses remain unchanged. A reader is created at
+    request composition and discarded afterwards. Publication during a request
+    requires explicit invalidation before any further read.
+    """
+
+    def __init__(self) -> None:
+        self._sealed: dict[tuple[StoreRoot, ProviderId], SealedStore] = {}
+        self._witnesses: dict[tuple[StoreRoot, ProviderId], tuple[tuple[object, ...], ...]] = {}
+        self._verified: dict[tuple[StoreRoot, ProviderId], set[PartitionIdentifier]] = {}
+
+    def invalidate(self) -> None:
+        """Discard preparation after an owned store publication."""
+        self._sealed.clear()
+        self._witnesses.clear()
+        self._verified.clear()
+
+    def _prepare(self, store: StoreRoot, provider_id: ProviderId, *, allow_pending: bool = False) -> SealedStore:
+        from rivretrieve._internal.store import integrity
+
+        key = (store, provider_id)
+        witness = _inventory_witness(store)
+        previous = self._sealed.get(key)
+        if previous is not None and witness == self._witnesses[key]:
+            return previous
+        sealed = integrity.inspect_integrity(store, provider_id, allow_pending=allow_pending)
+        if previous is not None and previous.generation_id != sealed.generation_id:
+            integrity._fail(store, provider_id, "generation_changed")
+        self._sealed[key] = sealed
+        self._witnesses[key] = _inventory_witness(store)
+        self._verified[key] = set()
+        return sealed
+
+    def evidence(self, store: StoreRoot, provider_id: ProviderId) -> CurrentEvidence:
+        """Return the current evidence relations, keeping inventory support separate."""
+        require_readable_store(store)
+        sealed = self._prepare(store, provider_id)
+        manifest = sealed.store.manifest
+        return CurrentEvidence(
+            manifest.outcomes, manifest.inventories, manifest.issues, manifest.source_calls, sealed.supporting_outcomes
+        )
 
     def query(self, query: StoreQuery) -> StoreReadResult:
-        from rivretrieve._internal.store.integrity import inspect_integrity, verify_files
+        from rivretrieve._internal.store.integrity import verify_inspected_files
 
         require_readable_store(query.store)
-        sealed = inspect_integrity(query.store, query.provider_id)
-        # This conservative read still audits all partitions. The publication seal
-        # also supplies a selected-partition contract for a request-bounded reader.
-        verify_files(sealed, tuple(sealed.store.partition_files))
-        validated = validate_store(query.store, query.provider_id)
+        sealed = self._prepare(query.store, query.provider_id)
+        validated = sealed.store
         executed = _executed_query(query)
-        if validated.partition_files:
-            physical_rows, optimized_plan = _scan(query.store, executed)
+        candidates = {
+            key: path
+            for key, path in validated.partition_files.items()
+            if str(key).split("/")[0].removeprefix("product=") in executed.products
+            and int(str(key).split("/")[1].removeprefix("year=")) in executed.years
+        }
+        verified = self._verified[(query.store, query.provider_id)]
+        verify_inspected_files(sealed, candidates.keys() - verified)
+        verified.update(candidates)
+        if candidates:
+            physical_rows, optimized_plan = _scan(tuple(candidates.values()), executed)
         else:
             physical_rows = pl.DataFrame(
                 schema={
@@ -313,8 +362,6 @@ class StoreReader:
         return self.query(query)
 
     def status(self, store: StoreRoot, provider_id: ProviderId) -> StoreStatus:
-        from rivretrieve._internal.store.integrity import inspect_integrity
-
         state = inspect_lifecycle(Path(store))
         if state.committed_path is None:
             return StoreStatus(
@@ -328,7 +375,7 @@ class StoreReader:
                 ownership=state.ownership,
             )
         pending_seal = state.committed_path / ".integrity.pending"
-        sealed = inspect_integrity(
+        sealed = self._prepare(
             StoreRoot(state.committed_path),
             provider_id,
             allow_pending=pending_seal in (*state.interrupted_paths, *state.cleanup_paths),
@@ -346,6 +393,21 @@ class StoreReader:
             cleanup_paths=state.cleanup_paths,
             ownership=state.ownership,
         )
+
+
+def _inventory_witness(store: StoreRoot) -> tuple[tuple[object, ...], ...]:
+    # Include directories to detect added/deleted entries, and ctime to detect
+    # edits whose mtime was restored. Never follow a newly introduced symlink.
+    try:
+        paths = (Path(store), *sorted(Path(store).rglob("*")))
+        return tuple(
+            (str(path), item.st_mode, item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_ctime_ns)
+            for path in paths
+            for item in (path.lstat(),)
+        )
+    except OSError:
+        # Inspection supplies the established malformed-store refusal.
+        return ()
 
 
 def require_readable_store(store: StoreRoot) -> None:
@@ -394,9 +456,9 @@ def _executed_query(query: StoreQuery) -> ExecutedStoreQuery:
     )
 
 
-def _scan(store: StoreRoot, executed: ExecutedStoreQuery) -> tuple[pl.DataFrame, str]:
+def _scan(paths: tuple[Path, ...], executed: ExecutedStoreQuery) -> tuple[pl.DataFrame, str]:
     scan = pl.scan_parquet(
-        str(Path(store) / "product=*" / "year=*" / "*.parquet"),
+        list(paths),
         hive_partitioning=True,
         missing_columns="raise",
         extra_columns="raise",

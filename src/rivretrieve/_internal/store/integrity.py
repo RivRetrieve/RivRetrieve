@@ -262,6 +262,16 @@ def verify_files(sealed: SealedStore, identifiers: Iterable[PartitionIdentifier]
     current = inspect_integrity(sealed.store.root, sealed.store.manifest.provider_id)
     if current.generation_id != sealed.generation_id:
         _fail(sealed.store.root, sealed.store.manifest.provider_id, "generation_changed")
+    verify_inspected_files(current, identifiers)
+
+
+def verify_inspected_files(sealed: SealedStore, identifiers: Iterable[PartitionIdentifier]) -> None:
+    """Hash candidates against metadata whose current inventory was already checked.
+
+    The reader owns the request lifetime and checks filesystem witnesses before
+    reusing this preparation. This function never grants path-only trust.
+    """
+    current = sealed
     for identifier in set(identifiers):
         path = current.store.partition_files[identifier]
         name = path.relative_to(current.store.root).as_posix()
