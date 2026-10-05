@@ -561,3 +561,22 @@ def test_issue_acquisition_aliases_resolve_from_active_retry_calls(tmp_path):
     path.write_text(json.dumps(raw))
     integrity.seal_store(root, provider)
     integrity.audit_store(root, provider)
+
+
+@pytest.mark.parametrize("state", [None, False, "unexpected"])
+def test_storage_issue_context_marker_requires_known_state(tmp_path, state):
+    root, provider = _linked_live_store(tmp_path)
+    manifest = root / "manifest.json"
+    raw = json.loads(manifest.read_text())
+    raw["issues"] = [
+        {
+            "severity": "info",
+            "code": "source.authored",
+            "message": "Authored note",
+            "details": {"acquisition_ids": ["acquisition"], "_source_details_state": state},
+        }
+    ]
+    manifest.write_text(json.dumps(raw))
+    _resign(root)
+    with pytest.raises(ObservationStoreRefusedError, match="issue.context"):
+        integrity.audit_store(root, provider)

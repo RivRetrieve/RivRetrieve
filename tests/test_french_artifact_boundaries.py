@@ -8,7 +8,10 @@ import pytest
 
 import rivretrieve as rr
 from rivretrieve._internal import discovery, export_bundle
-from rivretrieve._internal.store import ObservationStoreRefusedError, validation
+from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.store import ObservationStoreRefusedError, StoreRoot, validation
+from rivretrieve._internal.store.accumulation import StoreUpdate, accumulate
+from tests.store.test_integrity import _resign
 
 _ARTIFACT_ARCHIVE = Path("tests/test_data/french_combined_artifacts.tar.xz")
 _BUNDLES = (
@@ -169,15 +172,17 @@ def test_current_context_only_empty_bundle_round_trip():
 
 
 @pytest.mark.parametrize("operation", ("status", "reuse", "refresh"))
-@pytest.mark.derived("tests/test_data/french_combined_artifacts.tar.xz")
-def test_current_store_revision_still_refuses_retired_publication_service(operation, tmp_path, monkeypatch, artifacts):
+def test_current_store_revision_still_refuses_retired_publication_service(operation, tmp_path, monkeypatch):
+    # Author a current generation, then change only its publication identity.
+    # Re-sign this synthetic carrier so the semantic gate, not byte integrity, refuses.
     cache = tmp_path / "cache"
     target = cache / "fr_hubeau/store"
-    shutil.copytree(artifacts / "store", target)
+    accumulate(StoreRoot(target), ProviderId("fr_hubeau"), StoreUpdate((), (), (), ()))
     path = target / "manifest.json"
     manifest = json.loads(path.read_text())
-    manifest["format_version"] = 8
+    del manifest["publication_service"]
     path.write_text(json.dumps(manifest))
+    _resign(target)
     before = _files(cache)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(cache))
     monkeypatch.setattr(validation, "_open_parquet", _no_values)
@@ -187,7 +192,7 @@ def test_current_store_revision_still_refuses_retired_publication_service(operat
             pytest.fail("retired publication identity reached source transport")
 
     monkeypatch.setattr(discovery, "HttpClient", NoNetwork)
-    with pytest.raises(ObservationStoreRefusedError, match="publication.service"):
+    with pytest.raises(ObservationStoreRefusedError, match="publication.service") as caught:
         if operation == "status":
             rr.cache_status("fr_hubeau")
         else:
@@ -195,4 +200,6 @@ def test_current_store_revision_still_refuses_retired_publication_service(operat
                 provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily", statistic="mean"
             )
             rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache=operation, on_issue="ignore")
+    assert caught.value.refusal.kind is validation.StoreRefusalKind.INCOMPATIBLE
+    assert caught.value.refusal.defect == "publication_service:expected hubeau"
     assert _files(cache) == before

@@ -588,6 +588,68 @@ class _ReusePlan:
     series: tuple[SourceSeries, ...]
 
 
+def _remap_issue_evidence(issue: Issue, outcome_ids: Mapping[str, str], inventory_ids: Mapping[str, str]) -> Issue:
+    if not issue.details:
+        return issue
+    details = dict(issue.details)
+    for field, identities in (("outcome_id", outcome_ids), ("snapshot_id", inventory_ids)):
+        key = details.get(field)
+        if isinstance(key, str) and key in identities:
+            details[field] = identities[key]
+    return issue.model_copy(update={"details": details})
+
+
+def _bind_acquisition_evidence(
+    outcomes: tuple[RetrievalOutcome, ...],
+    inventories: tuple[InventorySnapshot, ...],
+    issues: tuple[Issue, ...],
+    calls: tuple[str, ...],
+) -> tuple[tuple[RetrievalOutcome, ...], tuple[InventorySnapshot, ...], tuple[Issue, ...]]:
+    """Bind derived evidence to the actual acquisition without changing source facts."""
+    # Check raw identities before projections can give contradictory records
+    # different IDs merely because their windows or facts differ.
+    for records, key in ((outcomes, "outcome_id"), (inventories, "snapshot_id")):
+        held: dict[str, object] = {}
+        for item in records:
+            identity = getattr(item, key)
+            if identity in held and held[identity] != item:
+                raise FatalContractError(f"Acquisition contradicts existing {key}")
+            held[identity] = item
+    outcome_ids = {item.outcome_id: stable_id(item.outcome_id, "acquisition", *calls) for item in outcomes}
+    inventory_ids = {item.snapshot_id: stable_id(item.snapshot_id, "acquisition", *calls) for item in inventories}
+
+    def reference(value: str) -> str:
+        for prefix, identities in (("retrieval-outcome:", outcome_ids), ("source-inventory:", inventory_ids)):
+            if value.startswith(prefix):
+                key = value.removeprefix(prefix)
+                return prefix + identities.get(key, key)
+        return value
+
+    return (
+        tuple(
+            item.model_copy(
+                update={
+                    "outcome_id": outcome_ids[item.outcome_id],
+                    "calls": tuple(dict.fromkeys((*item.calls, *calls))),
+                }
+            )
+            for item in outcomes
+        ),
+        tuple(
+            item.model_copy(
+                update={
+                    "snapshot_id": inventory_ids[item.snapshot_id],
+                    "evidence": tuple(
+                        dict.fromkeys((*map(reference, item.evidence), *(f"source-call:{key}" for key in calls)))
+                    ),
+                }
+            )
+            for item in inventories
+        ),
+        tuple(_remap_issue_evidence(item, outcome_ids, inventory_ids) for item in issues),
+    )
+
+
 def _reconcile_acquired_inventories(
     acquired: SourceAcquisition,
     parsed_results: tuple[ParsedSeries, ...],
@@ -1396,6 +1458,12 @@ def _acquisition_groups(
 def _issue_with_acquisition_references(issue: Issue, references: tuple[str, ...]) -> Issue:
     """Attach storage lineage without overwriting publisher issue context."""
     details = dict(issue.details or {})
+    if "_source_details_state" in details and (
+        details["_source_details_state"] != "none" or "acquisition_ids" not in details
+    ):
+        raise FatalContractError("Parsed issue context conflicts with storage-only context state")
+    if issue.details is None:
+        details["_source_details_state"] = "none"
     if "acquisition_ids" in details:
         existing = details["acquisition_ids"]
         if not isinstance(existing, (tuple, list)) or tuple(existing) != references:
@@ -1403,6 +1471,22 @@ def _issue_with_acquisition_references(issue: Issue, references: tuple[str, ...]
     else:
         details["acquisition_ids"] = references
     return issue.model_copy(update={"details": details})
+
+
+def _public_issues(issues: tuple[Issue, ...]) -> tuple[Issue, ...]:
+    """Keep storage lineage internal without changing original issue context."""
+    projected = []
+    for issue in issues:
+        if issue.details is None or "acquisition_ids" not in issue.details:
+            projected.append(issue)
+            continue
+        details = dict(issue.details)
+        details.pop("acquisition_ids")
+        state = details.pop("_source_details_state", None)
+        if state not in (None, "none"):
+            raise FatalContractError("Stored issue context state is malformed")
+        projected.append(issue.model_copy(update={"details": None if state == "none" and not details else details}))
+    return tuple(projected)
 
 
 def _unique_calls(calls: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
@@ -1805,23 +1889,10 @@ def drive(
                 for origin in fetched.calls
             )
             references = tuple(str(call["call_id"]) for call in auxiliary_calls)
-            fetched = replace(
-                fetched,
-                inventories=tuple(
-                    snapshot.model_copy(
-                        update={
-                            "evidence": tuple(
-                                dict.fromkeys((*snapshot.evidence, *(f"source-call:{key}" for key in references)))
-                            )
-                        }
-                    )
-                    for snapshot in fetched.inventories
-                ),
-                outcomes=tuple(
-                    outcome.model_copy(update={"calls": tuple(dict.fromkeys((*outcome.calls, *references)))})
-                    for outcome in fetched.outcomes
-                ),
+            bound_outcomes, bound_inventories, bound_issues = _bind_acquisition_evidence(
+                fetched.outcomes, fetched.inventories, fetched.issues, references
             )
+            fetched = replace(fetched, outcomes=bound_outcomes, inventories=bound_inventories, issues=bound_issues)
         all_issues.extend(
             issue.model_copy(
                 update={"details": {**(issue.details or {}), "inventory_scope": pair_scope.model_dump(mode="json")}}
@@ -2102,23 +2173,10 @@ def drive(
             _validate_parsed_series(parsed)
             # The shared engine knows which immutable payload was parsed even
             # when a provider supplies no separate source-call identifier.
-            parsed = replace(
-                parsed,
-                inventories=tuple(
-                    snapshot.model_copy(
-                        update={
-                            "evidence": tuple(
-                                dict.fromkeys((*snapshot.evidence, f"source-call:{payload.acquisition_id}"))
-                            )
-                        }
-                    )
-                    for snapshot in parsed.inventories
-                ),
-                outcomes=tuple(
-                    outcome.model_copy(update={"calls": tuple(dict.fromkeys((*outcome.calls, payload.acquisition_id)))})
-                    for outcome in parsed.outcomes
-                ),
+            bound_outcomes, bound_inventories, bound_issues = _bind_acquisition_evidence(
+                parsed.outcomes, parsed.inventories, parsed.issues, (payload.acquisition_id,)
             )
+            parsed = replace(parsed, outcomes=bound_outcomes, inventories=bound_inventories, issues=bound_issues)
             validate_native_rows(parsed.rows, config.products, series=parsed.series)
             transaction_parsed.append(parsed)
             parsed_payloads.append((payload_index, parsed))
@@ -2189,9 +2247,7 @@ def drive(
                         }
                     )
                 )
-            inventories.extend(acquired_snapshots)
-            fresh_inventories.extend(acquired_snapshots)
-            all_issues.extend(parsed.issues)
+            admitted_outcome_ids: dict[str, str] = {}
             native = _clip_native(parsed.rows, parsed.series, request.window)
             selected_ids = {item.series_id for item in parsed.series if pair_scope.matches(item)}
             selected_facts = {
@@ -2285,6 +2341,7 @@ def drive(
                         dict.fromkeys(concrete.select("facts_id", "time", "time_zone").iter_rows())
                     )
                 outcome = original.model_copy(update=updates)
+                admitted_outcome_ids[original.outcome_id] = outcome.outcome_id
                 outcomes.append(outcome)
                 fresh_outcomes.append(outcome)
                 if outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
@@ -2313,8 +2370,48 @@ def drive(
                             ),
                         )
                     )
+            admitted_snapshots = []
+            admitted_snapshot_ids = {}
+            for original_snapshot, snapshot in zip(parsed.inventories, acquired_snapshots, strict=True):
+                evidence = tuple(
+                    "retrieval-outcome:"
+                    + admitted_outcome_ids.get(
+                        reference.removeprefix("retrieval-outcome:"), reference.removeprefix("retrieval-outcome:")
+                    )
+                    if reference.startswith("retrieval-outcome:")
+                    else reference
+                    for reference in snapshot.evidence
+                )
+                snapshot_id = stable_id(snapshot.snapshot_id, *evidence)
+                admitted_snapshot_ids[original_snapshot.snapshot_id] = snapshot_id
+                admitted_snapshot_ids[snapshot.snapshot_id] = snapshot_id
+                admitted_snapshots.append(
+                    snapshot.model_copy(update={"snapshot_id": snapshot_id, "evidence": evidence})
+                )
+            admitted_snapshots = [
+                snapshot.model_copy(
+                    update={
+                        "evidence": tuple(
+                            "source-inventory:"
+                            + admitted_snapshot_ids.get(
+                                reference.removeprefix("source-inventory:"), reference.removeprefix("source-inventory:")
+                            )
+                            if reference.startswith("source-inventory:")
+                            else reference
+                            for reference in snapshot.evidence
+                        )
+                    }
+                )
+                for snapshot in admitted_snapshots
+            ]
+            inventories.extend(admitted_snapshots)
+            fresh_inventories.extend(admitted_snapshots)
+            admitted_issues = tuple(
+                _remap_issue_evidence(issue, admitted_outcome_ids, admitted_snapshot_ids) for issue in parsed.issues
+            )
+            all_issues.extend(admitted_issues)
             if len(fresh_outcomes) > parsed_outcome_start:
-                for issue in parsed.issues:
+                for issue in admitted_issues:
                     if (issue.details or {}).get("outcome_id") is None:
                         issue_acquisitions[id(issue)] = tuple(
                             dict.fromkeys(
@@ -2472,7 +2569,7 @@ def drive(
     return assemble(
         converted.value,
         enriched,
-        tuple(all_issues) + converted.issues,
+        _public_issues(tuple(all_issues) + converted.issues),
         Receipts(request.provider_id, tuple(receipt_entries)),
         source_series=selected,
         inventories=retained_inventories,
@@ -2686,7 +2783,7 @@ def drive_store(
     return assemble(
         converted.value,
         provenance,
-        manifest.issues + converted.issues + tuple(query_issues),
+        _public_issues(manifest.issues + converted.issues + tuple(query_issues)),
         Receipts(request.provider_id, receipt_entries),
         # Inventory is retained evidence, not a filtered view. Keep all its
         # definitions so restricted exports remain self-contained.

@@ -364,12 +364,17 @@ def test_refresh_keeps_same_url_attempts_distinct(transport, advance_clock):
     assert earlier["call_id"] != later["call_id"]
     manifest = rr.cache_status("lt_lhmt").manifest
     assert manifest is not None
-    assert {call["call_id"] for call in manifest.source_calls} == {earlier["call_id"], later["call_id"]}
-    assert len(manifest.source_calls) == 2
+    # Fully replaced acquisitions are not retained as an append-only history.
+    assert {call["call_id"] for call in manifest.source_calls} == {later["call_id"]}
+    assert len(manifest.source_calls) == 1
     assert earlier["retrieved_at"] == old
     assert later["retrieved_at"] == transport.retrieved_at
     assert {item.retrieved_at for item in rr.cache_status("lt_lhmt").coverage} == {transport.retrieved_at}
     pt.assert_frame_equal(first.data, second.data)
+    reused = fetch(cache="reuse")
+    assert transport.calls == [(STATION, "2023-06"), (STATION, "2023-06")]
+    assert reused.provenance.calls_made == second.provenance.calls_made
+    pt.assert_frame_equal(reused.data, second.data)
 
 
 @pytest.mark.parametrize("failure", [401, 403, 500, b"not JSON", TransportFailureReason.RETRY_EXHAUSTED])

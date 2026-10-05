@@ -1863,3 +1863,30 @@ def test_storage_issue_lineage_preserves_native_issue_and_original_count():
     assert stored.code == issue.code and stored.message == issue.message
     assert issue.details == {"source_quality_code": "Q", "count": 7}
     assert driver_module._issue_with_acquisition_references(stored, ("payload",)) == stored
+
+
+@pytest.mark.parametrize("details", [None, {}, {"count": 7, "native_label": "authored"}])
+def test_public_issue_projection_preserves_exact_original_context(details):
+    from rivretrieve._internal.issues import Issue
+
+    original = Issue(severity="info", code="source.authored", message="Authored note", details=details)
+    stored = driver_module._issue_with_acquisition_references(original, ("authored-acquisition",))
+    assert stored.details["acquisition_ids"] == ("authored-acquisition",)
+    assert driver_module._public_issues((original,)) == (original,)
+    assert driver_module._public_issues((stored,)) == (original,)
+    assert original.details == details
+    assert driver_module._issue_with_acquisition_references(stored, ("authored-acquisition",)) == stored
+
+
+def test_issue_context_marker_cannot_overwrite_publisher_context():
+    from rivretrieve._internal.issues import Issue
+
+    original = Issue(
+        severity="info",
+        code="source.authored",
+        message="Authored note",
+        details={"_source_details_state": "publisher vocabulary"},
+    )
+    with pytest.raises(FatalContractError, match="conflicts with storage-only context"):
+        driver_module._issue_with_acquisition_references(original, ("authored-acquisition",))
+    assert driver_module._public_issues((original,)) == (original,)

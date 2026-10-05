@@ -312,9 +312,9 @@ The following operations make no source request:
 For example, after an interrupted preparation:
 
 ```python
-status = rr.cache_status("ca_eccc")
-unfinished_paths = status.interrupted_paths
-cleanup_paths = status.cleanup_paths
+recovery_status = rr.cache_status("ca_eccc")
+unfinished_paths = recovery_status.interrupted_paths
+cleanup_paths = recovery_status.cleanup_paths
 
 recovery = rr.recover_cache("ca_eccc")
 actions_taken = recovery.actions

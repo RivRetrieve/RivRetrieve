@@ -199,6 +199,8 @@ Both manifest kinds MUST contain `series`, `inventories`, `outcomes`, `issues`, 
   unchanged. Counts describe the original supporting acquisition, not a new count
   over the rows currently served. Those references retain the issue only while
   the acquisition supports active outcomes. Support-only history cannot make an issue active.
+  Fetch results omit this storage-only linkage and preserve the original issue
+  context, including the difference between missing and empty details.
   Typed inventory references (`source-call:`, `source-inventory:` and
   `retrieval-outcome:`) resolve within the retained evidence. Other evidence strings
   preserve source prose and URLs without interpreting them as local identifiers.

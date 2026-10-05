@@ -269,19 +269,35 @@ def compact_inventories(inventories: tuple[InventorySnapshot, ...]) -> tuple[Inv
     by_scope: dict[tuple[str, str, str], list[InventorySnapshot]] = {}
     for item in reversed(inventories):
         scoped = by_scope.setdefault((item.scope.model_dump_json(), item.access, item.origin), [])
-        if any(
-            (
-                new.window is None
-                or item.window is not None
-                and new.window.axis == item.window.axis
-                and new.window.start <= item.window.start
-                and new.window.end >= item.window.end
-            )
+        covering = tuple(
+            new
             for new in scoped
-        ):
-            continue
-        retained.append(item)
+            if new.window is None
+            or item.window is not None
+            and new.window.axis == item.window.axis
+            and new.window.start <= item.window.start
+            and new.window.end >= item.window.end
+        )
+        # Keep the authority boundary even when a later incomplete census has
+        # invalidated a complete one. Older positive knowledge must not cross it.
         scoped.append(item)
+        if covering:
+            if item.completeness is InventoryCompleteness.COMPLETE or any(
+                new.completeness is InventoryCompleteness.COMPLETE for new in covering
+            ):
+                continue
+            # Incomplete responses establish positive member/fact knowledge,
+            # not the absence of sibling members. Several later responses may
+            # together replace that support without establishing a full census.
+            members = {member for new in covering for member in new.members}
+            facts = {
+                (member, fact) for new in covering for member, established in new.member_facts for fact in established
+            }
+            if set(item.members).issubset(members) and all(
+                (member, fact) in facts for member, established in item.member_facts for fact in established
+            ):
+                continue
+        retained.append(item)
     by_id = {item.snapshot_id: item for item in inventories}
     needed = {item.snapshot_id for item in retained}
     pending = list(retained)

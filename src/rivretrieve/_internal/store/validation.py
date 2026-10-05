@@ -910,6 +910,12 @@ def _validate_metadata(raw: dict[str, Any], store: StoreRoot, provider_id: Provi
                 active_calls.add(alias)
                 pending_calls.append(alias)
     for index, issue in enumerate(metadata["issues"]):
+        if (
+            issue.details is not None
+            and "_source_details_state" in issue.details
+            and (issue.details["_source_details_state"] != "none" or "acquisition_ids" not in issue.details)
+        ):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"issue.context:{index}")
         if issue.details is not None and "outcome_id" in issue.details:
             reference = issue.details["outcome_id"]
             if not isinstance(reference, str) or reference not in active_outcomes:
