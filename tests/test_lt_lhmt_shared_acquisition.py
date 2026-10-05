@@ -371,10 +371,16 @@ def test_refresh_keeps_same_url_attempts_distinct(transport, advance_clock):
     assert later["retrieved_at"] == transport.retrieved_at
     assert {item.retrieved_at for item in rr.cache_status("lt_lhmt").coverage} == {transport.retrieved_at}
     pt.assert_frame_equal(first.data, second.data)
-    reused = fetch(cache="reuse")
+    # Positive member evidence permits explicit reuse, not an ALL census.
+    chosen = rr.pick(selection(), series_id=tuple(second.data["series_id"].unique()))
+    reused = fetch(chosen, cache="reuse")
     assert transport.calls == [(STATION, "2023-06"), (STATION, "2023-06")]
     assert reused.provenance.calls_made == second.provenance.calls_made
     pt.assert_frame_equal(reused.data, second.data)
+    reacquired = fetch(cache="reuse")
+    assert transport.calls == [(STATION, "2023-06")] * 3
+    assert reacquired.provenance.calls_made[0]["call_id"] != later["call_id"]
+    pt.assert_frame_equal(reacquired.data, second.data)
 
 
 @pytest.mark.parametrize("failure", [401, 403, 500, b"not JSON", TransportFailureReason.RETRY_EXHAUSTED])
