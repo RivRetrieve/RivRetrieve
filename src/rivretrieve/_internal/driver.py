@@ -534,7 +534,7 @@ def _clip_native(rows: Rows, series: tuple[SourceSeries, ...], window: Requested
 
 
 def _exclude_native_intervals(
-    rows: Rows, series: tuple[SourceSeries, ...], intervals: tuple[tuple[str, RequestedInterval], ...]
+    rows: Rows, series: tuple[SourceSeries, ...], intervals: tuple[tuple[str, tuple[str, ...], RequestedInterval], ...]
 ) -> Rows:
     """Exclude concrete source intervals on each physical fact's clipping axis."""
     if rows.is_empty() or not intervals:
@@ -544,7 +544,7 @@ def _exclude_native_intervals(
     )
     daily = pl.col("facts_id").is_in(daily_facts)
     keep = pl.lit(True)
-    for series_id, interval in intervals:
+    for series_id, facts_ids, interval in intervals:
         inside = (
             axis_time_expression(interval.axis).is_between(interval.start, interval.end, closed="both")
             if interval.axis is TimeAxis.UTC
@@ -553,8 +553,25 @@ def _exclude_native_intervals(
             )
             | (~daily & pl.col("time").is_between(interval.start, interval.end, closed="both"))
         )
-        keep = keep & ~((pl.col("series_id") == series_id) & inside)
+        keep = keep & ~((pl.col("series_id") == series_id) & pl.col("facts_id").is_in(facts_ids) & inside)
     return rows.filter(keep)
+
+
+def _complete_inventory(snapshot: InventorySnapshot, inventories: tuple[InventorySnapshot, ...]) -> bool:
+    """A completeness claim cannot outrun its required inventory dependencies."""
+    by_id = {item.snapshot_id: item for item in inventories}
+
+    def established(item: InventorySnapshot, visiting: frozenset[str]) -> bool:
+        if item.completeness is not InventoryCompleteness.COMPLETE or item.snapshot_id in visiting:
+            return False
+        dependencies = tuple(
+            reference.removeprefix("source-inventory:")
+            for reference in item.evidence
+            if reference.startswith("source-inventory:")
+        )
+        return all(key in by_id and established(by_id[key], visiting | {item.snapshot_id}) for key in dependencies)
+
+    return established(snapshot, frozenset())
 
 
 def _snapshot_matches(snapshot: InventorySnapshot, scope: SeriesScope, window: SeriesWindow) -> bool:
@@ -725,6 +742,11 @@ def _reconcile_acquired_inventories(
             for event in acquired.failed_requests
         ) or any(
             outcome.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
+            and (
+                outcome.series_id is None
+                or not outcome.facts_ids
+                or not set(outcome.facts_ids).issubset(declared_facts.get(outcome.series_id, ()))
+            )
             for outcome in scoped_outcomes
         ):
             reasons.append("This acquisition has failed, unsupported or unresolved observation outcomes")
@@ -742,7 +764,14 @@ def _reconcile_acquired_inventories(
                     item.series_id == key and fact.facts_id in item.facts_ids and item.status is OutcomeStatus.EMPTY
                     for item in scoped_outcomes
                 )
-                if not observed_definition and not acquired_empty:
+                identified_failure = any(
+                    item.series_id == key
+                    and fact.facts_id in item.facts_ids
+                    and set(item.facts_ids).issubset(declared_facts.get(key, ()))
+                    and _observation_failure(item)
+                    for item in scoped_outcomes
+                )
+                if not observed_definition and not acquired_empty and not identified_failure:
                     reasons.append("A matching admitted member lacks a concrete response definition")
                 coverage = tuple(
                     RequestedInterval(outcome.window.start, outcome.window.end, axis=outcome.window.axis)
@@ -751,7 +780,7 @@ def _reconcile_acquired_inventories(
                     and fact.facts_id in outcome.facts_ids
                     and outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
                 )
-                if remainder(
+                if not identified_failure and remainder(
                     RequestedInterval(snapshot_window.start, snapshot_window.end, axis=snapshot_window.axis), coverage
                 ):
                     reasons.append("A matching admitted member lacks successful coverage in this acquisition")
@@ -1006,6 +1035,8 @@ def _reusable_snapshot(
             return None
         # A newer applicable observation cannot be hidden by an older inventory.
         if scope.restriction is RestrictionKind.ALL and not _snapshot_matches(snapshot, scope, window):
+            return None
+        if not _complete_inventory(snapshot, manifest.inventories):
             return None
         acquired_facts = dict(snapshot.member_facts)
         observed_members = tuple(
@@ -1296,54 +1327,142 @@ def _result_metadata(
     )
 
 
+def _observation_failure(outcome: RetrievalOutcome) -> bool:
+    return outcome.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED) or (
+        outcome.status is OutcomeStatus.UNRESOLVED and outcome.series_id is not None
+    )
+
+
+def _exclude_failed_rows(rows: Rows, series: tuple[SourceSeries, ...], failures: tuple[RetrievalOutcome, ...]) -> Rows:
+    scopes = tuple(
+        (
+            definition.series_id,
+            (fact.facts_id,),
+            RequestedInterval(item.window.start, item.window.end, axis=item.window.axis),
+        )
+        for item in failures
+        for definition in series
+        for fact in definition.facts
+        if _failure_affects(item, definition.series_id, definition.station_id, definition.product_id, fact.facts_id)
+    )
+    return _exclude_native_intervals(rows, series, scopes)
+
+
+def _failure_affects(
+    failure: RetrievalOutcome, series_id: str, station_id: str, product_id: str, facts_id: str
+) -> bool:
+    """Keep unknown fact scope conservative, but inventory uncertainty independent."""
+    if failure.status not in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED):
+        return False
+    if failure.series_id is None:
+        return (
+            failure.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED)
+            and failure.station_id == station_id
+            and failure.product_id == product_id
+        )
+    return failure.series_id == series_id and (not failure.facts_ids or facts_id in failure.facts_ids)
+
+
+def _authorize_fact_retirement(
+    replacements: list[SuccessfulReplacement],
+    definitions: tuple[SourceSeries, ...],
+    inventories: list[InventorySnapshot],
+    outcomes: list[RetrievalOutcome],
+) -> list[SuccessfulReplacement]:
+    """Retire absent facts only with complete acquired membership for this interval."""
+    by_series = {item.series_id: item for item in definitions}
+    by_outcome = {item.outcome_id: item for item in outcomes}
+    authorized = []
+    for replacement in replacements:
+        coverage = replacement.coverage
+        outcome = by_outcome[coverage.outcome_id]
+        definition = by_series[coverage.series_id]
+        retired = []
+        if outcome.coverage == "interval":
+            for fact in definition.facts:
+                if fact.facts_id in coverage.facts_ids:
+                    continue
+                if any(
+                    _failure_affects(
+                        item, definition.series_id, definition.station_id, definition.product_id, fact.facts_id
+                    )
+                    and (
+                        item.window.axis is not coverage.interval.axis
+                        or (item.window.start <= coverage.interval.end and item.window.end >= coverage.interval.start)
+                    )
+                    for item in outcomes
+                ):
+                    continue
+                latest = next(
+                    (
+                        snapshot
+                        for snapshot in reversed(inventories)
+                        if snapshot.origin == "response"
+                        and snapshot.window is not None
+                        and snapshot.window.axis is coverage.interval.axis
+                        and snapshot.window.start <= coverage.interval.start
+                        and snapshot.window.end >= coverage.interval.end
+                        and snapshot.scope.matches(definition)
+                        and snapshot.scope.matches_facts(fact)
+                    ),
+                    None,
+                )
+                if (
+                    latest is not None
+                    and _complete_inventory(latest, tuple(inventories))
+                    and definition.series_id in dict(latest.member_facts)
+                    and fact.facts_id not in dict(latest.member_facts)[definition.series_id]
+                    and set(coverage.facts_ids).issubset(dict(latest.member_facts)[definition.series_id])
+                ):
+                    retired.append(fact.facts_id)
+        authorized.append(replace(replacement, replaced_facts_ids=(*coverage.facts_ids, *retired)))
+    return authorized
+
+
 def _combine_replacements(
     replacements: list[SuccessfulReplacement],
     fresh_outcomes: list[RetrievalOutcome],
     outcomes: list[RetrievalOutcome],
 ) -> list[SuccessfulReplacement]:
-    """Replace one concrete window once, with every acquired native contribution."""
-    grouped: dict[tuple[str, RequestedInterval], list[SuccessfulReplacement]] = {}
+    """Subtract failed facts and times before composing dependent contributions."""
+    grouped: dict[tuple[str, RequestedInterval, tuple[str, ...]], list[SuccessfulReplacement]] = {}
     by_id = {item.outcome_id: item for item in fresh_outcomes}
-    failures = tuple(
-        item
-        for item in fresh_outcomes
-        if item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
-    )
+    failures = tuple(item for item in fresh_outcomes if item.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY))
     acquisition_axes: dict[tuple[str, str], TimeAxis] = {}
     for replacement in replacements:
+        original = by_id[replacement.coverage.outcome_id]
+        fact_intervals: dict[RequestedInterval, list[str]] = {}
         for facts_id in replacement.coverage.facts_ids:
             key = replacement.coverage.series_id, facts_id
             previous_axis = acquisition_axes.setdefault(key, replacement.coverage.interval.axis)
             if previous_axis is not replacement.coverage.interval.axis:
                 raise FatalContractError("One source series cannot mix acquisition time axes")
-        original = by_id[replacement.coverage.outcome_id]
-        excluded = tuple(
-            RequestedInterval(item.window.start, item.window.end, axis=item.window.axis)
-            for item in failures
-            if (
-                item.series_id == original.series_id
-                or (
-                    item.series_id is None
-                    and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED)
-                    and item.station_id == original.station_id
-                    and item.product_id == original.product_id
+            excluded = tuple(
+                RequestedInterval(item.window.start, item.window.end, axis=item.window.axis)
+                for item in failures
+                if _failure_affects(
+                    item, replacement.coverage.series_id, original.station_id, original.product_id, facts_id
                 )
             )
-        )
-        if any(item.axis is not replacement.coverage.interval.axis for item in excluded):
-            raise FatalContractError("One source series cannot mix acquisition time axes")
-        for interval in remainder(replacement.coverage.interval, excluded):
+            if any(item.axis is not replacement.coverage.interval.axis for item in excluded):
+                raise FatalContractError("One source series cannot mix acquisition time axes")
+            for interval in remainder(replacement.coverage.interval, excluded):
+                fact_intervals.setdefault(interval, []).append(facts_id)
+        for interval, facts in fact_intervals.items():
+            facts_ids = tuple(facts)
             part = replacement
-            if interval != replacement.coverage.interval:
+            if interval != replacement.coverage.interval or facts_ids != replacement.coverage.facts_ids:
                 native = replacement.rows.filter(
-                    axis_time_expression(interval.axis).is_between(interval.start, interval.end)
+                    pl.col("facts_id").is_in(facts_ids)
+                    & axis_time_expression(interval.axis).is_between(interval.start, interval.end)
                 )
                 outcome = original.model_copy(
                     update={
                         "outcome_id": stable_id(
-                            original.outcome_id, interval.start.isoformat(), interval.end.isoformat()
+                            original.outcome_id, interval.start.isoformat(), interval.end.isoformat(), *facts_ids
                         ),
                         "window": SeriesWindow(start=interval.start, end=interval.end, axis=interval.axis),
+                        "facts_ids": facts_ids,
                         "status": OutcomeStatus.EMPTY if native.is_empty() else OutcomeStatus.SUCCESS,
                         "observation_keys": tuple(
                             dict.fromkeys(native.select("facts_id", "time", "time_zone").iter_rows())
@@ -1358,13 +1477,61 @@ def _combine_replacements(
                 part = replace(
                     replacement,
                     rows=native,
-                    coverage=replace(replacement.coverage, interval=interval, outcome_id=outcome.outcome_id),
+                    coverage=replace(
+                        replacement.coverage, interval=interval, outcome_id=outcome.outcome_id, facts_ids=facts_ids
+                    ),
+                    replaced_facts_ids=facts_ids,
                 )
-            key = part.coverage.series_id, part.coverage.interval
+            key = part.coverage.series_id, part.coverage.interval, part.coverage.facts_ids
             grouped.setdefault(key, []).append(part)
+    # Partition partially shared fact sets by their actual contributors. This
+    # keeps a multi-fact page and a same-window single-fact page composable without
+    # making an unrelated fact inherit the second page's evidence.
+    windows: dict[tuple[str, RequestedInterval], list[SuccessfulReplacement]] = {}
+    for (series_id, interval, _), parts in grouped.items():
+        windows.setdefault((series_id, interval), []).extend(parts)
+    grouped = {}
+    for (series_id, interval), parts in windows.items():
+        contributors = {
+            fact: tuple(index for index, part in enumerate(parts) if fact in part.coverage.facts_ids)
+            for part in parts
+            for fact in part.coverage.facts_ids
+        }
+        for part in parts:
+            cohorts: dict[tuple[int, ...], list[str]] = {}
+            for fact in part.coverage.facts_ids:
+                cohorts.setdefault(contributors[fact], []).append(fact)
+            for facts in cohorts.values():
+                facts_ids = tuple(facts)
+                fragment = part
+                if facts_ids != part.coverage.facts_ids:
+                    native = part.rows.filter(pl.col("facts_id").is_in(facts_ids))
+                    original = by_id[part.coverage.outcome_id]
+                    outcome = original.model_copy(
+                        update={
+                            "outcome_id": stable_id(original.outcome_id, "contributing-facts", *facts_ids),
+                            "facts_ids": facts_ids,
+                            "status": OutcomeStatus.EMPTY if native.is_empty() else OutcomeStatus.SUCCESS,
+                            "observation_keys": tuple(
+                                dict.fromkeys(native.select("facts_id", "time", "time_zone").iter_rows())
+                            )
+                            if original.coverage == "observations"
+                            else (),
+                        }
+                    )
+                    outcomes.append(outcome)
+                    fresh_outcomes.append(outcome)
+                    by_id[outcome.outcome_id] = outcome
+                    fragment = replace(
+                        part,
+                        rows=native,
+                        coverage=replace(part.coverage, facts_ids=facts_ids, outcome_id=outcome.outcome_id),
+                        replaced_facts_ids=facts_ids,
+                    )
+                grouped.setdefault((series_id, interval, tuple(sorted(facts_ids))), []).append(fragment)
     combined = []
     snapshot_keys: set[tuple[str, str, datetime, str]] = set()
-    for (series_id, interval), parts in grouped.items():
+    for (series_id, interval, _), parts in grouped.items():
         for part in parts:
             if by_id[part.coverage.outcome_id].coverage != "observations":
                 continue
@@ -1380,6 +1547,9 @@ def _combine_replacements(
                 raise FatalContractError("A replacement window mixes interval and observation-only evidence")
             combined.extend(parts)
             continue
+        # Equal fact windows can be dependent pages of one acquisition. Keep their
+        # row multiplicity and established composition; disjoint facts never share
+        # this attribution merely because a store writes them in one batch.
         contributors = tuple(by_id[item.coverage.outcome_id] for item in parts)
         native = pl.concat([item.rows for item in parts])
         instants = tuple(item.retrieved_at for item in contributors if item.retrieved_at is not None)
@@ -1387,7 +1557,6 @@ def _combine_replacements(
             update={
                 "outcome_id": stable_id("combined", *(item.outcome_id for item in contributors)),
                 "status": OutcomeStatus.EMPTY if native.is_empty() else OutcomeStatus.SUCCESS,
-                "facts_ids": tuple(dict.fromkeys(fact for item in contributors for fact in item.facts_ids)),
                 "retrieved_at": max(instants) if instants else None,
                 "calls": tuple(dict.fromkeys(call for item in contributors for call in item.calls)),
             }
@@ -1708,8 +1877,6 @@ def drive(
                     receipt_entries.append(encode_store_excerpt(read))
             continue
 
-        restored_held_ids: set[str] = set()
-
         def retain_held_successes(
             target_ids: tuple[str, ...] = (),
             *,
@@ -1717,7 +1884,7 @@ def drive(
             held_interval: RequestedInterval = interval,
             held_station: str = station,
             held_product: ProductId = product,
-            restored_ids: set[str] = restored_held_ids,
+            failed_facts: tuple[str, ...] = (),
         ) -> None:
             if cache == "bypass" or manifest is None or store is None:
                 return
@@ -1728,21 +1895,25 @@ def drive(
             )
             ids = tuple(item.series_id for item in held_series)
             fact_ids = tuple(
-                fact.facts_id for item in held_series for fact in item.facts if held_scope.matches_facts(fact)
+                fact.facts_id
+                for item in held_series
+                for fact in item.facts
+                if held_scope.matches_facts(fact) and (not failed_facts or fact.facts_id in failed_facts)
             )
             coverage = tuple(
-                replace(item, interval=remaining)
+                replace(item, interval=remaining, facts_ids=(fact_id,))
                 for key in ids
                 for axis in TimeAxis
                 for item in served_coverage(manifest.coverage, key, interval_envelope(held_interval, axis))
-                if set(item.facts_ids).intersection(fact_ids)
+                for fact_id in item.facts_ids
+                if fact_id in fact_ids
                 for remaining in remainder(
                     item.interval,
                     tuple(
                         previous.interval
                         for previous in served
                         if previous.series_id == item.series_id
-                        and set(item.facts_ids).issubset(previous.facts_ids)
+                        and fact_id in previous.facts_ids
                         and previous.interval.axis is item.interval.axis
                     ),
                 )
@@ -1761,13 +1932,12 @@ def drive(
                     facts_ids=fact_ids,
                 )
             )
-            restored_ids.update(ids)
             held_rows = _exclude_native_intervals(
                 held_read.rows.filter(
                     axis_time_expression(held_interval.axis).is_between(held_interval.start, held_interval.end)
                 ),
                 held_series,
-                tuple((item.series_id, item.interval) for item in served),
+                tuple((item.series_id, item.facts_ids, item.interval) for item in served),
             )
             held_rows = _clip_native(held_rows, held_series, request.window)
             rows.append(held_rows)
@@ -1779,6 +1949,9 @@ def drive(
             for item in manifest.outcomes:
                 if item.series_id not in ids or not _overlaps(item, held_interval):
                     continue
+                held_facts = tuple(key for key in item.facts_ids if key in fact_ids)
+                if item.facts_ids and not held_facts:
+                    continue
                 compared = interval_envelope(held_interval, item.window.axis)
                 held_window = SeriesWindow(
                     start=max(item.window.start, compared.start),
@@ -1789,7 +1962,9 @@ def drive(
                     item.model_copy(
                         update={
                             "window": held_window,
-                            "outcome_id": stable_id(item.outcome_id, held_window.model_dump_json()),
+                            "outcome_id": stable_id(item.outcome_id, held_window.model_dump_json(), *held_facts),
+                            "facts_ids": held_facts,
+                            "observation_keys": tuple(key for key in item.observation_keys if key[0] in held_facts),
                         }
                     )
                 )
@@ -1914,18 +2089,11 @@ def drive(
             # assembled. Restore held concrete successes first, so later partial
             # page rows cannot overlap them. Inventory-only unknown failures do
             # not override independently successful concrete requests.
-            failed_acquired_ids = tuple(
-                item.series_id
-                for item in fetched.outcomes
-                if item.series_id is not None
-                and item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
-            )
             for failed_outcome in fetched.outcomes:
-                if failed_outcome.series_id not in failed_acquired_ids or failed_outcome.status not in (
-                    OutcomeStatus.FAILED,
-                    OutcomeStatus.UNSUPPORTED,
-                    OutcomeStatus.UNRESOLVED,
-                ):
+                if not _observation_failure(failed_outcome) or (
+                    failed_outcome.station_id,
+                    failed_outcome.product_id,
+                ) != (station, str(product)):
                     continue
                 requested_failure_axis = interval_envelope(interval, failed_outcome.window.axis)
                 failed_start = max(requested_failure_axis.start, failed_outcome.window.start)
@@ -1934,6 +2102,7 @@ def drive(
                     retain_held_successes(
                         (failed_outcome.series_id,) if failed_outcome.series_id is not None else (),
                         held_interval=RequestedInterval(failed_start, failed_end, axis=failed_outcome.window.axis),
+                        failed_facts=failed_outcome.facts_ids if failed_outcome.series_id is not None else (),
                     )
             # A fully exhausted source transaction can establish an empty answer
             # for a known concrete member even when no page contains its rows.
@@ -2186,11 +2355,10 @@ def drive(
         # rows. A late incomplete page has the same effect as an early one.
         for _, parsed in parsed_payloads:
             for failed_outcome in parsed.outcomes:
-                if failed_outcome.status not in (
-                    OutcomeStatus.FAILED,
-                    OutcomeStatus.UNSUPPORTED,
-                    OutcomeStatus.UNRESOLVED,
-                ):
+                if not _observation_failure(failed_outcome) or (
+                    failed_outcome.station_id,
+                    failed_outcome.product_id,
+                ) != (station, str(product)):
                     continue
                 requested_failure_axis = interval_envelope(interval, failed_outcome.window.axis)
                 failed_start = max(requested_failure_axis.start, failed_outcome.window.start)
@@ -2199,6 +2367,7 @@ def drive(
                     retain_held_successes(
                         (failed_outcome.series_id,) if failed_outcome.series_id is not None else (),
                         held_interval=RequestedInterval(failed_start, failed_end, axis=failed_outcome.window.axis),
+                        failed_facts=failed_outcome.facts_ids if failed_outcome.series_id is not None else (),
                     )
         for payload_index, parsed in parsed_payloads:
             parsed_outcome_start = len(fresh_outcomes)
@@ -2213,6 +2382,12 @@ def drive(
                 incomplete = any(
                     item.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
                     and item.series_id in original_snapshot.members
+                    and (
+                        not item.facts_ids
+                        or not set(item.facts_ids).issubset(
+                            dict(original_snapshot.member_facts).get(item.series_id, ())
+                        )
+                    )
                     and (original_snapshot.window is None or item.window.axis is original_snapshot.window.axis)
                     and (
                         original_snapshot.window is None
@@ -2236,7 +2411,9 @@ def drive(
                 snapshot = original_snapshot.model_copy(
                     update={
                         "member_facts": tuple(
-                            (key, acquired_facts[key]) for key in original_snapshot.members if key in acquired_facts
+                            (key, dict(original_snapshot.member_facts).get(key, acquired_facts[key]))
+                            for key in original_snapshot.members
+                            if key in acquired_facts
                         ),
                     }
                 )
@@ -2256,15 +2433,6 @@ def drive(
                 fact.facts_id for item in parsed.series for fact in item.facts if pair_scope.matches_facts(fact)
             }
             native = native.filter(pl.col("series_id").is_in(selected_ids) & pl.col("facts_id").is_in(selected_facts))
-            if isinstance(fetched, SourceAcquisition):
-                unsupported = tuple(
-                    (item.series_id, RequestedInterval(item.window.start, item.window.end, axis=item.window.axis))
-                    for item in fetched.outcomes
-                    if item.series_id is not None and item.status is OutcomeStatus.UNSUPPORTED
-                )
-                # A contradiction invalidates its bounded transaction, not other
-                # independently acquired intervals of the same source series.
-                native = _exclude_native_intervals(native, parsed.series, unsupported)
             # Coverage/outcome evidence describes the current source page even
             # when reuse serves held values instead of overlapping partial rows.
             coverage_native = (
@@ -2272,12 +2440,12 @@ def drive(
                 if any(item.window.axis is TimeAxis.UTC for item in parsed.outcomes)
                 else native
             )
-            if restored_held_ids:
-                native = _exclude_native_intervals(
-                    native,
-                    parsed.series,
-                    tuple((item.series_id, item.interval) for item in served if item.series_id in restored_held_ids),
-                )
+            failures = (
+                *(fetched.outcomes if isinstance(fetched, SourceAcquisition) else ()),
+                *(item for result in transaction_parsed for item in result.outcomes),
+                *fresh_outcomes[acquisition_outcome_start:],
+            )
+            native = _exclude_failed_rows(native, parsed.series, failures)
             rows.append(native)
             identity_scope = pair_scope.model_copy(update={"predicates": ()})
             requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
@@ -2315,7 +2483,9 @@ def drive(
                     OutcomeStatus.SUCCESS,
                     OutcomeStatus.EMPTY,
                 ):
-                    candidate = coverage_native.filter(pl.col("series_id") == original.series_id)
+                    candidate = coverage_native.filter(
+                        (pl.col("series_id") == original.series_id) & pl.col("facts_id").is_in(original.facts_ids)
+                    )
                     if candidate.select(axis_time_expression(TimeAxis.UTC).is_null().any()).item():
                         raise FatalContractError("UTC acquisition rows require published fixed offsets")
                 concrete = (
@@ -2358,18 +2528,7 @@ def drive(
                                 outcome.facts_ids,
                             ),
                             concrete,
-                            replaced_facts_ids=tuple(
-                                dict.fromkeys(
-                                    fact.facts_id
-                                    for definition in (
-                                        *parsed.series,
-                                        *(manifest.series if manifest is not None else ()),
-                                    )
-                                    if definition.series_id == outcome.series_id
-                                    for fact in definition.facts
-                                    if pair_scope.matches_facts(fact)
-                                )
-                            ),
+                            replaced_facts_ids=outcome.facts_ids,
                         )
                     )
             admitted_snapshots = []
@@ -2493,6 +2652,11 @@ def drive(
         )
     )
     pending = _combine_replacements(pending, fresh_outcomes, outcomes)
+    retirement_definitions = {item.series_id: item for item in (manifest.series if manifest is not None else ())}
+    _merge_definitions(retirement_definitions, tuple(definitions.values()))
+    pending = _authorize_fact_retirement(
+        pending, tuple(retirement_definitions.values()), fresh_inventories, fresh_outcomes
+    )
     combined = pl.concat(rows)
     # A rolling publication establishes only its explicit observation keys.
     # Preserve older snapshot rows absent from the new publication, without

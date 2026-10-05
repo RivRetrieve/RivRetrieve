@@ -9,7 +9,7 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from rivretrieve._internal.driver import drive
+from rivretrieve._internal.driver import _combine_replacements, drive
 from rivretrieve._internal.engine import (
     ObservationRequest,
     RequestedWindow,
@@ -25,7 +25,9 @@ from rivretrieve._internal.providers.cz_chmi.declaration import declaration
 from rivretrieve._internal.providers.cz_chmi.parse import parse
 from rivretrieve._internal.source_series import OutcomeStatus
 from rivretrieve._internal.store import StoreReader, StoreRoot
+from rivretrieve._internal.time_axis import TimeAxis
 from tests.test_chmi_source_boundary_isolation import _payload
+from tests.test_source_series_store import _success
 
 
 def single_payload(retained_evidence_root):
@@ -278,3 +280,187 @@ def test_fresh_successful_payloads_cannot_mix_axes_for_one_series_fact(retained_
     with pytest.raises(FatalContractError, match="cannot mix acquisition time axes"):
         run(tmp_path / "store", (payload, replace(payload, acquisition_id="utc")))
     assert not (tmp_path / "store").exists()
+
+
+def contribution(facts, *, name="success", instant=datetime(2026, 9, 1, tzinfo=UTC)):
+    outcome, replacement = _success("series", name, [1.0, None, 1.0])
+    outcome = outcome.model_copy(update={"facts_ids": facts, "retrieved_at": instant, "calls": (name,)})
+    rows = pl.concat([replacement.rows.with_columns(pl.lit(fact).alias("facts_id")) for fact in facts])
+    return outcome, replace(
+        replacement,
+        rows=rows,
+        coverage=replace(replacement.coverage, facts_ids=facts, retrieved_at=instant),
+    )
+
+
+@pytest.mark.parametrize("status", [OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED])
+@pytest.mark.parametrize("facts", [("maximum",), ()])
+def test_composition_subtracts_failure_by_facts_and_closed_time(status, facts):
+    positive, replacement = contribution(("mean", "maximum"))
+    boundary = datetime(2020, 1, 1, 12)
+    failure = positive.model_copy(
+        update={
+            "outcome_id": "failure",
+            "facts_ids": facts,
+            "status": status,
+            "reason": "unavailable",
+            "window": positive.window.model_copy(update={"start": boundary}),
+        }
+    )
+    results = _combine_replacements([replacement], [positive, failure], [])
+    scopes = {
+        (fact, part.coverage.interval.start, part.coverage.interval.end)
+        for part in results
+        for fact in part.coverage.facts_ids
+    }
+    end = datetime(2020, 1, 1, 11, 59, 59, 999999)
+    assert scopes == {
+        ("mean", positive.window.start, positive.window.end if facts else end),
+        ("maximum", positive.window.start, end),
+    }
+
+
+@pytest.mark.parametrize("unknown", [False, True])
+def test_independent_facts_keep_original_calls_times_and_multiplicity(unknown):
+    first = contribution(("mean",), name="mean", instant=None if unknown else datetime(2026, 8, 1, tzinfo=UTC))
+    second = contribution(("maximum",), name="maximum")
+    fresh = [first[0], second[0]]
+    results = _combine_replacements([first[1], second[1]], fresh, [])
+    by_id = {item.outcome_id: item for item in fresh}
+    assert len(results) == 2
+    for result in results:
+        expected = first if result.coverage.facts_ids == ("mean",) else second
+        assert result.coverage.retrieved_at == expected[0].retrieved_at
+        assert by_id[result.coverage.outcome_id].calls == expected[0].calls
+        assert_frame_equal(result.rows, expected[1].rows)
+
+
+@pytest.mark.parametrize("time_disjoint", [False, True])
+def test_disjoint_failed_fact_does_not_compare_time_axes(time_disjoint):
+    positive, replacement = contribution(("mean",))
+    failure = positive.model_copy(
+        update={
+            "outcome_id": "failure",
+            "facts_ids": ("maximum",),
+            "status": OutcomeStatus.FAILED,
+            "reason": "unavailable",
+            "window": positive.window.model_copy(update={"axis": TimeAxis.UTC}),
+        }
+    )
+    if time_disjoint:
+        failure = failure.model_copy(
+            update={
+                "window": failure.window.model_copy(
+                    update={
+                        "start": datetime(2020, 1, 2),
+                        "end": datetime(2020, 1, 3),
+                    }
+                )
+            }
+        )
+    assert _combine_replacements([replacement], [positive, failure], []) == [replacement]
+
+
+@pytest.mark.parametrize("status", list(OutcomeStatus))
+@pytest.mark.parametrize("identity", ["series", "different-series", None])
+def test_failure_domains_preserve_unrelated_series_and_inventory_uncertainty(status, identity):
+    positive, replacement = contribution(("mean",))
+    failure = positive.model_copy(
+        update={
+            "outcome_id": "other",
+            "series_id": identity,
+            "status": status,
+            "reason": "invented scope",
+        }
+    )
+    result = _combine_replacements([replacement], [positive, failure], [])
+    veto = status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED) and identity in ("series", None)
+    veto |= status is OutcomeStatus.UNRESOLVED and identity == "series"
+    assert len(result) == (0 if veto else 1)
+
+
+def test_partial_shared_facts_compose_pages_without_borrowing_sibling_evidence():
+    broad = contribution(("mean", "maximum"), name="broad", instant=None)
+    narrow = contribution(("mean",), name="page")
+    fresh = [broad[0], narrow[0]]
+    results = _combine_replacements([broad[1], narrow[1]], fresh, [])
+    by_id = {item.outcome_id: item for item in fresh}
+    assert len(results) == 2
+    mean = next(item for item in results if item.coverage.facts_ids == ("mean",))
+    maximum = next(item for item in results if item.coverage.facts_ids == ("maximum",))
+    assert_frame_equal(mean.rows, pl.concat([broad[1].rows.filter(pl.col("facts_id") == "mean"), narrow[1].rows]))
+    assert by_id[mean.coverage.outcome_id].calls == ("broad", "page")
+    assert by_id[maximum.coverage.outcome_id].calls == ("broad",)
+    assert maximum.coverage.retrieved_at is None
+
+
+def test_same_fact_axis_mismatch_remains_fatal():
+    from rivretrieve._internal.issues import FatalContractError
+
+    positive, replacement = contribution(("mean",))
+    failed = positive.model_copy(
+        update={
+            "outcome_id": "failed",
+            "status": OutcomeStatus.FAILED,
+            "reason": "invented failure",
+            "window": positive.window.model_copy(update={"axis": TimeAxis.UTC}),
+        }
+    )
+    with pytest.raises(FatalContractError, match="cannot mix acquisition time axes"):
+        _combine_replacements([replacement], [positive, failed], [])
+
+
+@pytest.mark.parametrize("overlap", [False, True])
+def test_synthetic_snapshot_composition_preserves_exact_keys_and_overlap_guard(overlap):
+    from rivretrieve._internal.issues import FatalContractError
+
+    pairs = [contribution(("mean",), name="first"), contribution(("mean",), name="second")]
+    if not overlap:
+        pairs[1] = (
+            pairs[1][0],
+            replace(pairs[1][1], rows=pairs[1][1].rows.with_columns(pl.lit(datetime(2020, 1, 1, 12)).alias("time"))),
+        )
+    outcomes = [
+        item.model_copy(
+            update={
+                "coverage": "observations",
+                "observation_keys": tuple(dict.fromkeys(part.rows.select("facts_id", "time", "time_zone").iter_rows())),
+            }
+        )
+        for item, part in pairs
+    ]
+    if overlap:
+        with pytest.raises(FatalContractError, match="Independent snapshot acquisitions overlap"):
+            _combine_replacements([part for _, part in pairs], outcomes, [])
+    else:
+        results = _combine_replacements([part for _, part in pairs], outcomes, [])
+        assert len(results) == 2
+        for part, (_, expected) in zip(results, pairs, strict=True):
+            assert_frame_equal(part.rows, expected.rows)
+
+
+def test_fact_failure_closed_endpoint_filters_rows_at_the_boundary():
+    positive, replacement = contribution(("mean", "maximum"))
+    stamps = [datetime(2020, 1, 1, 11, 59, 59, 999999), datetime(2020, 1, 1, 12), datetime(2020, 1, 1, 13)]
+    rows = pl.concat(
+        [
+            replacement.rows.head(1).with_columns(
+                pl.lit(fact).alias("facts_id"), pl.lit(stamp).alias("time"), pl.lit(2.0).alias("value")
+            )
+            for fact in ("mean", "maximum")
+            for stamp in stamps
+        ]
+    )
+    failed = positive.model_copy(
+        update={
+            "outcome_id": "failure",
+            "status": OutcomeStatus.FAILED,
+            "facts_ids": ("maximum",),
+            "reason": "boundary failure",
+            "window": positive.window.model_copy(update={"start": stamps[1]}),
+        }
+    )
+    results = _combine_replacements([replace(replacement, rows=rows)], [positive, failed], [])
+    accepted = pl.concat([item.rows for item in results])
+    expected = rows.filter((pl.col("facts_id") == "mean") | (pl.col("time") < stamps[1]))
+    assert_frame_equal(accepted.sort("facts_id", "time"), expected.sort("facts_id", "time"))

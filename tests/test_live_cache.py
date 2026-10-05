@@ -393,8 +393,9 @@ def test_successful_series_is_written_before_public_issue_policy_raises(
 
 
 @pytest.mark.recorded("tests/test_data/usgs_modern")
-def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_coverage(
-    tmp_path: Path, retained_evidence_root: Path
+@pytest.mark.parametrize("declared_failure", [False, True])
+def test_error_issue_preserves_success_but_declared_failure_refuses_rows(
+    tmp_path: Path, retained_evidence_root: Path, declared_failure: bool
 ) -> None:
     """Engine WithIssues contract, not a claim that this source returned the authored issue."""
     from rivretrieve._internal.issues import Issue
@@ -407,7 +408,9 @@ def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_cover
                 outcomes=tuple(
                     item.model_copy(update={"status": OutcomeStatus.FAILED, "reason": "Authored source failure"})
                     for item in parsed.outcomes
-                ),
+                )
+                if declared_failure
+                else parsed.outcomes,
                 issues=(
                     *parsed.issues,
                     Issue(
@@ -422,12 +425,16 @@ def test_returned_parse_error_issue_preserves_rows_but_does_not_accumulate_cover
     store = tmp_path / "store"
     transport = CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root)
     result = _drive(store, transport, control=ParseIssueControl(10))
-    assert not result.canonical_rows.is_empty()
+    assert result.canonical_rows.is_empty() is declared_failure
     assert len(transport.calls) == 1
     assert any(issue.code == "contract_test.parse_error" for issue in result.issues)
     manifest = StoreReader().status(StoreRoot(store), _PROVIDER).manifest
-    assert not manifest.coverage
-    assert any(item.status is OutcomeStatus.FAILED for item in manifest.outcomes)
+    assert bool(manifest.coverage) is not declared_failure
+    if declared_failure:
+        assert not list(store.rglob("*.parquet"))
+        assert any(item.status is OutcomeStatus.FAILED for item in manifest.outcomes)
+    else:
+        assert any(item.status is OutcomeStatus.SUCCESS for item in manifest.outcomes)
 
 
 @pytest.mark.recorded("tests/test_data/usgs_modern")
