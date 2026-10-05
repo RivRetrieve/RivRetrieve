@@ -80,16 +80,16 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "2cdc8039c504bb4f81adcd5c4c881fa649f32458e9d245debbaf4d973deb2df4",
-      "contentSize": "15361 B"
+      "sha256": "10e3560347c12da277026acb876d0a747a1caef00309d7139f61fcb4cb2b9ebe",
+      "contentSize": "16402 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "7e4e893ce975144d9e46b377796b2ce375f0be7e71b566a87e94938c6a7e200c",
-      "contentSize": "2741 B"
+      "sha256": "28a190493adb6527330f19e31eb77370fb657041abda8f85768bc9fcde8b0b27",
+      "contentSize": "2789 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
@@ -104,24 +104,24 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "8fd830b776804565f4e97f79284ab63e1c117305abc5a87f19c910478b5d03e1",
-      "contentSize": "2440 B"
+      "sha256": "875062c133b539df10061e659e4993c8e905cbfb602713f542cd0c202741d200",
+      "contentSize": "2459 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "ca543e99c98685d7996d3614a658720186f53ca361af43ce5db9c1f760c6554e",
-      "contentSize": "1402 B"
+      "sha256": "41a7d761dfafc2eee1042a670a78ffa4ca88cbd9720be5b10292242dc3dadf88",
+      "contentSize": "1383 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "5b5f23d84f0a787967fa2cbb131a53ec4706c24fcb9cfba8a0fcfe7805b2574f",
-      "contentSize": "1637 B"
+      "sha256": "c507776719ae012983bda2e11a476aef72c36a79df9d3fb1fab8dd9518528ec7",
+      "contentSize": "1640 B"
     },
     {
       "@id": "format.json",
@@ -152,8 +152,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "station_metadata.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "0b1876b458bd9d8a82df2e04517a48266683d8b2829efabc8e205ef4b94884a1",
-      "contentSize": "19516 B"
+      "sha256": "4e6987386e34779bb4509cb9dabd9e40d270e81a3f1f297ed4309b23dc77bf1b",
+      "contentSize": "27869 B"
     }
   ],
   "recordSet": [
