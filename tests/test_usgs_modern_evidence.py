@@ -26,8 +26,8 @@ def test_every_retained_source_body_has_exact_hash_and_acquisition_manifest(reta
             ((retained_evidence_root / "tests/test_data/usgs_modern") / "historical-manifest.json").read_text()
         ),
     ]
-    assert len(records) == 53
-    assert len(hashes) == len({item["file"] for item in records}) == 47
+    assert len(records) == 56
+    assert len(hashes) == len({item["file"] for item in records}) == 50
     assert set(hashes) == {item["file"] for item in records}
     for item in records:
         content = ((retained_evidence_root / "tests/test_data/usgs_modern") / item["file"]).read_bytes()
