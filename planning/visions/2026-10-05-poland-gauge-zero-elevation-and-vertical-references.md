@@ -88,11 +88,12 @@ The following are excluded:
 
 ## Publication authority and private material
 
-The repository owner confirmed permission to publish these heights and their
-vertical-reference labels during discovery and authorized this vision's publication.
-Record this as owner confirmation for this scoped metadata adoption. The workbook
-itself contains no redistribution statement, and neither its retention nor the
-previous area-only approval establishes broader redistribution rights.
+The repository owner stated that they believe they have permission to publish
+these values. They authorized this vision's publication after the summary included
+both heights and vertical-reference labels. Record this as the owner's scoped
+confirmation, not a source-issued licence or an independently verified grant.
+The workbook itself contains no redistribution statement, and neither its retention
+nor the previous area-only approval establishes broader redistribution rights.
 
 The prior private review withholds elevation because original support and
 publication authority were unestablished. Update that decision with the retained
