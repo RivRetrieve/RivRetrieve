@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.usgs_nwis import generate_catalogue
 from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 from rivretrieve._internal.providers.usgs_nwis.origins import build_acquisition_provenance
+from tests.test_catalogue_origin_certification import _catalogue_recording_paths
 
 
 def test_usgs_provenance_names_nwis_and_verified_source_words() -> None:
@@ -23,40 +25,20 @@ def test_usgs_provenance_names_nwis_and_verified_source_words() -> None:
     assert provenance.header.withheld_facts == ()
 
 
-@pytest.mark.governing(
-    "research/usgs-modern-coverage",
-    "research/usgs-modern-coverage/metadata-00060-0000.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0001.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0002.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0003.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0004.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0005.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0006.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0007.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0000.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0001.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0002.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0003.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0004.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0005.json.gz",
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
-    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
-    "tests/test_data/usgs_nwis_terms_citation-1.html",
-    "tests/test_data/usgs_nwis_terms_licence-1.html",
-)
+@pytest.mark.governing(*_catalogue_recording_paths("usgs_nwis"))
 def test_usgs_build_rejects_changed_terms_recording(retained_evidence_root, tmp_path: Path) -> None:
-    source = retained_evidence_root / "tests/test_data"
-    target = tmp_path / "tests/test_data"
-    target.mkdir(parents=True)
-    (target / "usgs_nwis_terms_licence-1.html").write_bytes(
-        (source / "usgs_nwis_terms_licence-1.html").read_bytes() + b"changed"
-    )
-    (target / "usgs_nwis_terms_citation-1.html").write_bytes((source / "usgs_nwis_terms_citation-1.html").read_bytes())
-    (target / "usgs_nwis_instantaneous_values_definition.html").write_bytes(
-        (source / "usgs_nwis_instantaneous_values_definition.html").read_bytes()
-    )
+    provenance = build_acquisition_provenance()
+    for source in provenance.source_records:
+        for item in source.evidence:
+            path = Path(item.recording.repository_path)
+            target = tmp_path / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(retained_evidence_root / path, target)
+    verify_provenance_recordings(provenance, tmp_path)
+    target = tmp_path / "tests/test_data/usgs_nwis_terms_licence-1.html"
+    target.write_bytes(target.read_bytes() + b"changed")
     with pytest.raises(FatalContractError, match="usgs_nwis_terms_licence.*digest mismatch"):
-        verify_provenance_recordings(build_acquisition_provenance(), tmp_path)
+        verify_provenance_recordings(provenance, tmp_path)
 
 
 @pytest.mark.governing(
