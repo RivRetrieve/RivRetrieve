@@ -284,12 +284,54 @@ full requested scope with normal source padding, not only the missing dates.
 A successful empty answer can cover an interval; a failed request cannot.
 Reuse returns the saved answer, which may differ from the source today. Refresh
 can return fewer rows or none. If a series fails, older cached observations can
-remain alongside new issues, with their original retrieval time.
+remain alongside new issues, with their original retrieval time. A later successful
+answer replaces failures only for the identity, physical facts and interval it
+establishes. After full recovery, reuse does not repeat the superseded failure.
+Rolling snapshots replace matching observation keys; missing keys in a new snapshot
+do not establish an empty historical interval.
 
 Set `RIVRETRIEVE_CACHE_DIR` to override the platform's user cache directory.
-`cache_status(provider)` inspects local state without network access;
-`clear_cache(provider)` deletes that provider's store and pending recovery inputs,
-including preserved downloads.
+The following operations make no source request:
+
+- `cache_status(provider)` checks stored metadata and reports committed data,
+  interrupted work, cleanup residue and active ownership separately. It does not
+  read every observation byte.
+- `audit_cache(provider)` checks every saved file and observation. A returned
+  `CacheAuditResult` identifies the generation checked and reports partition, row
+  and byte counts. Missing or damaged data raises an error. This local check does
+  not repeat certification against original publisher artifacts.
+- `recover_cache(provider)` validates committed data and finishes recognized
+  interrupted work. It returns the resulting status and actions. It refuses an
+  active writer or ambiguous state rather than guessing which data to restore.
+- `clear_cache(provider)` deletes that provider's store and recognized interrupted
+  work, including preserved downloads. This is destructive consent. It leaves the
+  small coordination file used to prevent conflicting local operations.
+
+For example, after an interrupted preparation:
+
+```python
+status = rr.cache_status("ca_eccc")
+unfinished_paths = status.interrupted_paths
+cleanup_paths = status.cleanup_paths
+
+recovery = rr.recover_cache("ca_eccc")
+actions_taken = recovery.actions
+resulting_status = recovery.status
+```
+
+A first installation can have unfinished work without any committed observations.
+Its status is `interrupted`, not `absent`. Recovery discards that uncommitted stage.
+During replacement, the previous committed store remains identifiable. After the
+new store is committed, failed cleanup does not undo it. A
+`StorePostCommitCleanupError` retains the initiating error, cleanup errors,
+authoritative path and remaining paths. Inspect the status before retrying.
+
+The guarantee covers local process interruption while the operating system and
+filesystem continue running. Concurrent reading during replacement, distributed
+coordination and host or power failure are not covered. The configured cache root
+may be a symlink; managed provider directories and store contents must not be.
+Clear removes terminal managed symlinks without following their targets and never
+removes unrelated siblings.
 
 Canada (`ca_eccc`) and Poland (`pl_imgw`) read compiled stores from bulk downloads.
 Without a store, retrieval returns an empty result and an issue. Use

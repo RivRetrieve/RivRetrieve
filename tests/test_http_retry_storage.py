@@ -175,6 +175,9 @@ def test_exhausted_acquisition_rolls_back_artifacts_without_replacing_valid_stor
                 checks.append(True)
 
         def acquire(request):
+            nonlocal first, second
+            first = request.destination.with_name(request.destination.name + "-codz_2023.zip")
+            second = request.destination.with_name(request.destination.name + "-codz_2024.zip")
             downloaded = download_imgw_history(
                 request.destination,
                 today=request.today,
@@ -207,8 +210,11 @@ def test_exhausted_acquisition_rolls_back_artifacts_without_replacing_valid_stor
     assert caught.value.status_code is None
     assert caught.value.request.url == f"{origin}/2024/codz_2024.zip"
     assert calls == {"/": 1, "/2023/": 1, "/2024/": 1, "codz_2023.zip": 1, "codz_2024.zip": 3}
-    assert not list(tmp_path.glob("publisher-artifact.download*"))
-    assert set(tmp_path.iterdir()) == {Path(root), unrelated}
+    assert not list(tmp_path.glob(".store.workspace-*/publisher-artifact.download*"))
+    assert not first.exists()
+    assert not second.exists()
+    # The permanent lock inode remains after a completed rollback.
+    assert set(tmp_path.iterdir()) == {Path(root), unrelated, tmp_path / ".store.owner"}
     assert unrelated.read_bytes() == b"unrelated publisher input"
     assert {p.relative_to(root): p.read_bytes() for p in Path(root).rglob("*") if p.is_file()} == before
     assert validate_store(root, PROVIDER_ID).manifest == previous.manifest

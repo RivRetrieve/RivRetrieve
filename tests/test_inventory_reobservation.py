@@ -41,8 +41,9 @@ def test_reobserved_snapshot_moves_to_latest_without_inventing_source_timestamp(
     assert tuple(item.series_id for item in plan.series) == (a.series_id,), (
         "latest observed A must not serve B's absent member"
     )
-    assert tuple(item.snapshot_id for item in manifest.inventories) == ("B", "A")
-    assert manifest.inventories == (second, first)
+    # Current evidence retains the latest applicable snapshot, not every past attempt.
+    assert tuple(item.snapshot_id for item in manifest.inventories) == ("A",)
+    assert manifest.inventories == (first,)
     assert manifest.inventories[-1] == first
     assert manifest.inventories[-1].acquired_at is None
     assert {item.series_id for item in manifest.series} == {a.series_id, b.series_id}

@@ -17,6 +17,7 @@ from rivretrieve._internal.engine import ProviderConfig
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.registry import EngineProviderModule, ProviderRegistry
 from rivretrieve._internal.store import StoreRoot, ValidatedStore
+from rivretrieve._internal.store.lifecycle import StoreTransaction
 from rivretrieve._internal.transport import CredentialHeader, _request_origin
 
 
@@ -64,6 +65,7 @@ class BulkCompileRequest:
     destination: StoreRoot
     built_at: datetime
     compiler_version: str
+    transaction: StoreTransaction | None = None
 
     def __post_init__(self) -> None:
         if not self.publisher_artifacts:

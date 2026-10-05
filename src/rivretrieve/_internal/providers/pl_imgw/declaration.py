@@ -36,6 +36,7 @@ def _compile(request: BulkCompileRequest) -> ValidatedStore:
             publisher_artifacts=request.publisher_artifacts,
             built_at=request.built_at,
             compiler_version=request.compiler_version,
+            transaction=request.transaction,
         )
     )
 

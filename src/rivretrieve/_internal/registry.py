@@ -292,6 +292,9 @@ class _ProviderHandle:
         )
         requested_at = datetime.now(UTC)
         provider_info = self.info()
+        from rivretrieve._internal.store.reader import require_readable_store
+
+        require_readable_store(store)
         if not Path(store).exists():
             issue = Issue(
                 severity="warning",

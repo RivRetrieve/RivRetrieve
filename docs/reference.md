@@ -10,6 +10,14 @@ Functions import from `rivretrieve`. The reference renders their source docstrin
 
 ::: rivretrieve.as_frame
 
+### audit_cache
+
+::: rivretrieve.audit_cache
+
+### recover_cache
+
+::: rivretrieve.recover_cache
+
 ### cache_status
 
 ::: rivretrieve.cache_status
@@ -274,7 +282,7 @@ These types are not re-exported from `rivretrieve`. Their headings identify thei
 
 ::: rivretrieve._internal.store.reader.StoreStatus
     options:
-      members: [store, provider_id, presence, manifest, bytes_on_disk, coverage, partition_row_counts, root, exists, format_version, compiler_version, built_at, source_vintage, publisher_artifact_url, publisher_artifact_checksum, publisher_artifact_urls, publisher_artifact_checksums, source_schema_fingerprint]
+      members: [store, provider_id, presence, manifest, bytes_on_disk, generation_id, committed_path, interrupted_paths, cleanup_paths, ownership, coverage, partition_row_counts, root, exists, format_version, compiler_version, built_at, source_vintage, publisher_artifact_url, publisher_artifact_checksum, publisher_artifact_urls, publisher_artifact_checksums, source_schema_fingerprint]
 
 ### ValidatedStore
 
@@ -293,6 +301,18 @@ These types are not re-exported from `rivretrieve`. Their headings identify thei
 ::: rivretrieve._internal.store.validation.AccumulatedStoreManifest
     options:
       members: [format_version, provider_id, built_at, coverage, partition_row_counts, series, inventories, outcomes, issues, source_calls]
+
+### CacheAuditResult
+
+::: rivretrieve._internal.store.integrity.CacheAuditResult
+    options:
+      members: [provider_id, path, generation_id, checked_at, partitions_checked, rows_checked, bytes_checked]
+
+### CacheRecoveryResult
+
+::: rivretrieve._internal.store.reader.CacheRecoveryResult
+    options:
+      members: [provider_id, path, status, actions]
 
 ### CacheClearResult
 
@@ -409,6 +429,18 @@ Function Raises sections state the conditions. FatalContractError subclasses byp
 ### StoreCertificationError
 
 ::: rivretrieve._internal.store.certification.StoreCertificationError
+    options:
+      members: []
+
+### StoreLifecycleError
+
+::: rivretrieve._internal.store.lifecycle.StoreLifecycleError
+    options:
+      members: []
+
+### StoreTransactionError
+
+::: rivretrieve._internal.store.lifecycle.StoreTransactionError
     options:
       members: []
 

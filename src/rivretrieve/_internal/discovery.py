@@ -1271,11 +1271,15 @@ def _resolve_store_root(provider_id: str, registered: StoreRoot | None) -> Store
     if value is not None:
         if not value.strip():
             raise ValueError("RIVRETRIEVE_CACHE_DIR must name a non-empty cache directory")
-        root = Path(value).expanduser().absolute()
-        return StoreRoot(root / provider_id / "store")
-    if registered is not None:
-        return registered
-    return StoreRoot(Path(user_cache_dir("rivretrieve")) / provider_id / "store")
+        root = Path(value).expanduser().resolve()
+        store = root / provider_id / "store"
+    elif registered is not None:
+        store = Path(registered)
+    else:
+        store = Path(user_cache_dir("rivretrieve")).resolve() / provider_id / "store"
+    if store.parent.is_symlink():
+        raise FatalContractError(f'Managed provider directory must not be a symlink: "{store.parent}"')
+    return StoreRoot(store)
 
 
 def _resolve_credentials(
@@ -1625,9 +1629,13 @@ def download(provider: str):
         If a source response or store validation violates a contract.
     StoreCertificationError
         If compilation certification fails before publication.
+    StoreTransactionError
+        If preparation failed and retained inputs or cleanup residue require
+        recovery. ``original`` preserves the initiating exception;
+        ``cleanup_errors`` and ``residue_paths`` preserve cleanup facts.
     StorePostCommitCleanupError
-        If publication succeeded but cleanup left residue. The new store remains
-        authoritative and the exception names the residue.
+        If publication succeeded but cleanup failed. The new generation remains
+        authoritative; the exception identifies it and any remaining paths.
     OSError
         If local file operations fail.
     ValueError
@@ -1641,7 +1649,8 @@ def download(provider: str):
     -----
     This call can transfer a national dataset. It is not needed for live
     providers. Before publication, a failed compilation preserves the previous
-    store and publisher inputs. Use clear_cache explicitly for recovery.
+    store and publisher inputs. Use recover_cache for interrupted work; use
+    clear_cache only when deleting all owned state is intended.
     Transport failures can also propagate rather than becoming result issues.
 
     An existing compiled store that passes validation supplies its source
@@ -1670,10 +1679,12 @@ def cache_status(provider: str):
     Returns
     -------
     StoreStatus
-        Resolved path, presence, validated manifest and bytes on disk. Properties
-        expose format version, partition row counts, bulk source identity and
-        accumulated coverage where applicable. An absent store has no manifest,
-        zero bytes and empty coverage. Coverage is retrieval history, not continuity.
+        Resolved path, committed generation and metadata-checked manifest,
+        interrupted paths, cleanup residue and local ownership. Observation bytes
+        are not audited. ``present`` means committed data exists; ``interrupted``
+        means recognized unfinished work exists without committed data. Only
+        ``absent`` means neither exists. Coverage describes established successful
+        intervals, not continuous observations or a permanent retrieval history.
 
     Raises
     ------
@@ -1682,7 +1693,9 @@ def cache_status(provider: str):
     UnknownProviderError
         If provider is not registered.
     ObservationStoreRefusedError
-        If an existing store is invalid or interrupted publication needs recovery.
+        If committed metadata is malformed or its publication identity changed.
+    StoreLifecycleError
+        If the journal is malformed or managed paths are unsafe.
     OSError
         If local file operations fail.
     ValueError
@@ -1706,7 +1719,8 @@ def clear_cache(provider: str):
     CacheClearResult
         Provider identifier, store path, whether anything existed, total bytes
         removed and every removed path. Includes recognized pending publisher
-        downloads and accumulated-write staging or backup directories.
+        downloads, staging, previous generations and transaction workspaces.
+        The permanent coordination file remains.
 
     Raises
     ------
@@ -1716,6 +1730,8 @@ def clear_cache(provider: str):
         If provider is not registered.
     BulkArtifactCleanupRefusedError
         If the pending-download namespace is symlinked or contains an unsafe entry.
+    StoreLifecycleError
+        If ownership is active or ambiguous, or a managed provider path is unsafe.
     OSError
         If deletion fails. This operation is not transactional.
     ValueError
@@ -1724,11 +1740,90 @@ def clear_cache(provider: str):
     Notes
     -----
     This destructive action also removes preserved pending publisher downloads
-    and accumulated-write staging or backup directories, allowing a retry after
-    interrupted retrieval or failed compilation. It does not download replacement
+    and recognized staging, previous generations and transaction workspaces,
+    allowing a retry after interrupted retrieval or failed compilation. It does not download replacement
     data. It removes symlinks themselves rather than following them.
     Unrelated sibling paths are not removed.
     """
     from rivretrieve._internal.bulk import clear_cache as bulk_clear_cache
 
     return bulk_clear_cache(provider)
+
+
+def audit_cache(provider: str):
+    """Check every file and observation in one committed local store.
+
+    Parameters
+    ----------
+    provider : str
+        Registered live or bulk provider identifier.
+
+    Returns
+    -------
+    CacheAuditResult
+        Provider, path, generation identity, UTC check time and counts of
+        partitions, rows and bytes checked. Return means all local integrity
+        and consistency checks passed for that generation.
+
+    Raises
+    ------
+    ObservationStoreRefusedError
+        If data is absent, incompatible, malformed or changed since publication.
+    StoreLifecycleError
+        If active ownership or interrupted publication prevents an unambiguous
+        audit. Inspect ``cache_status`` and use ``recover_cache`` first.
+
+    Notes
+    -----
+    This read-only operation makes no source request and does not repeat
+    certification against original publisher artifacts. It can read the whole
+    national dataset. ``cache_status`` does not perform this complete check.
+    """
+    from rivretrieve._internal.bulk import _cache_registration
+    from rivretrieve._internal.store.integrity import audit_store
+    from rivretrieve._internal.store.reader import require_readable_store
+
+    provider_id, root = _cache_registration(provider)
+    require_readable_store(root)
+    return audit_store(root, provider_id)
+
+
+def recover_cache(provider: str):
+    """Finish interrupted local work without downloading observations.
+
+    Parameters
+    ----------
+    provider : str
+        Registered live or bulk provider identifier.
+
+    Returns
+    -------
+    CacheRecoveryResult
+        Provider, canonical path, resulting status and actions taken. Recovery
+        validates committed data before preserving or restoring it. Uncommitted
+        first-install staging is discarded; it is never promoted to a store.
+
+    Raises
+    ------
+    StoreLifecycleError
+        If ownership is active or ambiguous, or surviving paths do not establish
+        which generation was committed. No guess-based restoration is performed.
+    ObservationStoreRefusedError
+        If the committed generation fails its complete local audit.
+    OSError
+        If local restoration or cleanup fails. Inspect status before retrying.
+
+    Notes
+    -----
+    Recovery coordinates with writers and clear. It can read every observation
+    byte. It preserves source-selection facts and never merges old and new bulk
+    snapshots. Use ``clear_cache`` only when removal of all owned data is intended.
+    """
+    from rivretrieve._internal.bulk import _cache_registration
+    from rivretrieve._internal.store.integrity import audit_store
+    from rivretrieve._internal.store.lifecycle import recover_store
+    from rivretrieve._internal.store.reader import CacheRecoveryResult, StoreReader
+
+    provider_id, root = _cache_registration(provider)
+    actions = recover_store(Path(root), lambda path: audit_store(StoreRoot(path), provider_id, allow_pending=True))
+    return CacheRecoveryResult(provider_id, Path(root), StoreReader().status(root, provider_id), actions)

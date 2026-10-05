@@ -24,6 +24,7 @@ from rivretrieve._internal.providers.registration import (
 from rivretrieve._internal.recordings import read_recording
 from rivretrieve._internal.registry import ProviderRegistry
 from rivretrieve._internal.store import StoreRoot, validate_store
+from rivretrieve._internal.store.lifecycle import StoreLifecycleError, StoreTransactionError
 
 
 def _poland_one_month(request: BulkDownloadRequest) -> tuple[DownloadedBulkArtifact, ...]:
@@ -95,26 +96,33 @@ def test_public_failed_bulk_compile_requires_explicit_clear_then_retries(
     monkeypatch.setattr(bulk_lifecycle, "_registry", registry)
     monkeypatch.setattr(bulk_lifecycle, "HttpClient", SequencedClient)
 
-    with pytest.raises(failure_type):
+    with pytest.raises(StoreTransactionError) as caught:
         rr.download(provider_id)
-    pending = Path(store).parent / expected_pending_name
+    assert type(caught.value.original) is failure_type
+    assert caught.value.__cause__ is caught.value.original
+    assert caught.value.cleanup_errors == ()
+    assert caught.value.generation_id is None
+    assert caught.value.committed_path is None
+    assert caught.value.transaction_id
+    (pending,) = Path(store).parent.glob(f".store.workspace-*/{expected_pending_name}")
     assert pending.is_file()
+    assert pending.parent in caught.value.residue_paths
     preserved = pending.read_bytes()
 
-    with pytest.raises(FileExistsError, match="already exists"):
+    with pytest.raises(StoreLifecycleError, match="requires explicit recovery"):
         rr.download(provider_id)
     assert pending.read_bytes() == preserved
 
     cleared = rr.clear_cache(provider_id)
     assert cleared.existed is True
-    assert cleared.removed_paths == (pending,)
-    assert cleared.bytes_freed == len(preserved)
+    assert pending.parent in cleared.removed_paths
+    assert cleared.bytes_freed >= len(preserved)
     assert not pending.exists()
 
     validated = rr.download(provider_id)
     assert validated.manifest.provider_id == provider_id
     assert validate_store(store, ProviderId(provider_id)).manifest.provider_id == provider_id
-    assert not tuple(Path(store).parent.glob("publisher-artifact.download*"))
+    assert not tuple(Path(store).parent.glob(".store.workspace-*/publisher-artifact.download*"))
 
 
 def test_public_poland_multi_artifact_download_uses_real_declaration_and_compiler(

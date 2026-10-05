@@ -375,6 +375,12 @@
             "type": "object"
           }
         },
+        "supporting_outcomes": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
         "issues": {
           "type": "array",
           "items": {

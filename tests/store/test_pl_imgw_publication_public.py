@@ -23,6 +23,7 @@ from rivretrieve._internal.providers.pl_imgw.declaration import declaration
 from rivretrieve._internal.providers.registration import BulkStore
 from rivretrieve._internal.registry import ProviderRegistry
 from rivretrieve._internal.store import ObservationStoreRefusedError, StoreRoot, validate_store
+from rivretrieve._internal.store.lifecycle import StoreTransactionError
 
 ROOT = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe/"
 
@@ -106,7 +107,7 @@ def assert_provenance(root, result, responses, names, vintage):
     assert result.manifest.source_vintage == vintage
     assert validate_store(root, ProviderId("pl_imgw")).manifest == result.manifest
     assert rr.cache_status("pl_imgw").source_vintage == vintage
-    assert not tuple(Path(root).parent.glob("publisher-artifact.download*"))
+    assert not tuple(Path(root).parent.glob(".store.workspace-*/publisher-artifact.download*"))
 
 
 @pytest.mark.parametrize("empty_trailing_directory", [False, True])
@@ -235,13 +236,25 @@ def test_public_failed_refresh_preserves_store_bytes_and_provenance(public_imgw,
         "compiler": "valid ZIP",
         "partial-write": "partial disk write",
     }[failure]
-    with pytest.raises(expected_error, match=reason):
-        rr.download("pl_imgw")
+    if failure == "compiler":
+        with pytest.raises(StoreTransactionError) as caught:
+            rr.download("pl_imgw")
+        assert type(caught.value.original) is expected_error
+        assert reason in str(caught.value.original)
+        assert caught.value.__cause__ is caught.value.original
+        assert caught.value.cleanup_errors == ()
+        assert caught.value.generation_id is None
+        assert caught.value.committed_path == Path(root)
+        assert caught.value.transaction_id
+        assert any(path.name.startswith(".store.workspace-") for path in caught.value.residue_paths)
+    else:
+        with pytest.raises(expected_error, match=reason):
+            rr.download("pl_imgw")
     after = {path.relative_to(root): path.read_bytes() for path in Path(root).rglob("*") if path.is_file()}
     assert after == before
     assert validate_store(root, ProviderId("pl_imgw")).manifest == original.manifest
     assert rr.cache_status("pl_imgw").source_vintage == date(2023, 10, 31)
-    pending = tuple(Path(root).parent.glob("publisher-artifact.download*"))
+    pending = tuple(Path(root).parent.glob(".store.workspace-*/publisher-artifact.download*"))
     if failure == "compiler":
         assert sorted(path.name for path in pending) == sorted("publisher-artifact.download-" + name for name in names)
         for path in pending:
@@ -279,7 +292,7 @@ def test_public_refresh_cannot_shorten_previously_published_history(public_imgw,
     assert validate_store(root, ProviderId("pl_imgw")).manifest == original.manifest
     assert rr.cache_status("pl_imgw").source_vintage == original.manifest.source_vintage
     assert not any(url.endswith(".zip") for url in calls)
-    assert not tuple(Path(root).parent.glob("publisher-artifact.download*"))
+    assert not tuple(Path(root).parent.glob(".store.workspace-*/publisher-artifact.download*"))
 
 
 @pytest.mark.parametrize("refused_manifest", ["incompatible", "malformed"])
@@ -331,7 +344,7 @@ def test_public_download_propagates_unexpected_previous_store_validation_failure
     assert not calls
     assert {path.relative_to(root): path.read_bytes() for path in Path(root).rglob("*") if path.is_file()} == before
     assert validate_store(root, ProviderId("pl_imgw")).manifest == original.manifest
-    assert not tuple(Path(root).parent.glob("publisher-artifact.download*"))
+    assert not tuple(Path(root).parent.glob(".store.workspace-*/publisher-artifact.download*"))
 
 
 @pytest.mark.recorded("tests/test_data/pl_imgw_date_fields/codz_1992_07.zip")
@@ -409,10 +422,10 @@ def test_public_date_failure_preserves_existing_store_and_exact_recovery_bytes(p
         original_decode = bulk.decode_imgw_batches
         calls = 0
 
-        def corrupt_second_decode(paths):
+        def corrupt_second_decode(paths, *, workspace):
             nonlocal calls
             calls += 1
-            stream = original_decode(paths)
+            stream = original_decode(paths, workspace=workspace)
             if calls == 1:
                 return stream
 
@@ -434,12 +447,20 @@ def test_public_date_failure_preserves_existing_store_and_exact_recovery_bytes(p
         "certification": "read-back differs",
     }
     error = StoreCertificationError if failure == "certification" else ValueError
-    with pytest.raises(error, match=reasons[failure]):
+    with pytest.raises(StoreTransactionError) as caught:
         rr.download("pl_imgw")
+    assert type(caught.value.original) is error
+    assert reasons[failure] in str(caught.value.original)
+    assert caught.value.__cause__ is caught.value.original
+    assert caught.value.cleanup_errors == ()
+    assert caught.value.generation_id is None
+    assert caught.value.committed_path == Path(root)
+    assert caught.value.transaction_id
+    assert any(path.name.startswith(".store.workspace-") for path in caught.value.residue_paths)
     assert {path.relative_to(root): path.read_bytes() for path in Path(root).rglob("*") if path.is_file()} == before
     assert validate_store(root, ProviderId("pl_imgw")).manifest == previous.manifest
     assert rr.cache_status("pl_imgw").source_vintage == previous.manifest.source_vintage
-    (retained,) = Path(root).parent.glob("publisher-artifact.download*")
+    (retained,) = Path(root).parent.glob(".store.workspace-*/publisher-artifact.download*")
     assert retained.read_bytes() == content.getvalue()
 
 

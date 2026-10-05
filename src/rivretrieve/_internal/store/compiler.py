@@ -26,6 +26,7 @@ from rivretrieve._internal.source_series import (
     stable_id,
     validate_series_rows,
 )
+from rivretrieve._internal.store.integrity import seal_store
 from rivretrieve._internal.store.validation import (
     Disposition,
     PublisherArtifact,
@@ -34,7 +35,6 @@ from rivretrieve._internal.store.validation import (
     SourceSchemaFingerprint,
     StoreRoot,
     ValidatedStore,
-    validate_store,
 )
 
 NativeStoreRows = NewType("NativeStoreRows", pl.DataFrame)
@@ -121,7 +121,7 @@ def compile_store(request: StoreCompileRequest, rows: NativeStoreRows | pl.DataF
                 _write_partition(physical, directory / "part-0.parquet")
                 counts[identifier] = physical.height
         _write_manifest(root, request, counts, request.series)
-        return validate_store(request.destination, request.provider_id)
+        return seal_store(request.destination, request.provider_id).store
     except BaseException:
         # The layout writer never leaves a plausible partial store.
         # Removing a newly created destination does not alter existing evidence.
@@ -496,7 +496,7 @@ def compile_store_batches(request: StoreCompileRequest, stream: ObservationBatch
                 f"expected={contributed_rows}; actual={emitted_total}"
             )
         _write_manifest(root, request, counts, tuple(definitions.values()))
-        validate_store(request.destination, request.provider_id)
+        seal_store(request.destination, request.provider_id)
         return StreamingCompileEvidence(
             MappingProxyType(dict(counts)),
             MappingProxyType({key: tuple(value) for key, value in row_groups.items()}),

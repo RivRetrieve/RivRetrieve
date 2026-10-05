@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
@@ -73,6 +74,7 @@ from rivretrieve._internal.source_series import (
 )
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 from rivretrieve._internal.store.accumulation import StoreUpdate, SuccessfulReplacement, accumulate
+from rivretrieve._internal.store.provenance import encode_source_call
 from rivretrieve._internal.store.receipts import encode_store_excerpt
 from rivretrieve._internal.store.validation import (
     AccumulatedStoreManifest,
@@ -250,7 +252,10 @@ def _provenance_with_payload_origins(
         call
         for index, payload in enumerate(payloads)
         for call in (
-            *({**_secret_call(item), **contexts[index]} for item in payload.prerequisite_calls),
+            *(
+                {**_secret_call(item), "acquisition_id": payload.acquisition_id, **contexts[index]}
+                for item in payload.prerequisite_calls
+            ),
             *({**item, **contexts[index]} for item in _payload_calls(payload)),
         )
     )
@@ -588,10 +593,16 @@ def _reconcile_acquired_inventories(
     parsed_results: tuple[ParsedSeries, ...],
     scope: SeriesScope,
     window: SeriesWindow,
+    *,
+    durable_outcomes: tuple[RetrievalOutcome, ...] | None = None,
 ) -> tuple[InventorySnapshot, ...]:
     """Keep current inventory knowledge separate from transaction-bounded retrieval proof."""
     declared = {item.series_id: item for item in acquired.series}
-    outcomes = (*acquired.outcomes, *(item for parsed in parsed_results for item in parsed.outcomes))
+    outcomes = (
+        durable_outcomes
+        if durable_outcomes is not None
+        else (*acquired.outcomes, *(item for parsed in parsed_results for item in parsed.outcomes))
+    )
     reconciled = []
     for snapshot in acquired.inventories:
         compared = interval_envelope(
@@ -1013,6 +1024,18 @@ def _issue_in_scope(
         )
     ):
         return False
+    references = details.get("acquisition_ids")
+    if references is not None:
+        if not isinstance(references, (list, tuple)) or not all(isinstance(key, str) for key in references):
+            raise FatalContractError("Stored issue acquisition references are malformed")
+        return any(
+            set(item.calls).intersection(references)
+            and item.station_id == station
+            and item.product_id == product
+            and (item.series_id is None or item.series_id in series_ids)
+            and _overlaps(item, interval)
+            for item in outcomes
+        )
     assessments = tuple(
         item
         for item in outcomes
@@ -1370,6 +1393,18 @@ def _acquisition_groups(
     return tuple(tuple(group) for group in groups)
 
 
+def _issue_with_acquisition_references(issue: Issue, references: tuple[str, ...]) -> Issue:
+    """Attach storage lineage without overwriting publisher issue context."""
+    details = dict(issue.details or {})
+    if "acquisition_ids" in details:
+        existing = details["acquisition_ids"]
+        if not isinstance(existing, (tuple, list)) or tuple(existing) != references:
+            raise FatalContractError("Parsed issue acquisition references contradict its supporting payloads")
+    else:
+        details["acquisition_ids"] = references
+    return issue.model_copy(update={"details": details})
+
+
 def _unique_calls(calls: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
     """Retain distinct attempts, including legacy evidence without an attempt ID."""
     seen: set[str] = set()
@@ -1428,9 +1463,13 @@ def drive(
     fresh_definitions: dict[str, SourceSeries] = {}
     fresh_inventories: list[InventorySnapshot] = list(inventories)
     fresh_outcomes: list[RetrievalOutcome] = []
+    issue_acquisitions: dict[int, tuple[str, ...]] = {}
     manifest: AccumulatedStoreManifest | None = None
     if cache != "bypass":
         assert store is not None
+        from rivretrieve._internal.store.reader import require_readable_store
+
+        require_readable_store(store)
         held = StoreReader().status(store, request.provider_id).manifest
         if held is not None:
             if not isinstance(held, AccumulatedStoreManifest):
@@ -1708,6 +1747,9 @@ def drive(
         if isinstance(result, (TransportFailure, CredentialExchangeError)):
             failure = result
             issue = _source_failure_issue(request.provider_id, station, product, failure, credential_names)
+            issue = issue.model_copy(
+                update={"details": {**(issue.details or {}), "inventory_scope": pair_scope.model_dump(mode="json")}}
+            )
             all_issues.append(issue)
             retain_held_successes()
             known_members = {
@@ -1742,11 +1784,49 @@ def drive(
                 fresh_outcomes.append(outcome)
             continue
         fetched = result
+        acquisition_outcome_start = len(fresh_outcomes)
+        auxiliary_calls: tuple[dict[str, object], ...] = ()
+        if isinstance(fetched, SourceAcquisition) and fetched.calls:
+            # These origins support this acquired inventory. Give the existing
+            # evidence records content identities so compaction can retain their
+            # dependencies without storing unlimited anonymous call history.
+            auxiliary_calls = tuple(
+                {
+                    **(record := _origin_call(origin)),
+                    "call_id": stable_id(
+                        "source-call-origin",
+                        tuple(snapshot.snapshot_id for snapshot in fetched.inventories)
+                        or tuple(outcome.outcome_id for outcome in fetched.outcomes)
+                        or tuple(payload.acquisition_id for payload in fetched.value),
+                        json.dumps(encode_source_call(record), sort_keys=True),
+                    ),
+                    "station_products": ((station, str(product)),),
+                }
+                for origin in fetched.calls
+            )
+            references = tuple(str(call["call_id"]) for call in auxiliary_calls)
+            fetched = replace(
+                fetched,
+                inventories=tuple(
+                    snapshot.model_copy(
+                        update={
+                            "evidence": tuple(
+                                dict.fromkeys((*snapshot.evidence, *(f"source-call:{key}" for key in references)))
+                            )
+                        }
+                    )
+                    for snapshot in fetched.inventories
+                ),
+                outcomes=tuple(
+                    outcome.model_copy(update={"calls": tuple(dict.fromkeys((*outcome.calls, *references)))})
+                    for outcome in fetched.outcomes
+                ),
+            )
         all_issues.extend(
             issue.model_copy(
                 update={"details": {**(issue.details or {}), "inventory_scope": pair_scope.model_dump(mode="json")}}
             )
-            if issue.code == "source.inventory_unresolved"
+            if issue.code in {"source.inventory_unresolved", "source.request_failed"}
             else issue
             for issue in fetched.issues
         )
@@ -1831,9 +1911,7 @@ def drive(
                         replaced_facts_ids=matching_facts,
                     )
                 )
-            cached_calls.extend(
-                {**_origin_call(origin), "station_products": ((station, str(product)),)} for origin in fetched.calls
-            )
+            cached_calls.extend(auxiliary_calls)
             for event in fetched.failed_requests:
                 target = event.series
                 if len(group) > 1 and (target.station_id, target.product_id) != (station, product):
@@ -1882,7 +1960,10 @@ def drive(
                         retrieved_at=response.retrieved_at,
                         content_type=response.content_type or _origin_value(UnknownOriginFact()),
                     )
-                    cached_calls.extend(_secret_call(item) for item in response.prerequisite_calls)
+                    cached_calls.extend(
+                        {**_secret_call(item), "acquisition_id": event.call_id or event.event_id}
+                        for item in response.prerequisite_calls
+                    )
                 attempt_traces = event.failure.attempt_traces if isinstance(event.failure, TransportFailure) else ()
                 if attempt_traces:
                     call_ids = tuple(attempt.attempt_id for attempt in attempt_traces)
@@ -1944,6 +2025,7 @@ def drive(
                             "variant": target.variant,
                             "window": event.window.model_dump(mode="json"),
                             "outcome_id": event.event_id,
+                            "inventory_scope": pair_scope.model_dump(mode="json"),
                         },
                         "message": issue.message
                         + (f" Source variant: {target.variant}." if target.variant is not None else "")
@@ -2018,6 +2100,25 @@ def drive(
             if not isinstance(parsed, ParsedSeries):
                 raise FatalContractError("Provider parse must return ParsedSeries")
             _validate_parsed_series(parsed)
+            # The shared engine knows which immutable payload was parsed even
+            # when a provider supplies no separate source-call identifier.
+            parsed = replace(
+                parsed,
+                inventories=tuple(
+                    snapshot.model_copy(
+                        update={
+                            "evidence": tuple(
+                                dict.fromkeys((*snapshot.evidence, f"source-call:{payload.acquisition_id}"))
+                            )
+                        }
+                    )
+                    for snapshot in parsed.inventories
+                ),
+                outcomes=tuple(
+                    outcome.model_copy(update={"calls": tuple(dict.fromkeys((*outcome.calls, payload.acquisition_id)))})
+                    for outcome in parsed.outcomes
+                ),
+            )
             validate_native_rows(parsed.rows, config.products, series=parsed.series)
             transaction_parsed.append(parsed)
             parsed_payloads.append((payload_index, parsed))
@@ -2040,6 +2141,7 @@ def drive(
                         held_interval=RequestedInterval(failed_start, failed_end, axis=failed_outcome.window.axis),
                     )
         for payload_index, parsed in parsed_payloads:
+            parsed_outcome_start = len(fresh_outcomes)
             source_series_by_payload[payload_index] = tuple(
                 dict.fromkeys((*source_series_by_payload[payload_index], *(item.series_id for item in parsed.series)))
             )
@@ -2211,8 +2313,22 @@ def drive(
                             ),
                         )
                     )
+            if len(fresh_outcomes) > parsed_outcome_start:
+                for issue in parsed.issues:
+                    if (issue.details or {}).get("outcome_id") is None:
+                        issue_acquisitions[id(issue)] = tuple(
+                            dict.fromkeys(
+                                (*issue_acquisitions.get(id(issue), ()), payloads[payload_index].acquisition_id)
+                            )
+                        )
         if isinstance(fetched, SourceAcquisition):
-            reconciled = _reconcile_acquired_inventories(fetched, tuple(transaction_parsed), pair_scope, window)
+            reconciled = _reconcile_acquired_inventories(
+                fetched,
+                tuple(transaction_parsed),
+                pair_scope,
+                window,
+                durable_outcomes=tuple(fresh_outcomes[acquisition_outcome_start:]),
+            )
             inventories.extend(reconciled)
             fresh_inventories.extend(reconciled)
         pair_definitions = tuple(
@@ -2344,7 +2460,12 @@ def drive(
                 tuple(fresh_inventories),
                 tuple(fresh_outcomes),
                 tuple(pending),
-                tuple(all_issues),
+                tuple(
+                    _issue_with_acquisition_references(issue, issue_acquisitions[id(issue)])
+                    if id(issue) in issue_acquisitions
+                    else issue
+                    for issue in all_issues
+                ),
                 enriched.calls_made,
             ),
         )
@@ -2374,6 +2495,9 @@ def drive_store(
     scope = request.scope or SeriesScope(
         provider_ids=(str(request.provider_id),), station_ids=request.stations, product_ids=tuple(request.products)
     )
+    from rivretrieve._internal.store.reader import require_readable_store
+
+    require_readable_store(store)
     resolved = reader or StoreReader()
     status = resolved.status(store, request.provider_id)
     if not isinstance(status.manifest, StoreManifest):

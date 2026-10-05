@@ -7,14 +7,12 @@ replaces the only surviving observation store and deletes the publisher artifact
 from __future__ import annotations
 
 import hashlib
-import os
-import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import cast
-from uuid import uuid4
 
 import polars as pl
 import pyarrow.parquet as pq
@@ -31,6 +29,14 @@ from rivretrieve._internal.store.compiler import (
     _physical_partition,
     compile_store,
     compile_store_batches,
+)
+from rivretrieve._internal.store.integrity import SealedStore, inspect_integrity, verify_files
+from rivretrieve._internal.store.lifecycle import (
+    StorePostCommitCleanupError as StorePostCommitCleanupError,
+)
+from rivretrieve._internal.store.lifecycle import (
+    StoreTransaction,
+    store_transaction,
 )
 from rivretrieve._internal.store.reader import StoreQuery, StoreReader
 from rivretrieve._internal.store.validation import SourceColumn, StoreRoot, ValidatedStore, validate_store
@@ -67,13 +73,43 @@ class StoreCertificationError(RuntimeError):
     """The publisher artifact or staged store failed certification."""
 
 
-class StorePostCommitCleanupError(StoreCertificationError):
-    """The new store is authoritative but named non-secret cleanup residue remains."""
-
-
 SourceDecoder = Callable[[Path], NativeStoreMaterialization]
 StreamingSourceDecoder = Callable[[Path | tuple[Path, ...]], ObservationBatchStream]
 StoreWriter = Callable[[StoreCompileRequest, NativeStoreRows | pl.DataFrame], ValidatedStore]
+
+
+@contextmanager
+def compilation_transaction(
+    destination: StoreRoot, transaction: StoreTransaction | None = None
+) -> Iterator[StoreTransaction]:
+    """Reuse explicit ownership or open one publication transaction."""
+    if transaction is not None:
+        transaction.lease.check(Path(destination))
+        if transaction.committed:
+            raise ValueError("Cannot compile into an already committed transaction")
+        transaction.workspace.mkdir(exist_ok=True)
+        yield transaction
+    else:
+        with store_transaction(Path(destination)) as acquired:
+            acquired.workspace.mkdir(exist_ok=True)
+            yield acquired
+
+
+def _publish_certified(transaction: StoreTransaction, request: StoreCompileRequest) -> ValidatedStore:
+    def validate(stage: Path) -> SealedStore:
+        sealed = inspect_integrity(StoreRoot(stage), request.provider_id)
+        verify_files(sealed, tuple(sealed.store.partition_files))
+        return sealed
+
+    staged = cast(SealedStore, transaction.publish(validate)).store
+    return replace(
+        staged,
+        root=StoreRoot(transaction.root),
+        partition_files={
+            identifier: transaction.root / path.relative_to(transaction.stage)
+            for identifier, path in staged.partition_files.items()
+        },
+    )
 
 
 def certify_store(
@@ -83,47 +119,30 @@ def certify_store(
     *,
     writer: StoreWriter = compile_store,
     reader: StoreReader | None = None,
+    transaction: StoreTransaction | None = None,
 ) -> ValidatedStore:
-    """Compile, verify, atomically publish, then delete the publisher artifact.
+    """Certify exact source equality, publish, then delete the supplied artifact.
 
-    The decoder runs before a staging directory exists. It must report all observed
-    source fields and every independently complete source member. Any pre-commit failure
-    restores the previous store and publisher artifact. A typed post-commit cleanup
-    failure keeps the validated new store authoritative and names remaining residue.
+    Pre-commit failures leave the artifact and previous store intact. Artifact
+    deletion and old-generation cleanup failures after publication report the new
+    authoritative store and remaining paths through StorePostCommitCleanupError.
     """
-    artifact = Path(publisher_artifact)
-    destination = Path(request.destination)
-    if request.publisher_artifacts:
-        raise StoreCertificationError("non-streaming certification accepts exactly one publisher artifact")
-    _check_artifact(artifact, destination, request.publisher_artifact)
-    decoded = decode(artifact)
-    if decoded.series:
-        request = replace(request, series=decoded.series)
-    _check_source(decoded, request)
-
-    stage = destination.with_name(f".{destination.name}.staging-{uuid4().hex}")
-    backup = destination.with_name(f".{destination.name}.previous-{uuid4().hex}")
-    staged_request = replace(request, destination=StoreRoot(stage))
-    published = False
-    try:
+    with compilation_transaction(request.destination, transaction) as active:
+        artifact = Path(publisher_artifact)
+        if request.publisher_artifacts:
+            raise StoreCertificationError("non-streaming certification accepts exactly one publisher artifact")
+        _check_artifact(artifact, active.root, request.publisher_artifact)
+        decoded = decode(artifact)
+        if decoded.series:
+            request = replace(request, series=decoded.series)
+        _check_source(decoded, request)
+        staged_request = replace(request, destination=StoreRoot(active.stage))
         writer(staged_request, decoded.rows)
-        _verify_read_back(stage, request, pl.DataFrame(decoded.rows), reader or StoreReader())
-        _publish(stage, destination, backup)
-        published = True
-        validated = validate_store(StoreRoot(destination), request.provider_id)
+        _verify_read_back(active.stage, request, pl.DataFrame(decoded.rows), reader or StoreReader())
+        active.register_cleanup((artifact,))
+        validated = _publish_certified(active, request)
         artifact.unlink()
-    except Exception as original:
-        _rollback_precommit(
-            original,
-            stage=stage,
-            destination=destination,
-            backup=backup,
-            restore_store=published or backup.exists(),
-        )
-        raise
-
-    _post_commit_cleanup(backup)
-    return validated
+        return validated
 
 
 def _check_artifact(artifact: Path, destination: Path, expected_artifact: object) -> None:
@@ -225,188 +244,37 @@ def _verify_read_back(
         raise StoreCertificationError(f"staged store read-back differs from decoded rows: {error}") from error
 
 
-def _publish(stage: Path, destination: Path, backup: Path) -> None:
-    had_previous = destination.exists()
-    if had_previous:
-        os.replace(destination, backup)
-    try:
-        os.replace(stage, destination)
-    except Exception as publication_error:
-        if had_previous:
-            try:
-                os.replace(backup, destination)
-            except Exception as restoration_error:
-                raise StoreCertificationError(
-                    "atomic publication failed and immediate prior-store restore failed: "
-                    f"{type(restoration_error).__name__}: {restoration_error}"
-                ) from publication_error
-        raise
-
-
-def _restore_previous(destination: Path, backup: Path) -> None:
-    if destination.exists():
-        _remove_tree(destination)
-    if backup.exists():
-        os.replace(backup, destination)
-
-
-def _remove_tree(path: Path) -> None:
-    if path.exists():
-        shutil.rmtree(path)
-
-
 def certify_store_batches(
     request: StoreCompileRequest,
     publisher_artifact: Path | tuple[Path, ...],
     decode: StreamingSourceDecoder,
+    *,
+    transaction: StoreTransaction | None = None,
 ) -> ValidatedStore:
-    """certify_store_batches : Artifacts × StreamingDecoder × StoreCompileRequest → ValidatedStore."""
-    artifacts = (
-        tuple(Path(item) for item in publisher_artifact)
-        if isinstance(publisher_artifact, tuple)
-        else (Path(publisher_artifact),)
-    )
-    destination = Path(request.destination)
-    expected_artifacts = request.all_publisher_artifacts
-    if len(artifacts) != len(expected_artifacts):
-        raise StoreCertificationError("publisher artifact path and provenance counts differ")
-    for artifact, expected in zip(artifacts, expected_artifacts, strict=True):
-        _check_artifact(artifact, destination, expected)
-    decoded = decode(artifacts if len(artifacts) > 1 else artifacts[0])
-    if decoded.observed_source_columns != request.source_columns:
-        raise StoreCertificationError("observed source schema is not declaration-closed")
-
-    stage = destination.with_name(f".{destination.name}.staging-{uuid4().hex}")
-    backup = destination.with_name(f".{destination.name}.previous-{uuid4().hex}")
-    staged_request = replace(request, destination=StoreRoot(stage))
-    published = False
-    quarantine: Path | None = None
-    quarantine_copies: tuple[Path, ...] = ()
-    try:
-        evidence = compile_store_batches(staged_request, decoded)
-        _verify_streamed_read_back(
-            stage,
-            request,
-            evidence,
-            decode(artifacts if len(artifacts) > 1 else artifacts[0]),
+    """Certify a complete streamed source snapshot through the shared lifecycle."""
+    with compilation_transaction(request.destination, transaction) as active:
+        artifacts = (
+            tuple(Path(item) for item in publisher_artifact)
+            if isinstance(publisher_artifact, tuple)
+            else (Path(publisher_artifact),)
         )
-        quarantine, quarantine_copies = _link_artifact_rollback_copies(destination, artifacts)
-        _publish(stage, destination, backup)
-        published = True
-        validated = validate_store(StoreRoot(destination), request.provider_id)
+        expected_artifacts = request.all_publisher_artifacts
+        if len(artifacts) != len(expected_artifacts):
+            raise StoreCertificationError("publisher artifact path and provenance counts differ")
+        for artifact, expected in zip(artifacts, expected_artifacts, strict=True):
+            _check_artifact(artifact, active.root, expected)
+        source_paths = artifacts if len(artifacts) > 1 else artifacts[0]
+        decoded = decode(source_paths)
+        if decoded.observed_source_columns != request.source_columns:
+            raise StoreCertificationError("observed source schema is not declaration-closed")
+        staged_request = replace(request, destination=StoreRoot(active.stage))
+        evidence = compile_store_batches(staged_request, decoded)
+        _verify_streamed_read_back(active.stage, request, evidence, decode(source_paths))
+        active.register_cleanup(artifacts)
+        validated = _publish_certified(active, request)
         for artifact in artifacts:
             artifact.unlink()
-    except Exception as original:
-        _rollback_precommit(
-            original,
-            stage=stage,
-            destination=destination,
-            backup=backup,
-            restore_store=published or backup.exists(),
-            artifacts=artifacts,
-            quarantine=quarantine,
-            quarantine_copies=quarantine_copies,
-        )
-        raise
-
-    # Commit point: the validated destination is authoritative and every original
-    # artifact has been unlinked while its quarantine links are still intact.
-    _post_commit_cleanup(*(path for path in (quarantine, backup) if path is not None))
-    return validated
-
-
-def _rollback_precommit(
-    original: Exception,
-    *,
-    stage: Path,
-    destination: Path,
-    backup: Path,
-    restore_store: bool,
-    artifacts: tuple[Path, ...] = (),
-    quarantine: Path | None = None,
-    quarantine_copies: tuple[Path, ...] = (),
-) -> None:
-    """Attempt independent pre-commit restoration and cleanup, then aggregate defects."""
-    restoration_errors: list[Exception] = []
-    cleanup_errors: list[Exception] = []
-    artifact_restoration_failed = False
-    if quarantine is not None:
-        try:
-            _restore_linked_artifacts(artifacts, quarantine_copies)
-        except Exception as error:
-            restoration_errors.append(error)
-            artifact_restoration_failed = True
-    if restore_store:
-        try:
-            _restore_previous(destination, backup)
-        except Exception as error:
-            restoration_errors.append(error)
-    cleanup_paths = [stage]
-    if quarantine is not None and not artifact_restoration_failed:
-        cleanup_paths.append(quarantine)
-    for residue in cleanup_paths:
-        try:
-            _remove_tree(residue)
-        except OSError as error:
-            cleanup_errors.append(error)
-    if not restoration_errors and not cleanup_errors:
-        return
-    details = [
-        *(f"restoration {type(error).__name__}: {error}" for error in restoration_errors),
-        *(f"cleanup {type(error).__name__}: {error}" for error in cleanup_errors),
-    ]
-    state = "incomplete" if restoration_errors else "complete with cleanup residue"
-    raise StoreCertificationError(f"pre-commit rollback was {state}: {'; '.join(details)}") from original
-
-
-def _post_commit_cleanup(*paths: Path) -> None:
-    failures: list[str] = []
-    for path in paths:
-        try:
-            _remove_tree(path)
-        except OSError as error:
-            failures.append(f"{path.name} ({type(error).__name__}: {error})")
-    residues = [path.name for path in paths if path.exists()]
-    if failures or residues:
-        raise StorePostCommitCleanupError(
-            "new store is authoritative; post-commit cleanup requires retry: "
-            f"failures={failures!r}; residues={residues!r}"
-        )
-
-
-def _link_artifact_rollback_copies(destination: Path, artifacts: tuple[Path, ...]) -> tuple[Path, tuple[Path, ...]]:
-    """Create same-filesystem rollback links before any downloaded name is removed."""
-    quarantine = destination.parent / f".publisher-artifacts.rollback-{uuid4().hex}"
-    quarantine.mkdir()
-    copies: list[Path] = []
-    try:
-        for index, artifact in enumerate(artifacts):
-            copy = quarantine / f"{index:06d}-{artifact.name}"
-            os.link(artifact, copy)
-            copies.append(copy)
-    except Exception as original:
-        try:
-            _remove_tree(quarantine)
-        except OSError as cleanup_error:
-            raise StoreCertificationError(
-                "publisher-artifact rollback-link setup failed and cleanup was incomplete: "
-                f"{type(cleanup_error).__name__}: {cleanup_error}"
-            ) from original
-        raise
-    return quarantine, tuple(copies)
-
-
-def _restore_linked_artifacts(artifacts: tuple[Path, ...], copies: tuple[Path, ...]) -> None:
-    failures: list[str] = []
-    for artifact, copy in zip(artifacts, copies, strict=True):
-        if artifact.exists():
-            continue
-        try:
-            os.link(copy, artifact)
-        except OSError as error:
-            failures.append(f"{artifact.name} ({type(error).__name__}: {error})")
-    if failures:
-        raise StoreCertificationError(f"publisher artifact restoration was incomplete: {failures!r}")
+        return validated
 
 
 def _verify_streamed_read_back(

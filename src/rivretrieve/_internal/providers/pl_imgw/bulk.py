@@ -46,6 +46,8 @@ from rivretrieve._internal.store import (
     certify_store_batches,
     source_unit_inventory_fingerprint,
 )
+from rivretrieve._internal.store.certification import compilation_transaction
+from rivretrieve._internal.store.lifecycle import StoreTransaction
 
 PROVIDER_ID: Final = ProviderId("pl_imgw")
 BASE_URL: Final = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe"
@@ -313,6 +315,7 @@ class ImgwCompileRequest:
     built_at: datetime
     compiler_version: str
     publisher_artifacts: tuple[DownloadedBulkArtifact | DownloadedImgw, ...] = ()
+    transaction: StoreTransaction | None = None
 
     def __post_init__(self) -> None:
         artifacts = self.publisher_artifacts or (DownloadedImgw(self.publisher_artifact, self.publisher_url),)
@@ -359,30 +362,36 @@ class ImgwCompileRequest:
 
 def compile_imgw(request: ImgwCompileRequest) -> ValidatedStore:
     """Certify and publish the ordered IMGW archives as one store."""
-    downloaded = request.publisher_artifacts or (
-        DownloadedImgw(Path(request.publisher_artifact), request.publisher_url),
-    )
-    artifacts = tuple(Path(item.path) for item in downloaded)
-    provenance = tuple(PublisherArtifact(item.url, _sha256(item.path)) for item in downloaded)
-    compile_request = StoreCompileRequest(
-        destination=request.destination,
-        provider_id=PROVIDER_ID,
-        compiler_version=request.compiler_version,
-        built_at=request.built_at,
-        source_vintage=max(item.source_vintage for item in downloaded),
-        publisher_artifact=provenance[0],
-        publisher_artifacts=provenance,
-        source_columns=IMGW_SOURCE_COLUMNS,
-        source_column_dispositions=IMGW_SOURCE_DISPOSITIONS,
-    )
-    return certify_store_batches(compile_request, artifacts, decode_imgw_batches)
+    with compilation_transaction(request.destination, request.transaction) as transaction:
+        downloaded = request.publisher_artifacts or (
+            DownloadedImgw(Path(request.publisher_artifact), request.publisher_url),
+        )
+        artifacts = tuple(Path(item.path) for item in downloaded)
+        provenance = tuple(PublisherArtifact(item.url, _sha256(item.path)) for item in downloaded)
+        compile_request = StoreCompileRequest(
+            destination=request.destination,
+            provider_id=PROVIDER_ID,
+            compiler_version=request.compiler_version,
+            built_at=request.built_at,
+            source_vintage=max(item.source_vintage for item in downloaded),
+            publisher_artifact=provenance[0],
+            publisher_artifacts=provenance,
+            source_columns=IMGW_SOURCE_COLUMNS,
+            source_column_dispositions=IMGW_SOURCE_DISPOSITIONS,
+        )
+        return certify_store_batches(
+            compile_request,
+            artifacts,
+            lambda paths: decode_imgw_batches(paths, workspace=transaction.workspace),
+            transaction=transaction,
+        )
 
 
 IMGW_ROWS_PER_BATCH: Final = 65_536
 _ARTIFACT_NAME = re.compile(r"codz_(?P<year>[0-9]{4})(?:_(?P<month>[0-9]{2}))?\.zip$")
 
 
-def decode_imgw_batches(paths: Path | tuple[Path, ...]) -> ObservationBatchStream:
+def decode_imgw_batches(paths: Path | tuple[Path, ...], *, workspace: Path | None = None) -> ObservationBatchStream:
     """decode_imgw_batches : IMGWArchive+ → ObservationBatchStream."""
     from collections import Counter
 
@@ -395,7 +404,10 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...]) -> ObservationBatchStrea
         for product, _index, _sentinels in sorted(_PRODUCT_COLUMNS, key=lambda item: str(item[0])):
             for year in years:
                 iterators = [
-                    _external_station_sort(_iter_imgw_product_year(path, product, year, artifact_index))
+                    _external_station_sort(
+                        _iter_imgw_product_year(path, product, year, artifact_index),
+                        workspace=workspace or path.parent,
+                    )
                     for artifact_index, (path, period) in enumerate(zip(ordered, periods, strict=True))
                     if year in _calendar_years(period)
                 ]
@@ -496,13 +508,13 @@ def _iter_imgw_product_year(
                 yield _imgw_source_unit(path, artifact_index, ordinal, source), row
 
 
-def _external_station_sort(rows):
+def _external_station_sort(rows, *, workspace: Path):
     """Bounded external sort by station identifier and source ordinal."""
     import pickle
     import sqlite3
     import tempfile
 
-    with tempfile.TemporaryDirectory(prefix="rivretrieve-imgw-sort-") as directory:
+    with tempfile.TemporaryDirectory(prefix="rivretrieve-imgw-sort-", dir=workspace) as directory:
         database = Path(directory) / "rows.sqlite3"
         connection = sqlite3.connect(database)
         try:

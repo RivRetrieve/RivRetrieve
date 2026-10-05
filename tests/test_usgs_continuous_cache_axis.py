@@ -198,3 +198,63 @@ def test_public_narrow_inventory_refresh_cannot_hide_new_series_in_broad_reuse(m
     assert narrow.data.height == 1
     reused = rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="reuse", on_issue="ignore")
     assert_frame_equal(reused.data, narrow.data)
+
+
+def test_public_failed_refresh_partial_recovery_and_full_recovery_do_not_replay_old_failure(monkeypatch, tmp_path):
+    """Only unresolved failed spans remain diagnostic; held rows keep acquisition time."""
+    from dataclasses import replace
+
+    from rivretrieve._internal.issues import IssuePolicyError
+
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge")
+    continuous = next(item for item in selected.series if item.product_id == "discharge_instantaneous")
+    selected = rr.pick(selected, series_id=continuous.series_id)
+    transport = _Spans(continuous.identity.published_id)
+    stamp = datetime(2026, 9, 20, tzinfo=UTC)
+    send = transport.send
+
+    def stamped_send(request):
+        return replace(send(request), retrieved_at=stamp)
+
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(transport, "send", stamped_send)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+
+    def fetch(cache, policy="ignore"):
+        return rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache=cache, on_issue=policy)
+
+    first = fetch("refresh")
+    assert first.data.height == 2
+    stamp = datetime(2026, 9, 21, tzinfo=UTC)
+    transport.failed_first = transport.failed_second = True
+    failed = fetch("refresh")
+    assert_frame_equal(failed.data, first.data)
+    assert any(item.status == "failed" for item in failed.outcomes)
+
+    stamp = datetime(2026, 9, 22, tzinfo=UTC)
+    transport.failed_first = False
+    transport.value = 20
+    partial = fetch("refresh")
+    np.testing.assert_allclose(partial.data.sort("time")["value"], np.array([11, 20]) * 0.028316846592)
+    assert {item.retrieved_at for item in partial.provenance.served_intervals} == {datetime(2026, 9, 20, tzinfo=UTC)}
+    assert any(item.status == "success" and item.retrieved_at == stamp for item in partial.outcomes)
+    calls = len(transport.calls)
+    reused_partial = fetch("reuse")
+    assert_frame_equal(reused_partial.data, partial.data)
+    assert any(item.status == "failed" for item in reused_partial.outcomes)
+    with pytest.raises(IssuePolicyError):
+        fetch("reuse", "raise")
+    assert len(transport.calls) == calls
+
+    stamp = datetime(2026, 9, 23, tzinfo=UTC)
+    transport.failed_second = False
+    transport.value = 30
+    recovered = fetch("refresh", "raise")
+    assert not any(item.status == "failed" for item in recovered.outcomes)
+    calls = len(transport.calls)
+    reused = fetch("reuse", "raise")
+    assert len(transport.calls) == calls
+    assert_frame_equal(reused.data, recovered.data)
+    assert not any(item.status == "failed" for item in reused.outcomes)
+    assert not any(item.code == "source.request_failed" for item in reused.issues)
+    assert {item.retrieved_at for item in reused.provenance.served_intervals} == {stamp}

@@ -1729,8 +1729,12 @@ def test_prerequisite_calls_are_interleaved_before_each_actual_payload_origin() 
         "content_type",
         "response_disposition",
         "station_products",
+        "acquisition_id",
     }
     assert enriched.calls_made[0]["station_products"] == (("A", "level"), ("A", "flow"))
+    assert enriched.calls_made[0]["acquisition_id"] == payloads[0].acquisition_id
+    assert enriched.calls_made[3]["acquisition_id"] == payloads[2].acquisition_id
+    assert enriched.calls_made[0]["credential_header_names"] == ("Identificador", "Senha")
 
 
 @pytest.mark.parametrize(
@@ -1821,3 +1825,41 @@ def test_compiled_query_keeps_inventory_definitions_and_fact_filtered_receipts(
     assert restored.source_series == result.source_series
     assert restored.inventories == result.inventories
     assert restored.outcomes == result.outcomes
+
+
+@pytest.mark.parametrize("existing", [None, "payload", [], ["other"], ["payload", "payload"]])
+def test_storage_issue_lineage_never_overwrites_conflicting_source_context(existing):
+    from rivretrieve._internal.issues import Issue
+
+    issue = Issue(
+        severity="info",
+        code="source_quality_code",
+        message="Native code",
+        details={
+            "source_quality_code": "Q",
+            "count": 7,
+            "acquisition_ids": existing,
+        },
+    )
+    with pytest.raises(FatalContractError, match="acquisition references contradict"):
+        driver_module._issue_with_acquisition_references(issue, ("payload",))
+    assert issue.details == {"source_quality_code": "Q", "count": 7, "acquisition_ids": existing}
+
+
+def test_storage_issue_lineage_preserves_native_issue_and_original_count():
+    from rivretrieve._internal.issues import Issue
+
+    issue = Issue(
+        severity="info",
+        code="source_quality_code",
+        message="Native code",
+        details={
+            "source_quality_code": "Q",
+            "count": 7,
+        },
+    )
+    stored = driver_module._issue_with_acquisition_references(issue, ("payload",))
+    assert stored.details == {"source_quality_code": "Q", "count": 7, "acquisition_ids": ("payload",)}
+    assert stored.code == issue.code and stored.message == issue.message
+    assert issue.details == {"source_quality_code": "Q", "count": 7}
+    assert driver_module._issue_with_acquisition_references(stored, ("payload",)) == stored

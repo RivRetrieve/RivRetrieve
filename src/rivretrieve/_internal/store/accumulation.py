@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-import shutil
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
 
 import polars as pl
 
@@ -23,9 +21,22 @@ from rivretrieve._internal.source_series import (
     stable_id,
     validate_series_rows,
 )
+from rivretrieve._internal.store.authority import compact_evidence
+from rivretrieve._internal.store.integrity import (
+    inspect_integrity,
+    link_partition,
+    refresh_witnesses,
+    seal_store,
+    verify_files,
+)
+from rivretrieve._internal.store.lifecycle import store_transaction
 from rivretrieve._internal.store.provenance import encode_source_call
-from rivretrieve._internal.store.reader import StoreReader
-from rivretrieve._internal.store.validation import AccumulatedStoreManifest, StoreRoot, validate_store
+from rivretrieve._internal.store.validation import (
+    AccumulatedStoreManifest,
+    PartitionIdentifier,
+    StoreRoot,
+    _validate_metadata,
+)
 from rivretrieve._internal.time_axis import TimeAxis, axis_time_expression
 
 
@@ -105,22 +116,26 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
     Failed refreshes do not remove held native rows or successful coverage.
     """
     root = Path(store)
-    root.parent.mkdir(parents=True, exist_ok=True)
-    lock = root.with_name(f".{root.name}.write-lock")
-    try:
-        lock.mkdir()
-    except FileExistsError as error:
-        raise FatalContractError(
-            f'Store writer already active at "{lock}"; preserve and inspect before recovery'
-        ) from error
-    stage = root.with_name(f".{root.name}.pending-{uuid4().hex}")
-    backup = root.with_name(f".{root.name}.backup-{uuid4().hex}")
-    try:
-        status = StoreReader().status(store, provider_id)
-        previous = status.manifest
+    with store_transaction(root) as transaction:
+        stage = transaction.stage
+        sealed = inspect_integrity(store, provider_id) if root.exists() else None
+        previous = sealed.store.manifest if sealed else None
+        certified = None
+
+        def refresh_link_witnesses(path: Path) -> None:
+            # An aborted attempt may have discovered pre-existing ctime drift.
+            # Never refresh that unverified prior witness. Retry hashes the
+            # original digest before it can inherit an unchanged partition.
+            if transaction.committed and certified is not None:
+                refresh_witnesses(certified, StoreRoot(path))
+
+        transaction.after_cleanup = refresh_link_witnesses
         if previous is not None and not isinstance(previous, AccumulatedStoreManifest):
             raise FatalContractError(f'Expected an accumulated store at "{store}"; refusing to modify a compiled store')
         held = previous.coverage if previous else ()
+        held_by_series: dict[str, list[CoverageInterval]] = {}
+        for item in held:
+            held_by_series.setdefault(item.series_id, []).append(item)
         counts = {str(key): value for key, value in previous.partition_row_counts.items()} if previous else {}
         series = _merge_series(previous.series if previous else (), update.series)
         inventories = _merge_records(
@@ -146,8 +161,33 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             for item in update.outcomes
         )
         outcomes = _merge_records(previous.outcomes if previous else (), durable_outcomes, "outcome_id")
-        definitions = {item.series_id: item for item in series}
         outcome_by_id = {item.outcome_id: item for item in outcomes}
+        # Validate incoming evidence before compaction can remove a record. A
+        # malformed stage result must remain fatal even when it has no live support.
+        _validate_metadata(
+            {
+                "series": [item.model_dump(mode="json") for item in series],
+                "inventories": [item.model_dump(mode="json") for item in inventories],
+                "outcomes": [item.model_dump(mode="json") for item in outcomes],
+                "supporting_outcomes": [
+                    item.model_dump(mode="json")
+                    for item in sealed.supporting_outcomes
+                    if item.outcome_id not in outcome_by_id
+                ]
+                if sealed
+                else [],
+                "issues": [
+                    item.model_dump(mode="json") for item in (*(previous.issues if previous else ()), *update.issues)
+                ],
+                "source_calls": [
+                    encode_source_call(item)
+                    for item in (*(previous.source_calls if previous else ()), *update.source_calls)
+                ],
+            },
+            store,
+            provider_id,
+        )
+        definitions = {item.series_id: item for item in series}
         replacements: list[SuccessfulReplacement] = []
         snapshot_keys: set[tuple[str, str, datetime, str]] = set()
         acquisition_axes: dict[tuple[str, str], TimeAxis] = {}
@@ -179,7 +219,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                 item.series_id == coverage.series_id
                 and set(item.facts_ids).intersection(replaced_facts)
                 and item.interval.axis is not coverage.interval.axis
-                for item in held
+                for item in held_by_series.get(coverage.series_id, ())
             ):
                 raise FatalContractError("Stored source series cannot change its acquisition time axis")
             known_facts = {fact.facts_id for fact in definitions[coverage.series_id].facts}
@@ -213,16 +253,15 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             if (outcome.status is OutcomeStatus.EMPTY) != rows.is_empty():
                 raise FatalContractError("Successful empty and nonempty outcomes must match their native rows")
             replacements.append(replace(replacement, coverage=coverage))
-        if root.exists():
-            shutil.copytree(root, stage)
-        else:
-            stage.mkdir()
+        stage.mkdir()
+        partition_updates: dict[str, list[SuccessfulReplacement]] = {}
         for replacement in replacements:
             coverage, rows = replacement.coverage, replacement.rows
             definition = definitions[coverage.series_id]
             replaced_facts = replacement.replaced_facts_ids or coverage.facts_ids
             retained: list[CoverageInterval] = []
-            for item in held:
+            existing_coverage = held_by_series.get(coverage.series_id, [])
+            for item in existing_coverage:
                 overlap_facts = tuple(fact_id for fact_id in item.facts_ids if fact_id in replaced_facts)
                 if (
                     item.series_id != coverage.series_id
@@ -240,14 +279,32 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                 )
             observation_only = outcome_by_id[coverage.outcome_id].coverage == "observations"
             if observation_only:
-                retained = list(held)
+                retained = existing_coverage
             else:
                 retained.append(coverage)
-            held = tuple(retained)
+            held_by_series[coverage.series_id] = retained
             margin = 1 if coverage.interval.axis is TimeAxis.UTC else 0
             for year in range(coverage.interval.start.year - margin, coverage.interval.end.year + margin + 1):
                 identifier = f"product={definition.product_id}/year={year:04d}"
-                directory = stage / identifier
+                partition_updates.setdefault(identifier, []).append(replacement)
+        reused = {}
+        if sealed is not None:
+            verify_files(sealed, tuple(key for key in sealed.store.partition_files if str(key) in partition_updates))
+        if sealed is not None:
+            for identifier, source in sealed.store.partition_files.items():
+                if str(identifier) not in partition_updates:
+                    destination = stage / str(identifier) / source.name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    reused[identifier] = link_partition(sealed, identifier, destination)
+        for identifier, changes in partition_updates.items():
+            year = int(identifier.rsplit("=", 1)[1])
+            key = PartitionIdentifier(identifier)
+            existing_rows = None
+            if sealed is not None and key in sealed.store.partition_files:
+                existing_rows = pl.read_parquet(sealed.store.partition_files[key])
+            for replacement in changes:
+                coverage, rows = replacement.coverage, replacement.rows
+                replaced_facts = replacement.replaced_facts_ids or coverage.facts_ids
                 additions = rows.filter(pl.col("time").dt.year() == year).select(
                     "station_id",
                     "time",
@@ -261,10 +318,8 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                     "facts_id",
                     "source_unit",
                 )
-                if identifier in counts:
-                    existing = next(directory.glob("*.parquet"))
-                    existing_rows = pl.read_parquet(existing)
-                    if observation_only:
+                if existing_rows is not None:
+                    if outcome_by_id[coverage.outcome_id].coverage == "observations":
                         retained_rows = existing_rows.join(
                             additions.select("series_id", "facts_id", "time", "time_zone").unique(),
                             on=["series_id", "facts_id", "time", "time_zone"],
@@ -281,23 +336,30 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                             )
                         )
                     additions = pl.concat([retained_rows, additions])
-                    existing.unlink()
-                if additions.is_empty():
-                    counts.pop(identifier, None)
-                    if directory.exists():
-                        directory.rmdir()
-                    continue
-                directory.mkdir(parents=True, exist_ok=True)
-                additions.sort("station_id", maintain_order=True).write_parquet(directory / "rows.parquet")
-                counts[identifier] = additions.height
-        issues = tuple(
-            dict.fromkeys(item.model_dump_json() for item in (*(previous.issues if previous else ()), *update.issues))
-        )
-        calls = tuple(
-            dict.fromkeys(
-                json.dumps(encode_source_call(item), sort_keys=True)
-                for item in (*(previous.source_calls if previous else ()), *update.source_calls)
-            )
+                existing_rows = additions
+            assert existing_rows is not None
+            if existing_rows.is_empty():
+                counts.pop(identifier, None)
+                continue
+            directory = stage / identifier
+            directory.mkdir(parents=True, exist_ok=True)
+            existing_rows.sort("station_id", maintain_order=True).write_parquet(directory / "rows.parquet")
+            counts[identifier] = existing_rows.height
+        held = tuple(item for records in held_by_series.values() for item in records)
+        all_issues = {item.model_dump_json(): item for item in (*(previous.issues if previous else ()), *update.issues)}
+        all_calls = {
+            json.dumps(encode_source_call(item), sort_keys=True): item
+            for item in (*(previous.source_calls if previous else ()), *update.source_calls)
+        }
+        evidence = compact_evidence(
+            held,
+            outcomes,
+            inventories,
+            tuple(all_issues.values()),
+            tuple(all_calls.values()),
+            supporting_outcomes=sealed.supporting_outcomes if sealed else (),
+            new_outcome_ids=frozenset(item.outcome_id for item in durable_outcomes),
+            new_inventory_ids=frozenset(item.snapshot_id for item in update.inventories),
         )
         manifest = {
             "format_version": 8,
@@ -306,27 +368,16 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             "coverage": [_coverage_json(item) for item in held],
             "partition_row_counts": counts,
             "series": [item.model_dump(mode="json") for item in series],
-            "inventories": [item.model_dump(mode="json") for item in inventories],
-            "outcomes": [item.model_dump(mode="json") for item in outcomes],
-            "issues": [json.loads(item) for item in issues],
-            "source_calls": [json.loads(item) for item in calls],
+            "inventories": [item.model_dump(mode="json") for item in evidence.inventories],
+            "outcomes": [item.model_dump(mode="json") for item in evidence.outcomes],
+            "supporting_outcomes": [item.model_dump(mode="json") for item in evidence.supporting_outcomes],
+            "issues": [item.model_dump(mode="json") for item in evidence.issues],
+            "source_calls": [encode_source_call(item) for item in evidence.source_calls],
         }
         manifest.update(publication_identity_fields((provider_id,)))
         (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        candidate = validate_store(StoreRoot(stage), provider_id).manifest
+        certified = seal_store(StoreRoot(stage), provider_id, previous=sealed, reused=reused)
+        candidate = certified.store.manifest
         assert isinstance(candidate, AccumulatedStoreManifest)
-        if root.exists():
-            root.rename(backup)
-        try:
-            stage.rename(root)
-        except OSError:
-            if backup.exists():
-                backup.rename(root)
-            raise
-        if backup.exists():
-            shutil.rmtree(backup)
+        transaction.publish(lambda _: certified)
         return candidate
-    finally:
-        if stage.exists():
-            shutil.rmtree(stage)
-        lock.rmdir()
