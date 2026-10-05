@@ -17,6 +17,34 @@ repeat its metadata row. Metadata remains available for catalogue-only gauges an
 for gauges excluded from observation admission or map display. A listed station
 or metadata value does not guarantee observations for a quantity or period.
 
+## Columns at a glance
+
+The summary has one row per gauge and these columns, in this order.
+
+| Column | Type | What it holds |
+| --- | --- | --- |
+| `provider_id` | `String` | The provider the gauge belongs to, such as `usgs_nwis`. |
+| `station_id` | `String` | The station identifier. It stays a string so leading zeros survive. |
+| `station_name` | `String` | The one distinct nonblank name the source supports. Null when there is none. |
+| `latitude` | `Float64` | Latitude from the packaged station catalogue, unchanged. |
+| `longitude` | `Float64` | Longitude from the packaged station catalogue, unchanged. |
+| `crs` | `String` | The coordinate reference system of the coordinates, such as `EPSG:4269`. The text `unknown` when the catalogue does not state it. |
+| `water_body_name_field` | `List(String)` | Native field names that hold a water-body name, such as `riverName`. |
+| `water_body_name_value` | `List(String)` | The names themselves, in the same order as the field list. |
+| `drainage_area_field` | `List(String)` | Native field names that hold a drainage area. |
+| `drainage_area_value` | `List(String)` | The areas as JSON text. Decode each entry with `json.loads`. |
+| `drainage_area_unit` | `List(String)` | The unit of each area, such as `km2` or `sq mi`. Null when unknown. |
+| `elevation_field` | `List(String)` | Native field names that hold an elevation. |
+| `elevation_value` | `List(String)` | The elevations as JSON text. Decode each entry with `json.loads`. |
+| `elevation_unit` | `List(String)` | The unit of each elevation, such as `feet`. Null when unknown. |
+| `elevation_datum` | `List(String)` | The published datum label or code of each elevation, such as `NAVD88`. Null when none is published. A blank source value stays blank. |
+
+In each group of list columns, entry *i* of every list describes the same source
+field. A gauge with no field for a group has null list cells. Each part below
+explains these columns. `rr.metadata(selection, view="source")` returns a different
+table with one row per source attribute, described in
+[Inspect source attributes and scope](#inspect-source-attributes-and-scope).
+
 ## Read the station summary
 
 `provider_id` and `station_id` identify each gauge. Station identifiers remain
@@ -268,13 +296,13 @@ inline units and leading padding. For example, Japan's area above decodes to
 | Column | Meaning |
 | --- | --- |
 | `provider_id`, `station_id` | Gauge identity. |
-| `attribute_role` | Enum: `station_name`, `water_body_name`, `drainage_area` or `elevation`. |
 | `source_field` | Exact native field name. |
 | `source_scope` | Source context where needed to distinguish fields, otherwise null. |
 | `source_value` | JSON scalar text, or null. Decode non-null cells with `json.loads`. |
 | `source_dtype` | Native scalar type, such as `String` or `Float64`. |
 | `source_unit` | Established unit, otherwise null. |
 | `state` | Enum: `value`, `source_null` or `no_metadata`. |
+| `attribute_role` | Enum: `station_name`, `water_body_name`, `drainage_area` or `elevation`. |
 | `support_fact` | Stable fact name in the provider's packaged catalogue evidence. |
 | `source_datum` | Published datum label or code as plain text, otherwise null. |
 | `source_datum_field`, `source_datum_dtype` | Native datum field and type, when the datum comes from a native field. |

@@ -28,6 +28,9 @@ Functions import from `rivretrieve`. The reference renders their source docstrin
 
 ### metadata
 
+The columns of both views are listed in the
+[station metadata guide](station-metadata.md#columns-at-a-glance).
+
 ::: rivretrieve.metadata
 
 ### fetch

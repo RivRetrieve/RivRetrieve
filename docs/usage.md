@@ -65,11 +65,13 @@ print(stations.select("station_id", "station_name").rows())
 source_attributes = rr.metadata(chosen_gauges, view="source")
 ```
 
-The station table contains names and coordinates with their CRS. Unresolved name
-alternatives leave the summary name null and set its alternatives indicator.
-The source view preserves names and separate drainage-area fields with exact
-values, units where established, and explicit absence states. Both views work
-offline. See [station metadata](station-metadata.md) for interpretation.
+The station table contains names and coordinates with their CRS, plus lists of
+water-body, drainage-area and elevation fields. When a gauge has no name or
+several different names, the summary name is null. The source view preserves names
+and separate drainage-area fields with exact values, units where established, and
+explicit absence states. Both views work offline. The
+[column table](station-metadata.md#columns-at-a-glance) lists what to expect, and
+[station metadata](station-metadata.md) explains how to interpret it.
 
 ### Save a selection
 
