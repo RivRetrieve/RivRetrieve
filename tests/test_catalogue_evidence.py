@@ -551,6 +551,62 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
         del model["fact_bindings"][11:15]
         del model["source_records"][2]
         return AcquisitionProvenance.model_validate(model)
+    if provenance.provider_id == "pl_imgw":
+        facts = [
+            "source.grdc.catchment_area_unit",
+            "source.grdc.gauge_zero_height_unit",
+            "source.grdc.vertical_reference",
+        ]
+        assert model["fact_universe"][48:51] == facts
+        assert model["fact_bindings"][3:5] == [
+            {
+                "fact_group": "grdc_catchment_area_unit",
+                "facts": facts[:1],
+                "source_id": "sr.pl.grdc",
+                "acquisition_id": "grdc_workbook_corroboration_private_receipt",
+            },
+            {
+                "fact_group": "grdc_gauge_zero_support",
+                "facts": facts[1:],
+                "source_id": "sr.pl.grdc",
+                "acquisition_id": "grdc_workbook_corroboration_private_receipt",
+            },
+        ]
+        grdc = next(source for source in model["source_records"] if source["source_id"] == "sr.pl.grdc")
+        workbook = next(
+            acquisition
+            for acquisition in grdc["acquisitions"]
+            if acquisition["acquisition_id"] == "grdc_workbook_corroboration_private_receipt"
+        )
+        # Validate the complete approved extension before restoring the old description.
+        assert workbook == {
+            "acquisition_id": "grdc_workbook_corroboration_private_receipt",
+            "method": "corroborating_receipt",
+            "instant_type": "private_redacted_corroborating_receipt",
+            "description": (
+                "Later GRDC workbook receipt corroborates every recovered field but is not "
+                "established as the historical acquisition that produced the recovered import. "
+                "Its header Catchment area (square kilometre) establishes the existing area field unit. "
+                "The gauge-zero height header establishes metres, and each station row supplies its "
+                "vertical reference. These references do not establish historical stage applicability"
+            ),
+            "requested_from": ["private://grdc-bfg/correspondence"],
+            "retrieved_at_start": None,
+            "retrieved_at_end": None,
+            "recording_ids": [],
+            "material": {
+                "filename": "Metadata_GRDC_30.10.2025.xlsx",
+                "byte_count": 116301,
+                "sha256": "dfab6ea7de80fb1570f4a8dded8743ed7c7dcb4eb67fe75e2c0e02e9b964b7bf",
+            },
+        }
+        workbook["description"] = (
+            "Later GRDC workbook receipt corroborates every recovered field but is not "
+            "established as the historical acquisition that produced the recovered import"
+        )
+        del model["fact_universe"][48:51]
+        del model["fact_bindings"][3:5]
+        return AcquisitionProvenance.model_validate(model)
     if provenance.provider_id == "jp_mlit":
         expected_binding = {
             "acquisition_id": "station_zero_point_definition_capture_2026_08_02",
@@ -699,7 +755,45 @@ def test_historical_restoration_rejects_changed_metadata_source_extension(mutati
         _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "ch_foen", "jp_mlit", "no_nve", "usgs_nwis"])
+@pytest.mark.parametrize("mutation", ["fact", "binding", "acquisition", "description"])
+def test_polish_historical_restoration_rejects_changed_metadata_support(mutation):
+    original = _legacy("pl_imgw")
+    metadata = pl.read_parquet(ROOT / "pl_imgw/catalogue/station_metadata.parquet")
+    projected = historical_source_provenance(original, metadata)
+    payload = projected.model_dump(mode="json")
+    if mutation == "fact":
+        payload["fact_universe"][48] = "source.grdc.other_area_unit"
+        payload["fact_bindings"][3]["facts"] = ["source.grdc.other_area_unit"]
+    elif mutation == "binding":
+        payload["fact_bindings"][3]["acquisition_id"] = "recovered_upstream_import_f67f6d8"
+    else:
+        workbook = payload["source_records"][1]["acquisitions"][1]
+        if mutation == "acquisition":
+            workbook["material"]["sha256"] = "a" * 64
+        else:
+            workbook["description"] = "changed workbook support"
+    with pytest.raises(AssertionError):
+        _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
+
+
+def test_polish_historical_restoration_preserves_unexpected_source_facts():
+    original = _legacy("pl_imgw")
+    metadata = pl.read_parquet(ROOT / "pl_imgw/catalogue/station_metadata.parquet")
+    projected = historical_source_provenance(original, metadata)
+    expected = _assert_metadata_source_extensions_and_restore_original(projected).model_dump(mode="json")
+    payload = projected.model_dump(mode="json")
+    # An unreviewed fact must survive projection so the unchanged oracle rejects it.
+    fact = "source.grdc.unexpected_metadata_support"
+    for document in (payload, expected):
+        document["fact_universe"].append(fact)
+        binding = next(item for item in document["fact_bindings"] if item["fact_group"] == "grdc_native_station_fields")
+        binding["facts"].append(fact)
+    restored = _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
+    assert restored.model_dump(mode="json") == expected
+    assert fact in restored.fact_universe
+
+
+@pytest.mark.parametrize("provider", ["ca_eccc", "ch_foen", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_removes_only_declared_metadata_source_closure(provider):
     original = _legacy(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
@@ -712,12 +806,18 @@ def test_historical_restoration_removes_only_declared_metadata_source_closure(pr
         "ch_foen": (47, 5, 11, 4),
         "jp_mlit": (8, 1, 0, 1),
         "no_nve": (6, 4, 0, 1),
+        "pl_imgw": (48, 3, 3, 2),
         "usgs_nwis": (0, 3, 0, 1),
     }[provider]
     del expected["fact_universe"][fact_start : fact_start + fact_count]
     del expected["fact_bindings"][binding_start : binding_start + binding_count]
     if provider == "ch_foen":
         del expected["source_records"][2]
+    elif provider == "pl_imgw":
+        expected["source_records"][1]["acquisitions"][1]["description"] = (
+            "Later GRDC workbook receipt corroborates every recovered field but is not "
+            "established as the historical acquisition that produced the recovered import"
+        )
     elif provider != "no_nve":
         source = expected["source_records"][0]
         acquisition_start = 5 if provider == "usgs_nwis" else 0
@@ -727,7 +827,7 @@ def test_historical_restoration_removes_only_declared_metadata_source_closure(pr
     assert projected.model_dump(mode="json") == before
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "ch_foen", "jp_mlit", "no_nve", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["ca_eccc", "ch_foen", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_preserves_changes_outside_the_extension(provider):
     original = _legacy(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")

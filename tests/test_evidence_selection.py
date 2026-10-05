@@ -203,6 +203,7 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
             [
                 "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
                 "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
+                "maintenance/catalogue/station_metadata/sources/fr_hubeau",
             ],
         ),
         ("lt_lhmt", ["tests/test_data/lt_lhmt_terms_licence.html"]),

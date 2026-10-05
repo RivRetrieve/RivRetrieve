@@ -127,6 +127,7 @@ def test_production_provenance_rejects_changed_recording(
             marks=pytest.mark.governing(
                 "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
                 "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
+                "maintenance/catalogue/station_metadata/sources/fr_hubeau",
                 "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
                 full_verification=("fr_hubeau",),
             ),
@@ -141,7 +142,7 @@ def test_production_provenance_rejects_changed_recording(
     ],
 )
 def test_native_cli_rejects_raw_byte_substitution(
-    tmp_path: Path, provider_id: str, retained_evidence_root: Path
+    tmp_path: Path, provider_id: str, retained_evidence_root: Path, catalogue_input_receipt
 ) -> None:
     from tests.test_catalogue_build_provenance import _build
 
@@ -167,7 +168,11 @@ def test_native_cli_rejects_raw_byte_substitution(
             str(retained_evidence_root),
         ]
         if provider_id == "fr_hubeau":
+            receipt_path = tmp_path / "input-receipt.json"
+            receipt_path.write_text(catalogue_input_receipt.model_dump_json())
             args += [
+                "--input-receipt",
+                str(receipt_path),
                 "--native-capture",
                 str(retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory/native_capture.json"),
                 "--availability-ledger",

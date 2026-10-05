@@ -38,6 +38,7 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
     TEMPERATURE_CRS_EVIDENCE_URL,
     TEMPERATURE_STATION_CATALOGUE_ORIGINS,
 )
+from rivretrieve._internal.providers.fr_hubeau.station_metadata import StationMetadataSources
 from tests._catalogue_projection import copy_catalogue_projection
 from tests.test_catalogue_origin_certification import _catalogue_recording_paths
 
@@ -1361,7 +1362,7 @@ def test_source_response_rebuild_requires_explicit_reviewed_ledger(tmp_path):
 
 
 @pytest.mark.governing(
-    *_catalogue_recording_paths("fr_hubeau"),
+    *_catalogue_recording_paths("fr_hubeau", scopes=("maintenance/catalogue/station_metadata/sources/fr_hubeau",)),
     "src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet",
     "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz",
     "maintenance/catalogue/fr_hubeau/inventory/native_capture.json",
@@ -1372,11 +1373,17 @@ def test_source_response_rebuild_requires_explicit_reviewed_ledger(tmp_path):
     full_verification=("fr_hubeau",),
 )
 def test_retained_station_responses_rebuild_exact_native_capture(
-    retained_evidence_root, catalogue_build_inputs, tmp_path, monkeypatch
+    retained_evidence_root, catalogue_input_receipt, catalogue_build_inputs, tmp_path, monkeypatch
 ):
     """Source-response materialization is separate from the shared native-table build."""
     from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import NativeInventoryCapture
-    from rivretrieve._internal.providers.fr_hubeau.rebuild_catalogue import rebuild
+    from rivretrieve._internal.providers.fr_hubeau.origins import (
+        SITE_METADATA_LINEAGE_SHA256,
+        SITE_METADATA_MANIFEST_SHA256,
+        SITE_METADATA_ROOT,
+    )
+    from rivretrieve._internal.providers.fr_hubeau.rebuild_catalogue import main
+    from rivretrieve._internal.providers.fr_hubeau.station_metadata import read_station_metadata_sources
     from rivretrieve._internal.transport import HttpClient
 
     def offline(*args, **kwargs):
@@ -1386,19 +1393,47 @@ def test_retained_station_responses_rebuild_exact_native_capture(
     inventory = retained_evidence_root / "maintenance/catalogue/fr_hubeau/inventory"
     capture = NativeInventoryCapture.model_validate_json((inventory / "native_capture.json").read_bytes())
     native = read_native_table(retained_evidence_root / CURRENT_NATIVE_PATH)
+    metadata_sources = read_station_metadata_sources(
+        retained_evidence_root,
+        input_receipt=catalogue_input_receipt,
+        site_root=SITE_METADATA_ROOT,
+        manifest_sha256=SITE_METADATA_MANIFEST_SHA256,
+        lineage_sha256=SITE_METADATA_LINEAGE_SHA256,
+    )
     catalogue = build_catalogue(
-        native, FRANCE_ORIGIN_DECLARATIONS, _availability(retained_evidence_root), native_capture=capture
+        native,
+        FRANCE_ORIGIN_DECLARATIONS,
+        _availability(retained_evidence_root),
+        native_capture=capture,
+        metadata_sources=metadata_sources,
     )
     selected = catalogue_build_inputs(catalogue.acquisition_provenance)
     output = tmp_path / "catalogue"
     capture_output = tmp_path / "native_capture.json"
-    rebuild(
-        retained_evidence_root,
-        inventory / "governing_evidence.json.xz",
-        output,
-        capture_output,
-        capture.native_table.revision,
-        build_inputs=selected,
+    receipt_path = tmp_path / "input-receipt.json"
+    receipt_path.write_text(catalogue_input_receipt.model_dump_json())
+    build_path = tmp_path / "build-inputs.json"
+    build_path.write_text(selected.model_dump_json())
+    assert (
+        main(
+            [
+                "--evidence-root",
+                str(retained_evidence_root),
+                "--availability-ledger",
+                str(inventory / "governing_evidence.json.xz"),
+                "--input-receipt",
+                str(receipt_path),
+                "--build-inputs",
+                str(build_path),
+                "--out",
+                str(output),
+                "--capture-output",
+                str(capture_output),
+                "--revision",
+                capture.native_table.revision,
+            ]
+        )
+        == 0
     )
     assert (output / "native.parquet").read_bytes() == (retained_evidence_root / CURRENT_NATIVE_PATH).read_bytes()
     assert NativeInventoryCapture.model_validate_json(capture_output.read_bytes()) == capture
@@ -1429,7 +1464,15 @@ def test_source_response_rebuild_resolves_output_containment(tmp_path, monkeypat
         (checkout / ".git").write_text("synthetic checkout marker")
         output = Path("checkout/new-output")
     with pytest.raises(ValueError, match="outside source checkouts|separate from retained evidence"):
-        rebuild(inputs, inputs / "ledger.json.xz", output, capture, "a" * 40, build_inputs=_build())
+        rebuild(
+            inputs,
+            inputs / "ledger.json.xz",
+            output,
+            capture,
+            "a" * 40,
+            build_inputs=_build(),
+            metadata_sources=StationMetadataSources({}, (), {}, {}),
+        )
     assert not output.exists()
     assert not capture.exists()
 
@@ -1449,6 +1492,7 @@ def test_source_response_rebuild_allows_new_external_output_paths(tmp_path):
             tmp_path / "new" / "capture.json",
             "a" * 40,
             build_inputs=_build(),
+            metadata_sources=StationMetadataSources({}, (), {}, {}),
         )
 
 
@@ -1584,3 +1628,51 @@ def test_synthetic_metadata_build_keeps_canonical_geometry_products_and_native_c
     )
     elevation = built.station_metadata.filter(pl.col("attribute_role") == "elevation").sort("source_scope")
     pl_testing.assert_frame_equal(elevation.select(expected.columns), expected)
+
+
+def test_retained_rebuild_declares_complete_metadata_scope():
+    """The actual consumer requests one scope, never its individual site bodies."""
+    scope = "maintenance/catalogue/station_metadata/sources/fr_hubeau"
+    marks = test_retained_station_responses_rebuild_exact_native_capture.pytestmark
+    governing = [mark for mark in marks if mark.name == "governing"]
+    assert len(governing) == 1
+    assert scope in governing[0].args
+    assert not any(path.startswith(scope + "/") for path in governing[0].args)
+    assert governing[0].kwargs["full_verification"] == ("fr_hubeau",)
+
+
+@pytest.mark.parametrize(
+    "overlap", ["existing-output", "existing-capture", "capture-in-output", "ledger-output", "ledger-capture"]
+)
+def test_source_response_rebuild_preserves_inputs_and_existing_products(tmp_path, overlap):
+    from rivretrieve._internal.providers.fr_hubeau.rebuild_catalogue import rebuild
+    from tests.test_catalogue_build_provenance import _build
+
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    ledger = tmp_path / "ledger.json.xz"
+    ledger.write_bytes(b"original")
+    output = tmp_path / "output"
+    capture = tmp_path / "capture.json"
+    if overlap == "existing-output":
+        output.mkdir()
+        (output / "native.parquet").symlink_to(ledger)
+    elif overlap == "existing-capture":
+        capture.hardlink_to(ledger)
+    elif overlap == "capture-in-output":
+        capture = output / "native.parquet"
+    elif overlap == "ledger-output":
+        output = tmp_path
+    else:
+        capture = ledger
+    with pytest.raises(ValueError, match="new paths|must be separate|retained inputs"):
+        rebuild(
+            inputs,
+            ledger,
+            output,
+            capture,
+            "a" * 40,
+            build_inputs=_build(),
+            metadata_sources=StationMetadataSources({}, (), {}, {}),
+        )
+    assert ledger.read_bytes() == b"original"
