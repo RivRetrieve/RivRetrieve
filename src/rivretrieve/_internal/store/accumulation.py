@@ -49,12 +49,19 @@ class SuccessfulReplacement:
 
 @dataclass(frozen=True, slots=True)
 class StoreUpdate:
+    """One live update with separate active and inventory-support acquisitions.
+
+    ``supporting_outcomes`` cannot authorize rows, coverage or current issues.
+    Publication discards support that no retained inventory references.
+    """
+
     series: tuple[SourceSeries, ...]
     inventories: tuple[InventorySnapshot, ...]
     outcomes: tuple[RetrievalOutcome, ...]
     replacements: tuple[SuccessfulReplacement, ...]
     issues: tuple[Issue, ...] = ()
     source_calls: tuple[dict[str, object], ...] = ()
+    supporting_outcomes: tuple[RetrievalOutcome, ...] = ()
 
 
 def _coverage_json(item: CoverageInterval) -> dict[str, object]:
@@ -162,6 +169,13 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
         )
         outcomes = _merge_records(previous.outcomes if previous else (), durable_outcomes, "outcome_id")
         outcome_by_id = {item.outcome_id: item for item in outcomes}
+        supporting_outcomes = _merge_records(
+            sealed.supporting_outcomes if sealed else (), update.supporting_outcomes, "outcome_id"
+        )
+        # Support is immutable source evidence, not an admitted row snapshot.
+        for item in supporting_outcomes:
+            if item.outcome_id in outcome_by_id and outcome_by_id[item.outcome_id] != item:
+                raise FatalContractError("Conflicting current and inventory-support acquisition identities")
         # Validate incoming evidence before compaction can remove a record. A
         # malformed stage result must remain fatal even when it has no live support.
         _validate_metadata(
@@ -170,12 +184,8 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                 "inventories": [item.model_dump(mode="json") for item in inventories],
                 "outcomes": [item.model_dump(mode="json") for item in outcomes],
                 "supporting_outcomes": [
-                    item.model_dump(mode="json")
-                    for item in sealed.supporting_outcomes
-                    if item.outcome_id not in outcome_by_id
-                ]
-                if sealed
-                else [],
+                    item.model_dump(mode="json") for item in supporting_outcomes if item.outcome_id not in outcome_by_id
+                ],
                 "issues": [
                     item.model_dump(mode="json") for item in (*(previous.issues if previous else ()), *update.issues)
                 ],
@@ -357,7 +367,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             inventories,
             tuple(all_issues.values()),
             tuple(all_calls.values()),
-            supporting_outcomes=sealed.supporting_outcomes if sealed else (),
+            supporting_outcomes=supporting_outcomes,
             new_outcome_ids=frozenset(item.outcome_id for item in durable_outcomes),
             new_inventory_ids=frozenset(item.snapshot_id for item in update.inventories),
         )

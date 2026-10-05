@@ -1547,6 +1547,8 @@ def drive(
     fresh_definitions: dict[str, SourceSeries] = {}
     fresh_inventories: list[InventorySnapshot] = list(inventories)
     fresh_outcomes: list[RetrievalOutcome] = []
+    supporting_outcomes: list[RetrievalOutcome] = []
+    unadmitted_outcome_ids: set[str] = set()
     issue_acquisitions: dict[int, tuple[str, ...]] = {}
     manifest: AccumulatedStoreManifest | None = None
     if cache != "bypass":
@@ -2372,6 +2374,22 @@ def drive(
                     )
             admitted_snapshots = []
             admitted_snapshot_ids = {}
+            # Unadmitted source evidence can still justify an inventory. Keep it
+            # separate from active outcomes and from successful row coverage.
+            unadmitted_outcome_ids.update(
+                item.outcome_id for item in parsed.outcomes if item.outcome_id not in admitted_outcome_ids
+            )
+            inventory_outcome_ids = {
+                reference.removeprefix("retrieval-outcome:")
+                for snapshot in acquired_snapshots
+                for reference in snapshot.evidence
+                if reference.startswith("retrieval-outcome:")
+            }
+            supporting_outcomes.extend(
+                item
+                for item in parsed.outcomes
+                if item.outcome_id not in admitted_outcome_ids and item.outcome_id in inventory_outcome_ids
+            )
             for original_snapshot, snapshot in zip(parsed.inventories, acquired_snapshots, strict=True):
                 evidence = tuple(
                     "retrieval-outcome:"
@@ -2562,8 +2580,12 @@ def drive(
                     if id(issue) in issue_acquisitions
                     else issue
                     for issue in all_issues
+                    # Public source diagnostics remain intact. Only admitted
+                    # outcomes can authorize a stored active diagnostic.
+                    if (issue.details or {}).get("outcome_id") not in unadmitted_outcome_ids
                 ),
                 enriched.calls_made,
+                supporting_outcomes=tuple(supporting_outcomes),
             ),
         )
     return assemble(
