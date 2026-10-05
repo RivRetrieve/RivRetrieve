@@ -43,7 +43,7 @@ def test_camels_example_selects_documented_gauges_without_network(monkeypatch, c
             "product_id": ["discharge_daily_mean"] * 3,
         }
     )
-    assert_frame_equal(rr.as_frame(scope["selection"]).select(expected.columns), expected)
+    assert_frame_equal(rr.as_frame(scope["camels"]).select(expected.columns), expected)
 
 
 PAGES = [
