@@ -1,4 +1,4 @@
-"""Authored cursor chains distinguish partial observations from exhaustive coverage."""
+"""Authored cursor chains preserve receipts without accepting failed observation scopes."""
 
 import json
 from datetime import UTC, datetime
@@ -13,7 +13,7 @@ from rivretrieve._internal.providers.fr_hubeau.config import config, window_decl
 from rivretrieve._internal.providers.fr_hubeau.fetch import fetch
 from rivretrieve._internal.providers.fr_hubeau.parse import parse
 from rivretrieve._internal.source_series import OutcomeStatus
-from rivretrieve._internal.store import StoreRoot
+from rivretrieve._internal.store import StoreReader, StoreRoot
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason, TransportResponse
 
 PRODUCT = ProductId("discharge_daily_mean")
@@ -61,7 +61,7 @@ class Transport:
         json.dumps({"data": [], "next": "https://outside.example/"}).encode(),
     ],
 )
-def test_incomplete_cursor_retains_rows_and_bytes_but_retries_uncovered_window(tmp_path, late):
+def test_incomplete_cursor_refuses_rows_retains_bytes_and_retries_uncovered_window(tmp_path, late):
     class Stages:
         config = config()
         window_declarations = window_declarations()
@@ -92,11 +92,20 @@ def test_incomplete_cursor_retains_rows_and_bytes_but_retries_uncovered_window(t
         )
 
     partial = run()
-    assert partial.canonical_rows.height == 1
+    # The acquisition declares this concrete series unresolved over its full
+    # window. The result cannot accept page rows that persistence must refuse.
+    assert partial.canonical_rows.is_empty()
+    manifest = StoreReader().status(store, ProviderId("fr_hubeau")).manifest
+    assert manifest.coverage == ()
+    assert not list(store.rglob("*.parquet"))
     assert [entry.content for entry in partial.receipts.entries] == (
         [page(NEXT)] if late == "fail" else [page(NEXT), late]
     )
     unresolved = next(outcome for outcome in partial.outcomes if outcome.status is OutcomeStatus.UNRESOLVED)
+    definition = next(item for item in partial.source_series if item.series_id == unresolved.series_id)
+    assert unresolved.facts_ids == tuple(item.facts_id for item in definition.facts)
+    assert unresolved.window.start == datetime(1999, 12, 30)
+    assert unresolved.window.end == datetime(2000, 1, 4, 23, 59, 59, 999999)
     assert len(unresolved.calls) == 2
     assert set(unresolved.calls).issubset({call["call_id"] for call in partial.provenance.calls_made})
     assert any(issue.severity == "error" for issue in partial.issues)
