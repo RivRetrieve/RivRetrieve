@@ -16,15 +16,13 @@ from rivretrieve._internal.coverage import CoverageInterval
 from rivretrieve._internal.engine import Rows, RowsSchema, WindowEndpoint
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.source_series import SeriesWindow
+from rivretrieve._internal.store.lifecycle import Ownership, StoreLifecycleError, inspect_lifecycle
 from rivretrieve._internal.store.validation import (
     AccumulatedStoreManifest,
     ArtifactChecksum,
-    ObservationStoreRefusedError,
     PartitionIdentifier,
     SourceSchemaFingerprint,
     StoreManifest,
-    StoreRefusal,
-    StoreRefusalKind,
     StoreRoot,
     validate_store,
 )
@@ -118,11 +116,12 @@ class StoreReadResult:
 class StorePresence(StrEnum):
     ABSENT = "absent"
     PRESENT = "present"
+    INTERRUPTED = "interrupted"
 
 
 @dataclass(frozen=True, slots=True)
 class StoreStatus:
-    """Validated local-store presence and size without source access.
+    """Metadata-checked local state without reading observation bytes.
 
     Attributes
     ----------
@@ -131,13 +130,18 @@ class StoreStatus:
     provider_id : ProviderId
         Provider whose store was inspected.
     presence : StorePresence
-        absent or present. The exists property reports the same distinction.
+        ``present`` identifies committed data. ``interrupted`` identifies
+        unfinished work without committed data. ``absent`` means neither exists.
+        The exists property reports committed data, not unfinished staging.
     manifest : StoreManifest, AccumulatedStoreManifest or None
-        Validated manifest when present.
+        Manifest checked against its publication identity and metadata rules.
+        Presence does not claim all observation bytes have been checked.
     bytes_on_disk : int
-        Total regular-file bytes under the store, zero when absent.
+        Logical bytes in committed metadata, partitions and seal, zero without
+        committed data. Cleanup residue is listed separately. This is not
+        allocated disk space or the bytes a clear operation will reclaim.
     coverage : tuple[CoverageInterval, ...]
-        Property exposing accumulated-store retrieval history, otherwise empty.
+        Current successful accumulated-store coverage, otherwise empty.
     partition_row_counts : Mapping[PartitionIdentifier, int]
         Property exposing physical row counts, empty when absent.
     format_version, compiler_version, built_at, source_vintage
@@ -146,6 +150,19 @@ class StoreStatus:
         Compiled-store identity properties, otherwise None.
     publisher_artifact_urls, publisher_artifact_checksums : tuple
         Ordered identities for all compiled artifacts, otherwise empty.
+    generation_id : str or None
+        Identity of the committed publication whose metadata was checked.
+    committed_path : pathlib.Path or None
+        Selected committed data, including recoverable prior data during an
+        interrupted replacement. It can differ from the canonical store path.
+    interrupted_paths : tuple[pathlib.Path, ...]
+        Recognized work requiring recovery before reads or another acquisition.
+    cleanup_paths : tuple[pathlib.Path, ...]
+        Residue remaining after commit. Its presence does not invalidate the
+        selected new generation.
+    ownership : Ownership
+        Local ownership state: idle, active, abandoned or ambiguous. Active or
+        ambiguous ownership prevents recovery and clear.
     """
 
     store: StoreRoot
@@ -153,6 +170,11 @@ class StoreStatus:
     presence: StorePresence
     manifest: StoreManifest | AccumulatedStoreManifest | None = None
     bytes_on_disk: int = 0
+    generation_id: str | None = None
+    committed_path: Path | None = None
+    interrupted_paths: tuple[Path, ...] = ()
+    cleanup_paths: tuple[Path, ...] = ()
+    ownership: Ownership = Ownership.IDLE
 
     def __post_init__(self) -> None:
         if (self.presence is StorePresence.PRESENT) != (self.manifest is not None):
@@ -221,12 +243,40 @@ class StoreStatus:
         return self.manifest.coverage if isinstance(self.manifest, AccumulatedStoreManifest) else ()
 
 
+@dataclass(frozen=True, slots=True)
+class CacheRecoveryResult:
+    """The resulting local state and actions taken by explicit recovery.
+
+    Attributes
+    ----------
+    provider_id : ProviderId
+        Provider whose local storage was inspected and recovered.
+    path : pathlib.Path
+        Resolved canonical observation-store path.
+    status : StoreStatus
+        Resulting metadata-checked state. Recovery validates any committed
+        generation it preserves or restores before discarding recovery inputs.
+    actions : tuple[str, ...]
+        Stable readable descriptions of preserved, restored or removed paths.
+    """
+
+    provider_id: ProviderId
+    path: Path
+    status: StoreStatus
+    actions: tuple[str, ...]
+
+
 class StoreReader:
     """The shared reader for compiled and accumulated observation stores."""
 
     def query(self, query: StoreQuery) -> StoreReadResult:
-        # Validation deliberately precedes partition selection and construction of any
-        # lazy scan. In particular an unknown revision cannot cause a Parquet open.
+        from rivretrieve._internal.store.integrity import inspect_integrity, verify_files
+
+        require_readable_store(query.store)
+        sealed = inspect_integrity(query.store, query.provider_id)
+        # This conservative read still audits all partitions. The publication seal
+        # also supplies a selected-partition contract for a request-bounded reader.
+        verify_files(sealed, tuple(sealed.store.partition_files))
         validated = validate_store(query.store, query.provider_id)
         executed = _executed_query(query)
         if validated.partition_files:
@@ -263,26 +313,47 @@ class StoreReader:
         return self.query(query)
 
     def status(self, store: StoreRoot, provider_id: ProviderId) -> StoreStatus:
-        root = Path(store)
-        backups = tuple(root.parent.glob(f".{root.name}.backup-*"))
-        if backups:
-            raise ObservationStoreRefusedError(
-                StoreRefusal(
-                    StoreRefusalKind.MALFORMED,
-                    store,
-                    provider_id,
-                    f"interrupted store publication: preserve and inspect backup {backups[0]} before recovery",
-                )
+        from rivretrieve._internal.store.integrity import inspect_integrity
+
+        state = inspect_lifecycle(Path(store))
+        if state.committed_path is None:
+            return StoreStatus(
+                store=store,
+                provider_id=provider_id,
+                presence=StorePresence.INTERRUPTED
+                if state.interrupted_paths or state.ownership is not Ownership.IDLE
+                else StorePresence.ABSENT,
+                interrupted_paths=state.interrupted_paths,
+                cleanup_paths=state.cleanup_paths,
+                ownership=state.ownership,
             )
-        if not root.exists():
-            return StoreStatus(store=store, provider_id=provider_id, presence=StorePresence.ABSENT)
-        validated = validate_store(store, provider_id)
+        pending_seal = state.committed_path / ".integrity.pending"
+        sealed = inspect_integrity(
+            StoreRoot(state.committed_path),
+            provider_id,
+            allow_pending=pending_seal in (*state.interrupted_paths, *state.cleanup_paths),
+        )
         return StoreStatus(
             store=store,
             provider_id=provider_id,
             presence=StorePresence.PRESENT,
-            manifest=validated.manifest,
-            bytes_on_disk=sum(path.stat().st_size for path in root.rglob("*") if path.is_file()),
+            manifest=sealed.store.manifest,
+            bytes_on_disk=sum(item.size for item in sealed.files.values())
+            + (state.committed_path / "integrity.json").stat().st_size,
+            generation_id=sealed.generation_id,
+            committed_path=state.committed_path,
+            interrupted_paths=state.interrupted_paths,
+            cleanup_paths=state.cleanup_paths,
+            ownership=state.ownership,
+        )
+
+
+def require_readable_store(store: StoreRoot) -> None:
+    """Refuse an unresolved transaction before a read or source acquisition."""
+    state = inspect_lifecycle(Path(store))
+    if state.interrupted_paths or state.ownership in (Ownership.ACTIVE, Ownership.AMBIGUOUS):
+        raise StoreLifecycleError(
+            f'Observation store "{store}" has interrupted or active work; inspect cache_status and use recover_cache'
         )
 
 

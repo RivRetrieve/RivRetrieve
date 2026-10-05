@@ -92,7 +92,6 @@ def _success(identity: str, answer: str, values: list[float | None], day: int = 
         status=OutcomeStatus.SUCCESS if values else OutcomeStatus.EMPTY,
         facts_ids=("facts",),
         retrieved_at=datetime(2026, 9, 1, tzinfo=UTC),
-        calls=("source-call",),
     )
     rows = pl.DataFrame(
         {
@@ -243,7 +242,9 @@ def test_source_call_vintage_and_tuples_roundtrip_without_receipts(tmp_path: Pat
     store = StoreRoot(tmp_path / "store")
     definition = _definition("a-series")
     pair = _success(definition.series_id, "a", [1.0])
+    pair = (pair[0].model_copy(update={"calls": ("source-call",)}), pair[1])
     call = {
+        "call_id": "source-call",
         "retrieved_at": datetime(2026, 9, 2, 11, 12, 13, tzinfo=UTC),
         "url": "https://example.invalid/source",
         "request_parameters": {"station": "a"},
@@ -328,7 +329,7 @@ def test_narrow_fact_refresh_keeps_sibling_physical_rows_and_success_vintage(tmp
     assert read.executed_query.facts_ids == ("other-facts",)
 
 
-def test_explicit_broad_replacement_retires_previous_fact_rows_without_rewriting_history(tmp_path: Path) -> None:
+def test_explicit_broad_replacement_retires_rows_and_fully_superseded_support(tmp_path: Path) -> None:
     store = StoreRoot(tmp_path / "store")
     original_definition = _definition("same-series")
     first, first_rows = _success(original_definition.series_id, "original", [1.0])
@@ -347,4 +348,5 @@ def test_explicit_broad_replacement_retires_previous_fact_rows_without_rewriting
     assert_frame_equal(_query(store).rows, rows)
     assert tuple(item.facts_ids for item in manifest.coverage) == ((next_facts.facts_id,),)
     assert manifest.series[0].facts == (*original_definition.facts, next_facts)
-    assert first in manifest.outcomes and success in manifest.outcomes
+    assert first not in manifest.outcomes
+    assert manifest.outcomes == (success,)

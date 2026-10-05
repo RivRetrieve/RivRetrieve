@@ -24,6 +24,8 @@ from rivretrieve._internal.providers.registration import (
 )
 from rivretrieve._internal.registry import _ProviderHandle, _registry
 from rivretrieve._internal.store import StoreRoot, StoreStatus, ValidatedStore, store_status
+from rivretrieve._internal.store.integrity import inspect_integrity, verify_files
+from rivretrieve._internal.store.lifecycle import clear_store, managed_paths, store_lease, store_transaction
 from rivretrieve._internal.store.validation import ObservationStoreRefusedError, StoreManifest, validate_store
 from rivretrieve._internal.transport import HttpClient, HttpMethod, Transport, TransportRequest
 
@@ -92,36 +94,28 @@ def download(provider: str) -> ValidatedStore:
 
 
 def cache_status(provider: str) -> StoreStatus:
-    """Report a provider's validated local store without network access."""
+    """Report committed data, interrupted work and ownership without scanning observations."""
     provider_id, root = _cache_registration(provider)
     return store_status(root, provider_id)
 
 
 def clear_cache(provider: str) -> CacheClearResult:
-    """Delete the compiled observation store or accumulated live store, plus recovery inputs.
+    """Delete prepared bulk data or a live cache and its recognized unfinished work.
 
-    This destructive verb also removes preserved pending publisher downloads and
-    accumulated-write staging/backup directories so the next retrieval can retry.
-
-    This explicit destructive verb removes preserved failed-compilation inputs so a
-    later ``download()`` can retry. It never follows symlinks, never removes an
-    unrelated sibling, and refuses a real directory in the pending-file namespace
-    before deleting either the store or any pending input.
+    Active or ambiguous ownership refuses deletion. The permanent ownership file
+    remains. Managed symlinks are removed without following their targets.
+    Unrelated siblings and external direct-compiler inputs are not removed.
     """
     provider_id, root = _cache_registration(provider)
     path = Path(root)
-    pending = _pending_download_paths(path.parent)
-    store_existed = path.exists() or path.is_symlink()
-    accumulated_pending = tuple(
-        sorted((*path.parent.glob(f".{path.name}.pending-*"), *path.parent.glob(f".{path.name}.backup-*")))
-    )
-    removed_paths = *((path,) if store_existed else ()), *pending, *accumulated_pending
-    bytes_freed = sum(_tree_size(item) for item in removed_paths)
-    for item in removed_paths:
-        if item.is_symlink() or item.is_file():
-            item.unlink()
-        elif item.is_dir():
-            shutil.rmtree(item)
+    if path.parent.is_symlink():
+        raise BulkArtifactCleanupRefusedError(f'Cannot clear symlinked pending-download namespace: "{path.parent}"')
+    with store_lease(path, recovery=True) as lease:
+        pending = _pending_download_paths(path.parent)
+        candidates = (*managed_paths(path), *pending)
+        sizes = {item: _tree_size(item) for item in candidates if item.exists() or item.is_symlink()}
+        removed_paths = clear_store(path, extra_paths=pending, lease=lease)
+        bytes_freed = sum(sizes.get(item, 0) for item in removed_paths)
     return CacheClearResult(provider_id, path, bool(removed_paths), bytes_freed, removed_paths)
 
 
@@ -161,44 +155,48 @@ def _download(
     if available < required:
         raise InsufficientDiskSpaceError(provider_id, required, available)
 
-    previous_source_vintage = None
-    if Path(root).exists():
-        try:
-            previous = validate_store(root, provider_id)
-        except ObservationStoreRefusedError:
-            # Explicit download is also the established rebuild path for refused
-            # stores. Only a valid compiled store can establish a coverage floor.
-            pass
-        else:
-            if isinstance(previous.manifest, StoreManifest):
-                previous_source_vintage = previous.manifest.source_vintage
+    with store_transaction(Path(root)) as transaction:
+        pending = _pending_download_paths(Path(root).parent)
+        if pending:
+            raise FileExistsError(f'publisher artifact destination already exists: "{pending[0]}"')
+        previous_source_vintage = None
+        if Path(root).exists():
+            try:
+                previous = validate_store(root, provider_id)
+                sealed = inspect_integrity(root, provider_id)
+                verify_files(sealed, tuple(previous.partition_files))
+            except ObservationStoreRefusedError:
+                # Only an unambiguously selected valid snapshot establishes a floor.
+                # Explicit download remains the rebuild path for refused data.
+                pass
+            else:
+                if isinstance(previous.manifest, StoreManifest):
+                    previous_source_vintage = previous.manifest.source_vintage
 
-    work = Path(root).parent
-    work.mkdir(parents=True, exist_ok=True)
-    artifact = work / "publisher-artifact.download"
-    client = client_factory()
-    downloaded_value = operations.download(
-        BulkDownloadRequest(
-            destination=artifact,
-            today=today,
-            probe=lambda url: client.send(TransportRequest(HttpMethod.HEAD, url)).status_code,
-            transfer=lambda url, destination: _transfer(client, url, destination),
-            previous_source_vintage=previous_source_vintage,
+        transaction.workspace.mkdir(exist_ok=True)
+        artifact = transaction.workspace / "publisher-artifact.download"
+        client = client_factory()
+        downloaded_value = operations.download(
+            BulkDownloadRequest(
+                destination=artifact,
+                today=today,
+                probe=lambda url: client.send(TransportRequest(HttpMethod.HEAD, url)).status_code,
+                transfer=lambda url, destination: _transfer(client, url, destination),
+                previous_source_vintage=previous_source_vintage,
+            )
         )
-    )
+        downloaded = downloaded_value if isinstance(downloaded_value, tuple) else (downloaded_value,)
+        from rivretrieve import __version__
 
-    downloaded = downloaded_value if isinstance(downloaded_value, tuple) else (downloaded_value,)
-
-    from rivretrieve import __version__
-
-    return operations.compile(
-        BulkCompileRequest(
-            publisher_artifacts=downloaded,
-            destination=root,
-            built_at=datetime.now(UTC),
-            compiler_version=__version__,
+        return operations.compile(
+            BulkCompileRequest(
+                publisher_artifacts=downloaded,
+                destination=root,
+                built_at=datetime.now(UTC),
+                compiler_version=__version__,
+                transaction=transaction,
+            )
         )
-    )
 
 
 def _transfer(client: Transport, url: str, destination: Path) -> None:

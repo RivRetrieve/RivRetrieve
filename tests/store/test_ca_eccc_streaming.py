@@ -216,6 +216,18 @@ def test_hydat_identity_inventory_refuses_equal_count_month_substitution(tmp_pat
         datetime(2026, 9, 2, tzinfo=UTC),
         "0.1.49",
     )
-    with pytest.raises(ValueError, match="duplicate source unit|identity inventory"):
+    from rivretrieve._internal.store.lifecycle import StoreTransactionError
+
+    with pytest.raises(StoreTransactionError) as caught:
         ca_bulk.compile_hydat(request)
+    assert type(caught.value.original) is ValueError
+    assert (
+        str(caught.value.original) == "duplicate source unit across observation batches: DLY_FLOWS:rowid=000000000003"
+    )
+    assert caught.value.__cause__ is caught.value.original
+    assert caught.value.cleanup_errors == ()
+    assert caught.value.committed_path is None
+    assert caught.value.generation_id is None
+    assert caught.value.transaction_id
+    assert any(path.name.startswith(".store.workspace-") for path in caught.value.residue_paths)
     assert artifact.exists()

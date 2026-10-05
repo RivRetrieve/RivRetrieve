@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from bisect import bisect_right
+from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -410,7 +412,7 @@ def _discover_partitions(
 
     for path in parquet_paths:
         relative = path.relative_to(root).as_posix()
-        if not _PARTITION_FILE.fullmatch(relative):
+        if path.is_symlink() or not _PARTITION_FILE.fullmatch(relative):
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.path:{relative}")
 
     directories: dict[PartitionIdentifier, Path] = {}
@@ -432,6 +434,8 @@ def _discover_partitions(
 
     for directory in canonical_directories:
         identifier = PartitionIdentifier(directory.relative_to(root).as_posix())
+        if directory.is_symlink():
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.path:{identifier}")
         try:
             files = sorted(path for path in directory.iterdir() if path.is_file() and path.suffix == ".parquet")
         except OSError:
@@ -450,10 +454,8 @@ def _discover_partitions(
             f"partition.key:expected={sorted(manifest_keys)!r};actual={sorted(actual_keys)!r}",
         )
 
-    return {
-        identifier: next(path for path in parquet_paths if path.parent == directories[identifier])
-        for identifier in sorted(directories)
-    }
+    by_directory = {path.parent: path for path in parquet_paths}
+    return {identifier: by_directory[directory] for identifier, directory in sorted(directories.items())}
 
 
 def _open_parquet(path: Path) -> pq.ParquetFile:
@@ -622,6 +624,27 @@ def _parse_manifest(raw: dict[str, Any]) -> StoreManifest:
 
 
 def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
+    """Check every semantic rule, including unsealed compiler staging tables."""
+    return _validate_store_contents(store, provider_id)
+
+
+def _validate_store_contents(
+    store: StoreRoot,
+    provider_id: ProviderId,
+    checked_partitions: frozenset[PartitionIdentifier] | None = None,
+) -> ValidatedStore:
+    try:
+        return _validate_contents(store, provider_id, checked_partitions)
+    except (OSError, pa.ArrowException) as error:
+        _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.parquet:{error}")
+
+
+def _validate_contents(
+    store: StoreRoot,
+    provider_id: ProviderId,
+    checked_partitions: frozenset[PartitionIdentifier] | None,
+) -> ValidatedStore:
+    # A subset is only used by integrity.py after proving unchanged support.
     raw = _read_raw_manifest(store, provider_id)
     _check_revision(raw, store, provider_id)
     stored_provider = raw.get("provider_id")
@@ -634,7 +657,7 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
         _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")
     _validate_metadata(raw, store, provider_id)
     if raw["format_version"] == 8:
-        return _validate_accumulated(raw, store, provider_id)
+        return _validate_accumulated(raw, store, provider_id, checked_partitions)
     _validate_source_contract(raw, store, provider_id)
     partition_files = _discover_partitions(raw, store, provider_id)
     retained_columns = tuple(
@@ -642,7 +665,10 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
         for item in raw["source_column_dispositions"]
         if item["disposition"] == Disposition.RETAINED
     )
-    for identifier, path in partition_files.items():
+    checked_files = {
+        key: path for key, path in partition_files.items() if checked_partitions is None or key in checked_partitions
+    }
+    for identifier, path in checked_files.items():
         _validate_partition(
             identifier,
             path,
@@ -652,12 +678,17 @@ def validate_store(store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
             store,
             provider_id,
         )
-    _validate_series_partitions(raw, partition_files, store, provider_id)
+    _validate_series_partitions(raw, checked_files, store, provider_id)
     manifest = _parse_manifest(raw)
     return ValidatedStore(root=store, manifest=manifest, partition_files=partition_files)
 
 
-def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> ValidatedStore:
+def _validate_accumulated(
+    raw: dict[str, Any],
+    store: StoreRoot,
+    provider_id: ProviderId,
+    checked_partitions: frozenset[PartitionIdentifier] | None = None,
+) -> ValidatedStore:
     coverage: list[CoverageInterval] = []
     outcomes = {item.outcome_id: item for item in _metadata(raw)["outcomes"]}
     for index, item in enumerate(raw["coverage"]):
@@ -689,16 +720,22 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
             or not set(record.facts_ids).issubset(outcome.facts_ids)
         ):
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.outcome:{index}")
-        if any(
-            previous.series_id == record.series_id
-            and previous.interval.axis is record.interval.axis
-            and bool(set(previous.facts_ids).intersection(record.facts_ids))
-            and previous.interval.start <= record.interval.end
-            and previous.interval.end >= record.interval.start
-            for previous in coverage
-        ):
-            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.overlap:{index}")
         coverage.append(record)
+    intervals: dict[tuple[str, str, TimeAxis], list[tuple[datetime, datetime]]] = defaultdict(list)
+    interval_indices: dict[tuple[str, str, TimeAxis, datetime, datetime], int] = {}
+    for index, record in enumerate(coverage):
+        for facts_id in record.facts_ids:
+            key = (record.series_id, facts_id, record.interval.axis)
+            span = (record.interval.start, record.interval.end)
+            intervals[key].append(span)
+            interval_indices[(*key, *span)] = index
+    for key, spans in intervals.items():
+        spans.sort()
+        for left, right in zip(spans, spans[1:], strict=False):
+            if left[1] >= right[0]:
+                index = max(interval_indices[(*key, *left)], interval_indices[(*key, *right)])
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.overlap:{index}")
+    starts = {key: [span[0] for span in spans] for key, spans in intervals.items()}
     observed_keys = {
         (outcome.series_id, *key)
         for outcome in outcomes.values()
@@ -706,7 +743,10 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
         for key in outcome.observation_keys
     }
     partitions = _discover_partitions(raw, store, provider_id)
-    for identifier, path in partitions.items():
+    checked_files = {
+        key: path for key, path in partitions.items() if checked_partitions is None or key in checked_partitions
+    }
+    for identifier, path in checked_files.items():
         _validate_partition(
             identifier,
             path,
@@ -727,16 +767,16 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
             ):
                 if (
                     not any(
-                        c.series_id == series_id
-                        and facts_id in c.facts_ids
-                        and (axis_timestamp := timestamp_on_axis(timestamp, time_zone, c.interval.axis)) is not None
-                        and c.interval.start <= axis_timestamp <= c.interval.end
-                        for c in coverage
+                        (axis_timestamp := timestamp_on_axis(timestamp, time_zone, axis)) is not None
+                        and (position := bisect_right(starts.get((series_id, facts_id, axis), []), axis_timestamp) - 1)
+                        >= 0
+                        and axis_timestamp <= intervals[(series_id, facts_id, axis)][position][1]
+                        for axis in TimeAxis
                     )
                     and (series_id, facts_id, timestamp, time_zone) not in observed_keys
                 ):
                     _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{identifier}")
-    _validate_series_partitions(raw, partitions, store, provider_id)
+    _validate_series_partitions(raw, checked_files, store, provider_id)
     manifest = AccumulatedStoreManifest(
         format_version=8,
         provider_id=provider_id,
@@ -746,6 +786,10 @@ def _validate_accumulated(raw: dict[str, Any], store: StoreRoot, provider_id: Pr
         **_metadata(raw),
     )
     return ValidatedStore(root=store, manifest=manifest, partition_files=partitions)
+
+
+def _supporting_outcomes(raw: dict[str, Any]) -> tuple[RetrievalOutcome, ...]:
+    return tuple(RetrievalOutcome.model_validate(item) for item in raw.get("supporting_outcomes", ()))
 
 
 def _metadata(raw: dict[str, Any]) -> dict[str, Any]:
@@ -761,6 +805,7 @@ def _metadata(raw: dict[str, Any]) -> dict[str, Any]:
 def _validate_metadata(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> None:
     try:
         metadata = _metadata(raw)
+        support = _supporting_outcomes(raw)
     except (ValidationError, ValueError, TypeError) as error:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"series.metadata:{error}")
     definitions = {item.series_id: item for item in metadata["series"]}
@@ -790,7 +835,7 @@ def _validate_metadata(raw: dict[str, Any], store: StoreRoot, provider_id: Provi
                 if not fact_ids or len(set(fact_ids)) != len(fact_ids) or not set(fact_ids).issubset(allowed):
                     _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "inventory.member_facts")
     outcomes: set[str] = set()
-    for outcome in metadata["outcomes"]:
+    for outcome in (*metadata["outcomes"], *support):
         if not outcome.outcome_id or outcome.outcome_id in outcomes:
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "outcome.identity")
         outcomes.add(outcome.outcome_id)
@@ -808,6 +853,82 @@ def _validate_metadata(raw: dict[str, Any], store: StoreRoot, provider_id: Provi
                 admission(fact).status != "supported" for fact in definition.facts if fact.facts_id in outcome.facts_ids
             ):
                 _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "outcome.admission")
+
+    call_ids: set[str] = set()
+    for index, call in enumerate(metadata["source_calls"]):
+        for field in ("call_id", "acquisition_id"):
+            identifier = call.get(field)
+            if identifier is None:
+                continue
+            if not isinstance(identifier, str) or not identifier.strip():
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"source_call.identity:{index}:{field}")
+            call_ids.add(identifier)
+    for outcome in (*metadata["outcomes"], *support):
+        if any(reference not in call_ids for reference in outcome.calls):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"outcome.calls:{outcome.outcome_id}")
+    for snapshot in metadata["inventories"]:
+        for reference in snapshot.evidence:
+            if reference.startswith("source-call:") and reference.removeprefix("source-call:") not in call_ids:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"inventory.source_call:{snapshot.snapshot_id}")
+            if (
+                reference.startswith("source-inventory:")
+                and reference.removeprefix("source-inventory:") not in snapshots
+            ):
+                _refuse(
+                    StoreRefusalKind.MALFORMED, store, provider_id, f"inventory.source_inventory:{snapshot.snapshot_id}"
+                )
+            if (
+                reference.startswith("retrieval-outcome:")
+                and reference.removeprefix("retrieval-outcome:") not in outcomes
+            ):
+                _refuse(
+                    StoreRefusalKind.MALFORMED,
+                    store,
+                    provider_id,
+                    f"inventory.retrieval_outcome:{snapshot.snapshot_id}",
+                )
+
+    dependencies = {
+        reference.removeprefix("retrieval-outcome:")
+        for snapshot in metadata["inventories"]
+        for reference in snapshot.evidence
+        if reference.startswith("retrieval-outcome:")
+    }
+    if any(item.outcome_id not in dependencies for item in support):
+        _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "supporting_outcome.unreferenced")
+    active_outcomes = {item.outcome_id for item in metadata["outcomes"]}
+    aliases: dict[str, set[str]] = defaultdict(set)
+    for call in metadata["source_calls"]:
+        identities = {call[field] for field in ("call_id", "acquisition_id") if call.get(field) is not None}
+        for identity in identities:
+            aliases[identity].update(identities)
+    active_calls = {reference for item in metadata["outcomes"] for reference in item.calls}
+    pending_calls = list(active_calls)
+    while pending_calls:
+        for alias in aliases[pending_calls.pop()]:
+            if alias not in active_calls:
+                active_calls.add(alias)
+                pending_calls.append(alias)
+    for index, issue in enumerate(metadata["issues"]):
+        if (
+            issue.details is not None
+            and "_source_details_state" in issue.details
+            and (issue.details["_source_details_state"] != "none" or "acquisition_ids" not in issue.details)
+        ):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"issue.context:{index}")
+        if issue.details is not None and "outcome_id" in issue.details:
+            reference = issue.details["outcome_id"]
+            if not isinstance(reference, str) or reference not in active_outcomes:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"issue.outcome:{index}")
+        if issue.details is not None and "acquisition_ids" in issue.details:
+            references = issue.details["acquisition_ids"]
+            if (
+                not isinstance(references, list | tuple)
+                or not references
+                or any(not isinstance(reference, str) or reference not in active_calls for reference in references)
+                or len(set(references)) != len(references)
+            ):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"issue.acquisitions:{index}")
 
 
 def _validate_series_partitions(

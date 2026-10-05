@@ -285,9 +285,16 @@ def test_manifest_declarations_define_every_observation_product_obligation() -> 
     )
 
 
-def test_store_boundary_probe_reads_validated_store_at_declared_query() -> None:
-    store = StoreRoot(Path(__file__).parent / "test_data" / "source_series_store_conformance" / "valid_future_austria")
+def test_store_boundary_probe_reads_validated_store_at_declared_query(tmp_path: Path) -> None:
+    import shutil
+
+    from rivretrieve._internal.store.integrity import seal_store
+
+    fixture = Path(__file__).parent / "test_data" / "source_series_store_conformance" / "valid_future_austria"
+    store = StoreRoot(tmp_path / "store")
+    shutil.copytree(fixture, store)
     provider_id = ProviderId("fixture_bulk")
+    seal_store(store, provider_id)
     product_id = ProductId("level")
     query = StoreQuery(
         store=store,

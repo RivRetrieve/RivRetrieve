@@ -1729,8 +1729,12 @@ def test_prerequisite_calls_are_interleaved_before_each_actual_payload_origin() 
         "content_type",
         "response_disposition",
         "station_products",
+        "acquisition_id",
     }
     assert enriched.calls_made[0]["station_products"] == (("A", "level"), ("A", "flow"))
+    assert enriched.calls_made[0]["acquisition_id"] == payloads[0].acquisition_id
+    assert enriched.calls_made[3]["acquisition_id"] == payloads[2].acquisition_id
+    assert enriched.calls_made[0]["credential_header_names"] == ("Identificador", "Senha")
 
 
 @pytest.mark.parametrize(
@@ -1821,3 +1825,68 @@ def test_compiled_query_keeps_inventory_definitions_and_fact_filtered_receipts(
     assert restored.source_series == result.source_series
     assert restored.inventories == result.inventories
     assert restored.outcomes == result.outcomes
+
+
+@pytest.mark.parametrize("existing", [None, "payload", [], ["other"], ["payload", "payload"]])
+def test_storage_issue_lineage_never_overwrites_conflicting_source_context(existing):
+    from rivretrieve._internal.issues import Issue
+
+    issue = Issue(
+        severity="info",
+        code="source_quality_code",
+        message="Native code",
+        details={
+            "source_quality_code": "Q",
+            "count": 7,
+            "acquisition_ids": existing,
+        },
+    )
+    with pytest.raises(FatalContractError, match="acquisition references contradict"):
+        driver_module._issue_with_acquisition_references(issue, ("payload",))
+    assert issue.details == {"source_quality_code": "Q", "count": 7, "acquisition_ids": existing}
+
+
+def test_storage_issue_lineage_preserves_native_issue_and_original_count():
+    from rivretrieve._internal.issues import Issue
+
+    issue = Issue(
+        severity="info",
+        code="source_quality_code",
+        message="Native code",
+        details={
+            "source_quality_code": "Q",
+            "count": 7,
+        },
+    )
+    stored = driver_module._issue_with_acquisition_references(issue, ("payload",))
+    assert stored.details == {"source_quality_code": "Q", "count": 7, "acquisition_ids": ("payload",)}
+    assert stored.code == issue.code and stored.message == issue.message
+    assert issue.details == {"source_quality_code": "Q", "count": 7}
+    assert driver_module._issue_with_acquisition_references(stored, ("payload",)) == stored
+
+
+@pytest.mark.parametrize("details", [None, {}, {"count": 7, "native_label": "authored"}])
+def test_public_issue_projection_preserves_exact_original_context(details):
+    from rivretrieve._internal.issues import Issue
+
+    original = Issue(severity="info", code="source.authored", message="Authored note", details=details)
+    stored = driver_module._issue_with_acquisition_references(original, ("authored-acquisition",))
+    assert stored.details["acquisition_ids"] == ("authored-acquisition",)
+    assert driver_module._public_issues((original,)) == (original,)
+    assert driver_module._public_issues((stored,)) == (original,)
+    assert original.details == details
+    assert driver_module._issue_with_acquisition_references(stored, ("authored-acquisition",)) == stored
+
+
+def test_issue_context_marker_cannot_overwrite_publisher_context():
+    from rivretrieve._internal.issues import Issue
+
+    original = Issue(
+        severity="info",
+        code="source.authored",
+        message="Authored note",
+        details={"_source_details_state": "publisher vocabulary"},
+    )
+    with pytest.raises(FatalContractError, match="conflicts with storage-only context"):
+        driver_module._issue_with_acquisition_references(original, ("authored-acquisition",))
+    assert driver_module._public_issues((original,)) == (original,)

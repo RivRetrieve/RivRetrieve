@@ -19,9 +19,18 @@ from rivretrieve._internal.store import (
     StoreReader,
     StoreRoot,
 )
+from rivretrieve._internal.store.integrity import seal_store
 from rivretrieve._internal.store.validation import StoreManifest
 
 FIXTURES = Path(__file__).parents[1] / "test_data" / "source_series_store_conformance"
+
+
+def _published(tmp_path: Path, name: str = "valid_hydat_national") -> Path:
+    """Publish a synthetic semantic fixture with a local content identity."""
+    store = tmp_path / name
+    shutil.copytree(FIXTURES / name, store)
+    seal_store(StoreRoot(store), ProviderId("fixture_bulk"))
+    return store
 
 
 def _query(store: Path, *, station: str = "ca-001", product: str = "discharge") -> StoreQuery:
@@ -59,8 +68,8 @@ def test_unknown_revision_is_refused_before_a_partition_scan(tmp_path: Path, mon
     assert 'rivretrieve.download("fixture_bulk")' in str(raised.value)
 
 
-def test_reader_projects_native_rows_and_keeps_physical_value_state() -> None:
-    store = FIXTURES / "valid_hydat_national"
+def test_reader_projects_native_rows_and_keeps_physical_value_state(tmp_path: Path) -> None:
+    store = _published(tmp_path)
     result = StoreReader().query(_query(store))
 
     assert result.rows.columns == [
@@ -80,8 +89,8 @@ def test_reader_projects_native_rows_and_keeps_physical_value_state() -> None:
     assert result.executed_query.years == (2023, 2024)
 
 
-def test_reader_preserves_duplicate_source_rows() -> None:
-    store = FIXTURES / "valid_source_duplicates"
+def test_reader_preserves_duplicate_source_rows(tmp_path: Path) -> None:
+    store = _published(tmp_path, "valid_source_duplicates")
     result = StoreReader().query(
         StoreQuery(
             store=StoreRoot(store.resolve()),
@@ -105,7 +114,7 @@ def test_status_reports_absence_or_validated_manifest_facts(tmp_path: Path) -> N
     assert absent.source_vintage is None
     assert absent.partition_row_counts == {}
 
-    store = StoreRoot((FIXTURES / "valid_hydat_national").resolve())
+    store = StoreRoot(_published(tmp_path).resolve())
     present = reader.status(store, ProviderId("fixture_bulk"))
     assert present.presence is StorePresence.PRESENT
     assert present.exists
@@ -118,8 +127,8 @@ def test_status_reports_absence_or_validated_manifest_facts(tmp_path: Path) -> N
     assert present.partition_row_counts
 
 
-def test_empty_query_result_has_engine_rows_schema() -> None:
-    result = StoreReader().query(_query(FIXTURES / "valid_hydat_national", station="not-present"))
+def test_empty_query_result_has_engine_rows_schema(tmp_path: Path) -> None:
+    result = StoreReader().query(_query(_published(tmp_path), station="not-present"))
     assert result.rows.schema == {
         "station_id": pl.String,
         "product_id": pl.String,
@@ -163,11 +172,11 @@ def test_empty_query_result_has_engine_rows_schema() -> None:
     ],
     ids=["station", "product", "adjacent-years-closed-bounds", "before-row"],
 )
-def test_reader_filters_rows_by_identity_and_closed_time_bounds(station, product, start, end, expected):
+def test_reader_filters_rows_by_identity_and_closed_time_bounds(station, product, start, end, expected, tmp_path):
     from polars.testing import assert_frame_equal
 
     query = StoreQuery(
-        store=StoreRoot((FIXTURES / "valid_hydat_national").resolve()),
+        store=StoreRoot(_published(tmp_path).resolve()),
         provider_id=ProviderId("fixture_bulk"),
         stations=(station,),
         products=(ProductId(product),),

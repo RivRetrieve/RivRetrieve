@@ -53,6 +53,10 @@ def test_corrupt_store_manifest_cannot_turn_twelve_centimetres_into_twelve_metre
     raw = json.loads(path.read_text())
     raw["series"][0]["facts"][0]["normalized_unit"] = "m"
     path.write_text(json.dumps(raw))
+    from tests.store.test_integrity import _resign
+
+    # Reach the unit-consistency rule, rather than an earlier byte-identity refusal.
+    _resign(store)
     with pytest.raises(ObservationStoreRefusedError, match="normaliz"):
         read = _query(store)
         result = convert(

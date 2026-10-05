@@ -35,6 +35,7 @@ from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
 from rivretrieve._internal.source_series import OutcomeStatus, ParsedSeries
 from rivretrieve._internal.store import ObservationStoreRefusedError, StoreReader, StoreRoot
+from rivretrieve._internal.store.lifecycle import StoreLifecycleError
 from rivretrieve._internal.transport import (
     HttpMethod,
     Transport,
@@ -304,16 +305,23 @@ def test_unknown_revision_refuses_before_transport(tmp_path: Path, retained_evid
     assert replay.calls == []
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
-def test_interrupted_publication_refuses_before_source_call(tmp_path: Path, retained_evidence_root: Path) -> None:
+def test_interrupted_publication_refuses_before_source_call(tmp_path: Path) -> None:
+    from rivretrieve._internal.store.accumulation import StoreUpdate, accumulate
+
     store = tmp_path / "store"
-    _drive(store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root))
-    store.rename(tmp_path / ".store.backup-interrupted")
-    transport = CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root)
-    with pytest.raises(ObservationStoreRefusedError, match="interrupted store publication"):
-        _drive(store, transport)
-    assert transport.calls == []
+    accumulate(StoreRoot(store), _PROVIDER, StoreUpdate((), (), (), ()))
+    residue = tmp_path / ".store.backup-interrupted"
+    store.rename(residue)
+    before = _bytes(residue)
+
+    class NoSource:
+        def send(self, request):
+            pytest.fail("interrupted publication reached source transport")
+
+    with pytest.raises(StoreLifecycleError, match="interrupted or active work"):
+        _drive(store, NoSource())
     assert not store.exists()
+    assert _bytes(residue) == before
 
 
 @pytest.mark.recorded("tests/test_data/usgs_modern")

@@ -544,7 +544,12 @@ class ZoneValue:
 
 @dataclass(frozen=True, slots=True)
 class ObservationStoreConfig:
-    """The revision and declared peak-space requirement of a compiled store."""
+    """Store revision and pre-download free-space estimate in bytes.
+
+    Admission checks the filesystem used for managed storage and workspaces.
+    The estimate does not reserve space or guarantee capacity for every source
+    release. A late resource failure preserves committed data and reports residue.
+    """
 
     format_version: int
     required_free_bytes: int = 6_000_000_000

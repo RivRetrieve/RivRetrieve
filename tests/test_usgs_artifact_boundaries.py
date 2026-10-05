@@ -107,22 +107,26 @@ def test_modern_catalogue_format(tmp_path):
 @pytest.mark.parametrize("operation", ["validate", "accumulate"])
 def test_legacy_store_refusal_is_non_destructive(identity, operation, tmp_path):
     store = StoreRoot(tmp_path / "store")
-    store.mkdir()
-    manifest = {"format_version": 8, "provider_id": "usgs_nwis"}
+    from tests.store.test_integrity import _resign
+
+    accumulate(store, ProviderId("usgs_nwis"), StoreUpdate((), (), (), ()))
+    path = store / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest.pop("usgs_publication_service")
     if identity is not None:
         manifest["usgs_publication_service"] = identity
-    path = store / "manifest.json"
     path.write_text(json.dumps(manifest))
-    values = store / "legacy.parquet"
-    values.write_bytes(b"retained legacy evidence, not a valid parquet")
+    # Update byte controls so each operation reaches publication-service refusal.
+    _resign(store)
     before = {p.name: p.read_bytes() for p in store.iterdir()}
+    siblings = set(tmp_path.iterdir())
     with pytest.raises(ObservationStoreRefusedError, match="usgs_publication_service"):
         if operation == "validate":
             validate_store(store, ProviderId("usgs_nwis"))
         else:
             accumulate(store, ProviderId("usgs_nwis"), StoreUpdate((), (), (), ()))
     assert {p.name: p.read_bytes() for p in store.iterdir()} == before
-    assert set(tmp_path.iterdir()) == {store}
+    assert set(tmp_path.iterdir()) == siblings
 
 
 @pytest.mark.parametrize("provider", ["usgs_nwis", "fr_hubeau", "no_nve"])

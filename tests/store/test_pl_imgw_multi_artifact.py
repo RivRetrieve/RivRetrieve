@@ -188,7 +188,9 @@ def test_imgw_history_download_removes_partial_current_target_and_refuses_preexi
     assert not first_target.exists()
 
 
-def test_second_artifact_unlink_failure_restores_every_artifact_and_previous_store(tmp_path, monkeypatch) -> None:
+def test_second_artifact_unlink_failure_keeps_new_snapshot_and_reports_remaining_artifact(
+    tmp_path, monkeypatch
+) -> None:
     import zipfile
     from datetime import UTC, datetime
 
@@ -197,6 +199,7 @@ def test_second_artifact_unlink_failure_restores_every_artifact_and_previous_sto
     from rivretrieve._internal.primitives import ProviderId
     from rivretrieve._internal.providers.pl_imgw.bulk import DownloadedImgw, ImgwCompileRequest, compile_imgw
     from rivretrieve._internal.store import StoreRoot, validate_store
+    from rivretrieve._internal.store.lifecycle import StorePostCommitCleanupError
 
     root = StoreRoot(tmp_path / "store")
     initial = tmp_path / "codz_2023.zip"
@@ -230,7 +233,7 @@ def test_second_artifact_unlink_failure_restores_every_artifact_and_previous_sto
 
     monkeypatch.setattr(Path, "unlink", fail_second)
 
-    with pytest.raises(OSError, match="second unlink refused"):
+    with pytest.raises(StorePostCommitCleanupError) as caught:
         compile_imgw(
             ImgwCompileRequest(
                 artifacts[0].path,
@@ -243,10 +246,14 @@ def test_second_artifact_unlink_failure_restores_every_artifact_and_previous_sto
             )
         )
 
-    assert all(item.path.exists() for item in artifacts)
+    assert isinstance(caught.value.original, OSError)
+    assert caught.value.committed_path == Path(root)
+    assert artifacts[1].path in caught.value.residue_paths
+    assert not artifacts[0].path.exists()
+    assert artifacts[1].path.exists()
     compiled_manifest = validate_store(root, ProviderId("pl_imgw")).manifest
     assert isinstance(compiled_manifest, StoreManifest)
-    assert compiled_manifest.publisher_artifact.url == _official_url("codz_2023.zip")
+    assert compiled_manifest.publisher_artifact.url == artifacts[0].url
     assert not tuple(tmp_path.glob(".publisher-artifacts.rollback-*"))
 
 
@@ -271,15 +278,13 @@ def test_imgw_plural_request_refuses_a_conflicting_singular_identity(tmp_path) -
         )
 
 
-def test_post_commit_quarantine_cleanup_failure_is_loud_and_keeps_new_store_authoritative(
-    tmp_path, monkeypatch
-) -> None:
+def test_post_commit_workspace_cleanup_failure_is_loud_and_keeps_new_store_authoritative(tmp_path, monkeypatch) -> None:
     import zipfile
     from datetime import UTC, datetime
 
     import pytest
 
-    import rivretrieve._internal.store.certification as certification
+    import rivretrieve._internal.store.lifecycle as lifecycle
     from rivretrieve._internal.providers.pl_imgw.bulk import DownloadedImgw, ImgwCompileRequest, compile_imgw
     from rivretrieve._internal.store import StoreRoot
 
@@ -292,21 +297,20 @@ def test_post_commit_quarantine_cleanup_failure_is_loud_and_keeps_new_store_auth
                 f"154210010;SEPOPOL;Lyna;2022;{month:02d};01;100;10.0;7.0;{calendar_month}\r\n".encode(),
             )
         artifacts.append(DownloadedImgw(path, _official_url(path.name)))
-    real_remove = certification._remove_tree
+    real_remove = lifecycle._remove
     refused = False
 
     def fail_once(path: Path) -> None:
         nonlocal refused
-        if path.name.startswith(".publisher-artifacts.rollback-") and not refused:
+        if path.name.startswith(".store.workspace-") and not refused:
             refused = True
-            next(path.iterdir()).unlink()
-            raise OSError("rollback cleanup refused")
+            raise OSError("workspace cleanup refused")
         real_remove(path)
 
-    monkeypatch.setattr(certification, "_remove_tree", fail_once)
+    monkeypatch.setattr(lifecycle, "_remove", fail_once)
     root = StoreRoot(tmp_path / "store")
 
-    with pytest.raises(certification.StorePostCommitCleanupError, match="new store is authoritative"):
+    with pytest.raises(lifecycle.StorePostCommitCleanupError, match="workspace cleanup refused"):
         compile_imgw(
             ImgwCompileRequest(
                 artifacts[0].path,
@@ -321,9 +325,9 @@ def test_post_commit_quarantine_cleanup_failure_is_loud_and_keeps_new_store_auth
 
     assert all(not item.path.exists() for item in artifacts)
     assert Path(root).is_dir()
-    residues = tuple(tmp_path.glob(".publisher-artifacts.rollback-*"))
+    residues = tuple(tmp_path.glob(".store.workspace-*"))
     assert len(residues) == 1
-    assert len(tuple(residues[0].iterdir())) == 1
+    assert not tuple(residues[0].iterdir())
     assert not tuple(tmp_path.glob(".store.previous-*"))
 
 

@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import sqlite3
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -26,6 +26,8 @@ from rivretrieve._internal.source_series import (
     stable_id,
     validate_series_rows,
 )
+from rivretrieve._internal.store.integrity import seal_store
+from rivretrieve._internal.store.lifecycle import StoreTransactionError
 from rivretrieve._internal.store.validation import (
     Disposition,
     PublisherArtifact,
@@ -34,7 +36,6 @@ from rivretrieve._internal.store.validation import (
     SourceSchemaFingerprint,
     StoreRoot,
     ValidatedStore,
-    validate_store,
 )
 
 NativeStoreRows = NewType("NativeStoreRows", pl.DataFrame)
@@ -121,11 +122,10 @@ def compile_store(request: StoreCompileRequest, rows: NativeStoreRows | pl.DataF
                 _write_partition(physical, directory / "part-0.parquet")
                 counts[identifier] = physical.height
         _write_manifest(root, request, counts, request.series)
-        return validate_store(request.destination, request.provider_id)
-    except BaseException:
-        # The layout writer never leaves a plausible partial store.
+        return seal_store(request.destination, request.provider_id).store
+    except BaseException as original:
         # Removing a newly created destination does not alter existing evidence.
-        _remove_new_store(root)
+        _cleanup_failed_compile(root, original, ())
         raise
 
 
@@ -311,6 +311,25 @@ def _write_manifest(
     )
 
 
+def _cleanup_failed_compile(
+    root: Path, original: BaseException, close_resources: Iterable[Callable[[], object]]
+) -> None:
+    errors: list[BaseException] = []
+    for close in close_resources:
+        try:
+            close()
+        except BaseException as error:
+            errors.append(error)
+    residue: tuple[Path, ...] = ()
+    try:
+        _remove_new_store(root)
+    except BaseException as error:
+        errors.append(error)
+        residue = (root,)
+    if errors:
+        raise StoreTransactionError(original, cleanup_errors=tuple(errors), residue_paths=residue) from original
+
+
 def _remove_new_store(root: Path) -> None:
     if not root.exists():
         return
@@ -387,11 +406,12 @@ def compile_store_batches(request: StoreCompileRequest, stream: ObservationBatch
     emitted_total = 0
     definitions = {item.series_id: item for item in request.series}
     last_partition_identifier: str | None = None
-    unit_database = sqlite3.connect(root / ".source-units.sqlite3")
-    unit_database.execute(
-        "CREATE TABLE source_units (name TEXT PRIMARY KEY, publisher_records INTEGER NOT NULL, expected_rows INTEGER NOT NULL, emitted_rows INTEGER NOT NULL)"
-    )
+    unit_database: sqlite3.Connection | None = None
     try:
+        unit_database = sqlite3.connect(root / ".source-units.sqlite3")
+        unit_database.execute(
+            "CREATE TABLE source_units (name TEXT PRIMARY KEY, publisher_records INTEGER NOT NULL, expected_rows INTEGER NOT NULL, emitted_rows INTEGER NOT NULL)"
+        )
         for batch_number, batch in enumerate(stream.batches, start=1):
             if not isinstance(batch, NativeObservationBatch):
                 raise TypeError("observation batch iterator yielded an invalid batch")
@@ -468,6 +488,7 @@ def compile_store_batches(request: StoreCompileRequest, stream: ObservationBatch
             writer.close()
         writers.clear()
         unit_database.close()
+        unit_database = None
         (root / ".source-units.sqlite3").unlink()
         if sum(counts.values()) != emitted_total:
             raise ValueError("streamed partition counts differ from emitted source rows")
@@ -496,16 +517,16 @@ def compile_store_batches(request: StoreCompileRequest, stream: ObservationBatch
                 f"expected={contributed_rows}; actual={emitted_total}"
             )
         _write_manifest(root, request, counts, tuple(definitions.values()))
-        validate_store(request.destination, request.provider_id)
+        seal_store(request.destination, request.provider_id)
         return StreamingCompileEvidence(
             MappingProxyType(dict(counts)),
             MappingProxyType({key: tuple(value) for key, value in row_groups.items()}),
         )
-    except BaseException:
-        for writer in writers.values():
-            writer.close()
-        unit_database.close()
-        _remove_new_store(root)
+    except BaseException as original:
+        close_resources: list[Callable[[], object]] = [writer.close for writer in writers.values()]
+        if unit_database is not None:
+            close_resources.append(unit_database.close)
+        _cleanup_failed_compile(root, original, close_resources)
         raise
 
 

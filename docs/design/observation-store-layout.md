@@ -191,8 +191,19 @@ Both manifest kinds MUST contain `series`, `inventories`, `outcomes`, `issues`, 
   `unresolved`, or `no_match` results. A successful outcome identifies a concrete series
   and its physical facts. Other outcomes retain a reason; a requested selector can remain
   recorded without inventing a source identity.
-- `issues` retains issue identity, severity and reason. `source_calls` retains source-call
-  provenance, not publisher payload bytes or request headers.
+- `issues` retains active issue identity, severity and reason. `source_calls` retains
+  supporting source-call provenance, not publisher payload bytes or request headers.
+  Outcome call references resolve to recorded call or acquisition identities.
+  Stored native issue summaries can carry engine acquisition references in
+  `details.acquisition_ids`; source code, message, native fields and counts stay
+  unchanged. Counts describe the original supporting acquisition, not a new count
+  over the rows currently served. Those references retain the issue only while
+  the acquisition supports active outcomes. Support-only history cannot make an issue active.
+  Fetch results omit this storage-only linkage and preserve the original issue
+  context, including the difference between missing and empty details.
+  Typed inventory references (`source-call:`, `source-inventory:` and
+  `retrieval-outcome:`) resolve within the retained evidence. Other evidence strings
+  preserve source prose and URLs without interpreting them as local identifiers.
 
 Every physical row MUST reference a declared series and one of its fact segments.
 Its station and partition product MUST agree with the series. Its source unit MUST
@@ -332,14 +343,128 @@ held rows and successful coverage at their original retrieval instants; their ou
 and issues can still be recorded. Inventory evidence remains separate from successful
 coverage. Matching facts never allow one source identity to cover another.
 
-A provider store has one writer, guarded by a sibling write-lock directory. Writes stage
-a complete candidate beside the store, validate it, then replace its directory. Partition
-files are not modified in place. A failed stage leaves the previous store intact.
-An interruption between renames can leave a sibling backup requiring manual recovery.
-A subsequent reuse or refresh refuses before source access when a backup exists.
-Explicit `clear_cache` deletes the canonical store and pending and backup namespaces;
-it does not remove an active write lock. Concurrent reader/writer access and automatic
-recovery are not guaranteed.
+Both store kinds use the shared publication lifecycle described below. Partition
+files MUST NOT be modified in place. An accumulated update groups replacements by
+partition and rewrites each affected partition once. Unchanged partitions retain
+their original content identities through hardlinks. Metadata-only updates do not
+copy or decode observation partitions.
+
+Current evidence is separate from a permanent attempt history. Coverage and retained
+observation keys identify the successful outcomes supporting saved data. A successful
+replacement supersedes earlier diagnostics only within its established identity,
+physical-fact and time-axis scope. Partial recovery leaves unresolved failures active.
+Fully superseded records can be removed only after their current data, coverage and
+inventory dependencies have been resolved. The internal `supporting_outcomes`
+relation keeps an original acquisition outcome only while a retained inventory
+still cites it. It is separate from active `outcomes` and MUST NOT contribute an
+active diagnostic or trigger caller issue policy. Compaction removes that support
+once its last current dependency is gone. Both relations require unique,
+consistent identities and valid source-call links. Reuse MUST NOT reactivate a
+superseded failure. Generated excerpts remain distinct from original publisher
+payloads.
 
 Publisher payload bytes are not stored. A held receipt is a store excerpt encoded from
 selected physical rows, with served coverage and retrieval instants in provenance.
+
+
+## Publication integrity and inspection
+
+A published generation contains `integrity.json` alongside its manifest and
+partitions. An interrupted witness refresh can leave the reserved
+`.integrity.pending` metadata file. Inspection reports it as cleanup residue;
+normal reads and audit refuse it until explicit recovery checks the committed
+seal and removes that temporary file. It is never treated as published data. This seal records a closed inventory of managed files and their SHA-256
+content identities. The generation identity binds the content inventory, including
+`manifest.json`. The seal also retains filesystem witnesses used only to detect
+whether unchanged partitions need another byte check during an update.
+
+Publication MUST validate all new or changed observations, all metadata relations
+and the complete file inventory. Reused partitions MUST retain their previously
+validated content digests. Their identities, physical facts and acquisition support
+MUST remain valid under the new metadata. Bulk certification additionally checks
+complete source-column closure, source inventory/count/identity and exact
+source-to-staged-store equality. Local auditing does not repeat that source check.
+
+Operations have distinct detection scopes:
+
+| Operation | Checks performed |
+| --- | --- |
+| `cache_status` | Journal and ownership, closed file inventory, file identities, manifest digest and metadata relations. No observation bytes are decoded or hashed. |
+| Store read | Fresh metadata inspection, content digests and observation consistency checks before serving data. The present reader remains conservative and checks all partitions. |
+| `audit_cache` | Every sealed file digest and all observation and metadata consistency rules for one generation. Return identifies the generation and checked counts. |
+| Accumulated update | Current metadata, new or changed partitions and the retained support for unchanged partitions. Original digests are carried forward, never inferred from replacement bytes. |
+
+The reusable selected-read boundary is `inspect_integrity` followed by
+`verify_files` for explicit partition identifiers. The reader must inspect the
+current metadata for each operation and verify actual selected bytes before use.
+A cached result of validation is not permanent trust in a mutable path. Request
+batching and request-bounded read performance remain separate work.
+
+A filesystem witness contains device, inode, size, modification time and change
+time. Owned hardlink creation and removal change the last field without changing
+content. Under exclusive ownership, the writer can record those known transitions
+while preserving the original digest. An unexpected witness change requires
+verification against that original digest before reuse. Interrupted cleanup can
+therefore require extra byte checks on recovery or the next update. It MUST NOT
+cause changed bytes to acquire a new certified identity automatically.
+
+Digests detect local corruption and ordinary replacement. They do not authenticate
+an attacker who can replace data and rewrite its seal. Concurrent external mutation
+and hostile local users are outside this contract.
+
+## Shared publication and recovery
+
+One shared transaction protocol covers compiled replacement and live accumulation.
+Their data replacement semantics remain distinct. A compiled snapshot replaces the
+previous snapshot, including legitimate removals. A live update replaces only
+established successful scopes.
+
+An exclusive local-process lease coordinates download, compilation, accumulation,
+recovery and clear. The permanent `.store.owner` coordination file MUST NOT be
+unlinked while it can be opened by another process. The kernel releases ownership
+on process termination. Well-formed local abandoned ownership can be recovered;
+active or ambiguous ownership MUST refuse recovery and clear. Existing legacy
+write-lock directories do not prove their owner is dead and MUST NOT be blindly
+removed.
+
+The writer records its transaction before creating a stage. It validates the
+candidate before moving the previous committed directory aside. Installing the
+candidate at the canonical path is the commit point. The persisted journal and
+surviving paths distinguish this point after local process termination. First-install
+staging is never committed merely because it is complete or valid.
+
+Inspection reports committed data, unfinished work, cleanup residue and ownership
+separately. If interruption leaves the prior generation at its recorded previous
+path, that generation remains discoverable. Recognized work without committed data
+is `interrupted`, not `absent`. Cleanup residue beside a committed new generation
+does not mean the acquisition failed.
+
+Recovery validates the committed generation before preserving or restoring it.
+It MUST NOT restore a partly deleted previous directory or guess among unjournaled
+candidates. Recovery retains the complete manifest, including publisher artifact
+identities and provider-specific source-vintage safeguards. Another download MUST
+refuse unresolved publication before source selection or transfer.
+
+A precommit failure preserves the initiating exception and any restoration or
+cleanup exceptions. A postcommit cleanup failure retains the authoritative path,
+transaction identity and remaining paths in a distinct typed exception. Safe retry
+begins with inspection and recovery, not automatic removal of the only surviving
+store.
+
+The configured cache root may resolve through a symlink at the public composition
+boundary. Managed provider directories, journals, ownership files and generation
+contents MUST NOT follow symlinks. Explicit clear removes terminal managed symlinks
+themselves, never their targets or unrelated siblings. All owned staging, workspace
+and preserved-download namespaces participate in lifecycle inspection and deletion.
+Workspace locations are resolved before source decoding; disk admission is an
+estimate, not a reservation. Late disk failure has the same preservation rules.
+
+The supported guarantee is local process interruption while the operating system
+and filesystem continue running. Tests use actual subprocess termination at
+persisted boundaries as well as injected exceptions and cleanup failures. These
+checks do not establish host or power-loss durability. Continuous reads during
+replacement, distributed locking and network-filesystem coordination are not
+promised.
+
+The shared certification/publication entry point is the handoff for later provider
+build optimizations. Providers MUST NOT introduce another publication protocol.

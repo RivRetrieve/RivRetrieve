@@ -1,6 +1,7 @@
 from importlib.metadata import version as _version
 
 from rivretrieve._internal.discovery import as_frame as as_frame
+from rivretrieve._internal.discovery import audit_cache as audit_cache
 from rivretrieve._internal.discovery import cache_status as cache_status
 from rivretrieve._internal.discovery import clear_cache as clear_cache
 from rivretrieve._internal.discovery import describe as describe
@@ -15,6 +16,7 @@ from rivretrieve._internal.discovery import metadata as metadata
 from rivretrieve._internal.discovery import pick as pick
 from rivretrieve._internal.discovery import products as products
 from rivretrieve._internal.discovery import providers as providers
+from rivretrieve._internal.discovery import recover_cache as recover_cache
 from rivretrieve._internal.discovery import series as series
 from rivretrieve._internal.discovery import to_bundle as to_bundle
 from rivretrieve._internal.utc import to_utc as to_utc

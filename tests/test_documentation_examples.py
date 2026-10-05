@@ -416,3 +416,25 @@ def test_documentation_output_contracts(page):
     """Check every displayed print has an expected output before replay."""
     for block in blocks(page):
         output_contracts(block)
+
+
+def test_usage_recovery_example_preserves_observation_status(monkeypatch, tmp_path):
+    import rivretrieve as rr
+    import rivretrieve._internal.discovery as discovery
+
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.chdir(tmp_path)
+
+    def no_source(*args, **kwargs):
+        pytest.fail("local recovery example reached source transport")
+
+    monkeypatch.setattr(discovery, "HttpClient", no_source)
+    status = rr.cache_status("usgs_nwis")
+    scope = {"rr": rr, "status": status}
+    block = next(block for block in blocks("docs/usage.md") if "recovery = rr.recover_cache" in block)
+    execute_block(block, scope, "usage-recovery")
+    assert scope["status"] is status
+    assert scope["recovery_status"].provider_id == "ca_eccc"
+    assert scope["unfinished_paths"] == ()
+    assert scope["cleanup_paths"] == ()
+    assert not scope["resulting_status"].exists
