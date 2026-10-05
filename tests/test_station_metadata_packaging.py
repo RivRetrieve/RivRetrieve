@@ -95,6 +95,30 @@ assert_frame_equal(
     .sort("station_id"),
     poland_source.select("station_id", "source_field", "source_value", "source_unit").sort("station_id"),
 )
+elevations = rr.metadata(poland, view="source").filter(pl.col("attribute_role") == "elevation")
+assert elevations.height == elevations["station_id"].n_unique() == 1301
+assert set(elevations["source_field"]) == {"gauge_altitude"}
+assert set(elevations["source_dtype"]) == {"String"}
+assert set(elevations["source_unit"]) == {"m"}
+assert set(elevations["state"]) == {"value"}
+assert set(elevations["source_datum_dtype"]) == {"String"}
+assert set(elevations["source_datum_field"]) == {"Vertical reference system"}
+assert set(elevations["support_fact"]) == {"metadata.elevation.gauge_altitude"}
+assert set(elevations["datum_support_fact"]) == {"metadata.elevation.gauge_altitude.datum"}
+assert dict(elevations.group_by("source_datum").len().iter_rows()) == {
+    "EVRF2007": 851, "Kronsztadt": 390, "ND": 60,
+}
+assert all(isinstance(json.loads(value), str) for value in elevations["source_value"])
+assert elevations.filter(pl.col("source_value") == '"ND"').height == 60
+assert elevations.filter((pl.col("source_value") == '"ND"') != (pl.col("source_datum") == "ND")).is_empty()
+assert_frame_equal(
+    poland_summary.select("station_id", "elevation_field", "elevation_value", "elevation_unit", "elevation_datum")
+    .explode("elevation_field", "elevation_value", "elevation_unit", "elevation_datum")
+    .rename({"elevation_field": "source_field", "elevation_value": "source_value",
+             "elevation_unit": "source_unit", "elevation_datum": "source_datum"})
+    .sort("station_id"),
+    elevations.select("station_id", "source_field", "source_value", "source_unit", "source_datum").sort("station_id"),
+)
 actual = pl.concat(frames)
 schema = pl.Schema({
     "provider_id": pl.String,

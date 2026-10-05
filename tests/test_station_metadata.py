@@ -358,7 +358,7 @@ def test_metadata_declarations_cover_providers_without_unreviewed_names():
         assert ("maintenance/catalogue/station_metadata/review.json", None) in origins.CATALOGUE_BUILD_DECLARATIONS
         assert isinstance(fields, tuple)
         assert all(isinstance(field, MetadataField) for field in fields)
-        if provider in ("ba_fhmzbih", "fr_hydroportail", "th_thaiwater", "pl_imgw", "za_dws"):
+        if provider in ("ba_fhmzbih", "fr_hydroportail", "th_thaiwater", "za_dws"):
             assert all(field.attribute_role == "drainage_area" for field in fields)
 
 

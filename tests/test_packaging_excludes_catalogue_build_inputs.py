@@ -102,6 +102,7 @@ def test_distributions_exclude_local_files(distribution: str) -> None:
             "scratchpad/notes.txt",
             "research/evidence.json",
             "maintenance/catalogue/source/evidence.json",
+            "maintenance/catalogue/station_metadata/sources/pl_imgw/grdc-workbook/Metadata_GRDC_30.10.2025.xlsx",
             "tests/test_data/retained-input.txt",
             "tests/recordings/retained-response.yaml",
             "src/rivretrieve/_internal/providers/br_ana/catalogue/native.parquet",
