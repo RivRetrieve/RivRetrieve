@@ -11,7 +11,7 @@ from rivretrieve._internal.engine import ObservationRequest, RequestedWindow, Wi
 from rivretrieve._internal.observations import ObservationProvenance
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis.declaration import declaration
-from rivretrieve._internal.store import StoreRoot
+from rivretrieve._internal.store import StoreReader, StoreRoot
 from tests.usgs_modern_recordings import ModernReplay
 
 
@@ -527,9 +527,18 @@ def test_driver_preserves_independent_rows_and_nonconflicting_payload_outcomes(
         cache="reuse",
         store=store,
     )
-    assert result.canonical_rows.height == (
-        7 if case in ("disjoint_windows", "unknown_failure", "unsuccessful_overlap") else 14
-    )
+    failed_scope = case in ("unknown_failure", "unsuccessful_overlap")
+    assert result.canonical_rows.height == (0 if failed_scope else 7 if case == "disjoint_windows" else 14)
     assert store.exists()
+    if failed_scope:
+        manifest = StoreReader().status(store, ProviderId("usgs_nwis")).manifest
+        assert manifest.coverage == ()
+        assert not list(store.rglob("*.parquet"))
+        if case == "unknown_failure":
+            assert any(item.series_id is None and item.status is OutcomeStatus.FAILED for item in result.outcomes)
+            assert any(item.status is OutcomeStatus.SUCCESS for item in result.outcomes)
+            assert not any(item.status is OutcomeStatus.EMPTY for item in result.outcomes)
+        else:
+            assert {item.status for item in result.outcomes} == {OutcomeStatus.UNSUPPORTED, OutcomeStatus.FAILED}
     if case == "duplicate_rows":
         pt.assert_frame_equal(result.canonical_rows.head(7), result.canonical_rows.tail(7))
