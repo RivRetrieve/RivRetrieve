@@ -194,6 +194,17 @@ Both manifest kinds MUST contain `series`, `inventories`, `outcomes`, `issues`, 
 - `issues` retains active issue identity, severity and reason. `source_calls` retains
   supporting source-call provenance, not publisher payload bytes or request headers.
   Outcome call references resolve to recorded call or acquisition identities.
+  Ordinary acquisition calls MAY declare `prerequisite_acquisition_ids`, encoded
+  as a tuple by the source-call encoder. These are directed references to the
+  acquisitions that were actually needed to make the call. Each reference MUST
+  resolve to a recorded acquisition identity, or its call identity when no
+  separate acquisition identity exists. References MUST be unique and nonempty;
+  the tuple itself MAY be empty. Self-references, cycles and conflicting
+  declarations for one acquisition MUST be refused. Retry aliases and sanitized
+  credential exchanges remain distinct from these acquisition dependencies.
+  Retained outcomes and inventories retain their prerequisite calls transitively.
+  A call retained only as a prerequisite MUST NOT reactivate its superseded
+  diagnosis. Unneeded acquisition chains MUST be removed.
   Stored native issue summaries can carry engine acquisition references in
   `details.acquisition_ids`; source code, message, native fields and counts stay
   unchanged. Counts describe the original supporting acquisition, not a new count
@@ -290,6 +301,14 @@ The accumulated manifest requires `format_version`, `provider_id`, `built_at`,
 where applicable. `built_at` is the UTC write instant with six fractional digits and `Z`.
 Coverage and partition counts MAY be empty: inventory and unsuccessful outcomes can be
 stored even when no successful interval or observation row exists.
+
+MLIT accumulated stores MUST include `prerequisite_acquisition_ids` on every
+ordinary acquisition call, including an empty tuple on an HTML request with no
+prerequisite. Stores missing this declaration are incompatible. Both reuse and
+refresh MUST refuse them before transport or mutation. Run `clear_cache("jp_mlit")`
+and retrieve the required series again. This creates new acquisition history;
+it does not reconstruct an original HTML request that an older cache discarded.
+Other providers’ revision-8 stores remain readable without this field.
 
 Each coverage record contains exactly `series_id`, `start`, `end`, `retrieved_at`,
 `outcome_id`, `facts_ids`, and `axis`. Endpoints are closed, timezone-naive timestamps

@@ -11,6 +11,7 @@ from typing import Protocol, runtime_checkable
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_dependencies import source_call_support, validate_acquisition_dependencies
 from rivretrieve._internal.assembly import _AssemblyResult, assemble
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
@@ -205,13 +206,20 @@ def _attempt_call(attempt: TransportAttempt) -> dict[str, object]:
 
 def _payload_calls(payload: Payload) -> tuple[dict[str, object], ...]:
     if not payload.attempt_traces:
-        return ({**_origin_call(payload.origin), "call_id": payload.acquisition_id},)
+        return (
+            {
+                **_origin_call(payload.origin),
+                "call_id": payload.acquisition_id,
+                "prerequisite_acquisition_ids": payload.prerequisite_acquisition_ids,
+            },
+        )
     acquisition_id = payload.acquisition_id
     return tuple(
         {
             **(_origin_call(payload.origin) if index == len(payload.attempt_traces) else {}),
             **_attempt_call(attempt),
             "acquisition_id": acquisition_id,
+            "prerequisite_acquisition_ids": payload.prerequisite_acquisition_ids,
             "attempt": index,
             "attempts": len(payload.attempt_traces),
         }
@@ -1159,12 +1167,19 @@ def _calls_in_scope(
         and _overlaps(item, interval)
         for call in item.calls
     }
+    # Prerequisite-only calls follow the same interval selection as their
+    # dependent acquisitions, rather than passing as unreferenced history.
+    referenced = source_call_support(manifest.source_calls, referenced)
+    relevant = source_call_support(manifest.source_calls, relevant)
     retained = []
     for call in manifest.source_calls:
         associated = call.get("series_ids")
         if isinstance(associated, (list, tuple)) and associated and not set(associated).intersection(series_ids):
             continue
-        if call.get("call_id") in referenced and call.get("call_id") not in relevant:
+        identities = (call.get("call_id"), call.get("acquisition_id"))
+        if any(identity in referenced for identity in identities) and not any(
+            identity in relevant for identity in identities
+        ):
             continue
         pairs = call.get("station_products")
         if isinstance(pairs, (list, tuple)):
@@ -1658,6 +1673,34 @@ def _public_issues(issues: tuple[Issue, ...]) -> tuple[Issue, ...]:
     return tuple(projected)
 
 
+def _calls_with_failed_acquisitions(
+    payload_calls: tuple[dict[str, object], ...], failed_calls: tuple[dict[str, object], ...]
+) -> tuple[dict[str, object], ...]:
+    """Place failed acquisitions after their explicit support, preserving call groups."""
+    groups: dict[object, list[dict[str, object]]] = {}
+    for call in failed_calls:
+        groups.setdefault(call.get("acquisition_id", call.get("call_id")), []).append(call)
+    calls = list(payload_calls)
+    independent: list[dict[str, object]] = []
+    # Inserting later siblings first keeps the original order when groups share
+    # the same prerequisite position. Calls within each group stay unchanged.
+    for group in reversed(groups.values()):
+        dependencies = next(
+            (call["prerequisite_acquisition_ids"] for call in group if "prerequisite_acquisition_ids" in call), ()
+        )
+        assert isinstance(dependencies, tuple)
+        if not dependencies:
+            independent[0:0] = group
+            continue
+        positions = [
+            index for index, call in enumerate(calls) if call.get("acquisition_id", call.get("call_id")) in dependencies
+        ]
+        if not positions:
+            raise FatalContractError("Failed acquisition lacks its prerequisite call evidence")
+        calls[max(positions) + 1 : max(positions) + 1] = group
+    return (*independent, *calls)
+
+
 def _unique_calls(calls: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
     """Retain distinct attempts, including legacy evidence without an attempt ID."""
     seen: set[str] = set()
@@ -1711,6 +1754,7 @@ def drive(
     payloads: list[Payload] = []
     source_series_by_payload: list[tuple[str, ...]] = []
     cached_calls: list[dict[str, object]] = []
+    failed_calls: list[dict[str, object]] = []
     served: list[CoverageInterval] = []
     pending: list[SuccessfulReplacement] = []
     fresh_definitions: dict[str, SourceSeries] = {}
@@ -2045,6 +2089,21 @@ def drive(
                 fresh_outcomes.append(outcome)
             continue
         fetched = result
+        dependencies: dict[str, tuple[str, ...]] = {}
+        for payload in fetched.value:
+            if payload.acquisition_id in dependencies:
+                raise FatalContractError("Duplicate payload acquisition identity")
+            dependencies[payload.acquisition_id] = payload.prerequisite_acquisition_ids
+        payload_ids = set(dependencies)
+        if isinstance(fetched, SourceAcquisition):
+            for event in fetched.failed_requests:
+                identity = event.call_id or event.event_id
+                if identity in payload_ids:
+                    raise FatalContractError("Failed request shares a successful payload acquisition identity")
+                previous = dependencies.setdefault(identity, event.prerequisite_acquisition_ids)
+                if previous != event.prerequisite_acquisition_ids:
+                    raise FatalContractError("Prerequisite declarations conflict for one acquisition")
+        validate_acquisition_dependencies(dependencies)
         acquisition_outcome_start = len(fresh_outcomes)
         auxiliary_calls: tuple[dict[str, object], ...] = ()
         if isinstance(fetched, SourceAcquisition) and fetched.calls:
@@ -2054,6 +2113,7 @@ def drive(
             auxiliary_calls = tuple(
                 {
                     **(record := _origin_call(origin)),
+                    "prerequisite_acquisition_ids": (),
                     "call_id": stable_id(
                         "source-call-origin",
                         tuple(snapshot.snapshot_id for snapshot in fetched.inventories)
@@ -2161,6 +2221,7 @@ def drive(
                 response = event.failure.response if isinstance(event.failure, TransportFailure) else None
                 call = {
                     "call_id": event.call_id or event.event_id,
+                    "prerequisite_acquisition_ids": event.prerequisite_acquisition_ids,
                     **(
                         {
                             "station_id": target.station_id,
@@ -2202,14 +2263,14 @@ def drive(
                         retrieved_at=response.retrieved_at,
                         content_type=response.content_type or _origin_value(UnknownOriginFact()),
                     )
-                    cached_calls.extend(
+                    failed_calls.extend(
                         {**_secret_call(item), "acquisition_id": event.call_id or event.event_id}
                         for item in response.prerequisite_calls
                     )
                 attempt_traces = event.failure.attempt_traces if isinstance(event.failure, TransportFailure) else ()
                 if attempt_traces:
                     call_ids = tuple(attempt.attempt_id for attempt in attempt_traces)
-                    cached_calls.extend(
+                    failed_calls.extend(
                         {
                             **call,
                             **_attempt_call(attempt),
@@ -2226,7 +2287,7 @@ def drive(
                     )
                 else:
                     call_ids = (event.call_id or event.event_id,)
-                    cached_calls.append(call)
+                    failed_calls.append(call)
                 requested_failure_axis = interval_envelope(interval, event.window.axis)
                 overlap_start = max(requested_failure_axis.start, event.window.start)
                 overlap_end = min(requested_failure_axis.end, event.window.end)
@@ -2722,10 +2783,12 @@ def drive(
     enriched = _provenance_with_payload_origins(
         provenance, tuple(payloads), source_series_by_payload=tuple(source_series_by_payload)
     )
-    if cached_calls or served:
+    if cached_calls or failed_calls or served:
         enriched = enriched.model_copy(
             update={
-                "calls_made": _unique_calls(tuple(cached_calls) + enriched.calls_made),
+                "calls_made": _unique_calls(
+                    tuple(cached_calls) + _calls_with_failed_acquisitions(enriched.calls_made, tuple(failed_calls))
+                ),
                 "served_intervals": tuple(served),
             }
         )

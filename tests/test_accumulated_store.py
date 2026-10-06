@@ -492,3 +492,40 @@ def test_rolling_snapshot_reuse_rejects_changed_acquisition_or_key_support(tmp_p
     candidate = replace(previous, manifest=replace(previous.manifest, outcomes=(retained,)))
     with pytest.raises(ObservationStoreRefusedError, match="reuse_observations"):
         _preserves_support(previous, candidate, {PartitionIdentifier("product=level/year=2020")})
+
+
+@pytest.mark.parametrize("references", [("unknown",), ("dat",)])
+def test_persisted_acquisition_prerequisites_refuse_unknown_or_self_links(tmp_path, references):
+    from rivretrieve._internal.store.provenance import encode_source_call
+
+    store = StoreRoot(tmp_path / "store")
+    _accumulate_rows(store, _PROVIDER, _rows([datetime(2020, 1, 1)], [1.0]), _coverage("2020-01-01", "2020-01-02"))
+    path = store / "manifest.json"
+    document = json.loads(path.read_text())
+    document["source_calls"] = [encode_source_call({"call_id": "dat", "prerequisite_acquisition_ids": references})]
+    path.write_text(json.dumps(document))
+    with pytest.raises(ObservationStoreRefusedError, match="source_call.prerequisites"):
+        seal_store(store, _PROVIDER)
+
+
+def test_mlit_legacy_call_requires_clear_cache_without_relabeling_history(tmp_path):
+    from rivretrieve._internal.store.provenance import encode_source_call
+
+    provider = ProviderId("jp_mlit")
+    store = StoreRoot(tmp_path / "store")
+    _accumulate_rows(store, provider, _rows([datetime(2020, 1, 1)], [1.0]), _coverage("2020-01-01", "2020-01-02"))
+    path = store / "manifest.json"
+    document = json.loads(path.read_text())
+    document["source_calls"] = [encode_source_call({"call_id": "old-dat", "retrieved_at": _T1})]
+    path.write_text(json.dumps(document))
+    before = path.read_bytes()
+    with pytest.raises(ObservationStoreRefusedError, match="clear_cache before refreshing") as raised:
+        seal_store(store, provider)
+    assert raised.value.refusal.kind.value == "incompatible"
+    assert path.read_bytes() == before
+    # Other providers do not lose compatibility merely because the optional field is absent.
+    document["provider_id"] = str(_PROVIDER)
+    for series in document["series"]:
+        series["provider_id"] = str(_PROVIDER)
+    path.write_text(json.dumps(document))
+    seal_store(store, _PROVIDER)
