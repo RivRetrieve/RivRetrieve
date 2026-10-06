@@ -20,6 +20,7 @@ class _AssemblyResult:
     inventories: tuple[InventorySnapshot, ...] = ()
     outcomes: tuple[RetrievalOutcome, ...] = ()
     scope: SeriesScope = SeriesScope()
+    supporting_outcomes: tuple[RetrievalOutcome, ...] = ()
 
 
 def assemble(
@@ -32,6 +33,7 @@ def assemble(
     inventories: tuple[InventorySnapshot, ...] = (),
     outcomes: tuple[RetrievalOutcome, ...] = (),
     scope: SeriesScope | None = None,
+    supporting_outcomes: tuple[RetrievalOutcome, ...] = (),
 ) -> _AssemblyResult:
     return _AssemblyResult(
         canonical_rows=canonical_rows,
@@ -42,4 +44,5 @@ def assemble(
         inventories=inventories,
         outcomes=outcomes,
         scope=scope or SeriesScope(),
+        supporting_outcomes=supporting_outcomes,
     )

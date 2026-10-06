@@ -1890,3 +1890,98 @@ def test_issue_context_marker_cannot_overwrite_publisher_context():
     with pytest.raises(FatalContractError, match="conflicts with storage-only context"):
         driver_module._issue_with_acquisition_references(original, ("authored-acquisition",))
     assert driver_module._public_issues((original,)) == (original,)
+
+
+def test_compiled_read_projects_acquisitions_and_intact_inventory_dependencies(tmp_path):
+    from dataclasses import replace
+    from datetime import UTC
+
+    from rivretrieve._internal.store import compile_store
+    from tests.store.certification_support import artifact_and_request, fixture_series, rows
+
+    _, build = artifact_and_request(tmp_path)
+    definitions = (fixture_series("station-1"), fixture_series("station-2"))
+    acquired_at = datetime(2026, 1, 1, tzinfo=UTC)
+    acquisitions = tuple(
+        RetrievalOutcome(
+            outcome_id=f"acquisition-{index}",
+            series_id=definition.series_id,
+            station_id=definition.station_id,
+            product_id="discharge",
+            window=SeriesWindow(start=datetime(1998, 1, 1), end=datetime(1998, 1, 31)),
+            status=OutcomeStatus.SUCCESS,
+            facts_ids=(definition.facts[0].facts_id,),
+            calls=(f"call-{index}",),
+            retrieved_at=acquired_at,
+        )
+        for index, definition in enumerate(definitions)
+    )
+    inventories = tuple(
+        InventorySnapshot(
+            snapshot_id=f"inventory-{index}",
+            scope=SeriesScope(station_ids=(definition.station_id,), product_ids=("discharge",)),
+            members=(definition.series_id,),
+            completeness=InventoryCompleteness.COMPLETE,
+            access="authored artifact",
+            origin="compiled",
+            evidence=(f"retrieval-outcome:{outcome.outcome_id}",),
+        )
+        for index, (definition, outcome) in enumerate(zip(definitions, acquisitions, strict=True))
+    )
+    calls = tuple(
+        {"call_id": f"call-{index}", "url": f"https://example.test/{index}", "retrieved_at": acquired_at}
+        for index in range(2)
+    )
+    notes = tuple(
+        Issue(
+            severity="info",
+            code="source.note",
+            message="Authored native note",
+            details={"station_id": definition.station_id, "count": 7},
+        )
+        for definition in definitions
+    )
+    build = replace(build, series=definitions)
+    compile_store(build, pl.concat([rows(station="station-1"), rows(station="station-2")]))
+    import json
+
+    from rivretrieve._internal.store.integrity import seal_store
+    from rivretrieve._internal.store.provenance import encode_source_call
+
+    manifest_path = build.destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.update(
+        inventories=[item.model_dump(mode="json") for item in inventories],
+        outcomes=[item.model_dump(mode="json") for item in acquisitions],
+        source_calls=[encode_source_call(call) for call in calls],
+        issues=[item.model_dump(mode="json") for item in notes],
+    )
+    manifest_path.write_text(json.dumps(manifest))
+    (build.destination / "integrity.json").unlink()
+    seal_store(build.destination, build.provider_id)
+    config = ProviderConfig(
+        zone=ZoneValue("unknown"),
+        products={ProductId("discharge"): ProductConfig(SourceCoordinates({}), Unit.M3_S, Instant())},
+    )
+    request = ObservationRequest(
+        ProviderId("fixture_bulk"),
+        ("station-1",),
+        (ProductId("discharge"),),
+        RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(1998, 1, 2)), WindowEndpoint.from_datetime(datetime(1998, 1, 2))
+        ),
+    )
+    result = driver_module.drive_store(
+        request,
+        config,
+        build.destination,
+        provenance=ObservationProvenance(source="local", provider_id=ProviderId("fixture_bulk")),
+    )
+    assert result.canonical_rows["value"].to_list() == [12.4]
+    assert result.inventories == (inventories[0],)
+    assert result.source_series == (definitions[0],)
+    assert result.provenance.calls_made == (calls[0],)
+    assert result.provenance.retrieved_at == acquired_at
+    assert result.issues == (notes[0],)
+    assert result.supporting_outcomes == (acquisitions[0],)
+    assert all(item.station_id == "station-1" for item in result.outcomes)

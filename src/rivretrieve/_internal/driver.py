@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
 from types import MappingProxyType
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 import polars as pl
 
@@ -74,6 +74,7 @@ from rivretrieve._internal.source_series import (
 )
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 from rivretrieve._internal.store.accumulation import StoreUpdate, SuccessfulReplacement, accumulate
+from rivretrieve._internal.store.authority import CurrentEvidence, project_evidence, retained_snapshot_outcome
 from rivretrieve._internal.store.provenance import encode_source_call
 from rivretrieve._internal.store.receipts import encode_store_excerpt
 from rivretrieve._internal.store.validation import (
@@ -322,6 +323,29 @@ class _SourceResponseTransport:
             response=response,
             attempt_traces=response.attempt_traces,
         )
+
+
+def _provenance_with_calls(
+    provenance: ObservationProvenance, calls: tuple[dict[str, object], ...]
+) -> ObservationProvenance:
+    """Describe original acquisitions, including held calls, without dating reuse."""
+    if not calls and not provenance.calls_made:
+        return provenance
+    endpoints = tuple(dict.fromkeys(call["url"] for call in calls if isinstance(call.get("url"), str)))
+    instants = tuple(call["retrieved_at"] for call in calls if isinstance(call.get("retrieved_at"), datetime))
+    queries: list[dict[str, object]] = []
+    for call in calls:
+        query = call.get("query")
+        if isinstance(query, dict) and "statement" in query and query not in queries:
+            queries.append(cast(dict[str, object], query))
+    return provenance.model_copy(
+        update={
+            "calls_made": calls,
+            "endpoints": endpoints,
+            "retrieved_at": max(instants) if instants else None,
+            "query": None if not queries else queries[0] if len(queries) == 1 else {"calls": tuple(queries)},
+        }
+    )
 
 
 def _source_failure_issue(
@@ -1058,8 +1082,27 @@ def _issue_in_scope(
     interval: RequestedInterval,
     outcomes: tuple[RetrievalOutcome, ...],
     resolved_scope: SeriesScope | None = None,
+    facts_ids: tuple[str, ...] = (),
 ) -> bool:
     details = issue.details or {}
+    explicit = details.get("outcome_id")
+    if explicit is not None:
+        associated = tuple(item for item in outcomes if item.outcome_id == explicit)
+        if not any(
+            item.station_id == station
+            and item.product_id == product
+            and (item.series_id is None or item.series_id in series_ids)
+            and (not facts_ids or not item.facts_ids or set(item.facts_ids).intersection(facts_ids))
+            and _overlaps(item, interval)
+            for item in associated
+        ):
+            return False
+    if facts_ids:
+        if details.get("facts_id") is not None and details["facts_id"] not in facts_ids:
+            return False
+        declared = details.get("facts_ids")
+        if isinstance(declared, (tuple, list)) and declared and not set(declared).intersection(facts_ids):
+            return False
     inventory_scope = details.get("inventory_scope")
     if (
         issue.code == "source.inventory_unresolved"
@@ -1110,49 +1153,103 @@ def _issue_in_scope(
     return not assessments or any(_overlaps(item, interval) for item in assessments)
 
 
-def _calls_in_scope(
+def _held_outcomes(
     manifest: AccumulatedStoreManifest,
     station: str,
     product: str,
     series_ids: tuple[str, ...],
-    *,
+    facts_ids: tuple[str, ...],
     interval: RequestedInterval,
-) -> tuple[dict[str, object], ...]:
-    referenced = {call for item in manifest.outcomes for call in item.calls}
-    relevant = {
-        call
-        for item in manifest.outcomes
-        if item.station_id == station
-        and item.product_id == product
-        and (item.series_id is None or item.series_id in series_ids)
-        and _overlaps(item, interval)
-        for call in item.calls
-    }
+) -> tuple[RetrievalOutcome, ...]:
+    """Keep original applicable acquisitions rather than manufacture read-time ones."""
     retained = []
-    for call in manifest.source_calls:
-        associated = call.get("series_ids")
-        if isinstance(associated, (list, tuple)) and associated and not set(associated).intersection(series_ids):
-            continue
-        if call.get("call_id") in referenced and call.get("call_id") not in relevant:
-            continue
-        pairs = call.get("station_products")
-        if isinstance(pairs, (list, tuple)):
-            coordinates = tuple(tuple(pair) for pair in pairs if isinstance(pair, (list, tuple)))
-            if len(coordinates) != len(pairs) or any(len(pair) != 2 for pair in coordinates):
-                raise FatalContractError("Stored source-call routing coordinates are malformed")
-            if (station, product) not in coordinates:
-                continue
-        if any(
-            call.get(key) is not None and call[key] not in allowed
-            for key, allowed in (
-                ("station_id", (station,)),
-                ("product_id", (product,)),
-                ("series_id", series_ids),
-            )
+    for item in manifest.outcomes:
+        if (
+            item.station_id != station or item.product_id != product
+            or (item.series_id is not None and item.series_id not in series_ids)
+            or (item.facts_ids and facts_ids and not set(item.facts_ids).intersection(facts_ids))
         ):
             continue
-        retained.append(call)
+        if item.coverage == "observations":
+            native = interval_envelope(interval, TimeAxis.NATIVE)
+            keys = tuple(
+                key for key in item.observation_keys
+                if (not facts_ids or key[0] in facts_ids) and native.start <= key[1] <= native.end
+            )
+            if keys:
+                retained.append(retained_snapshot_outcome(item, keys))
+            continue
+        if not _overlaps(item, interval):
+            continue
+        if item.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY) and not any(
+            record.outcome_id == item.outcome_id
+            and (not facts_ids or set(record.facts_ids).intersection(facts_ids))
+            and record.interval.start <= interval_envelope(interval, record.interval.axis).end
+            and record.interval.end >= interval_envelope(interval, record.interval.axis).start
+            for record in manifest.coverage
+        ):
+            continue
+        retained.append(item)
     return tuple(retained)
+
+
+def _inventory_in_request(snapshot: InventorySnapshot, scope: SeriesScope, request: ObservationRequest) -> bool:
+    """Select applicable inventory claims without rewriting their source scope."""
+    requested = scope.model_copy(update={"station_ids": request.stations, "product_ids": tuple(request.products)})
+    for field in ("provider_ids", "station_ids", "product_ids", "series_ids", "variants"):
+        left, right = getattr(snapshot.scope, field), getattr(requested, field)
+        if left and right and not set(left).intersection(right):
+            return False
+    for left in snapshot.scope.predicates:
+        if any(right.field == left.field and right.value != left.value for right in requested.predicates):
+            return False
+    if snapshot.window is not None:
+        interval = RequestedInterval(
+            datetime.fromisoformat(request.window.start.isoformat()),
+            datetime.fromisoformat(request.window.end.isoformat()),
+        )
+        compared = interval_envelope(interval, snapshot.window.axis)
+        if snapshot.window.start > compared.end or snapshot.window.end < compared.start:
+            return False
+    return True
+
+
+def _project_returned_evidence(
+    request: ObservationRequest,
+    scope: SeriesScope,
+    definitions: dict[str, SourceSeries],
+    inventories: tuple[InventorySnapshot, ...],
+    outcomes: tuple[RetrievalOutcome, ...],
+    issues: tuple[Issue, ...],
+    calls: tuple[dict[str, object], ...],
+    *,
+    held: CurrentEvidence | None = None,
+    supporting_outcomes: tuple[RetrievalOutcome, ...] = (),
+) -> tuple[CurrentEvidence, tuple[SourceSeries, ...]]:
+    """Close request evidence over intact inventories and acquisition identities."""
+    evidence = project_evidence(
+        CurrentEvidence(
+            (*outcomes, *(held.outcomes if held is not None else ())),
+            (*inventories, *(held.inventories if held is not None else ())),
+            issues,
+            _unique_calls((*(held.source_calls if held is not None else ()), *calls)),
+            (*supporting_outcomes, *(held.supporting_outcomes if held is not None else ())),
+        ),
+        outcome_ids=frozenset(item.outcome_id for item in outcomes),
+        inventory_ids=frozenset(
+            item.snapshot_id for item in inventories if _inventory_in_request(item, scope, request)
+        ),
+    )
+    needed = {
+        item.series_id for item in (*evidence.outcomes, *evidence.supporting_outcomes) if item.series_id is not None
+    }
+    needed.update(key for item in evidence.inventories for key in item.members)
+    needed.update(
+        item.series_id
+        for item in definitions.values()
+        if item.station_id in request.stations and item.product_id in request.products and scope.matches(item)
+    )
+    return evidence, tuple(item for key, item in definitions.items() if key in needed)
 
 
 def _finite_selector_assessments(
@@ -1491,14 +1588,18 @@ def _public_issues(issues: tuple[Issue, ...]) -> tuple[Issue, ...]:
 
 def _unique_calls(calls: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
     """Retain distinct attempts, including legacy evidence without an attempt ID."""
-    seen: set[str] = set()
+    seen: dict[str, dict[str, object]] = {}
     result = []
     for call in calls:
         identity = call.get("call_id")
         if isinstance(identity, str):
             if identity in seen:
+                if seen[identity] != call:
+                    raise FatalContractError("Conflicting source-call identities")
                 continue
-            seen.add(identity)
+            seen[identity] = call
+        elif call.get("acquisition_id") is not None and call in result:
+            continue
         result.append(call)
     return tuple(result)
 
@@ -1513,6 +1614,7 @@ def drive(
     credential_names: tuple[str, ...] = (),
     cache: CacheMode = "bypass",
     store: StoreRoot | None = None,
+    reader: StoreReader | None = None,
 ) -> _AssemblyResult:
     if not isinstance(receipts, ReceiptMode):
         raise TypeError("receipts must be ReceiptMode")
@@ -1541,7 +1643,7 @@ def drive(
     receipt_entries: list[ReceiptEntry] = []
     payloads: list[Payload] = []
     source_series_by_payload: list[tuple[str, ...]] = []
-    cached_calls: list[dict[str, object]] = []
+    non_payload_calls: list[dict[str, object]] = []
     served: list[CoverageInterval] = []
     pending: list[SuccessfulReplacement] = []
     fresh_definitions: dict[str, SourceSeries] = {}
@@ -1551,16 +1653,19 @@ def drive(
     unadmitted_outcome_ids: set[str] = set()
     issue_acquisitions: dict[int, tuple[str, ...]] = {}
     manifest: AccumulatedStoreManifest | None = None
+    held_evidence: CurrentEvidence | None = None
+    resolved_reader = reader or StoreReader()
     if cache != "bypass":
         assert store is not None
         from rivretrieve._internal.store.reader import require_readable_store
 
         require_readable_store(store)
-        held = StoreReader().status(store, request.provider_id).manifest
+        held = resolved_reader.status(store, request.provider_id).manifest
         if held is not None:
             if not isinstance(held, AccumulatedStoreManifest):
                 raise FatalContractError("Live retrieval requires an accumulated store")
             manifest = held
+            held_evidence = resolved_reader.evidence(store, request.provider_id)
     resolved_transport = HttpClient() if transport is None else transport
     declarations = (
         provider.window_declarations_for_transport(resolved_transport)
@@ -1659,15 +1764,7 @@ def drive(
                         provider_id=request.provider_id,
                     )
                 )
-            outcomes.extend(
-                item
-                for item in manifest.outcomes
-                if _overlaps(item, interval)
-                and (
-                    item.series_id in ids
-                    or (item.series_id is None and item.station_id == station and item.product_id == product)
-                )
-            )
+            outcomes.extend(_held_outcomes(manifest, station, str(product), ids, matching_facts, interval))
             all_issues.extend(
                 issue
                 for issue in manifest.issues
@@ -1679,9 +1776,9 @@ def drive(
                     interval=interval,
                     outcomes=manifest.outcomes,
                     resolved_scope=pair_scope,
+                    facts_ids=matching_facts,
                 )
             )
-            cached_calls.extend(_calls_in_scope(manifest, station, str(product), ids, interval=interval))
             for key in ids:
                 served.extend(
                     replace(item, facts_ids=tuple(fact for fact in item.facts_ids if fact in matching_facts))
@@ -1691,7 +1788,7 @@ def drive(
                 )
             if ids:
                 assert store is not None
-                read = StoreReader().query(
+                read = resolved_reader.query(
                     StoreQuery(
                         store,
                         request.provider_id,
@@ -1749,7 +1846,7 @@ def drive(
             )
             if not coverage:
                 return
-            held_read = StoreReader().query(
+            held_read = resolved_reader.query(
                 StoreQuery(
                     store,
                     request.provider_id,
@@ -1776,32 +1873,16 @@ def drive(
             referenced_ids = {key for item in selected_snapshots for key in item.members}
             _merge_definitions(definitions, tuple(item for item in manifest.series if item.series_id in referenced_ids))
             inventories[:0] = list(selected_snapshots)
-            for item in manifest.outcomes:
-                if item.series_id not in ids or not _overlaps(item, held_interval):
-                    continue
-                compared = interval_envelope(held_interval, item.window.axis)
-                held_window = SeriesWindow(
-                    start=max(item.window.start, compared.start),
-                    end=min(item.window.end, compared.end),
-                    axis=item.window.axis,
-                )
-                outcomes.append(
-                    item.model_copy(
-                        update={
-                            "window": held_window,
-                            "outcome_id": stable_id(item.outcome_id, held_window.model_dump_json()),
-                        }
-                    )
-                )
+            outcomes.extend(_held_outcomes(manifest, held_station, str(held_product), ids, fact_ids, held_interval))
             served.extend(coverage)
             all_issues.extend(
                 issue
                 for issue in manifest.issues
                 if _issue_in_scope(
-                    issue, held_station, str(held_product), ids, interval=held_interval, outcomes=manifest.outcomes
+                    issue, held_station, str(held_product), ids, interval=held_interval, outcomes=manifest.outcomes,
+                    resolved_scope=held_scope, facts_ids=fact_ids
                 )
             )
-            cached_calls.extend(_calls_in_scope(manifest, held_station, str(held_product), ids, interval=held_interval))
             if receipts is ReceiptMode.INCLUDE:
                 receipt_entries.append(encode_store_excerpt(held_read))
 
@@ -1984,7 +2065,7 @@ def drive(
                         replaced_facts_ids=matching_facts,
                     )
                 )
-            cached_calls.extend(auxiliary_calls)
+            non_payload_calls.extend(auxiliary_calls)
             for event in fetched.failed_requests:
                 target = event.series
                 if len(group) > 1 and (target.station_id, target.product_id) != (station, product):
@@ -2033,14 +2114,14 @@ def drive(
                         retrieved_at=response.retrieved_at,
                         content_type=response.content_type or _origin_value(UnknownOriginFact()),
                     )
-                    cached_calls.extend(
+                    non_payload_calls.extend(
                         {**_secret_call(item), "acquisition_id": event.call_id or event.event_id}
                         for item in response.prerequisite_calls
                     )
                 attempt_traces = event.failure.attempt_traces if isinstance(event.failure, TransportFailure) else ()
                 if attempt_traces:
                     call_ids = tuple(attempt.attempt_id for attempt in attempt_traces)
-                    cached_calls.extend(
+                    non_payload_calls.extend(
                         {
                             **call,
                             **_attempt_call(attempt),
@@ -2057,7 +2138,7 @@ def drive(
                     )
                 else:
                     call_ids = (event.call_id or event.event_id,)
-                    cached_calls.append(call)
+                    non_payload_calls.append(call)
                 requested_failure_axis = interval_envelope(interval, event.window.axis)
                 overlap_start = max(requested_failure_axis.start, event.window.start)
                 overlap_end = min(requested_failure_axis.end, event.window.end)
@@ -2506,7 +2587,7 @@ def drive(
         held_series = tuple(item for item in manifest.series if item.series_id in snapshot_ids and scope.matches(item))
         if held_series:
             _merge_definitions(definitions, held_series)
-            held_read = StoreReader().query(
+            held_read = resolved_reader.query(
                 StoreQuery(
                     store,
                     request.provider_id,
@@ -2541,15 +2622,7 @@ def drive(
                 if not keys:
                     continue
                 attributed.update((item.series_id, *key) for key in keys)
-                outcomes.append(
-                    item.model_copy(
-                        update={
-                            "outcome_id": stable_id(item.outcome_id, repr(keys)),
-                            "observation_keys": keys,
-                        }
-                    )
-                )
-            cached_calls.extend(manifest.source_calls)
+                outcomes.append(retained_snapshot_outcome(item, keys))
             if receipts is ReceiptMode.INCLUDE and not held_rows.is_empty():
                 receipt_entries.append(encode_store_excerpt(held_read))
     selected, retained_inventories, retained_outcomes = _result_metadata(scope, definitions, inventories, outcomes)
@@ -2558,13 +2631,24 @@ def drive(
     enriched = _provenance_with_payload_origins(
         provenance, tuple(payloads), source_series_by_payload=tuple(source_series_by_payload)
     )
-    if cached_calls or served:
-        enriched = enriched.model_copy(
-            update={
-                "calls_made": _unique_calls(tuple(cached_calls) + enriched.calls_made),
-                "served_intervals": tuple(served),
-            }
-        )
+    acquired_calls = _unique_calls((*non_payload_calls, *enriched.calls_made))
+    available_definitions = dict(definitions)
+    if manifest is not None:
+        _merge_definitions(available_definitions, manifest.series)
+    evidence, selected = _project_returned_evidence(
+        request,
+        scope,
+        available_definitions,
+        retained_inventories,
+        retained_outcomes,
+        tuple(all_issues) + converted.issues,
+        acquired_calls,
+        held=held_evidence,
+        supporting_outcomes=tuple(supporting_outcomes),
+    )
+    enriched = _provenance_with_calls(enriched, evidence.source_calls)
+    if served:
+        enriched = enriched.model_copy(update={"served_intervals": tuple(served)})
     if cache != "bypass" and (fresh_outcomes or fresh_inventories or fresh_definitions):
         assert store is not None
         accumulate(
@@ -2584,18 +2668,20 @@ def drive(
                     # outcomes can authorize a stored active diagnostic.
                     if (issue.details or {}).get("outcome_id") not in unadmitted_outcome_ids
                 ),
-                enriched.calls_made,
+                acquired_calls,
                 supporting_outcomes=tuple(supporting_outcomes),
             ),
         )
+        resolved_reader.invalidate()
     return assemble(
         converted.value,
         enriched,
-        _public_issues(tuple(all_issues) + converted.issues),
+        _public_issues(evidence.issues),
         Receipts(request.provider_id, tuple(receipt_entries)),
         source_series=selected,
-        inventories=retained_inventories,
-        outcomes=retained_outcomes,
+        inventories=evidence.inventories,
+        outcomes=evidence.outcomes,
+        supporting_outcomes=evidence.supporting_outcomes,
         scope=scope,
     )
 
@@ -2632,7 +2718,11 @@ def drive_store(
                 f"compiled source products are no longer supported: {', '.join(retired_products)}",
             )
         )
-    selected = tuple(item for item in manifest.series if scope.matches(item))
+    selected = tuple(
+        item
+        for item in manifest.series
+        if item.station_id in request.stations and item.product_id in request.products and scope.matches(item)
+    )
     matching_facts = tuple(
         dict.fromkeys(
             fact.facts_id for definition in selected for fact in definition.facts if scope.matches_facts(fact)
@@ -2793,24 +2883,52 @@ def drive_store(
         outcomes,
         query_issues,
     )
+    held_evidence = resolved.evidence(store, request.provider_id)
+    relevant_issues = tuple(
+        issue
+        for issue in manifest.issues
+        if any(
+            _issue_in_scope(
+                issue,
+                station,
+                str(product),
+                tuple(item.series_id for item in selected),
+                interval=_requested_interval(request.window, config.products[product].semantics),
+                outcomes=manifest.outcomes,
+                resolved_scope=scope,
+                facts_ids=matching_facts,
+            )
+            for station in request.stations
+            for product in request.products
+        )
+    )
+    evidence, returned_series = _project_returned_evidence(
+        request,
+        scope,
+        known_identities,
+        manifest.inventories,
+        tuple(outcomes),
+        relevant_issues + converted.issues + tuple(query_issues),
+        (),
+        held=held_evidence,
+    )
+    provenance = _provenance_with_calls(provenance, evidence.source_calls)
     provenance = provenance.model_copy(
         update={
             "source_vintage": manifest.source_vintage,
             "publisher_artifact_checksum": str(manifest.publisher_artifact.sha256),
             "publisher_artifact_checksums": tuple(str(item.sha256) for item in manifest.publisher_artifacts),
             "publisher_artifact_urls": tuple(item.url for item in manifest.publisher_artifacts),
-            "calls_made": manifest.source_calls,
         }
     )
     return assemble(
         converted.value,
         provenance,
-        _public_issues(manifest.issues + converted.issues + tuple(query_issues)),
+        _public_issues(evidence.issues),
         Receipts(request.provider_id, receipt_entries),
-        # Inventory is retained evidence, not a filtered view. Keep all its
-        # definitions so restricted exports remain self-contained.
-        source_series=manifest.series,
-        inventories=manifest.inventories,
-        outcomes=tuple(outcomes),
+        source_series=returned_series,
+        inventories=evidence.inventories,
+        outcomes=evidence.outcomes,
+        supporting_outcomes=evidence.supporting_outcomes,
         scope=scope,
     )

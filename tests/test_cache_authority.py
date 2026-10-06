@@ -934,3 +934,83 @@ def test_issue_acquisition_links_follow_retry_aliases_but_not_support_only():
     current = compact_evidence((_cover(outcome),), (outcome,), (), (note,), calls)
     assert current.issues[0].details["acquisition_ids"] == ("first-attempt",)
     assert current.source_calls == calls[:2]
+
+
+@pytest.mark.parametrize("historical_is_active", [True, False])
+def test_projection_closes_intact_inventory_dependencies_without_activating_support(historical_is_active):
+    from rivretrieve._internal.store.authority import CurrentEvidence, project_evidence
+
+    active = _outcome("success")
+    historical = _outcome("historical", status=OutcomeStatus.FAILED).model_copy(update={"calls": ("last-attempt",)})
+    unrelated = _outcome("unrelated", series="other")
+    original = InventorySnapshot(
+        snapshot_id="original",
+        scope=SeriesScope(station_ids=("a",)),
+        members=(),
+        completeness=InventoryCompleteness.INCOMPLETE,
+        reason="Original census was incomplete",
+        access="daily",
+        origin="response",
+        evidence=("retrieval-outcome:historical",),
+    )
+    empty = original.model_copy(
+        update={
+            "snapshot_id": "complete-empty",
+            "completeness": InventoryCompleteness.COMPLETE,
+            "reason": None,
+            "evidence": ("source-inventory:original", "source-call:inventory-call"),
+        }
+    )
+    unrelated_inventory = empty.model_copy(update={"snapshot_id": "unrelated", "evidence": ("authored",)})
+    calls = (
+        {"acquisition_id": "historical-payload", "url": "https://example.test/auth"},
+        {"call_id": "first-attempt", "acquisition_id": "historical-payload"},
+        {"call_id": "last-attempt", "acquisition_id": "historical-payload"},
+        {"call_id": "inventory-call"},
+        {"call_id": "success"},
+        {"call_id": "unrelated"},
+    )
+    note = Issue(
+        severity="info",
+        code="source.note",
+        message="Source count",
+        details={"count": 7, "acquisition_ids": ("success",)},
+    )
+    historical_note = note.model_copy(update={"details": {"count": 9, "acquisition_ids": ("first-attempt",)}})
+    unbound = Issue(severity="info", code="source.terms", message="Terms unknown")
+    evidence = CurrentEvidence(
+        (active, historical, unrelated) if historical_is_active else (active, unrelated),
+        (original, empty, unrelated_inventory),
+        (_issue(historical), historical_note, note, unbound),
+        calls,
+        () if historical_is_active else (historical,),
+    )
+    selected = project_evidence(
+        evidence, outcome_ids=frozenset({"success"}), inventory_ids=frozenset({"complete-empty"})
+    )
+    assert selected.outcomes == (active,)
+    assert selected.supporting_outcomes == (historical,)
+    assert selected.inventories == (original, empty)
+    assert selected.source_calls == calls[:5]
+    assert selected.issues == (note, unbound)
+    assert empty.members == ()
+
+
+@pytest.mark.parametrize("reference", ["source-inventory:missing", "retrieval-outcome:missing", "source-call:missing"])
+def test_projection_refuses_missing_inventory_dependencies(reference):
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.store.authority import CurrentEvidence, project_evidence
+
+    inventory = InventorySnapshot(
+        snapshot_id="selected",
+        scope=SeriesScope(),
+        members=(),
+        completeness=InventoryCompleteness.COMPLETE,
+        access="daily",
+        origin="response",
+        evidence=(reference,),
+    )
+    with pytest.raises(FatalContractError, match="unknown"):
+        project_evidence(
+            CurrentEvidence((), (inventory,), (), ()), outcome_ids=frozenset(), inventory_ids=frozenset({"selected"})
+        )

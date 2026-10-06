@@ -127,7 +127,7 @@ def test_service_specific_daily_store_and_bundles_round_trip(retained_evidence_r
         content = rr.to_bundle(value)
         with ZipFile(BytesIO(content)) as archive:
             manifest = json.loads(archive.read("manifest.json"))
-        assert manifest["version"] == 2
+        assert manifest["version"] == 3
         assert manifest["publication_service"] == "hubeau"
         restored = rr.from_bundle(content)
         assert_frame_equal(rr.series(restored), rr.series(value))

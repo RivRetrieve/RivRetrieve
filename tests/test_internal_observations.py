@@ -554,6 +554,7 @@ def test_observation_result_constructs_with_exact_field_set() -> None:
         "source_series",
         "inventories",
         "outcomes",
+        "supporting_outcomes",
         "scope",
         "view_scope",
     )

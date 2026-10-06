@@ -109,6 +109,6 @@ def test_explicit_bypass_and_cleanup_refetch_produce_only_current_facts(retained
     assert json.loads((path / "manifest.json").read_text())["format_version"] == 8
     exported = rr.to_bundle(refreshed)
     with ZipFile(BytesIO(exported)) as archive:
-        assert json.loads(archive.read("manifest.json"))["version"] == 2
+        assert json.loads(archive.read("manifest.json"))["version"] == 3
     restored = rr.from_bundle(exported)
     assert restored.source_series == refreshed.source_series

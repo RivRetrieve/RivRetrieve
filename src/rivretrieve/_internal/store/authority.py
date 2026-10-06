@@ -38,6 +38,129 @@ class CurrentEvidence:
     supporting_outcomes: tuple[RetrievalOutcome, ...] = ()
 
 
+def _source_call_aliases(source_calls: tuple[dict[str, object], ...]) -> dict[str, set[str]]:
+    aliases: dict[str, set[str]] = {}
+    for call in source_calls:
+        identity, acquisition = call.get("call_id"), call.get("acquisition_id")
+        if isinstance(identity, str) and isinstance(acquisition, str):
+            aliases.setdefault(identity, set()).add(acquisition)
+            aliases.setdefault(acquisition, set()).add(identity)
+    return aliases
+
+
+def _expand_call_references(references: set[str], aliases: dict[str, set[str]]) -> set[str]:
+    needed = set(references)
+    pending = list(needed)
+    while pending:
+        for identity in aliases.get(pending.pop(), ()):
+            if identity not in needed:
+                needed.add(identity)
+                pending.append(identity)
+    return needed
+
+
+def project_evidence(
+    evidence: CurrentEvidence,
+    *,
+    outcome_ids: frozenset[str],
+    inventory_ids: frozenset[str],
+) -> CurrentEvidence:
+    """Retain selected claims and their unchanged acquisition dependencies.
+
+    Only selected current outcomes remain active. Other outcomes reached through
+    inventory references are support-only, including historical failures. Issues
+    without outcome or acquisition links remain for the caller to assess against
+    its request scope. This operation does not change successful supersession.
+    """
+    outcomes: dict[str, RetrievalOutcome] = {}
+    for item in (*evidence.outcomes, *evidence.supporting_outcomes):
+        previous = outcomes.setdefault(item.outcome_id, item)
+        if previous != item:
+            raise FatalContractError("Conflicting acquisition outcome identities")
+    inventories: dict[str, InventorySnapshot] = {}
+    for inventory in evidence.inventories:
+        previous_inventory = inventories.setdefault(inventory.snapshot_id, inventory)
+        if previous_inventory != inventory:
+            raise FatalContractError("Conflicting inventory identities")
+    if not outcome_ids.issubset(item.outcome_id for item in evidence.outcomes):
+        raise FatalContractError("Selected evidence references an unknown active outcome")
+    if not inventory_ids.issubset(inventories):
+        raise FatalContractError("Selected evidence references an unknown inventory")
+
+    needed_inventories = set(inventory_ids)
+    needed_outcomes = set(outcome_ids)
+    references: set[str] = set()
+    pending = list(inventory_ids)
+    while pending:
+        for reference in inventories[pending.pop()].evidence:
+            if reference.startswith("source-inventory:"):
+                identity = reference.removeprefix("source-inventory:")
+                if identity not in inventories:
+                    raise FatalContractError("Inventory references an unknown inventory")
+                if identity not in needed_inventories:
+                    needed_inventories.add(identity)
+                    pending.append(identity)
+            elif reference.startswith("retrieval-outcome:"):
+                identity = reference.removeprefix("retrieval-outcome:")
+                if identity not in outcomes:
+                    raise FatalContractError("Inventory references an unknown acquisition outcome")
+                needed_outcomes.add(identity)
+            elif reference.startswith("source-call:"):
+                references.add(reference.removeprefix("source-call:"))
+    active = tuple(item for identity, item in outcomes.items() if identity in outcome_ids)
+    support_ids = needed_outcomes - outcome_ids
+    support = tuple(item for identity, item in outcomes.items() if identity in support_ids)
+    active_references = {call for item in active for call in item.calls}
+    references.update(call for item in (*active, *support) for call in item.calls)
+    call_ids: set[str] = set()
+    calls_by_id: dict[str, dict[str, object]] = {}
+    for call in evidence.source_calls:
+        for key in ("call_id", "acquisition_id"):
+            identity = call.get(key)
+            if isinstance(identity, str) and identity:
+                call_ids.add(identity)
+        identity = call.get("call_id")
+        if isinstance(identity, str):
+            prior_call = calls_by_id.setdefault(identity, call)
+            if prior_call != call:
+                raise FatalContractError("Conflicting source-call identities")
+    if not references.issubset(call_ids):
+        raise FatalContractError("Selected evidence references an unknown source call")
+    aliases = _source_call_aliases(evidence.source_calls)
+    active_references = _expand_call_references(active_references, aliases)
+    references = _expand_call_references(references, aliases)
+    calls = tuple(
+        call
+        for call in evidence.source_calls
+        if call.get("call_id") in references or call.get("acquisition_id") in references
+    )
+    issues = []
+    for issue in evidence.issues:
+        details = issue.details or {}
+        outcome_id = details.get("outcome_id")
+        if outcome_id is not None and outcome_id not in outcome_ids:
+            continue
+        linked = details.get("acquisition_ids")
+        if linked is not None:
+            if (
+                not isinstance(linked, (tuple, list))
+                or not linked
+                or any(not isinstance(identity, str) or not identity for identity in linked)
+                or len(set(linked)) != len(linked)
+            ):
+                raise FatalContractError("Issue acquisition identities must be nonempty unique strings")
+            if not active_references.intersection(linked):
+                continue
+        issues.append(issue)
+    return CurrentEvidence(
+        active,
+        tuple(item for identity, item in inventories.items() if identity in needed_inventories),
+        tuple(issues),
+        calls,
+        support,
+    )
+
+
 def _same_scope(first: RetrievalOutcome, second: RetrievalOutcome) -> bool:
     return (
         first.station_id == second.station_id
@@ -473,19 +596,9 @@ def compact_evidence(
     references.update(reference.removeprefix("source-call:") for item in inventories for reference in item.evidence)
     # A referenced attempt also depends on its payload acquisition, including
     # credential prerequisites and earlier retry attempts from that acquisition.
-    aliases: dict[str, set[str]] = {}
-    for call in source_calls:
-        identity, acquisition = call.get("call_id"), call.get("acquisition_id")
-        if isinstance(identity, str) and isinstance(acquisition, str):
-            aliases.setdefault(identity, set()).add(acquisition)
-            aliases.setdefault(acquisition, set()).add(identity)
-    for needed in (active_references, references):
-        pending = list(needed)
-        while pending:
-            for identity in aliases.get(pending.pop(), ()):
-                if identity not in needed:
-                    needed.add(identity)
-                    pending.append(identity)
+    aliases = _source_call_aliases(source_calls)
+    active_references = _expand_call_references(active_references, aliases)
+    references = _expand_call_references(references, aliases)
 
     calls = tuple(
         call for call in source_calls if call.get("call_id") in references or call.get("acquisition_id") in references

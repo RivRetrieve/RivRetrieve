@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 from datetime import UTC, date, datetime, time
 from importlib.resources import files
 from pathlib import Path
@@ -26,7 +27,7 @@ from rivretrieve._internal.selection import _from_frame as _selection_from_frame
 from rivretrieve._internal.selection import _pick as _selection_pick
 from rivretrieve._internal.selection import _station_frame as _selection_station_frame
 from rivretrieve._internal.selection import _station_keys as _selection_station_keys
-from rivretrieve._internal.source_series import SeriesScope, SourceSeries
+from rivretrieve._internal.source_series import RetrievalOutcome, SeriesScope, SourceSeries
 from rivretrieve._internal.station_map import StationMap
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import (
@@ -350,6 +351,7 @@ def pick(
             source_series=selection.source_series,
             inventories=selection.inventories,
             outcomes=selection.outcomes,
+            supporting_outcomes=selection.supporting_outcomes,
             scope=selection.scope,
             view_scope=scope,
             issues=(*selection.issues, *current_issues),
@@ -591,7 +593,7 @@ def to_bundle(value: _Selection | ObservationResult) -> bytes:
     Returns
     -------
     bytes
-        ZIP archive in bundle format version 2. Write the bytes to a file to
+        ZIP archive in bundle format version 3. Write the bytes to a file to
         keep them. A selection bundle holds its request intent, source-series
         definitions, inventories, issues, station locations, catalogue evidence
         and empty-selection reason. A result bundle also holds the observation
@@ -630,7 +632,7 @@ def from_bundle(content: bytes) -> _Selection | ObservationResult:
     TypeError
         If ``content`` is not ``bytes``.
     ValueError
-        If the bytes are not a bundle, the bundle version is not 2, or its
+        If the bytes are not a bundle, the bundle version is not 3, or its
         contents fail validation. Bundles from other format versions must be
         exported again or re-fetched.
     ObservationDataSchemaError
@@ -1376,7 +1378,11 @@ def _fetch_provider_series(
     store: StoreRoot,
     on_issue: OnIssue,
 ) -> ObservationResult:
-    handle = _provider_lookup(provider_id)
+    from rivretrieve._internal.store import StoreReader
+
+    # The detached handle carries only this public request's store preparation.
+    # Provider registration and later requests never retain the reader.
+    handle = replace(_provider_lookup(provider_id), _reader=StoreReader())
     by_station: dict[str, list[str]] = {}
     for selected_series in series:
         product_ids = by_station.setdefault(selected_series.station_id, [])
@@ -1459,7 +1465,9 @@ def _merge_provider_results(
     }
     issues = _merge_provider_issues(results)
     receipt_entries = tuple(entry for result in results for entry in result.receipts.entries)
-    calls_made = tuple(call for result in results for call in result.provenance.calls_made)
+    from rivretrieve._internal.driver import _unique_calls
+
+    calls_made = _unique_calls(tuple(call for result in results for call in result.provenance.calls_made))
     endpoints = tuple(dict.fromkeys(endpoint for result in results for endpoint in result.provenance.endpoints))
     retrieved = tuple(
         result.provenance.retrieved_at for result in results if result.provenance.retrieved_at is not None
@@ -1470,11 +1478,21 @@ def _merge_provider_results(
         if query is not None and query not in queries:
             queries.append(query)
     merged_query = None if not queries else queries[0] if len(queries) == 1 else {"calls": tuple(queries)}
+    active_outcomes: dict[str, RetrievalOutcome] = {}
+    supporting_outcomes: dict[str, RetrievalOutcome] = {}
+    for result in results:
+        for item in (*result.outcomes, *result.supporting_outcomes):
+            existing = active_outcomes.get(item.outcome_id, supporting_outcomes.get(item.outcome_id))
+            if existing is not None and existing != item:
+                raise FatalContractError("Provider results disagree about an acquisition outcome")
+        active_outcomes.update((item.outcome_id, item) for item in result.outcomes)
+        supporting_outcomes.update((item.outcome_id, item) for item in result.supporting_outcomes)
     return ObservationResult(
         data=_canonical_observation_order(pl.concat([result.data for result in results])),
         source_series=_merge_series_definitions(results),
         inventories=tuple({item.snapshot_id: item for result in results for item in result.inventories}.values()),
-        outcomes=tuple({item.outcome_id: item for result in results for item in result.outcomes}.values()),
+        outcomes=tuple(active_outcomes.values()),
+        supporting_outcomes=tuple(item for key, item in supporting_outcomes.items() if key not in active_outcomes),
         scope=first.scope,
         provenance=first.provenance.model_copy(
             update={

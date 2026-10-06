@@ -31,7 +31,7 @@ from rivretrieve._internal.selection import StationLocation, _EmptyReason, _Sele
 from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
 
 _FORMAT = "rivretrieve-source-series"
-_VERSION = 2
+_VERSION = 3
 _PROVENANCE_VALUES = ("request", "calls_made", "time_windows", "query")
 
 
@@ -151,6 +151,7 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
                 {
                     "view_scope": value.view_scope.model_dump(mode="json") if value.view_scope is not None else None,
                     "outcomes": [item.model_dump(mode="json") for item in value.outcomes],
+                    "supporting_outcomes": [item.model_dump(mode="json") for item in value.supporting_outcomes],
                     "provenance": json.loads(value.provenance.model_dump_json(exclude=set(_PROVENANCE_VALUES))),
                     "provenance_values": {
                         name: _origin_value(getattr(value.provenance, name)) for name in _PROVENANCE_VALUES
@@ -216,7 +217,15 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
         fields.update(
             {"locations", "catalogue_evidence", "empty_reason"}
             if kind == "selection"
-            else {"view_scope", "outcomes", "provenance", "provenance_values", "receipt_provider", "receipts"}
+            else {
+                "view_scope",
+                "outcomes",
+                "supporting_outcomes",
+                "provenance",
+                "provenance_values",
+                "receipt_provider",
+                "receipts",
+            }
         )
         identity = _publication_identity(manifest)
         if any(manifest.get(field) != expected for field, expected in identity.items()):
@@ -316,5 +325,8 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
             else None,
             inventories=inventories,
             outcomes=tuple(RetrievalOutcome.model_validate(item) for item in manifest["outcomes"]),
+            supporting_outcomes=tuple(
+                RetrievalOutcome.model_validate(item) for item in manifest["supporting_outcomes"]
+            ),
             issues=issues,
         )
