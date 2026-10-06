@@ -145,6 +145,7 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(
     assert "header" not in public_json.lower()
     assert set(result.provenance.calls_made[0]) == {
         "call_id",
+        "prerequisite_acquisition_ids",
         "url",
         "request_parameters",
         "status_code",
@@ -155,6 +156,7 @@ def test_driver_selects_exclusive_flux_route_and_exact_replays_closed_window(
         "station_products",
         "series_ids",
     }
+    assert all(call["prerequisite_acquisition_ids"] == () for call in result.provenance.calls_made)
     expected_fields = {
         "discharge_reported": (("flow", "success"), ("flow_ls", "unresolved")),
         "stage_reported": (("height", "success"), ("height_abs", "unresolved")),

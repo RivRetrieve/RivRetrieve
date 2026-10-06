@@ -184,7 +184,36 @@ def test_dat_failure_keeps_html_without_covering_failed_interval(authored, mode)
     repaired = _fetch(selected, "2022-01-03", "2022-01-04", cache="reuse")
     assert repaired.data.height == 2
     assert len(authored.requests) == 6
-    assert all(outcome.status != mode for outcome in repaired.outcomes)
+    success = next(outcome for outcome in repaired.outcomes if outcome.status == "success")
+    assert success.facts_ids
+    if mode == "failed":
+        # A transport failure has unknown facts. Positive rows and an incomplete
+        # census cannot settle that wider uncertainty for this concrete series.
+        assert not bad.facts_ids
+        assert next(outcome for outcome in repaired.outcomes if outcome.status == "failed") == bad
+        original_issue = next(issue for issue in result.issues if issue.code == "source.request_failed")
+        assert next(issue for issue in repaired.issues if issue.code == "source.request_failed") == original_issue
+        current = rr.cache_status("jp_mlit").manifest
+        census = next(item for item in current.inventories if item.window.start.year == 2022)
+        assert census.completeness == "incomplete"
+        assert dict(census.member_facts)[bad.series_id] == success.facts_ids
+        repaired_calls = _calls(repaired)
+        assert repaired_calls[:2] == original[:2]
+        assert len(repaired_calls) == 4
+        assert repaired_calls[3]["prerequisite_acquisition_ids"] == (repaired_calls[2]["call_id"],)
+    else:
+        assert bad.facts_ids
+        assert all(outcome.status != mode for outcome in repaired.outcomes)
+    authored.forbid = True
+    held = _fetch(selected, "2022-01-03", "2022-01-04", cache="reuse")
+    assert_frame_equal(held.data, repaired.data)
+    assert {item.outcome_id: item for item in held.outcomes} == {item.outcome_id: item for item in repaired.outcomes}
+    assert held.issues == repaired.issues
+    assert _calls(held) == _calls(repaired)
+    if mode == "failed":
+        with pytest.raises(IssuePolicyError):
+            rr.fetch(selected, start="2022-01-03", end="2022-01-04", cache="reuse", on_issue="raise")
+    assert len(authored.requests) == 6
 
 
 @pytest.mark.parametrize("mode", ["empty", "malformed"])

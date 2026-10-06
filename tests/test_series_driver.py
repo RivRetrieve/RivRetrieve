@@ -26,10 +26,25 @@ def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path, reta
 
         @staticmethod
         def fetch(*args, **kwargs):
-            acquired = stages.fetch(*args, **kwargs)
             from dataclasses import replace
 
-            return replace(acquired, value=acquired.value + acquired.value)
+            # Repeat the actual replay acquisition, not the identity of one
+            # payload or its attempt traces. Keep both acquisitions' evidence.
+            first = stages.fetch(*args, **kwargs)
+            second = stages.fetch(*args, **kwargs)
+            assert {item.acquisition_id for item in first.value}.isdisjoint(
+                item.acquisition_id for item in second.value
+            )
+            return replace(
+                first,
+                value=first.value + second.value,
+                issues=first.issues + second.issues,
+                series=first.series + second.series,
+                inventories=first.inventories + second.inventories,
+                outcomes=first.outcomes + second.outcomes,
+                calls=first.calls + second.calls,
+                failed_requests=first.failed_requests + second.failed_requests,
+            )
 
     request = ObservationRequest(
         ProviderId("usgs_nwis"),
@@ -53,7 +68,11 @@ def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path, reta
 
     fresh = run()
     assert fresh.canonical_rows.height == 14
+    # Seven observations occur twice across all returned columns.
+    assert fresh.canonical_rows.unique().height == 7
+    assert fresh.canonical_rows.group_by(fresh.canonical_rows.columns).len()["len"].to_list() == [2] * 7
     calls = len(replay.calls)
+    assert calls == 2
     reused = run()
     pt.assert_frame_equal(reused.canonical_rows, fresh.canonical_rows)
     assert len(replay.calls) == calls

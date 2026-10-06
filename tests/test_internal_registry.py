@@ -389,6 +389,7 @@ def test_registry_passes_widened_fetch_window_and_preserves_requested_provenance
         "source_series",
         "inventories",
         "outcomes",
+        "supporting_outcomes",
         "scope",
         "view_scope",
     )

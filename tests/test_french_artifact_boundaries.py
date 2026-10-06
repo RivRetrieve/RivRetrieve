@@ -52,7 +52,7 @@ def test_combined_bundle_refused_before_values(name, monkeypatch, artifacts):
     path = artifacts / name
     content = path.read_bytes()
     monkeypatch.setattr(export_bundle.pl, "read_parquet", _no_values)
-    with pytest.raises(ValueError, match="publication.service"):
+    with pytest.raises(ValueError, match="Unsupported source-series bundle format version"):
         rr.from_bundle(content)
     assert path.read_bytes() == content
 
@@ -127,7 +127,7 @@ def test_service_specific_daily_store_and_bundles_round_trip(retained_evidence_r
         content = rr.to_bundle(value)
         with ZipFile(BytesIO(content)) as archive:
             manifest = json.loads(archive.read("manifest.json"))
-        assert manifest["version"] == 2
+        assert manifest["version"] == 3
         assert manifest["publication_service"] == "hubeau"
         restored = rr.from_bundle(content)
         assert_frame_equal(rr.series(restored), rr.series(value))
@@ -155,6 +155,71 @@ def test_context_only_empty_bundle_has_no_direct_french_identity(artifacts):
     assert all(item["provider_id"] != "fr_hubeau" for item in manifest["locations"])
     assert all("fr_hubeau" not in item["scope"]["provider_ids"] for item in manifest["inventories"])
     assert any(item["header"]["provider_id"] == "fr_hubeau" for item in manifest["catalogue_evidence"])
+
+
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.parametrize("carrier", ("selection", "empty-selection", "context-only-selection", "result"))
+@pytest.mark.parametrize("service", (None, "retired-combined-service"))
+def test_current_bundle_refuses_retired_publication_service_before_values(carrier, service, monkeypatch):
+    from dataclasses import replace
+    from io import BytesIO
+    from zipfile import ZipFile
+
+    import polars as pl
+    from polars.testing import assert_frame_equal
+
+    from rivretrieve._internal.observations import (
+        ObservationDataSchema,
+        ObservationProvenance,
+        ObservationResult,
+        Receipts,
+    )
+
+    # Author valid current carriers, not rewritten historical exports.
+    selection = rr.find(
+        provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily", statistic="mean"
+    )
+    if carrier == "context-only-selection":
+        value = rr.find(station="07374000", quantity="temperature", statistic="max")
+        assert not value.scope.provider_ids
+        assert not value.series
+        assert all(item.provider_id != "fr_hubeau" for item in value.known_series)
+        assert any(item.header.provider_id == "fr_hubeau" for item in value.acquisition_provenance)
+    elif carrier == "empty-selection":
+        value = replace(selection, known_series=(), inventories=(), locations=())
+    elif carrier == "result":
+        value = ObservationResult(
+            data=pl.DataFrame(schema=ObservationDataSchema.polars_schema),
+            provenance=ObservationProvenance(source="synthetic", provider_id=ProviderId("fr_hubeau")),
+            receipts=Receipts(provider_id=ProviderId("fr_hubeau"), entries=()),
+            scope=selection.scope,
+        )
+    else:
+        value = selection
+    content = rr.to_bundle(value)
+    restored = rr.from_bundle(content)
+    assert restored.scope == value.scope
+    assert_frame_equal(rr.series(restored), rr.series(value))
+    if carrier == "result":
+        assert_frame_equal(restored.data, value.data)
+
+    with ZipFile(BytesIO(content)) as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+    manifest = json.loads(members["manifest.json"])
+    assert manifest["version"] == 3
+    assert manifest["publication_service"] == "hubeau"
+    if service is None:
+        del manifest["publication_service"]
+    else:
+        manifest["publication_service"] = service
+    members["manifest.json"] = json.dumps(manifest).encode()
+    destination = BytesIO()
+    with ZipFile(destination, "w") as archive:
+        for name, member in members.items():
+            archive.writestr(name, member)
+    monkeypatch.setattr(export_bundle.pl, "read_parquet", _no_values)
+    with pytest.raises(ValueError, match="Unsupported publication_service identity"):
+        rr.from_bundle(destination.getvalue())
 
 
 def test_current_context_only_empty_bundle_round_trip():

@@ -90,7 +90,15 @@ def test_advancing_snapshot_upserts_only_published_rows_and_keeps_held_history(m
         overlap: datetime(2026, 9, 29, tzinfo=UTC),
         new_label: datetime(2026, 9, 29, tzinfo=UTC),
     }
-    assert vintages(refreshed) == expected_vintages
+    # The read keeps the supporting acquisition unchanged, including its
+    # originally published overlap key. Current row ownership remains exact in
+    # the committed store, not inferred by rewriting returned acquisition IDs.
+    assert seeded.outcomes[0] in refreshed.outcomes
+    assert vintages(rr.cache_status("ba_fhmzbih").manifest) == expected_vintages
+    assert {(key[1], outcome.retrieved_at) for outcome in refreshed.outcomes for key in outcome.observation_keys} == {
+        *expected_vintages.items(),
+        (overlap, datetime(2026, 9, 28, tzinfo=UTC)),
+    }
     # An empty snapshot has no published rows to replace and certifies no empty interval.
     source.retrieved_at = datetime(2026, 9, 30, tzinfo=UTC)
     source.content = workbook([])

@@ -196,3 +196,312 @@ def test_reader_filters_rows_by_identity_and_closed_time_bounds(station, product
         orient="row",
     )
     assert_frame_equal(result.physical_rows.select(frame.columns), frame)
+
+
+def test_small_read_hashes_only_candidate_partitions_without_full_decode(tmp_path, monkeypatch):
+    from rivretrieve._internal.store import integrity
+
+    store = _published(tmp_path)
+    digested = []
+    original_digest = integrity._digest
+
+    def digest(path):
+        digested.append(path.relative_to(store).as_posix())
+        return original_digest(path)
+
+    def unrelated_decode(path):
+        raise AssertionError(f"Read must not run whole-partition semantic decoding: {path}")
+
+    monkeypatch.setattr(integrity, "_digest", digest)
+    monkeypatch.setattr(validation, "_open_parquet", unrelated_decode)
+    query = StoreQuery(
+        StoreRoot(store),
+        ProviderId("fixture_bulk"),
+        ("ca-001",),
+        (ProductId("discharge"),),
+        datetime(2023, 12, 31),
+        datetime(2023, 12, 31, 23, 59, 59),
+    )
+    result = StoreReader().query(query)
+    assert result.rows["value"].to_list() == [3.5]
+    assert [name for name in digested if name.endswith(".parquet")] == ["product=discharge/year=2023/data.parquet"]
+
+
+def test_request_reader_shares_metadata_and_hashes_between_station_queries(tmp_path, monkeypatch):
+    from rivretrieve._internal.store import integrity
+
+    store = _published(tmp_path)
+    inspections = []
+    digested = []
+    original_inspect, original_digest = integrity.inspect_integrity, integrity._digest
+
+    def inspect(*args, **kwargs):
+        inspections.append(args[0])
+        return original_inspect(*args, **kwargs)
+
+    def digest(path):
+        digested.append(path)
+        return original_digest(path)
+
+    monkeypatch.setattr(integrity, "inspect_integrity", inspect)
+    monkeypatch.setattr(integrity, "_digest", digest)
+    reader = StoreReader()
+    reader.status(StoreRoot(store), ProviderId("fixture_bulk"))
+    first = reader.query(_query(store))
+    second = reader.query(_query(store, station="ca-002"))
+    assert first.rows.height == 2
+    assert second.rows.height == 1
+    assert len(inspections) == 1
+    assert len([path for path in digested if path.suffix == ".parquet"]) == 2
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_selected_byte_detection_and_full_audit_have_different_scopes(tmp_path, selected):
+    import os
+
+    from rivretrieve._internal.store.integrity import audit_store
+
+    store = _published(tmp_path)
+    reader = StoreReader()
+    query = _query(store, product="level")
+    assert reader.query(query).rows["value"].to_list() == [1.25]
+    product = "level" if selected else "discharge"
+    path = store / f"product={product}/year=2024/data.parquet"
+    before = path.stat()
+    content = bytearray(path.read_bytes())
+    content[len(content) // 2] ^= 1
+    path.write_bytes(content)
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+    if selected:
+        with pytest.raises(ObservationStoreRefusedError, match="digest"):
+            reader.query(query)
+    else:
+        assert reader.query(query).rows["value"].to_list() == [1.25]
+    with pytest.raises(ObservationStoreRefusedError, match="digest"):
+        audit_store(StoreRoot(store), ProviderId("fixture_bulk"))
+
+
+def test_prepared_reader_refuses_generation_replacement_until_invalidated(tmp_path):
+    store = _published(tmp_path)
+    reader = StoreReader()
+    query = _query(store, product="level")
+    assert reader.query(query).rows["value"].to_list() == [1.25]
+    part = store / "product=level/year=2024/data.parquet"
+    pl.read_parquet(part).with_columns(pl.lit(2.5).alias("value")).write_parquet(part)
+    # An independently published valid replacement must not silently be mixed
+    # with request metadata from the preceding generation.
+    (store / "integrity.json").unlink()
+    seal_store(StoreRoot(store), ProviderId("fixture_bulk"))
+    with pytest.raises(ObservationStoreRefusedError, match="generation_changed"):
+        reader.query(query)
+    reader.invalidate()
+    assert reader.query(query).rows["value"].to_list() == [2.5]
+
+
+@pytest.mark.parametrize("unrelated_rows", [10, 100])
+def test_native_scan_decodes_only_matching_row_groups(tmp_path, monkeypatch, capfd, unrelated_rows):
+    import re
+
+    from rivretrieve._internal.store import integrity
+
+    store = _published(tmp_path)
+    part = store / "product=discharge/year=2024/data.parquet"
+    physical = pl.read_parquet(part)
+    expanded = pl.concat(
+        [
+            physical.filter(pl.col("station_id") == "ca-001"),
+            *[physical.filter(pl.col("station_id") == "ca-002")] * unrelated_rows,
+        ]
+    )
+    expanded.write_parquet(part, row_group_size=1, statistics=True)
+    manifest_path = store / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["partition_row_counts"]["product=discharge/year=2024"] = expanded.height
+    manifest_path.write_text(json.dumps(manifest))
+    (store / "integrity.json").unlink()
+    seal_store(StoreRoot(store), ProviderId("fixture_bulk"))
+    hashes = []
+    original = integrity._digest
+
+    def digest(path):
+        if path.suffix == ".parquet":
+            hashes.append(path)
+        return original(path)
+
+    monkeypatch.setattr(integrity, "_digest", digest)
+    monkeypatch.setattr(validation, "_open_parquet", lambda path: pytest.fail("unpruned semantic decoding"))
+    capfd.readouterr()
+    # Native execution telemetry counts physical Parquet row groups, not a
+    # lazy-plan string. Only its numerical read/total event is inspected.
+    with pl.Config(verbose=True):
+        result = StoreReader().query(
+            StoreQuery(
+                StoreRoot(store),
+                ProviderId("fixture_bulk"),
+                ("ca-001",),
+                (ProductId("discharge"),),
+                datetime(2024, 1, 1),
+                datetime(2024, 1, 2),
+            )
+        )
+    diagnostics = capfd.readouterr().err
+    assert result.rows["value"].to_list() == [None]
+    assert result.physical_rows["source_quality"].to_list() == ["E"]
+    assert hashes == [part]
+    decoded = re.findall(r"Predicate pushdown: reading (\d+) / (\d+) row groups", diagnostics)
+    assert decoded == [("1", str(unrelated_rows + 1))]
+
+
+def test_prepared_reader_detects_valid_changed_value_with_restored_mtime(tmp_path):
+    import os
+    import struct
+
+    import pyarrow.parquet as pq
+
+    store = _published(tmp_path)
+    part = store / "product=level/year=2024/data.parquet"
+    table = pq.ParquetFile(part).read()
+    pq.write_table(table, part, compression="NONE", use_dictionary=False, write_statistics=False)
+    (store / "integrity.json").unlink()
+    seal_store(StoreRoot(store), ProviderId("fixture_bulk"))
+    reader = StoreReader()
+    query = _query(store, product="level")
+    assert reader.query(query).rows["value"].to_list() == [1.25]
+    before = part.stat()
+    content = part.read_bytes()
+    original = struct.pack("<d", 1.25)
+    assert content.count(original) == 1
+    part.write_bytes(content.replace(original, struct.pack("<d", 99.0)))
+    os.utime(part, ns=(before.st_atime_ns, before.st_mtime_ns))
+    # The changed bytes still decode to a well-typed valid native observation.
+    # Semantic/schema validation alone cannot detect this altered measurement.
+    assert pl.read_parquet(part)["value"].to_list() == [99.0]
+    assert reader.status(StoreRoot(store), ProviderId("fixture_bulk")).exists
+    with pytest.raises(ObservationStoreRefusedError, match="digest"):
+        reader.query(query)
+
+
+@pytest.mark.parametrize("unrelated_rows", [10, 100])
+def test_accumulated_scan_prunes_unrequested_time_row_groups(tmp_path, monkeypatch, capfd, unrelated_rows):
+    import re
+
+    from rivretrieve._internal.store import integrity
+
+    store = tmp_path / "live"
+    shutil.copytree(FIXTURES / "accumulated/valid_native_rows", store)
+    part = next(store.rglob("*.parquet"))
+    physical = pl.read_parquet(part)
+    expected = physical.filter(pl.col("time") == datetime(2020, 1, 1))
+    unrelated = physical.filter(pl.col("time") == datetime(2020, 1, 2))
+    expanded = pl.concat([expected, *[unrelated] * unrelated_rows])
+    expanded.write_parquet(part, row_group_size=1, statistics=True)
+    manifest_path = store / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["partition_row_counts"]["product=level/year=2020"] = expanded.height
+    manifest_path.write_text(json.dumps(manifest))
+    seal_store(StoreRoot(store), ProviderId("fixture_live"))
+    hashes = []
+    original = integrity._digest
+
+    def digest(path):
+        if path.suffix == ".parquet":
+            hashes.append(path)
+        return original(path)
+
+    monkeypatch.setattr(integrity, "_digest", digest)
+    monkeypatch.setattr(validation, "_open_parquet", lambda path: pytest.fail("unpruned semantic decoding"))
+    capfd.readouterr()
+    with pl.Config(verbose=True):
+        result = StoreReader().query(
+            StoreQuery(
+                StoreRoot(store),
+                ProviderId("fixture_live"),
+                ("a",),
+                (ProductId("level"),),
+                datetime(2020, 1, 1),
+                datetime(2020, 1, 1, 23, 59, 59),
+            )
+        )
+    diagnostics = capfd.readouterr().err
+    assert result.rows["value"].to_list() == [12.4, 12.4]
+    assert hashes == [part]
+    assert re.findall(r"Predicate pushdown: reading (\d+) / (\d+) row groups", diagnostics) == [
+        ("2", str(unrelated_rows + 2))
+    ]
+
+
+def test_empty_candidate_read_keeps_declared_native_schema_without_opening_observations(tmp_path, monkeypatch):
+    import rivretrieve._internal.store.reader as reader_module
+    from rivretrieve._internal.store import integrity
+
+    store = _published(tmp_path)
+    original_digest = integrity._digest
+
+    def metadata_only(path):
+        assert path.name == "manifest.json"
+        return original_digest(path)
+
+    monkeypatch.setattr(integrity, "_digest", metadata_only)
+    monkeypatch.setattr(validation, "_open_parquet", lambda path: pytest.fail("unrelated observation schema opened"))
+    monkeypatch.setattr(reader_module, "_scan", lambda *args: pytest.fail("no candidate scan is needed"))
+    result = StoreReader().query(
+        StoreQuery(
+            StoreRoot(store),
+            ProviderId("fixture_bulk"),
+            ("ca-001",),
+            (ProductId("discharge"),),
+            datetime(2030, 1, 1),
+            datetime(2030, 1, 2),
+        )
+    )
+    assert result.physical_rows.is_empty()
+    assert result.physical_rows.schema == {
+        "station_id": pl.String,
+        "time": pl.Datetime("us"),
+        "time_zone": pl.String,
+        "value": pl.Float64,
+        "value_state": pl.String,
+        "series_id": pl.String,
+        "facts_id": pl.String,
+        "source_unit": pl.String,
+        "native_unit": pl.String,
+        "source_quality": pl.String,
+        "source_note": pl.String,
+        "product": pl.String,
+        "year": pl.Int64,
+    }
+
+
+@pytest.mark.parametrize(
+    "declaration, expected",
+    [
+        ("integer", pl.Int64),
+        ("double", pl.Float64),
+        ("timestamp[us]", pl.Datetime("us")),
+        ("unsupported", None),
+    ],
+)
+def test_empty_native_schema_uses_declared_types_or_refuses(declaration, expected, tmp_path):
+    from dataclasses import replace
+
+    from rivretrieve._internal.store.reader import _empty_physical_rows
+
+    store = StoreRoot(_published(tmp_path))
+    manifest = StoreReader().status(store, ProviderId("fixture_bulk")).manifest
+    assert isinstance(manifest, StoreManifest)
+    # This pure schema-construction control does not publish altered declarations.
+    schema = replace(
+        manifest.source_schema,
+        columns=tuple(
+            replace(column, type=declaration) if column.name == "source_quality" else column
+            for column in manifest.source_schema.columns
+        ),
+    )
+    manifest = replace(manifest, source_schema=schema)
+    if expected is None:
+        with pytest.raises(ObservationStoreRefusedError, match="source_schema.native_type:source_quality"):
+            _empty_physical_rows(store, manifest)
+    else:
+        result = _empty_physical_rows(store, manifest)
+        assert result.is_empty()
+        assert result.schema["source_quality"] == expected

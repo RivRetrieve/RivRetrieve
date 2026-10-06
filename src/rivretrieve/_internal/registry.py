@@ -44,7 +44,7 @@ from rivretrieve._internal.source_series import (
     SourceSeries,
     stable_id,
 )
-from rivretrieve._internal.store import StoreRoot
+from rivretrieve._internal.store import StoreReader, StoreRoot
 
 if TYPE_CHECKING:
     from rivretrieve._internal.providers.registration import (
@@ -101,6 +101,7 @@ class _ProviderHandle:
     credential_headers: tuple[CredentialHeaderBinding, ...] = ()
     credential_exchange: CredentialExchangeBinding | None = None
     public_archive_access: PublicArchiveAccess | None = None
+    _reader: StoreReader | None = None
 
     def info(self) -> ProviderInfo:
         provenance = self._artifact.acquisition_provenance
@@ -258,12 +259,14 @@ class _ProviderHandle:
             credential_names=self.required_credentials,
             cache=cache,
             store=store,
+            reader=self._reader,
         )
         return ObservationResult(
             data=assembled.canonical_rows,
             source_series=assembled.source_series,
             inventories=assembled.inventories,
             outcomes=assembled.outcomes,
+            supporting_outcomes=assembled.supporting_outcomes,
             scope=assembled.scope,
             provenance=assembled.provenance,
             issues=(*assembled.issues, *provenance_issues),
@@ -424,6 +427,7 @@ class _ProviderHandle:
                 },
             ),
             receipts=receipts,
+            reader=self._reader,
         )
         provenance_issues = _unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation)
         return ObservationResult(
@@ -431,6 +435,7 @@ class _ProviderHandle:
             source_series=assembled.source_series,
             inventories=assembled.inventories,
             outcomes=assembled.outcomes,
+            supporting_outcomes=assembled.supporting_outcomes,
             scope=assembled.scope,
             provenance=assembled.provenance,
             issues=(*assembled.issues, *provenance_issues),

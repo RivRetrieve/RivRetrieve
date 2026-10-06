@@ -148,6 +148,12 @@ series with no observations. An outcome without a concrete identity has
 The inspection table includes these outcomes with null identity and fact columns.
 Counting observation rows alone misses entirely empty or failed requested gauges.
 
+`result.supporting_outcomes` contains original acquisition records needed to
+interpret the returned inventories. For example, an inventory can still refer to
+an earlier failed acquisition after a later retrieval succeeds. That earlier
+failure remains in `supporting_outcomes`, separate from active `outcomes`, and
+does not trigger issue policy. `pick` and bundle exports preserve this evidence.
+
 `pick(result, ...)` filters a result without another request. Original issues,
 receipts and provenance remain available and may describe the broader request.
 Save the complete result when that context matters:
@@ -292,6 +298,15 @@ establishes. After full recovery, reuse does not repeat the superseded failure.
 Rolling snapshots replace matching observation keys; missing keys in a new snapshot
 do not establish an empty historical interval.
 
+Local reads check current metadata and the saved byte identities of candidate
+product/year files before using their observations. They decode the row groups
+needed for the requested stations, source series, physical facts and dates.
+Stations and routes in one request share preparation. This avoids a national
+observation audit for each small request. Metadata inspection still depends on
+store size, and checking a selected file reads all its bytes. Damage confined to
+unselected observation bytes can remain undiscovered until a relevant read or
+complete audit.
+
 Set `RIVRETRIEVE_CACHE_DIR` to override the platform's user cache directory.
 The following operations make no source request:
 
@@ -355,9 +370,23 @@ request_scope = result.provenance.request
 source_calls = result.provenance.calls_made
 ```
 
-Provenance records request scope, available source calls, source terms and cache
-context. Failed requests can leave no payload origin. Cache-only retrieval can have
-`retrieved_at=None`; cached retrieval times are retained in `served_intervals`.
+Provenance records request scope, applicable source calls, source terms and cache
+context. Returned calls support observations, successful empty answers, applicable
+diagnostics or inventory evidence. An inventory retains its original scope and
+members, so its dependencies can include evidence beyond the selected rows.
+All calls made during the current fetch remain, including attempts outside the requested dates needed for source access, while calls from earlier acquisitions are limited to evidence relevant to the request.
+
+`requested_at` is the local invocation time. `retrieved_at` is the latest known
+original acquisition time among the returned calls, whether the result is fresh,
+held or mixed. Reuse does not create a new publisher acquisition. If none of the
+returned calls establishes a time, `retrieved_at` remains `None`. Individual calls,
+outcomes and `served_intervals` retain their original acquisition times and
+unknowns. An acquisition keeps its original window and observation keys even
+when only part of it contributes held rows. Older and newer acquisitions can
+therefore mention the same key in a mixed result. Use `result.data` for the
+selected answer; acquisition records do not define one-to-one row ownership.
+A source issue's count still describes its acquisition, not a new count
+over selected rows. Failed requests can leave no payload origin.
 
 ## Receipts (optional)
 

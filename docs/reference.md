@@ -103,7 +103,7 @@ These types are not re-exported from `rivretrieve`. Their headings identify thei
 
 ::: rivretrieve._internal.observations.ObservationResult
     options:
-      members: [data, provenance, issues, receipts, source_series, inventories, outcomes, scope, view_scope]
+      members: [data, provenance, issues, receipts, source_series, inventories, outcomes, supporting_outcomes, scope, view_scope]
 
 ### ObservationResult.to_polars
 

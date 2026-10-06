@@ -99,7 +99,9 @@ class ObservationProvenance(BaseModel):
     license, citation : str or None
         Established source terms and credit. None means not established here.
     requested_at, retrieved_at : datetime or None
-        UTC request instant and latest known source retrieval instant.
+        Local UTC invocation instant and latest known original acquisition
+        instant among returned calls. Reuse does not create an acquisition time;
+        no known returned acquisition time leaves retrieved_at as None.
     request : dict[str, object] or None
         Selected series and resolved start and end wall-clock endpoints.
     calls_made : tuple[dict[str, object], ...]
@@ -107,8 +109,10 @@ class ObservationProvenance(BaseModel):
         A failed request for one series and interval also appears, with its
         ``window``, ``failure_reason`` and ``response_meaning``, such as
         ``no_observations`` when the provider declares that the response means
-        no stored observations for that interval. Rows served from the cache
-        bring the calls of the earlier retrievals that produced them.
+        no stored observations for that interval. Held rows bring their original
+        calls. Calls can also support successful empty answers and intact source
+        inventories. Unrelated acquisition history is excluded; inventory
+        dependencies can extend beyond selected rows.
     time_windows : tuple[dict[str, object], ...]
         Additional window metadata. The current engine leaves this tuple empty.
     decomposition : tuple[str, ...]
@@ -304,13 +308,23 @@ class ObservationResult(BaseModel):
         Retrieval statuses, each for one source series, or for a request that
         has no concrete series identity, over the interval in its ``window``.
         A series can have several outcomes, for example ``empty``, ``success``
-        and ``failed`` for different months. Outcomes remain present even when
-        a series returned no rows. When cached rows are returned after a failed
+        and ``failed`` for different months. Returned acquisitions keep their
+        original windows and observation keys. Their scope can extend beyond
+        returned rows, and older and newer successful acquisitions can mention
+        the same key in a mixed result. The data frame is the selected answer;
+        acquisition records are not a one-to-one index of its rows.
+        Outcomes remain present even when a series returned no rows. When cached rows are returned after a failed
         retrieval, the cached ``success`` outcome and the new ``failed`` outcome
         can cover the same interval. Parts requested only as padding outside
         the requested dates produce an outcome only when their source request
         fails, and a padding-only HTTP 404 that the provider declares to mean
         no stored observations produces none.
+    supporting_outcomes : tuple[RetrievalOutcome, ...]
+        Original acquisition outcomes needed to interpret retained inventories.
+        These records can include historical failures that later retrievals
+        resolved. They are separate from active ``outcomes`` and do not trigger
+        issue policy. Their identities, reasons, calls and acquisition times
+        remain unchanged. The tuple is empty when no such support is needed.
     scope : SeriesScope
         The filters and restrictions of the original request.
     view_scope : SeriesScope or None
@@ -327,6 +341,7 @@ class ObservationResult(BaseModel):
     source_series: tuple[SourceSeries, ...] = ()
     inventories: tuple[InventorySnapshot, ...] = ()
     outcomes: tuple[RetrievalOutcome, ...] = ()
+    supporting_outcomes: tuple[RetrievalOutcome, ...] = ()
     scope: SeriesScope = SeriesScope()
     view_scope: SeriesScope | None = None
 
@@ -361,7 +376,13 @@ class ObservationResult(BaseModel):
                 or decision.target_unit != row["unit"]
             ):
                 raise ObservationDataSchemaError("Observation contradicts its admitted source-series facts")
-        for outcome in self.outcomes:
+        active_ids = {outcome.outcome_id for outcome in self.outcomes}
+        support_ids = {outcome.outcome_id for outcome in self.supporting_outcomes}
+        if len(support_ids) != len(self.supporting_outcomes):
+            raise ObservationDataSchemaError("Result contains duplicate supporting outcome identities")
+        if active_ids.intersection(support_ids):
+            raise ObservationDataSchemaError("An outcome cannot be both active and support-only")
+        for outcome in (*self.outcomes, *self.supporting_outcomes):
             if outcome.series_id is None:
                 continue
             definition = definitions.get(outcome.series_id)
@@ -372,8 +393,10 @@ class ObservationResult(BaseModel):
             facts_by_id = {item.facts_id: item for item in definition.facts}
             if any(identifier not in facts_by_id for identifier in outcome.facts_ids):
                 raise ObservationDataSchemaError("Retrieval outcome references unknown physical facts")
-            if outcome.status.value in ("success", "empty") and any(
-                admission(facts_by_id[identifier]).status != "supported" for identifier in outcome.facts_ids
+            if (
+                outcome.outcome_id in active_ids
+                and outcome.status.value in ("success", "empty")
+                and any(admission(facts_by_id[identifier]).status != "supported" for identifier in outcome.facts_ids)
             ):
                 raise ObservationDataSchemaError("Successful retrieval outcome requires admitted physical facts")
         return self

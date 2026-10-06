@@ -223,8 +223,10 @@ Distinct published identities MUST remain distinct even when their physical fact
 
 ## Compatibility and refusal
 
-A reader MUST validate the manifest before reading any partition. It MUST refuse an
-unknown format version, missing or mistyped required field, noncanonical checksum or
+A reader MUST validate the manifest before reading any partition. Publication and
+complete audit check all observations. Reads verify selected published partition
+bytes; they do not decode unselected observations for semantic validation. Within
+these detection scopes, an operation MUST refuse an unknown format version, missing or mistyped required field, noncanonical checksum or
 fingerprint, duplicate or incomplete disposition, illegal disposition condition,
 noncanonical partition key, path/key disagreement, row/count disagreement, illegal
 value/state combination, extra partition, or missing partition. Refusal means no partial
@@ -424,15 +426,29 @@ Operations have distinct detection scopes:
 | Operation | Checks performed |
 | --- | --- |
 | `cache_status` | Journal and ownership, closed file inventory, file identities, manifest digest and metadata relations. No observation bytes are decoded or hashed. |
-| Store read | Fresh metadata inspection, content digests and observation consistency checks before serving data. The present reader remains conservative and checks all partitions. |
+| Store read | Current metadata and closed inventory, then original content digests for selected product/year partitions. Published validation establishes observation consistency; verified bytes preserve that authority. Observation decoding applies conservative request predicates. |
 | `audit_cache` | Every sealed file digest and all observation and metadata consistency rules for one generation. Return identifies the generation and checked counts. |
 | Accumulated update | Current metadata, new or changed partitions and the retained support for unchanged partitions. Original digests are carried forward, never inferred from replacement bytes. |
 
-The reusable selected-read boundary is `inspect_integrity` followed by
-`verify_files` for explicit partition identifiers. The reader must inspect the
-current metadata for each operation and verify actual selected bytes before use.
-A cached result of validation is not permanent trust in a mutable path. Request
-batching and request-bounded read performance remain separate work.
+The selected-read boundary uses `inspect_integrity` and the shared selected-file
+hash checks. A public request shares metadata preparation and verified partition
+identities across its stations and routes. Before reusing preparation, the reader
+checks the closed inventory and filesystem witnesses, including change times.
+An owned publication invalidates this preparation. An unexpected generation change
+refuses the read rather than combining old metadata with new observations.
+
+Metadata and inventory checks depend on the store size. Selected-file hashing
+reads each candidate partition in full. Parquet decoding applies station, time,
+source-series and physical-fact restrictions within those partitions; unrelated
+row groups can be skipped. A candidate row group can contain unrequested rows.
+This is bounded decoding, not a promise of one-row physical I/O. The conversion
+stage retains authority for physical conversion and exact clipping.
+
+A small read need not discover changed observation bytes in an unselected
+partition when its structural file identities still agree. A relevant later read
+or `audit_cache` detects those changes. Missing files, extra files, incompatible
+metadata and unresolved lifecycle work still refuse access. Each new public
+request inspects current metadata; there is no permanent path-only trust.
 
 A filesystem witness contains device, inode, size, modification time and change
 time. Owned hardlink creation and removal change the last field without changing

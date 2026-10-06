@@ -91,6 +91,8 @@ def test_cached_source_notes_equal_fresh_notes_after_unrequested_failure(authore
     transport.forbid_network = True
     reused = _fetch(selected, cache="reuse", on_issue="raise")
     assert reused.issues == fresh.issues
+    assert reused.provenance.retrieved_at == fresh.provenance.retrieved_at
+    assert reused.provenance.endpoints == fresh.provenance.endpoints
     pt.assert_frame_equal(reused.data, fresh.data)
     transport.forbid_network = False
     transport.observations_failed = True

@@ -67,7 +67,7 @@ def test_usgs_identity_retained_from_each_bundle_context(location):
 def test_legacy_bundle_refused_before_values(identity, kind, tmp_path, monkeypatch):
     manifest = {
         "format": "rivretrieve-source-series",
-        "version": 2,
+        "version": 3,
         "kind": kind,
         "scope": {"provider_ids": ["usgs_nwis"]},
     }

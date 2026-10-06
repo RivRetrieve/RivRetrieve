@@ -216,11 +216,10 @@ def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
     assert cached.receipts.entries[0].format_version == 8
     excerpt = pl.read_parquet(io.BytesIO(cached.receipts.entries[0].content))
     assert excerpt.height >= cached.data.height
-    assert fresh.provenance.retrieved_at == datetime.fromisoformat(
-        manifest(retained_evidence_root)[DAILY_RECORDING]["acquired_utc"]
-    )
+    original_acquired_at = datetime.fromisoformat(manifest(retained_evidence_root)[DAILY_RECORDING]["acquired_utc"])
+    assert fresh.provenance.retrieved_at == original_acquired_at
     assert not fresh.provenance.served_intervals
-    assert cached.provenance.retrieved_at is None
+    assert cached.provenance.retrieved_at == original_acquired_at
     assert cached.provenance.calls_made
     assert cached.provenance.served_intervals
     assert all(
