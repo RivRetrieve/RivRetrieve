@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from rivretrieve._internal.acquisition_dependencies import source_call_dependencies, source_call_support
 from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval, remainder
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.source_series import (
@@ -128,7 +129,7 @@ def project_evidence(
         raise FatalContractError("Selected evidence references an unknown source call")
     aliases = _source_call_aliases(evidence.source_calls)
     active_references = _expand_call_references(active_references, aliases)
-    references = _expand_call_references(references, aliases)
+    references = source_call_support(evidence.source_calls, references)
     calls = tuple(
         call
         for call in evidence.source_calls
@@ -459,6 +460,7 @@ def compact_evidence(
         for call in source_calls
     ):
         raise FatalContractError("Persisted source calls require explicit call or acquisition identity")
+    source_call_dependencies(source_calls)
     acquisitions_by_id: dict[str, RetrievalOutcome] = {}
     for item in (*supporting_outcomes, *outcomes):
         prior = acquisitions_by_id.setdefault(item.outcome_id, item)
@@ -598,7 +600,7 @@ def compact_evidence(
     # credential prerequisites and earlier retry attempts from that acquisition.
     aliases = _source_call_aliases(source_calls)
     active_references = _expand_call_references(active_references, aliases)
-    references = _expand_call_references(references, aliases)
+    references = source_call_support(source_calls, references)
 
     calls = tuple(
         call for call in source_calls if call.get("call_id") in references or call.get("acquisition_id") in references

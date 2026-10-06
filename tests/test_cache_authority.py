@@ -1014,3 +1014,137 @@ def test_projection_refuses_missing_inventory_dependencies(reference):
         project_evidence(
             CurrentEvidence((), (inventory,), (), ()), outcome_ids=frozenset(), inventory_ids=frozenset({"selected"})
         )
+
+
+@pytest.mark.parametrize("replacement", [False, True])
+def test_directed_prerequisites_follow_only_surviving_acquisitions(replacement):
+    old, new = _outcome("dat-old"), _outcome("dat-new")
+    calls = (
+        {"call_id": "html-old"},
+        {"call_id": "dat-old", "prerequisite_acquisition_ids": ("html-old",)},
+        {"call_id": "unrelated", "prerequisite_acquisition_ids": ("html-old",)},
+        {"call_id": "html-new"},
+        {"call_id": "dat-new", "prerequisite_acquisition_ids": ("html-new",)},
+        {"call_id": "html-unrelated"},
+        {"call_id": "dat-unrelated", "prerequisite_acquisition_ids": ("html-unrelated",)},
+    )
+    calls = tuple({**call, "url": "https://example.test/shared"} for call in calls)
+    coverage = (_cover(new),) if replacement else (_cover(old), _cover(new))
+    current = compact_evidence(coverage, (old, new), (), (), calls)
+    expected = ("html-new", "dat-new") if replacement else ("html-old", "dat-old", "html-new", "dat-new")
+    assert tuple(call["call_id"] for call in current.source_calls) == expected
+
+
+def test_support_call_does_not_revive_superseded_acquisition_issue():
+    old, new = _outcome("old", status=OutcomeStatus.FAILED), _outcome("new")
+    issue = Issue(
+        severity="warning", code="source.test", message="old support warning", details={"acquisition_ids": ("old",)}
+    )
+    calls = ({"call_id": "old"}, {"call_id": "new", "prerequisite_acquisition_ids": ("old",)})
+    current = compact_evidence((_cover(new),), (old, new), (), (_issue(old), issue), calls)
+    assert current.source_calls == calls
+    assert current.outcomes == (new,)
+    assert current.issues == ()
+
+
+@pytest.mark.parametrize("dependencies", [("missing",), ("dat",), ("html", "html"), ("",), "html", ["html"]])
+def test_invalid_prerequisite_references_are_fatal_even_when_unretained(dependencies):
+    from rivretrieve._internal.issues import FatalContractError
+
+    with pytest.raises(FatalContractError, match="[Pp]rerequisite"):
+        compact_evidence(
+            (),
+            (),
+            (),
+            (),
+            (
+                {"call_id": "html"},
+                {"call_id": "dat", "prerequisite_acquisition_ids": dependencies},
+            ),
+        )
+
+
+def test_cyclic_acquisition_prerequisites_are_fatal():
+    from rivretrieve._internal.issues import FatalContractError
+
+    with pytest.raises(FatalContractError, match="[Pp]rerequisite"):
+        compact_evidence(
+            (),
+            (),
+            (),
+            (),
+            (
+                {"call_id": "a", "prerequisite_acquisition_ids": ("b",)},
+                {"call_id": "b", "prerequisite_acquisition_ids": ("a",)},
+            ),
+        )
+
+
+def test_prerequisite_acquisition_retains_retry_and_credential_aliases_without_siblings():
+    outcome = _outcome("dat-attempt")
+    calls = (
+        {"acquisition_id": "html", "response_disposition": "withheld"},
+        {"call_id": "html-retry", "acquisition_id": "html"},
+        {"call_id": "html-success", "acquisition_id": "html"},
+        {"call_id": "dat-attempt", "acquisition_id": "dat", "prerequisite_acquisition_ids": ("html",)},
+        {"call_id": "other-dat", "prerequisite_acquisition_ids": ("html",)},
+    )
+    current = compact_evidence((_cover(outcome),), (outcome,), (), (), calls)
+    assert current.source_calls == calls[:-1]
+
+
+def test_retry_alias_cannot_stand_in_for_a_prerequisite_acquisition_identity():
+    from rivretrieve._internal.issues import FatalContractError
+
+    with pytest.raises(FatalContractError, match="unknown acquisition"):
+        compact_evidence(
+            (),
+            (),
+            (),
+            (),
+            (
+                {"call_id": "html-attempt", "acquisition_id": "html"},
+                {"call_id": "dat", "prerequisite_acquisition_ids": ("html-attempt",)},
+            ),
+        )
+
+
+def test_source_call_support_is_transitive_and_does_not_modify_active_roots():
+    from rivretrieve._internal.acquisition_dependencies import source_call_support
+
+    calls = (
+        {"call_id": "entry"},
+        {"call_id": "html", "prerequisite_acquisition_ids": ("entry",)},
+        {"call_id": "attempt", "acquisition_id": "dat", "prerequisite_acquisition_ids": ("html",)},
+        {"call_id": "unrelated", "prerequisite_acquisition_ids": ("html",)},
+    )
+    roots = {"attempt"}
+    assert source_call_support(calls, roots) == {"attempt", "dat", "html", "entry"}
+    assert roots == {"attempt"}
+
+
+def test_request_projection_retains_directed_support_without_activating_its_diagnostics():
+    from rivretrieve._internal.store.authority import CurrentEvidence, project_evidence
+
+    active = _outcome("dat-attempt")
+    prerequisite = _outcome("html-retry", status=OutcomeStatus.FAILED)
+    calls = (
+        {"call_id": "entry"},
+        {"acquisition_id": "html", "response_disposition": "withheld"},
+        {"call_id": "html-retry", "acquisition_id": "html", "prerequisite_acquisition_ids": ("entry",)},
+        {"call_id": "html-success", "acquisition_id": "html", "prerequisite_acquisition_ids": ("entry",)},
+        {"call_id": "dat-attempt", "acquisition_id": "dat", "prerequisite_acquisition_ids": ("html",)},
+        {"call_id": "sibling", "prerequisite_acquisition_ids": ("html",)},
+    )
+    note = Issue(
+        severity="warning",
+        code="source.test",
+        message="prerequisite diagnosis",
+        details={"acquisition_ids": ("html-retry",)},
+    )
+    evidence = CurrentEvidence((prerequisite, active), (), (_issue(prerequisite), note), calls)
+    projected = project_evidence(evidence, outcome_ids=frozenset({active.outcome_id}), inventory_ids=frozenset())
+    assert projected.outcomes == (active,)
+    assert projected.supporting_outcomes == ()
+    assert projected.issues == ()
+    assert projected.source_calls == calls[:-1]

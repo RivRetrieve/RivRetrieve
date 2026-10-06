@@ -238,11 +238,10 @@ def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(retained_evi
     artifact = retained_evidence_root / "tests/test_data/fr_hydroportail_legacy_raw"
     shutil.copytree(artifact / "cache", tmp_path / "cache")
     before = {p.relative_to(artifact): p.read_bytes() for p in artifact.rglob("*") if p.is_file()}
-    legacy_result = rr.from_bundle((artifact / "result.zip").read_bytes())
-    legacy_selection = rr.from_bundle((artifact / "selection.zip").read_bytes())
-    assert rr.series(legacy_result)["variant"].to_list() == [None]
-    assert rr.series(legacy_selection)["variant"].to_list() == [None]
-    assert legacy_result.data.height == 282
+    # Historical v2 carriers remain unchanged and are explicitly unsupported.
+    for name in ("result.zip", "selection.zip"):
+        with pytest.raises(ValueError, match="Unsupported source-series bundle format version"):
+            rr.from_bundle((artifact / name).read_bytes())
     recording = read_recording(
         retained_evidence_root / "tests/test_data/fr_hydroportail_station_Q_padded.recording.json"
     )
@@ -287,10 +286,23 @@ def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(retained_evi
     assert set(rr.series(result)["variant"].drop_nulls()) == VARIANTS
     assert result.data["series_id"].n_unique() == 4
     transport.calls.clear()
-    expanded_export = rr.fetch(legacy_selection, start="2026-06-01", end="2026-06-02", cache="reuse", on_issue="ignore")
+    # An authored current-format selection retains unspecified variant intent.
+    # This is not a migration of the historical carrier or a source witness.
+    unspecified = replace(
+        selection,
+        known_series=(
+            selection.series[0].model_copy(update={"variant": None, "series_id": "synthetic-unspecified-variant"}),
+        ),
+        inventories=(),
+    )
+    unspecified = rr.from_bundle(rr.to_bundle(unspecified))
+    assert not unspecified.scope.variants
+    assert rr.series(unspecified)["variant"].to_list() == [None]
+    expanded_export = rr.fetch(unspecified, start="2026-06-01", end="2026-06-02", cache="reuse", on_issue="ignore")
     assert set(transport.calls) == VARIANTS
     assert set(rr.series(expanded_export)["variant"].drop_nulls()) == VARIANTS
-    assert rr.series(legacy_selection)["variant"].to_list() == [None]
+    assert expanded_export.data["series_id"].n_unique() == 4
+    assert rr.series(unspecified)["variant"].to_list() == [None]
     assert {p.relative_to(artifact): p.read_bytes() for p in artifact.rglob("*") if p.is_file()} == before
 
 

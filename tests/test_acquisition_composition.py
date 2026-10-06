@@ -464,3 +464,51 @@ def test_fact_failure_closed_endpoint_filters_rows_at_the_boundary():
     accepted = pl.concat([item.rows for item in results])
     expected = rows.filter((pl.col("facts_id") == "mean") | (pl.col("time") < stamps[1]))
     assert_frame_equal(accepted.sort("facts_id", "time"), expected.sort("facts_id", "time"))
+
+
+@pytest.mark.parametrize("failed_first", [False, True])
+def test_failed_acquisition_follows_its_support_without_reordering_independent_payloads(failed_first):
+    from rivretrieve._internal.driver import _calls_with_failed_acquisitions
+
+    support = {"call_id": "html", "prerequisite_acquisition_ids": ()}
+    healthy = ({"call_id": "other-html"}, {"call_id": "other-dat"})
+    failure = {"call_id": "failed-dat", "prerequisite_acquisition_ids": ("html",)}
+    payloads = (support, *healthy) if failed_first else (*healthy, support)
+    expected = (support, failure, *healthy) if failed_first else (*healthy, support, failure)
+    assert _calls_with_failed_acquisitions(payloads, (failure,)) == expected
+
+
+@pytest.mark.parametrize("dependencies", [("missing",), ("failed",)])
+def test_invalid_failed_dependency_is_fatal_before_store_publication(tmp_path, dependencies):
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget
+    from rivretrieve._internal.source_series import SeriesWindow
+    from rivretrieve._internal.transport import HttpMethod, TransportFailure, TransportFailureReason, TransportRequest
+
+    request = TransportRequest(HttpMethod.GET, "https://example.test/observations")
+    event = FailedSourceRequest(
+        "failed",
+        SourceRequestTarget("0-203-1-000400", "discharge_daily_mean"),
+        SeriesWindow(start=datetime(2023, 6, 1), end=datetime(2023, 6, 2)),
+        request,
+        TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503),
+        prerequisite_acquisition_ids=dependencies,
+    )
+    with pytest.raises(FatalContractError, match="Prerequisite"):
+        run(tmp_path / "store", SourceAcquisition((), failed_requests=(event,)))
+    assert not (tmp_path / "store" / "manifest.json").exists()
+
+
+@pytest.mark.parametrize("with_independent", [False, True])
+def test_failed_siblings_keep_original_call_group_order(with_independent):
+    from rivretrieve._internal.driver import _calls_with_failed_acquisitions
+
+    html = {"call_id": "html"}
+    first = (
+        {"call_id": "first-retry", "acquisition_id": "first-dat", "prerequisite_acquisition_ids": ("html",)},
+        {"call_id": "first-final", "acquisition_id": "first-dat", "prerequisite_acquisition_ids": ("html",)},
+    )
+    second = {"call_id": "second-dat", "prerequisite_acquisition_ids": ("html",)}
+    independent = ({"call_id": "independent-one"}, {"call_id": "independent-two"}) if with_independent else ()
+    failures = (*independent[:1], *first, second, *independent[1:])
+    assert _calls_with_failed_acquisitions((html,), failures) == (*independent, html, *first, second)

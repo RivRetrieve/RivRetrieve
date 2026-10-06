@@ -11,6 +11,7 @@ from typing import Protocol, cast, runtime_checkable
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_dependencies import validate_acquisition_dependencies
 from rivretrieve._internal.assembly import _AssemblyResult, assemble
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
@@ -206,13 +207,20 @@ def _attempt_call(attempt: TransportAttempt) -> dict[str, object]:
 
 def _payload_calls(payload: Payload) -> tuple[dict[str, object], ...]:
     if not payload.attempt_traces:
-        return ({**_origin_call(payload.origin), "call_id": payload.acquisition_id},)
+        return (
+            {
+                **_origin_call(payload.origin),
+                "call_id": payload.acquisition_id,
+                "prerequisite_acquisition_ids": payload.prerequisite_acquisition_ids,
+            },
+        )
     acquisition_id = payload.acquisition_id
     return tuple(
         {
             **(_origin_call(payload.origin) if index == len(payload.attempt_traces) else {}),
             **_attempt_call(attempt),
             "acquisition_id": acquisition_id,
+            "prerequisite_acquisition_ids": payload.prerequisite_acquisition_ids,
             "attempt": index,
             "attempts": len(payload.attempt_traces),
         }
@@ -1776,6 +1784,34 @@ def _public_issues(issues: tuple[Issue, ...]) -> tuple[Issue, ...]:
     return tuple(projected)
 
 
+def _calls_with_failed_acquisitions(
+    payload_calls: tuple[dict[str, object], ...], failed_calls: tuple[dict[str, object], ...]
+) -> tuple[dict[str, object], ...]:
+    """Place failed acquisitions after their explicit support, preserving call groups."""
+    groups: dict[object, list[dict[str, object]]] = {}
+    for call in failed_calls:
+        groups.setdefault(call.get("acquisition_id", call.get("call_id")), []).append(call)
+    calls = list(payload_calls)
+    independent: list[dict[str, object]] = []
+    # Inserting later siblings first keeps the original order when groups share
+    # the same prerequisite position. Calls within each group stay unchanged.
+    for group in reversed(groups.values()):
+        dependencies = next(
+            (call["prerequisite_acquisition_ids"] for call in group if "prerequisite_acquisition_ids" in call), ()
+        )
+        assert isinstance(dependencies, tuple)
+        if not dependencies:
+            independent[0:0] = group
+            continue
+        positions = [
+            index for index, call in enumerate(calls) if call.get("acquisition_id", call.get("call_id")) in dependencies
+        ]
+        if not positions:
+            raise FatalContractError("Failed acquisition lacks its prerequisite call evidence")
+        calls[max(positions) + 1 : max(positions) + 1] = group
+    return (*independent, *calls)
+
+
 def _unique_calls(calls: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
     """Retain distinct attempts, including legacy evidence without an attempt ID."""
     seen: dict[str, dict[str, object]] = {}
@@ -1834,6 +1870,7 @@ def drive(
     payloads: list[Payload] = []
     source_series_by_payload: list[tuple[str, ...]] = []
     non_payload_calls: list[dict[str, object]] = []
+    failed_calls: list[dict[str, object]] = []
     served: list[CoverageInterval] = []
     pending: list[SuccessfulReplacement] = []
     fresh_definitions: dict[str, SourceSeries] = {}
@@ -2148,6 +2185,21 @@ def drive(
                 fresh_outcomes.append(outcome)
             continue
         fetched = result
+        dependencies: dict[str, tuple[str, ...]] = {}
+        for payload in fetched.value:
+            if payload.acquisition_id in dependencies:
+                raise FatalContractError("Duplicate payload acquisition identity")
+            dependencies[payload.acquisition_id] = payload.prerequisite_acquisition_ids
+        payload_ids = set(dependencies)
+        if isinstance(fetched, SourceAcquisition):
+            for event in fetched.failed_requests:
+                identity = event.call_id or event.event_id
+                if identity in payload_ids:
+                    raise FatalContractError("Failed request shares a successful payload acquisition identity")
+                previous = dependencies.setdefault(identity, event.prerequisite_acquisition_ids)
+                if previous != event.prerequisite_acquisition_ids:
+                    raise FatalContractError("Prerequisite declarations conflict for one acquisition")
+        validate_acquisition_dependencies(dependencies)
         acquisition_outcome_start = len(fresh_outcomes)
         auxiliary_calls: tuple[dict[str, object], ...] = ()
         if isinstance(fetched, SourceAcquisition) and fetched.calls:
@@ -2157,6 +2209,7 @@ def drive(
             auxiliary_calls = tuple(
                 {
                     **(record := _origin_call(origin)),
+                    "prerequisite_acquisition_ids": (),
                     "call_id": stable_id(
                         "source-call-origin",
                         tuple(snapshot.snapshot_id for snapshot in fetched.inventories)
@@ -2264,6 +2317,7 @@ def drive(
                 response = event.failure.response if isinstance(event.failure, TransportFailure) else None
                 call = {
                     "call_id": event.call_id or event.event_id,
+                    "prerequisite_acquisition_ids": event.prerequisite_acquisition_ids,
                     **(
                         {
                             "station_id": target.station_id,
@@ -2305,14 +2359,14 @@ def drive(
                         retrieved_at=response.retrieved_at,
                         content_type=response.content_type or _origin_value(UnknownOriginFact()),
                     )
-                    non_payload_calls.extend(
+                    failed_calls.extend(
                         {**_secret_call(item), "acquisition_id": event.call_id or event.event_id}
                         for item in response.prerequisite_calls
                     )
                 attempt_traces = event.failure.attempt_traces if isinstance(event.failure, TransportFailure) else ()
                 if attempt_traces:
                     call_ids = tuple(attempt.attempt_id for attempt in attempt_traces)
-                    non_payload_calls.extend(
+                    failed_calls.extend(
                         {
                             **call,
                             **_attempt_call(attempt),
@@ -2329,7 +2383,7 @@ def drive(
                     )
                 else:
                     call_ids = (event.call_id or event.event_id,)
-                    non_payload_calls.append(call)
+                    failed_calls.append(call)
                 requested_failure_axis = interval_envelope(interval, event.window.axis)
                 overlap_start = max(requested_failure_axis.start, event.window.start)
                 overlap_end = min(requested_failure_axis.end, event.window.end)
@@ -2817,7 +2871,9 @@ def drive(
     enriched = _provenance_with_payload_origins(
         provenance, tuple(payloads), source_series_by_payload=tuple(source_series_by_payload)
     )
-    acquired_calls = _unique_calls((*non_payload_calls, *enriched.calls_made))
+    acquired_calls = _unique_calls(
+        (*non_payload_calls, *_calls_with_failed_acquisitions(enriched.calls_made, tuple(failed_calls)))
+    )
     available_definitions = dict(definitions)
     if manifest is not None:
         _merge_definitions(available_definitions, manifest.series)
@@ -2857,10 +2913,12 @@ def drive(
             else set()
         )
         if prior_diagnostics:
+            assert held_evidence is not None
             # Publication owns successful supersession. A rolling acquisition
             # does not settle an earlier failed interval merely by returning keys.
             # Inspect the new generation rather than reproduce that authority.
             current = resolved_reader.evidence(store, request.provider_id)
+            held_evidence = replace(held_evidence, issues=current.issues)
             _merge_definitions(available_definitions, published.series)
             current_scopes = tuple(
                 (
@@ -2907,18 +2965,27 @@ def drive(
         available_definitions,
         retained_inventories,
         retained_outcomes,
-        tuple(all_issues) + converted.issues,
+        tuple(issue for issue in all_issues if (issue.details or {}).get("outcome_id") not in unadmitted_outcome_ids)
+        + converted.issues,
         acquired_calls,
         held=held_evidence,
         supporting_outcomes=tuple(supporting_outcomes),
     )
-    enriched = _provenance_with_calls(enriched, evidence.source_calls)
+    # Current invocation attempts are evidence even when padding establishes no
+    # admitted outcome. Only held acquisition history is request-projected.
+    held_calls = tuple(call for call in evidence.source_calls if call not in acquired_calls)
+    enriched = _provenance_with_calls(enriched, _unique_calls((*held_calls, *acquired_calls)))
     if served:
         enriched = enriched.model_copy(update={"served_intervals": tuple(served)})
     return assemble(
         converted.value,
         enriched,
-        _public_issues(evidence.issues),
+        _public_issues(
+            (
+                *evidence.issues,
+                *(issue for issue in all_issues if (issue.details or {}).get("outcome_id") in unadmitted_outcome_ids),
+            )
+        ),
         Receipts(request.provider_id, tuple(receipt_entries)),
         source_series=selected,
         inventories=evidence.inventories,
