@@ -258,9 +258,12 @@ def download_imgw_history(
     today: date,
     transfer: ArtifactTransfer,
     first_year: int | None = None,
-    previous_source_vintage: date | None = None,
 ) -> tuple[DownloadedImgw, ...]:
-    """Download the complete source-backed history into unique artifact paths."""
+    """Download the complete currently listed history into unique artifact paths.
+
+    The listing must be continuous within its published extent. Its coverage end
+    may precede that of a previously downloaded snapshot.
+    """
     import tempfile
 
     base = Path(destination)
@@ -277,12 +280,6 @@ def download_imgw_history(
         read_index=read_index,
         first_year=FIRST_PUBLISHED_YEAR if first_year is None else first_year,
     )
-    latest_vintage = _imgw_period_source_vintage(_imgw_artifact_period(Path(planned[-1].filename)))
-    if previous_source_vintage is not None and latest_vintage < previous_source_vintage:
-        raise ValueError(
-            f"IMGW published history would regress from certified coverage {previous_source_vintage} "
-            f"to {latest_vintage}; previously published trailing archives are missing"
-        )
     downloaded: list[DownloadedImgw] = []
     try:
         for item in planned:

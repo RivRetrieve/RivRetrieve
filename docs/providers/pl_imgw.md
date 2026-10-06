@@ -123,6 +123,18 @@ The same compiled copy serves later requests for other stations and periods. Bot
 run `rr.download("pl_imgw")` again to replace the store with the files IMGW-PIB
 publishes at that time. Retrieval does not check for newer files.
 
+Calling `download` authorizes replacement with the newly acquired, valid archive,
+even if it covers a shorter period. For example, if the previous archive ended in
+October and the newly listed history ends in September, a successful download
+replaces it without a second confirmation. Rows absent from the new archive are
+not carried forward from the old store. A shorter listing does not establish why
+IMGW-PIB removed files.
+
+Missing periods within the listed history, ambiguous listings, failed transfers
+and invalid archives still prevent replacement and preserve the previous store.
+The archive end date describes published coverage, not a release date, download
+time or compilation time.
+
 ## What you can retrieve
 
 IMGW-PIB's field description (`CODZ_publiczne_format.txt`) names each field:
