@@ -168,3 +168,43 @@ def test_public_hydat_transport_failure_keeps_retry_identity(public_hydat):
 
     assert caught.value is failure
     assert calls == [("HEAD", current)]
+
+
+@pytest.mark.parametrize("refusal_phase", ["compilation", "certification replay"])
+def test_public_post_transfer_admission_uses_resolved_probe(public_hydat, monkeypatch, refusal_phase) -> None:
+    from datetime import date
+
+    import rivretrieve as rr
+    from rivretrieve._internal import bulk
+    from rivretrieve._internal.store.lifecycle import StoreTransactionError
+    from rivretrieve._internal.store.resources import CompilationPhase, InsufficientPreparationSpaceError
+
+    root, responses, calls, artifact = public_hydat
+    publisher = url(date(2026, 9, 22))
+    responses[publisher] = artifact.read_bytes()
+    rr.download("ca_eccc")
+    before = store_bytes(root)
+    calls.clear()
+    probed = []
+
+    def free(path):
+        probed.append(path)
+        # Source and native temp share this test filesystem: one check per phase.
+        allowed = 1 if refusal_phase == "compilation" else 2
+        return 10**12 if len(probed) <= allowed else 0
+
+    monkeypatch.setattr(bulk, "_available_bytes", free)
+    from rivretrieve._internal.providers.ca_eccc import bulk as hydat_bulk
+
+    monkeypatch.setattr(hydat_bulk, "resolve_sqlite_temp_directory", lambda: Path(root).parent)
+    with pytest.raises((InsufficientPreparationSpaceError, StoreTransactionError)) as caught:
+        rr.download("ca_eccc")
+    error = caught.value.original if isinstance(caught.value, StoreTransactionError) else caught.value
+    assert isinstance(error, InsufficientPreparationSpaceError)
+    assert error.phase is CompilationPhase(refusal_phase)
+    assert "No download was started" not in str(error)
+    assert calls == [("HEAD", publisher), ("GET", publisher)]
+    assert len(probed) == (2 if refusal_phase == "compilation" else 3)
+    assert probed[-1].name.startswith(".store.workspace-")
+    assert store_bytes(root) == before
+    assert artifact.exists()

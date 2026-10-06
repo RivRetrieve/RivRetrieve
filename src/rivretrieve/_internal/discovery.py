@@ -1643,6 +1643,10 @@ def download(provider: str):
         If provider is not a bulk provider.
     InsufficientDiskSpaceError
         If free space is below the declared requirement before any transfer.
+    InsufficientPreparationSpaceError
+        If estimated additional growth exceeds free space after transfer.
+        This check covers each workspace filesystem and does not reserve space.
+        Retained inputs or cleanup residue can wrap this in StoreTransactionError.
     FatalContractError
         If a source response or store validation violates a contract.
     StoreCertificationError

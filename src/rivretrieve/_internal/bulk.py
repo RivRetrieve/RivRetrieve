@@ -11,7 +11,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Protocol
 
 from rivretrieve._internal.discovery import _ensure_default_providers_registered, _resolve_store_root
 from rivretrieve._internal.engine import ObservationStoreConfig, ProviderConfig
@@ -26,6 +25,7 @@ from rivretrieve._internal.registry import _ProviderHandle, _registry
 from rivretrieve._internal.store import StoreRoot, StoreStatus, ValidatedStore, store_status
 from rivretrieve._internal.store.integrity import inspect_integrity, verify_files
 from rivretrieve._internal.store.lifecycle import clear_store, managed_paths, store_lease, store_transaction
+from rivretrieve._internal.store.resources import FreeSpaceProbe as FreeSpaceProbe
 from rivretrieve._internal.store.validation import ObservationStoreRefusedError, StoreManifest, validate_store
 from rivretrieve._internal.transport import HttpClient, HttpMethod, Transport, TransportRequest
 
@@ -74,10 +74,6 @@ class CacheClearResult:
     existed: bool
     bytes_freed: int
     removed_paths: tuple[Path, ...]
-
-
-class FreeSpaceProbe(Protocol):
-    def __call__(self, path: Path) -> int: ...
 
 
 ClientFactory = Callable[[], Transport]
@@ -195,6 +191,7 @@ def _download(
                 built_at=datetime.now(UTC),
                 compiler_version=__version__,
                 transaction=transaction,
+                free_space_probe=free_space_probe,
             )
         )
 

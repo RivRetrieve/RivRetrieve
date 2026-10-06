@@ -505,10 +505,10 @@ def test_public_date_failure_preserves_existing_store_and_exact_recovery_bytes(p
         original_decode = bulk.decode_imgw_batches
         calls = 0
 
-        def corrupt_second_decode(paths, *, workspace):
+        def corrupt_second_decode(paths, *, workspace, **resource_inputs):
             nonlocal calls
             calls += 1
-            stream = original_decode(paths, workspace=workspace)
+            stream = original_decode(paths, workspace=workspace, **resource_inputs)
             if calls == 1:
                 return stream
 

@@ -72,8 +72,8 @@ def test_imgw_selected_product_does_not_expand_other_cells(tmp_path, monkeypatch
     assert emitted[0][1]["value"] == 1.0
     assert cells == ["1"]
     cells.clear()
-    records, rows, _fingerprint = imgw._expected_imgw_inventory((artifact,))
-    assert (records, rows) == (1, 3)
+    records, rows, _fingerprint, calendar_records = imgw._expected_imgw_inventory((artifact,))
+    assert (records, rows, calendar_records) == (1, 3, {2022: 1})
     assert sorted(cells) == ["1", "100", "2"]
     with zipfile.ZipFile(artifact, "w") as archive:
         archive.writestr("codz_2022_03.csv", "1;S;R;2022;03;01;100;1;NaN;1\r\n")
@@ -179,3 +179,27 @@ def test_streamed_certification_reuses_semantics_but_replays_source(tmp_path, mo
     certify_store_batches(request, artifact, decode)
     assert validated == ["product=discharge/year=1998"]
     assert decoded == [b"publisher fixture bytes", b"publisher fixture bytes"]
+
+
+def test_imgw_station_sort_uses_managed_ordering_index(tmp_path, monkeypatch) -> None:
+    import sqlite3
+
+    from rivretrieve._internal.store import SourceUnitCount
+
+    plans = []
+    original = sqlite3.connect
+
+    class Connection(sqlite3.Connection):
+        def execute(self, sql, *args):
+            if sql.startswith("SELECT payload"):
+                plans.extend(super().execute("EXPLAIN QUERY PLAN " + sql).fetchall())
+            return super().execute(sql, *args)
+
+    monkeypatch.setattr(sqlite3, "connect", lambda path: original(path, factory=Connection))
+    source = [(SourceUnitCount(str(i), 1, 1), {"station_id": str(i)}) for i in (2, 0, 1)]
+    assert [row["station_id"] for _, row in imgw._external_station_sort(iter(source), workspace=tmp_path)] == [
+        "0",
+        "1",
+        "2",
+    ]
+    assert plans and not any("TEMP B-TREE" in row[-1].upper() for row in plans)
