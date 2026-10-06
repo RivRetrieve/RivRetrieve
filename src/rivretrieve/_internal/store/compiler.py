@@ -410,7 +410,7 @@ def compile_store_batches(request: StoreCompileRequest, stream: ObservationBatch
     try:
         unit_database = sqlite3.connect(root / ".source-units.sqlite3")
         unit_database.execute(
-            "CREATE TABLE source_units (name TEXT PRIMARY KEY, publisher_records INTEGER NOT NULL, expected_rows INTEGER NOT NULL, emitted_rows INTEGER NOT NULL)"
+            "CREATE TABLE source_units (name TEXT PRIMARY KEY, publisher_records INTEGER NOT NULL, expected_rows INTEGER NOT NULL, emitted_rows INTEGER NOT NULL) WITHOUT ROWID"
         )
         for batch_number, batch in enumerate(stream.batches, start=1):
             if not isinstance(batch, NativeObservationBatch):

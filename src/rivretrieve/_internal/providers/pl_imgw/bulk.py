@@ -388,6 +388,8 @@ def compile_imgw(request: ImgwCompileRequest) -> ValidatedStore:
 
 
 IMGW_ROWS_PER_BATCH: Final = 65_536
+# Each merged archive keeps one fetched chunk alive, independently of output batches.
+IMGW_SORT_ROWS_PER_FETCH: Final = 1_024
 _ARTIFACT_NAME = re.compile(r"codz_(?P<year>[0-9]{4})(?:_(?P<month>[0-9]{2}))?\.zip$")
 
 
@@ -440,13 +442,12 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...], *, workspace: Path | Non
     return ObservationBatchStream(IMGW_SOURCE_COLUMNS, batches(), expected_records, expected_rows, inventory_sha256)
 
 
-def _imgw_source_unit(path: Path, artifact_index: int, ordinal: int, source: tuple[str, ...]) -> SourceUnitCount:
+def _imgw_source_unit(artifact_index: int, ordinal: int, source: tuple[str, ...]) -> SourceUnitCount:
     encoded = json.dumps(source, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     record_sha = hashlib.sha256(encoded).hexdigest()
-    artifact_match = _ARTIFACT_NAME.search(path.name)
-    assert artifact_match is not None
-    member = Path(artifact_match.group(0)).with_suffix(".csv").name
-    identity = f"artifact={artifact_index:06d}:{path.name}:{member}:logical_ordinal={ordinal:012d}:sha256={record_sha}"
+    # The ordered artifact provenance binds the index. The ordinal preserves
+    # duplicate records, and the cell digest detects equal-count substitutions.
+    identity = f"{artifact_index:06d}:{ordinal:012d}:{record_sha}"
     return SourceUnitCount(identity, 1, len(_PRODUCT_COLUMNS))
 
 
@@ -466,7 +467,7 @@ def _expected_imgw_inventory(paths: tuple[Path, ...]) -> tuple[int, int, str]:
                     raise ValueError("IMGW publisher record did not expand to every declared product cell")
                 artifact_records += 1
                 total_records += 1
-                unit = _imgw_source_unit(path, artifact_index, ordinal, source)
+                unit = _imgw_source_unit(artifact_index, ordinal, source)
                 yield unit.source_unit, unit.publisher_records, unit.expected_emitted_rows
             if artifact_records == 0:
                 raise ValueError("IMGW publisher artifact contains no logical CSV records")
@@ -502,10 +503,10 @@ def _iter_imgw_product_year(
     period = _imgw_artifact_period(path)
     for ordinal, source in enumerate(_iter_imgw_records(path), start=1):
         output: list[dict[str, object]] = []
-        _emit_source_row(source, path.name, ordinal, output, expected_period=period)
+        _emit_source_row(source, path.name, ordinal, output, expected_period=period, selected_product=product)
         for row in output:
             if row["product"] == str(product) and cast(datetime, row["time"]).year == calendar_year:
-                yield _imgw_source_unit(path, artifact_index, ordinal, source), row
+                yield _imgw_source_unit(artifact_index, ordinal, source), row
 
 
 def _external_station_sort(rows, *, workspace: Path):
@@ -529,9 +530,10 @@ def _external_station_sort(rows, *, workspace: Path):
                     pending = []
             if pending:
                 connection.executemany("INSERT INTO rows VALUES (?, ?, ?)", pending)
+            pending.clear()
             connection.commit()
             cursor = connection.execute("SELECT payload FROM rows ORDER BY station, ordinal")
-            while chunk := cursor.fetchmany(IMGW_ROWS_PER_BATCH):
+            while chunk := cursor.fetchmany(IMGW_SORT_ROWS_PER_FETCH):
                 for (payload,) in chunk:
                     yield pickle.loads(payload)
         finally:
@@ -655,6 +657,7 @@ def _emit_source_row(
     output: list[dict[str, object]],
     *,
     expected_period: tuple[int, tuple[int, ...]] | None = None,
+    selected_product: ProductId | None = None,
 ) -> None:
     station = source[0].strip()
     if not station:
@@ -682,6 +685,8 @@ def _emit_source_row(
         raise ValueError(f"IMGW member {member!r} row {ordinal} has an invalid calendar date") from error
     retained = dict(zip(_RETAINED_NAMES, source, strict=True))
     for product, value_index, null_sentinels in _PRODUCT_COLUMNS:
+        if selected_product is not None and product != selected_product:
+            continue
         definition = source_series(station, str(product))
         facts = definition.facts[0]
         value, state = _native_value(source[value_index], member, ordinal, _SOURCE_FIELDS[value_index], null_sentinels)

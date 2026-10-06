@@ -284,8 +284,11 @@ def _verify_streamed_read_back(
     expected_stream: ObservationBatchStream,
 ) -> None:
     """Compare every staged physical row with a second bounded source decode."""
-    validated = validate_store(StoreRoot(stage), request.provider_id)
-    actual_counts = {str(key): value for key, value in validated.manifest.partition_row_counts.items()}
+    # Compilation already validated all semantics. Verify the sealed bytes before
+    # replay rather than repeating that full decode. Publication verifies again.
+    sealed = inspect_integrity(StoreRoot(stage), request.provider_id)
+    verify_files(sealed, tuple(sealed.store.partition_files))
+    actual_counts = {str(key): value for key, value in sealed.store.manifest.partition_row_counts.items()}
     if actual_counts != dict(evidence.partition_row_counts):
         raise StoreCertificationError(
             f"staged partition counts differ from streamed rows: expected={dict(evidence.partition_row_counts)!r}; "
