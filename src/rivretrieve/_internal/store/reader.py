@@ -22,10 +22,13 @@ from rivretrieve._internal.store.lifecycle import Ownership, StoreLifecycleError
 from rivretrieve._internal.store.validation import (
     AccumulatedStoreManifest,
     ArtifactChecksum,
+    Disposition,
     PartitionIdentifier,
     SourceSchemaFingerprint,
     StoreManifest,
+    StoreRefusalKind,
     StoreRoot,
+    _refuse,
 )
 
 
@@ -331,21 +334,8 @@ class StoreReader:
         if candidates:
             physical_rows, optimized_plan = _scan(tuple(candidates.values()), executed)
         else:
-            physical_rows = pl.DataFrame(
-                schema={
-                    "station_id": pl.String,
-                    "time": pl.Datetime("us"),
-                    "time_zone": pl.String,
-                    "value": pl.Float64,
-                    "value_state": pl.String,
-                    "series_id": pl.String,
-                    "facts_id": pl.String,
-                    "source_unit": pl.String,
-                    "product": pl.String,
-                    "year": pl.Int64,
-                }
-            )
-            optimized_plan = "EMPTY STORE: no partitions"
+            physical_rows = _empty_physical_rows(query.store, validated.manifest)
+            optimized_plan = "EMPTY SCAN: no candidate partitions"
         rows = _engine_rows(physical_rows)
         return StoreReadResult(
             store=query.store,
@@ -393,6 +383,49 @@ class StoreReader:
             cleanup_paths=state.cleanup_paths,
             ownership=state.ownership,
         )
+
+
+def _empty_physical_rows(store: StoreRoot, manifest: StoreManifest | AccumulatedStoreManifest) -> pl.DataFrame:
+    schema = pl.Schema(
+        {
+            "station_id": pl.String,
+            "time": pl.Datetime("us"),
+            "time_zone": pl.String,
+            "value": pl.Float64,
+            "value_state": pl.String,
+            "series_id": pl.String,
+            "facts_id": pl.String,
+            "source_unit": pl.String,
+        }
+    )
+    if isinstance(manifest, StoreManifest):
+        # These are the retained primitive representations admitted by the store
+        # contract. The published metadata supplies them without opening a file
+        # from an unrelated product/year merely to recover an empty schema.
+        types = {
+            "text": pl.String,
+            "string": pl.String,
+            "integer": pl.Int64,
+            "double": pl.Float64,
+            "float64": pl.Float64,
+            "timestamp[us]": pl.Datetime("us"),
+        }
+        declarations = {column.name: column.type.lower() for column in manifest.source_schema.columns}
+        for item in manifest.source_column_dispositions:
+            if item.disposition is not Disposition.RETAINED or item.source_column in schema:
+                continue
+            native_type = types.get(declarations.get(item.source_column, ""))
+            if native_type is None:
+                _refuse(
+                    StoreRefusalKind.MALFORMED,
+                    store,
+                    manifest.provider_id,
+                    f"source_schema.native_type:{item.source_column}",
+                )
+            schema[item.source_column] = native_type
+    schema["product"] = pl.String
+    schema["year"] = pl.Int64
+    return pl.DataFrame(schema=schema)
 
 
 def _inventory_witness(store: StoreRoot) -> tuple[tuple[object, ...], ...]:

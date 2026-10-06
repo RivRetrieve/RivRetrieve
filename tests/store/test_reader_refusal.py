@@ -428,3 +428,80 @@ def test_accumulated_scan_prunes_unrequested_time_row_groups(tmp_path, monkeypat
     assert re.findall(r"Predicate pushdown: reading (\d+) / (\d+) row groups", diagnostics) == [
         ("2", str(unrelated_rows + 2))
     ]
+
+
+def test_empty_candidate_read_keeps_declared_native_schema_without_opening_observations(tmp_path, monkeypatch):
+    import rivretrieve._internal.store.reader as reader_module
+    from rivretrieve._internal.store import integrity
+
+    store = _published(tmp_path)
+    original_digest = integrity._digest
+
+    def metadata_only(path):
+        assert path.name == "manifest.json"
+        return original_digest(path)
+
+    monkeypatch.setattr(integrity, "_digest", metadata_only)
+    monkeypatch.setattr(validation, "_open_parquet", lambda path: pytest.fail("unrelated observation schema opened"))
+    monkeypatch.setattr(reader_module, "_scan", lambda *args: pytest.fail("no candidate scan is needed"))
+    result = StoreReader().query(
+        StoreQuery(
+            StoreRoot(store),
+            ProviderId("fixture_bulk"),
+            ("ca-001",),
+            (ProductId("discharge"),),
+            datetime(2030, 1, 1),
+            datetime(2030, 1, 2),
+        )
+    )
+    assert result.physical_rows.is_empty()
+    assert result.physical_rows.schema == {
+        "station_id": pl.String,
+        "time": pl.Datetime("us"),
+        "time_zone": pl.String,
+        "value": pl.Float64,
+        "value_state": pl.String,
+        "series_id": pl.String,
+        "facts_id": pl.String,
+        "source_unit": pl.String,
+        "native_unit": pl.String,
+        "source_quality": pl.String,
+        "source_note": pl.String,
+        "product": pl.String,
+        "year": pl.Int64,
+    }
+
+
+@pytest.mark.parametrize(
+    "declaration, expected",
+    [
+        ("integer", pl.Int64),
+        ("double", pl.Float64),
+        ("timestamp[us]", pl.Datetime("us")),
+        ("unsupported", None),
+    ],
+)
+def test_empty_native_schema_uses_declared_types_or_refuses(declaration, expected, tmp_path):
+    from dataclasses import replace
+
+    from rivretrieve._internal.store.reader import _empty_physical_rows
+
+    store = StoreRoot(_published(tmp_path))
+    manifest = StoreReader().status(store, ProviderId("fixture_bulk")).manifest
+    assert isinstance(manifest, StoreManifest)
+    # This pure schema-construction control does not publish altered declarations.
+    schema = replace(
+        manifest.source_schema,
+        columns=tuple(
+            replace(column, type=declaration) if column.name == "source_quality" else column
+            for column in manifest.source_schema.columns
+        ),
+    )
+    manifest = replace(manifest, source_schema=schema)
+    if expected is None:
+        with pytest.raises(ObservationStoreRefusedError, match="source_schema.native_type:source_quality"):
+            _empty_physical_rows(store, manifest)
+    else:
+        result = _empty_physical_rows(store, manifest)
+        assert result.is_empty()
+        assert result.schema["source_quality"] == expected
