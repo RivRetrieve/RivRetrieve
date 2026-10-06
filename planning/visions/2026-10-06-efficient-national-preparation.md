@@ -188,5 +188,5 @@ This Effort owns the verified disposition of original report #392, including its
 resource report and shorter-archive consideration. Record measured conclusions and
 merged-delivery links. A justified remaining build cost is acceptable under the
 owner's decision above. Publishing this vision does not establish resolution,
-delivery or landing and must not close #392 or #517. Implementation starts only
-through the explicit handoff after this vision is published and verified.
+delivery or landing. Both issues remain open. Implementation starts only through
+the explicit handoff after this vision is published and verified.
