@@ -308,8 +308,12 @@ class ObservationResult(BaseModel):
         Retrieval statuses, each for one source series, or for a request that
         has no concrete series identity, over the interval in its ``window``.
         A series can have several outcomes, for example ``empty``, ``success``
-        and ``failed`` for different months. Outcomes remain present even when
-        a series returned no rows. When cached rows are returned after a failed
+        and ``failed`` for different months. Returned acquisitions keep their
+        original windows and observation keys. Their scope can extend beyond
+        returned rows, and older and newer successful acquisitions can mention
+        the same key in a mixed result. The data frame is the selected answer;
+        acquisition records are not a one-to-one index of its rows.
+        Outcomes remain present even when a series returned no rows. When cached rows are returned after a failed
         retrieval, the cached ``success`` outcome and the new ``failed`` outcome
         can cover the same interval. Parts requested only as padding outside
         the requested dates produce an outcome only when their source request

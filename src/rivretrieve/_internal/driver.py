@@ -74,7 +74,7 @@ from rivretrieve._internal.source_series import (
 )
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
 from rivretrieve._internal.store.accumulation import StoreUpdate, SuccessfulReplacement, accumulate
-from rivretrieve._internal.store.authority import CurrentEvidence, project_evidence, retained_snapshot_outcome
+from rivretrieve._internal.store.authority import CurrentEvidence, project_evidence
 from rivretrieve._internal.store.provenance import encode_source_call
 from rivretrieve._internal.store.receipts import encode_store_excerpt
 from rivretrieve._internal.store.validation import (
@@ -1179,7 +1179,7 @@ def _held_outcomes(
                 if (not facts_ids or key[0] in facts_ids) and native.start <= key[1] <= native.end
             )
             if keys:
-                retained.append(retained_snapshot_outcome(item, keys))
+                retained.append(item)
             continue
         if not _overlaps(item, interval):
             continue
@@ -1210,6 +1210,58 @@ def _inventory_in_request(snapshot: InventorySnapshot, scope: SeriesScope, reque
     return True
 
 
+def _held_issues(
+    evidence: CurrentEvidence,
+    request: ObservationRequest,
+    scope: SeriesScope,
+    definitions: dict[str, SourceSeries],
+) -> tuple[Issue, ...]:
+    """Select source issue scopes before acquisition-reference projection."""
+    start = datetime.fromisoformat(request.window.start.isoformat())
+    end = datetime.fromisoformat(request.window.end.isoformat())
+    identity_scope = scope.model_copy(update={"predicates": ()})
+    pairs = []
+    for station in request.stations:
+        for product in request.products:
+            members = tuple(
+                item
+                for item in definitions.values()
+                if item.station_id == station and item.product_id == product and identity_scope.matches(item)
+            )
+            facts = tuple(fact for item in members for fact in item.facts if scope.matches_facts(fact))
+            daily = any(fact.clipping_axis is ClippingAxis.CALENDAR_DATE for fact in facts)
+            interval = RequestedInterval(
+                datetime.combine(start.date(), time.min) if daily else start,
+                datetime.combine(end.date(), time.max) if daily else end,
+            )
+            pairs.append(
+                (
+                    station,
+                    product,
+                    tuple(item.series_id for item in members),
+                    tuple(fact.facts_id for fact in facts),
+                    interval,
+                )
+            )
+    return tuple(
+        issue
+        for issue in evidence.issues
+        if any(
+            _issue_in_scope(
+                issue,
+                station,
+                str(product),
+                identities,
+                facts_ids=facts,
+                interval=interval,
+                outcomes=evidence.outcomes,
+                resolved_scope=scope,
+            )
+            for station, product, identities, facts, interval in pairs
+        )
+    )
+
+
 def _project_returned_evidence(
     request: ObservationRequest,
     scope: SeriesScope,
@@ -1223,6 +1275,10 @@ def _project_returned_evidence(
     supporting_outcomes: tuple[RetrievalOutcome, ...] = (),
 ) -> tuple[CurrentEvidence, tuple[SourceSeries, ...]]:
     """Close request evidence over intact inventories and acquisition identities."""
+    original_issues = _held_issues(held, request, scope, definitions) if held is not None else ()
+    # Do not collapse equal notes from independent fresh acquisitions. Only
+    # avoid adding a held record already carried by the current result path.
+    issues = (*tuple(item for item in original_issues if item not in issues), *issues)
     evidence = project_evidence(
         CurrentEvidence(
             (*outcomes, *(held.outcomes if held is not None else ())),
@@ -2752,7 +2808,7 @@ def drive(
                 if not keys:
                     continue
                 attributed.update((item.series_id, *key) for key in keys)
-                outcomes.append(retained_snapshot_outcome(item, keys))
+                outcomes.append(item)
             if receipts is ReceiptMode.INCLUDE and not held_rows.is_empty():
                 receipt_entries.append(encode_store_excerpt(held_read))
     selected, retained_inventories, retained_outcomes = _result_metadata(scope, definitions, inventories, outcomes)
@@ -2845,7 +2901,6 @@ def drive(
                     for plan, identities, facts in current_scopes
                 )
             ] + [issue for issue in all_issues if (issue.details or {}).get("outcome_id") in unadmitted_outcome_ids]
-            held_evidence = current
     evidence, selected = _project_returned_evidence(
         request,
         scope,
@@ -3071,23 +3126,17 @@ def drive_store(
         query_issues,
     )
     held_evidence = resolved.evidence(store, request.provider_id)
-    relevant_issues = tuple(
-        issue
-        for issue in manifest.issues
-        if any(
-            _issue_in_scope(
-                issue,
-                station,
-                str(product),
-                tuple(item.series_id for item in selected),
-                interval=_requested_interval(request.window, config.products[product].semantics),
-                outcomes=manifest.outcomes,
-                resolved_scope=scope,
-                facts_ids=matching_facts,
-            )
-            for station in request.stations
-            for product in request.products
-        )
+    selected_ids = {item.series_id for item in selected}
+    # Compiled acquisitions support observations and empty answers independently
+    # of inventory links. A local query assessment is not their replacement.
+    outcomes.extend(
+        item
+        for item in manifest.outcomes
+        if item.station_id in request.stations
+        and item.product_id in request.products
+        and (item.series_id is None or item.series_id in selected_ids)
+        and (not item.facts_ids or not matching_facts or set(item.facts_ids).intersection(matching_facts))
+        and _overlaps(item, _requested_interval(request.window, config.products[ProductId(item.product_id)].semantics))
     )
     evidence, returned_series = _project_returned_evidence(
         request,
@@ -3095,7 +3144,7 @@ def drive_store(
         known_identities,
         manifest.inventories,
         tuple(outcomes),
-        relevant_issues + converted.issues + tuple(query_issues),
+        converted.issues + tuple(query_issues),
         (),
         held=held_evidence,
     )

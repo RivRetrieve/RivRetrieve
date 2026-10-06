@@ -347,7 +347,7 @@ def test_public_fact_reuse_keeps_original_acquisition_and_only_applicable_diagno
     assert all(item in stored.inventories for item in result.inventories)
 
 
-def test_public_compiled_empty_inventory_keeps_transitive_acquisition_support(bulk_store):
+def test_public_compiled_empty_inventory_keeps_dependencies_and_active_diagnostics(bulk_store):
     import json
 
     from rivretrieve._internal.issues import Issue
@@ -407,9 +407,113 @@ def test_public_compiled_empty_inventory_keeps_transitive_acquisition_support(bu
     integrity.seal_store(store, ProviderId("fixture_bulk"))
     result = rr.fetch(requested, start="2024-01-01", end="2024-01-01", cache="reuse", on_issue="ignore")
     assert result.data.is_empty()
-    assert tuple(item.status for item in result.outcomes) == (OutcomeStatus.NO_MATCH,)
+    assert tuple(item.status for item in result.outcomes) == (OutcomeStatus.NO_MATCH, OutcomeStatus.FAILED)
     assert result.inventories == (old, empty)
-    assert result.supporting_outcomes == (failed,)
+    # A dependency does not supersede an outcome still declared active by the
+    # publisher's compiled snapshot. Only the store authority can retire it.
+    assert result.supporting_outcomes == ()
     assert result.provenance.calls_made == ({"call_id": "historical-call"}, {"call_id": "empty-census-call"})
-    assert not any(item.code == "source.request_failed" for item in result.issues)
+    assert issue in result.issues
     assert any(item.code == "source.no_match" for item in result.issues)
+
+
+@pytest.mark.parametrize("inventory_link", [False, True])
+@pytest.mark.parametrize("active_failure", [False, True])
+def test_public_compiled_acquisitions_support_rows_notes_and_failures_without_inventory_links(
+    bulk_store, inventory_link, active_failure
+):
+    import json
+    from datetime import UTC
+
+    from rivretrieve._internal.issues import Issue, IssuePolicyError
+    from rivretrieve._internal.source_series import (
+        InventoryCompleteness,
+        InventorySnapshot,
+        OutcomeStatus,
+        RetrievalOutcome,
+        SeriesWindow,
+    )
+    from rivretrieve._internal.store.provenance import encode_source_call
+
+    selection, store = bulk_store
+    definition, unrelated = selection.known_series[:2]
+    requested = _selection("fixture_bulk", (definition,))
+    stamp = datetime(2026, 1, 1, tzinfo=UTC)
+    acquired = tuple(
+        RetrievalOutcome(
+            outcome_id=f"acquired-{index}",
+            series_id=item.series_id,
+            station_id=item.station_id,
+            product_id=item.product_id,
+            facts_ids=tuple(fact.facts_id for fact in item.facts),
+            window=SeriesWindow(start=datetime(2023, 1, 1), end=datetime(2024, 12, 31)),
+            status=OutcomeStatus.SUCCESS,
+            calls=(f"call-{index}",),
+            retrieved_at=stamp,
+        )
+        for index, item in enumerate((definition, unrelated))
+    )
+    failure = acquired[0].model_copy(
+        update={
+            "outcome_id": "active-failure",
+            "status": OutcomeStatus.FAILED,
+            "reason": "An independent artifact request failed",
+            "calls": ("failure-call",),
+        }
+    )
+    note = Issue(
+        severity="info",
+        code="source.note",
+        message="Original acquisition-wide summary",
+        details={"outcome_id": acquired[0].outcome_id, "count": 7},
+    )
+    unrelated_note = Issue(
+        severity="info",
+        code="source.note",
+        message="Unrelated station summary",
+        details={"station_id": unrelated.station_id, "count": 99},
+    )
+    failure_issue = Issue(
+        severity="error",
+        code="source.request_failed",
+        message=failure.reason,
+        details={"outcome_id": failure.outcome_id, "count": 11},
+    )
+    inventory = InventorySnapshot(
+        snapshot_id="source-census",
+        scope=requested.scope,
+        members=(definition.series_id,),
+        completeness=InventoryCompleteness.COMPLETE,
+        access="authored artifact",
+        origin="compiled",
+        evidence=(f"retrieval-outcome:{acquired[0].outcome_id}",) if inventory_link else ("Authored source census",),
+    )
+    calls = tuple({"call_id": key, "retrieved_at": stamp} for key in ("call-0", "call-1", "failure-call"))
+    path = store / "manifest.json"
+    raw = json.loads(path.read_text())
+    raw.update(
+        inventories=[inventory.model_dump(mode="json")],
+        outcomes=[item.model_dump(mode="json") for item in (*acquired, *((failure,) if active_failure else ()))],
+        source_calls=[encode_source_call(call) for call in calls],
+        issues=[
+            item.model_dump(mode="json")
+            for item in (note, unrelated_note, *((failure_issue,) if active_failure else ()))
+        ],
+    )
+    path.write_text(json.dumps(raw))
+    integrity.seal_store(store, ProviderId("fixture_bulk"))
+    result = rr.fetch(requested, start="2024-01-01", end="2024-01-01", cache="reuse", on_issue="ignore")
+    assert result.data["value"].to_list() == [None]
+    assert result.provenance.calls_made == (calls[0], *((calls[2],) if active_failure else ()))
+    assert result.provenance.retrieved_at == stamp
+    assert acquired[0] in result.outcomes and acquired[1] not in result.outcomes
+    assert note in result.issues and note.details == {"outcome_id": "acquired-0", "count": 7}
+    assert unrelated_note not in result.issues
+    assert result.source_series == (definition,)
+    assert result.inventories == (inventory,)
+    assert result.supporting_outcomes == ()
+    if active_failure:
+        assert failure in result.outcomes and failure_issue in result.issues
+        with pytest.raises(IssuePolicyError) as error:
+            rr.fetch(requested, start="2024-01-01", end="2024-01-01", cache="reuse", on_issue="raise")
+        assert failure_issue in error.value.issues

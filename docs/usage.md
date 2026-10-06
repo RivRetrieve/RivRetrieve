@@ -381,7 +381,11 @@ original acquisition time among the returned calls, whether the result is fresh,
 held or mixed. Reuse does not create a new publisher acquisition. If none of the
 returned calls establishes a time, `retrieved_at` remains `None`. Individual calls,
 outcomes and `served_intervals` retain their original acquisition times and
-unknowns. A source issue's count still describes its acquisition, not a new count
+unknowns. An acquisition keeps its original window and observation keys even
+when only part of it contributes held rows. Older and newer acquisitions can
+therefore mention the same key in a mixed result. Use `result.data` for the
+selected answer; acquisition records do not define one-to-one row ownership.
+A source issue's count still describes its acquisition, not a new count
 over selected rows. Failed requests can leave no payload origin.
 
 ## Receipts (optional)
