@@ -1682,13 +1682,15 @@ def _calls_with_failed_acquisitions(
         groups.setdefault(call.get("acquisition_id", call.get("call_id")), []).append(call)
     calls = list(payload_calls)
     independent: list[dict[str, object]] = []
-    for group in groups.values():
+    # Inserting later siblings first keeps the original order when groups share
+    # the same prerequisite position. Calls within each group stay unchanged.
+    for group in reversed(groups.values()):
         dependencies = next(
             (call["prerequisite_acquisition_ids"] for call in group if "prerequisite_acquisition_ids" in call), ()
         )
         assert isinstance(dependencies, tuple)
         if not dependencies:
-            independent.extend(group)
+            independent[0:0] = group
             continue
         positions = [
             index for index, call in enumerate(calls) if call.get("acquisition_id", call.get("call_id")) in dependencies

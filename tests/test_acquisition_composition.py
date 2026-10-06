@@ -497,3 +497,18 @@ def test_invalid_failed_dependency_is_fatal_before_store_publication(tmp_path, d
     with pytest.raises(FatalContractError, match="Prerequisite"):
         run(tmp_path / "store", SourceAcquisition((), failed_requests=(event,)))
     assert not (tmp_path / "store" / "manifest.json").exists()
+
+
+@pytest.mark.parametrize("with_independent", [False, True])
+def test_failed_siblings_keep_original_call_group_order(with_independent):
+    from rivretrieve._internal.driver import _calls_with_failed_acquisitions
+
+    html = {"call_id": "html"}
+    first = (
+        {"call_id": "first-retry", "acquisition_id": "first-dat", "prerequisite_acquisition_ids": ("html",)},
+        {"call_id": "first-final", "acquisition_id": "first-dat", "prerequisite_acquisition_ids": ("html",)},
+    )
+    second = {"call_id": "second-dat", "prerequisite_acquisition_ids": ("html",)}
+    independent = ({"call_id": "independent-one"}, {"call_id": "independent-two"}) if with_independent else ()
+    failures = (*independent[:1], *first, second, *independent[1:])
+    assert _calls_with_failed_acquisitions((html,), failures) == (*independent, html, *first, second)
