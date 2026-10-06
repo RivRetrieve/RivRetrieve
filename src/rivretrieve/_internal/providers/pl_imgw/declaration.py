@@ -20,7 +20,6 @@ def _download(request: BulkDownloadRequest) -> tuple[DownloadedBulkArtifact, ...
         request.destination,
         today=request.today,
         transfer=request.transfer,
-        previous_source_vintage=request.previous_source_vintage,
     )
     return tuple(DownloadedBulkArtifact(item.path, item.url, item.source_vintage) for item in downloaded)
 
