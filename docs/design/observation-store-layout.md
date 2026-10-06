@@ -515,12 +515,18 @@ space and MUST NOT be charged again. Sequential compilation and replay workspace
 MUST NOT be added as if they coexist.
 
 Poland keeps its ordering index in the managed workspace. Canada's source query
-can use native SQLite temporary files. Its admission check resolves the default
-SQLite VFS's native temporary directory without changing environment variables or
-SQLite global settings. Unix resolution follows SQLite's directory search;
-desktop Windows uses `GetTempPathW`, matching the reviewed SQLite 3.53.1 default
-VFS. Cygwin, UWP, custom VFS routing and changes to these process settings during
-compilation are outside this estimate.
+can use native SQLite temporary files. Its admission check reconstructs default
+SQLite VFS routing only when `SQLITE_TMPDIR` and `TMPDIR` were set before process
+startup and remain unchanged for the process lifetime. SQLite can cache its
+initialization-time environment. The check cannot recover that state after late
+changes, so those sessions are unsupported even if their environment stays fixed
+during compilation. Restart Python with the intended environment before preparing
+Canada in such a session.
+
+The check changes no environment variables or SQLite globals. Unix resolution
+follows SQLite's directory search; desktop Windows uses `GetTempPathW`, matching
+the reviewed SQLite 3.53.1 default VFS. Cygwin, UWP and custom VFS routing are not
+covered. SQLite global temp settings must remain unchanged during compilation.
 
 Admission estimates are not reservations or guaranteed upper bounds. Later
 refusals identify the preparation phase; they MUST NOT claim that acquisition has

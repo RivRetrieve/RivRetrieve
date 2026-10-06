@@ -1675,6 +1675,11 @@ def download(provider: str):
     clear_cache only when deleting all owned state is intended.
     Transport failures can also propagate rather than becoming result issues.
 
+    Canada's disk estimate requires ``SQLITE_TMPDIR`` and ``TMPDIR`` to be set
+    before Python starts and unchanged for the process lifetime. SQLite can cache
+    those settings. If they changed after startup, restart Python with the intended
+    environment before downloading Canada; admission cannot recover the old state.
+
     An existing compiled store that passes validation supplies its source
     vintage, so the provider can refuse a download whose published history
     would regress. An existing store that fails validation does not block the

@@ -1,10 +1,13 @@
 """Additional disk-growth estimates for compilation and source replay.
 
 Admission compares estimates with current free space; it reserves nothing. Native
-SQLite temporary storage assumes the default OS VFS and unchanged environment and
-SQLite global temp settings for the duration of compilation. Custom VFS routing is
-not covered. Source inputs, previous stores and existing candidates already occupy
-space and must not be charged again.
+SQLite routing is reconstructed only for the default OS VFS with SQLITE_TMPDIR and
+TMPDIR set before process startup and unchanged for the process lifetime. SQLite
+can cache its initialization-time environment; this module cannot recover that
+state after late changes. Such sessions and custom VFS routing are unsupported.
+SQLite global temp settings must remain unchanged during compilation. Source
+inputs, previous stores and existing candidates already occupy space and must not
+be charged again.
 """
 
 from __future__ import annotations
@@ -131,13 +134,17 @@ def _windows_temp_directory() -> str:
 
 
 def resolve_sqlite_temp_directory() -> Path:
-    """Resolve default-VFS temp storage without changing process or SQLite globals.
+    """Reconstruct default-VFS routing under an unchanged startup environment.
 
-    Unix follows SQLite's writable-directory search, rather than Python's cached
-    temporary directory. Desktop Win32 uses GetTempPathW, as in the reviewed SQLite
-    3.53.1 default VFS. Cygwin, UWP and custom VFS routing are not covered. Changes
-    to process settings during compilation are outside this estimate. This
-    function does not relocate SQLite files.
+    Set SQLITE_TMPDIR and TMPDIR before process startup and leave them unchanged
+    for the process lifetime. SQLite can cache its initialization-time environment;
+    this function cannot recover that state after late changes. Such sessions are
+    unsupported even when their environment stays fixed during compilation.
+
+    Unix follows SQLite's writable-directory search. Desktop Win32 uses
+    GetTempPathW, as in the reviewed SQLite 3.53.1 default VFS. Cygwin, UWP and
+    custom VFS routing are not covered. SQLite global temp settings must not change
+    during compilation. This function changes no globals and relocates no files.
     """
     if sys.platform == "cygwin":
         raise RuntimeError("Cannot estimate the Cygwin SQLite temporary-directory search")

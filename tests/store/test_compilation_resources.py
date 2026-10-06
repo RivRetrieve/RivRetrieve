@@ -61,7 +61,7 @@ def test_later_refusal_reports_phase_and_preserves_inputs(tmp_path) -> None:
     assert original.read_bytes() == b"source"
 
 
-def test_native_sqlite_temp_resolution_honors_sqlite_before_python_temp(tmp_path, monkeypatch) -> None:
+def test_sqlite_directory_policy_prioritizes_sqlite_over_python_temp(tmp_path, monkeypatch) -> None:
     from rivretrieve._internal.store import resources
 
     native = tmp_path / "sqlite"
@@ -217,7 +217,7 @@ def test_hydat_checks_exact_extraction_before_creating_payload(tmp_path, monkeyp
     assert artifact.read_bytes() == original
 
 
-def test_unix_sqlite_temp_search_skips_unavailable_directories(tmp_path, monkeypatch) -> None:
+def test_unix_directory_policy_skips_unavailable_directories(tmp_path, monkeypatch) -> None:
     from rivretrieve._internal.store import resources
 
     sqlite_dir = tmp_path / "sqlite"
@@ -265,3 +265,34 @@ def test_imgw_estimate_includes_excess_source_width(tmp_path, expanded, addition
     # One record, three output rows. Includes journal, excess-width output,
     # maintained ordering and metadata. Expected numbers are worked by hand.
     assert estimates == [CompilationSpaceEstimate(CompilationPhase.COMPILE, 64 * 1024**2 + additional)]
+
+
+def test_sqlite_resolution_in_process_with_startup_temp_environment(tmp_path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    if os.name != "posix":
+        pytest.skip("This startup-environment control exercises the Unix directory policy")
+    native = tmp_path / "native"
+    fallback = tmp_path / "fallback"
+    native.mkdir()
+    fallback.mkdir()
+    code = """
+import os
+import sqlite3
+from pathlib import Path
+from rivretrieve._internal.store.resources import resolve_sqlite_temp_directory
+connection = sqlite3.connect(":memory:")
+connection.close()
+assert resolve_sqlite_temp_directory() == Path(os.environ["SQLITE_TMPDIR"])
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=tmp_path,
+        env={**os.environ, "SQLITE_TMPDIR": str(native), "TMPDIR": str(fallback)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
