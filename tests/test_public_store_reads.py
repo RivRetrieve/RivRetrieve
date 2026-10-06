@@ -193,7 +193,31 @@ def live_routes(tmp_path, monkeypatch, stub_packaged_catalogue_artifact):
 
 
 def test_public_live_stations_and_routes_share_preparation(live_routes, monkeypatch):
+    import json
+
+    from rivretrieve._internal.source_series import CatalogueSeriesClaim, InventoryCompleteness, InventorySnapshot
+
     source, selected, store = live_routes
+    catalogue = InventorySnapshot(
+        snapshot_id="authored-catalogue",
+        scope=selected.scope,
+        members=(),
+        catalogue_claims=tuple(
+            CatalogueSeriesClaim(
+                provider_id=definition.provider_id,
+                station_id=definition.station_id,
+                product_id=definition.product_id,
+                identity=definition.identity.model_copy(update={"origin": "catalogue"}),
+            )
+            for definition in selected.known_series
+        ),
+        completeness=InventoryCompleteness.INCOMPLETE,
+        reason="Catalogue listings do not establish exhaustive response membership",
+        access="authored packaged catalogue",
+        origin="catalogue",
+        evidence=("authored catalogue source",),
+    )
+    selected = replace(selected, inventories=(catalogue,))
     fresh = rr.fetch(selected, start="2026-01-01", end="2026-01-04", cache="refresh", on_issue="raise")
     assert [(stations, products) for stations, products, _ in source.calls] == [
         (("station-1",), ("level",)),
@@ -201,6 +225,7 @@ def test_public_live_stations_and_routes_share_preparation(live_routes, monkeypa
         (("station-2",), ("level",)),
     ]
     source.calls.clear()
+    generation = json.loads((store / "integrity.json").read_text())["generation_id"]
     inspected, digested = _read_work(monkeypatch, store)
     for _ in range(2):
         inspected.clear()
@@ -208,6 +233,8 @@ def test_public_live_stations_and_routes_share_preparation(live_routes, monkeypa
         held = rr.fetch(selected, start="2026-01-01", end="2026-01-04", cache="reuse", on_issue="raise")
         pt.assert_frame_equal(held.data, fresh.data)
         assert source.calls == []
+        assert catalogue in held.inventories
+        assert json.loads((store / "integrity.json").read_text())["generation_id"] == generation
         assert len(inspected) == 1
         assert Counter(digested) == Counter(
             {
@@ -256,7 +283,6 @@ def test_public_live_write_invalidates_before_next_station_read(live_routes, mon
     pt.assert_frame_equal(result.data.select(expected.columns).sort("station_id", "product_id"), expected)
 
 
-
 def test_public_fact_reuse_keeps_original_acquisition_and_only_applicable_diagnostics(live_routes, monkeypatch):
     from rivretrieve._internal.issues import Issue
     from rivretrieve._internal.source_series import OutcomeStatus, known
@@ -268,23 +294,39 @@ def test_public_fact_reuse_keeps_original_acquisition_and_only_applicable_diagno
     maximum = mean.model_copy(update={"facts_id": mean.facts_id + ":max", "statistic": known("max", "authored fact")})
     definition = original.model_copy(update={"facts": (mean, maximum)})
     selected = _selection("fixture_live", (definition,))
-    count_note = Issue(severity="info", code="source.note", message="Publisher acquisition-wide count", details={"count": 7})
+    count_note = Issue(
+        severity="info", code="source.note", message="Publisher acquisition-wide count", details={"count": 7}
+    )
 
     def parse(payload, config):
         parsed = original_parse(payload, config)
         success = parsed.outcomes[0].model_copy(update={"outcome_id": "mean-acquisition"})
-        failure = success.model_copy(update={
-            "outcome_id": "max-acquisition", "facts_ids": (maximum.facts_id,),
-            "status": OutcomeStatus.FAILED, "reason": "Maximum series request failed",
-        })
+        failure = success.model_copy(
+            update={
+                "outcome_id": "max-acquisition",
+                "facts_ids": (maximum.facts_id,),
+                "status": OutcomeStatus.FAILED,
+                "reason": "Maximum series request failed",
+            }
+        )
         issue = Issue(
-            severity="error", code="source.request_failed", message=failure.reason,
+            severity="error",
+            code="source.request_failed",
+            message=failure.reason,
             details={"outcome_id": failure.outcome_id, "facts_id": maximum.facts_id, "count": 11},
         )
-        inventory = parsed.inventories[0].model_copy(update={
-            "evidence": ("retrieval-outcome:mean-acquisition", "retrieval-outcome:max-acquisition"),
-        })
-        return replace(parsed, series=(definition,), outcomes=(success, failure), inventories=(inventory,), issues=(issue, count_note))
+        inventory = parsed.inventories[0].model_copy(
+            update={
+                "evidence": ("retrieval-outcome:mean-acquisition", "retrieval-outcome:max-acquisition"),
+            }
+        )
+        return replace(
+            parsed,
+            series=(definition,),
+            outcomes=(success, failure),
+            inventories=(inventory,),
+            issues=(issue, count_note),
+        )
 
     monkeypatch.setattr(source, "parse", parse)
     rr.fetch(selected, start="2026-01-01", end="2026-01-04", cache="refresh", on_issue="ignore")
@@ -309,26 +351,50 @@ def test_public_compiled_empty_inventory_keeps_transitive_acquisition_support(bu
     import json
 
     from rivretrieve._internal.issues import Issue
-    from rivretrieve._internal.source_series import InventoryCompleteness, InventorySnapshot, OutcomeStatus, RetrievalOutcome, SeriesWindow
+    from rivretrieve._internal.source_series import (
+        InventoryCompleteness,
+        InventorySnapshot,
+        OutcomeStatus,
+        RetrievalOutcome,
+        SeriesWindow,
+    )
 
     selection, store = bulk_store
-    placeholder = selection.known_series[0].model_copy(update={"series_id": "empty-route", "station_id": "empty-station"})
+    placeholder = selection.known_series[0].model_copy(
+        update={"series_id": "empty-route", "station_id": "empty-station"}
+    )
     requested = _selection("fixture_bulk", (placeholder,))
     failed = RetrievalOutcome(
-        outcome_id="historical-failure", series_id=None, station_id="empty-station", product_id="discharge",
+        outcome_id="historical-failure",
+        series_id=None,
+        station_id="empty-station",
+        product_id="discharge",
         window=SeriesWindow(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2)),
-        status=OutcomeStatus.FAILED, reason="Historical census failed", calls=("historical-call",),
+        status=OutcomeStatus.FAILED,
+        reason="Historical census failed",
+        calls=("historical-call",),
     )
     old = InventorySnapshot(
-        snapshot_id="original-census", scope=SeriesScope(provider_ids=("fixture_bulk",), station_ids=("empty-station",), product_ids=("discharge",)),
-        members=(), completeness=InventoryCompleteness.INCOMPLETE, reason="Historical census failed",
-        access="authored compiled source", origin="compiled", evidence=("retrieval-outcome:historical-failure",),
+        snapshot_id="original-census",
+        scope=SeriesScope(provider_ids=("fixture_bulk",), station_ids=("empty-station",), product_ids=("discharge",)),
+        members=(),
+        completeness=InventoryCompleteness.INCOMPLETE,
+        reason="Historical census failed",
+        access="authored compiled source",
+        origin="compiled",
+        evidence=("retrieval-outcome:historical-failure",),
     )
-    empty = old.model_copy(update={
-        "snapshot_id": "complete-empty", "completeness": InventoryCompleteness.COMPLETE, "reason": None,
-        "evidence": ("source-inventory:original-census", "source-call:empty-census-call"),
-    })
-    issue = Issue(severity="error", code="source.request_failed", message=failed.reason, details={"outcome_id": failed.outcome_id})
+    empty = old.model_copy(
+        update={
+            "snapshot_id": "complete-empty",
+            "completeness": InventoryCompleteness.COMPLETE,
+            "reason": None,
+            "evidence": ("source-inventory:original-census", "source-call:empty-census-call"),
+        }
+    )
+    issue = Issue(
+        severity="error", code="source.request_failed", message=failed.reason, details={"outcome_id": failed.outcome_id}
+    )
     manifest_path = store / "manifest.json"
     raw = json.loads(manifest_path.read_text())
     raw.update(

@@ -350,3 +350,81 @@ def test_native_scan_decodes_only_matching_row_groups(tmp_path, monkeypatch, cap
     assert hashes == [part]
     decoded = re.findall(r"Predicate pushdown: reading (\d+) / (\d+) row groups", diagnostics)
     assert decoded == [("1", str(unrelated_rows + 1))]
+
+
+def test_prepared_reader_detects_valid_changed_value_with_restored_mtime(tmp_path):
+    import os
+    import struct
+
+    import pyarrow.parquet as pq
+
+    store = _published(tmp_path)
+    part = store / "product=level/year=2024/data.parquet"
+    table = pq.ParquetFile(part).read()
+    pq.write_table(table, part, compression="NONE", use_dictionary=False, write_statistics=False)
+    (store / "integrity.json").unlink()
+    seal_store(StoreRoot(store), ProviderId("fixture_bulk"))
+    reader = StoreReader()
+    query = _query(store, product="level")
+    assert reader.query(query).rows["value"].to_list() == [1.25]
+    before = part.stat()
+    content = part.read_bytes()
+    original = struct.pack("<d", 1.25)
+    assert content.count(original) == 1
+    part.write_bytes(content.replace(original, struct.pack("<d", 99.0)))
+    os.utime(part, ns=(before.st_atime_ns, before.st_mtime_ns))
+    # The changed bytes still decode to a well-typed valid native observation.
+    # Semantic/schema validation alone cannot detect this altered measurement.
+    assert pl.read_parquet(part)["value"].to_list() == [99.0]
+    assert reader.status(StoreRoot(store), ProviderId("fixture_bulk")).exists
+    with pytest.raises(ObservationStoreRefusedError, match="digest"):
+        reader.query(query)
+
+
+@pytest.mark.parametrize("unrelated_rows", [10, 100])
+def test_accumulated_scan_prunes_unrequested_time_row_groups(tmp_path, monkeypatch, capfd, unrelated_rows):
+    import re
+
+    from rivretrieve._internal.store import integrity
+
+    store = tmp_path / "live"
+    shutil.copytree(FIXTURES / "accumulated/valid_native_rows", store)
+    part = next(store.rglob("*.parquet"))
+    physical = pl.read_parquet(part)
+    expected = physical.filter(pl.col("time") == datetime(2020, 1, 1))
+    unrelated = physical.filter(pl.col("time") == datetime(2020, 1, 2))
+    expanded = pl.concat([expected, *[unrelated] * unrelated_rows])
+    expanded.write_parquet(part, row_group_size=1, statistics=True)
+    manifest_path = store / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["partition_row_counts"]["product=level/year=2020"] = expanded.height
+    manifest_path.write_text(json.dumps(manifest))
+    seal_store(StoreRoot(store), ProviderId("fixture_live"))
+    hashes = []
+    original = integrity._digest
+
+    def digest(path):
+        if path.suffix == ".parquet":
+            hashes.append(path)
+        return original(path)
+
+    monkeypatch.setattr(integrity, "_digest", digest)
+    monkeypatch.setattr(validation, "_open_parquet", lambda path: pytest.fail("unpruned semantic decoding"))
+    capfd.readouterr()
+    with pl.Config(verbose=True):
+        result = StoreReader().query(
+            StoreQuery(
+                StoreRoot(store),
+                ProviderId("fixture_live"),
+                ("a",),
+                (ProductId("level"),),
+                datetime(2020, 1, 1),
+                datetime(2020, 1, 1, 23, 59, 59),
+            )
+        )
+    diagnostics = capfd.readouterr().err
+    assert result.rows["value"].to_list() == [12.4, 12.4]
+    assert hashes == [part]
+    assert re.findall(r"Predicate pushdown: reading (\d+) / (\d+) row groups", diagnostics) == [
+        ("2", str(unrelated_rows + 2))
+    ]
