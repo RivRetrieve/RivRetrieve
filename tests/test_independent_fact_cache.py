@@ -704,3 +704,71 @@ def test_partial_snapshot_keeps_original_source_note_despite_unrelated_diagnosis
     held = rr.fetch(selected, start="2026-01-01", end="2026-01-01", cache="reuse", on_issue="ignore")
     pt.assert_frame_equal(held.data, mixed.data)
     assert next(issue for issue in held.issues if issue.code == "source.note").details["count"] == 7
+
+
+@pytest.mark.parametrize("on_issue", ["ignore", "raise"])
+def test_repeated_snapshot_compaction_keeps_source_note_root_lineage(fact_cache, monkeypatch, on_issue):
+    from rivretrieve._internal.issues import IssuePolicyError
+
+    stages, selection, _ = fact_cache
+    stages.members = ("mean",)
+    stages.snapshot = True
+    compactions = 2
+    stages.row_times = tuple(ROW_TIME.replace(hour=12 + index) for index in range(compactions + 1))
+    selected = rr.pick(selection, statistic="mean")
+    parse = stages.parse
+
+    def with_original_note(payload, config):
+        parsed = parse(payload, config)
+        if payload.acquisition_id == "1-mean":
+            return replace(
+                parsed,
+                issues=(
+                    Issue(
+                        severity="warning",
+                        code="source.note",
+                        message="Original snapshot count",
+                        details={"count": 7, "outcome_id": parsed.outcomes[0].outcome_id},
+                    ),
+                ),
+            )
+        return parsed
+
+    monkeypatch.setattr(stages, "parse", with_original_note)
+    fresh = rr.fetch(selected, start="2026-01-01", end="2026-01-01", cache="refresh", on_issue="ignore")
+    root_id = next(issue for issue in fresh.issues if issue.code == "source.note").details["outcome_id"]
+    stages.snapshot = False
+    stages.status["mean"] = OutcomeStatus.FAILED
+    rr.fetch(selected, start="2026-01-10", end="2026-01-10", cache="refresh", on_issue="ignore")
+    stages.snapshot = True
+    stages.status["mean"] = OutcomeStatus.SUCCESS
+    for index in range(1, compactions + 1):
+        prior = rr.cache_status(PROVIDER).manifest
+        prior_note = next(issue for issue in prior.issues if issue.code == "source.note")
+        prior_id = prior_note.details["outcome_id"]
+        assert prior_id in {item.outcome_id for item in prior.outcomes if item.status is OutcomeStatus.SUCCESS}
+        assert prior_note.details.get("original_outcome_id", prior_id) == root_id
+        if index > 1:
+            assert prior_id != root_id
+        stages.row_times = (ROW_TIME.replace(hour=12 + index),)
+        stages.value = float(index + 1)
+        policy = on_issue if index == compactions else "ignore"
+        if policy == "raise":
+            with pytest.raises(IssuePolicyError) as caught:
+                rr.fetch(selected, start="2026-01-01", end="2026-01-01", cache="refresh", on_issue=policy)
+            assert prior_note in caught.value.issues
+        else:
+            mixed = rr.fetch(selected, start="2026-01-01", end="2026-01-01", cache="refresh", on_issue=policy)
+            assert prior_note in mixed.issues
+        current = rr.cache_status(PROVIDER).manifest
+        current_note = next(issue for issue in current.issues if issue.code == "source.note")
+        assert current_note.details["original_outcome_id"] == root_id
+        assert current_note.details["count"] == 7
+    held = rr.fetch(selected, start="2026-01-01", end="2026-01-01", cache="reuse", on_issue="ignore")
+    expected = pl.DataFrame(
+        {
+            "time": [ROW_TIME.replace(hour=12 + index) for index in range(compactions + 1)],
+            "value": [float(index + 1) for index in range(compactions + 1)],
+        }
+    )
+    pt.assert_frame_equal(held.data.select("time", "value").sort("time"), expected)

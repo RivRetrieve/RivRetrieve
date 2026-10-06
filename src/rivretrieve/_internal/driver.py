@@ -2928,7 +2928,8 @@ def drive(
                 for issue in held_evidence.issues
                 if (issue.details or {}).get("outcome_id") in selected_successes
                 and any(
-                    (note.details or {}).get("original_outcome_id") == (issue.details or {}).get("outcome_id")
+                    (note.details or {}).get("original_outcome_id")
+                    == (issue.details or {}).get("original_outcome_id", (issue.details or {}).get("outcome_id"))
                     and (note.provider_id, note.code, note.severity, note.message)
                     == (issue.provider_id, issue.code, issue.severity, issue.message)
                     and all(
