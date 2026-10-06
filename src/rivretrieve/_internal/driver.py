@@ -2918,7 +2918,30 @@ def drive(
             # does not settle an earlier failed interval merely by returning keys.
             # Inspect the new generation rather than reproduce that authority.
             current = resolved_reader.evidence(store, request.provider_id)
-            held_evidence = replace(held_evidence, issues=current.issues)
+            selected_successes = {
+                item.outcome_id
+                for item in retained_outcomes
+                if item.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+            }
+            original_notes = tuple(
+                issue
+                for issue in held_evidence.issues
+                if (issue.details or {}).get("outcome_id") in selected_successes
+                and any(
+                    (note.details or {}).get("original_outcome_id") == (issue.details or {}).get("outcome_id")
+                    and (note.provider_id, note.code, note.severity, note.message)
+                    == (issue.provider_id, issue.code, issue.severity, issue.message)
+                    and all(
+                        (note.details or {}).get(key) == value
+                        for key, value in (issue.details or {}).items()
+                        if key not in {"outcome_id", "original_outcome_id", "window", "facts_ids"}
+                    )
+                    for note in current.issues
+                )
+            )
+            # Current authority retires diagnoses. Explicit fragment lineage can
+            # still support the unchanged note on a selected original acquisition.
+            held_evidence = replace(held_evidence, issues=(*current.issues, *original_notes))
             _merge_definitions(available_definitions, published.series)
             current_scopes = tuple(
                 (

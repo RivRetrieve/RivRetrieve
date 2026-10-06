@@ -648,3 +648,59 @@ def test_failure_veto_preserves_nonempty_and_successful_empty_source_answers(fac
     manifest = rr.cache_status(PROVIDER).manifest
     assert manifest.coverage == ()
     assert all(item.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY) for item in manifest.outcomes)
+
+
+@pytest.mark.parametrize("unrelated_failure", [False, True])
+@pytest.mark.parametrize("on_issue", ["ignore", "raise"])
+def test_partial_snapshot_keeps_original_source_note_despite_unrelated_diagnosis(
+    fact_cache, monkeypatch, unrelated_failure, on_issue
+):
+    from rivretrieve._internal.issues import IssuePolicyError
+
+    stages, selection, _ = fact_cache
+    stages.members = ("mean",)
+    stages.snapshot = True
+    stages.row_times = (ROW_TIME, ROW_TIME.replace(hour=13))
+    selected = rr.pick(selection, statistic="mean")
+    parse = stages.parse
+
+    def with_original_note(payload, config):
+        parsed = parse(payload, config)
+        if payload.acquisition_id == "1-mean":
+            note = Issue(
+                severity="warning",
+                code="source.note",
+                message="Original snapshot count",
+                details={"count": 7, "outcome_id": parsed.outcomes[0].outcome_id},
+            )
+            return replace(parsed, issues=(note,))
+        return parsed
+
+    monkeypatch.setattr(stages, "parse", with_original_note)
+    fresh = rr.fetch(selected, start="2026-01-01", end="2026-01-01", cache="refresh", on_issue="ignore")
+    original_note = next(issue for issue in fresh.issues if issue.code == "source.note")
+    original = next(outcome for outcome in fresh.outcomes if outcome.status is OutcomeStatus.SUCCESS)
+    if unrelated_failure:
+        stages.snapshot = False
+        stages.status["mean"] = OutcomeStatus.FAILED
+        rr.fetch(selected, start="2026-01-10", end="2026-01-10", cache="refresh", on_issue="ignore")
+    stages.snapshot = True
+    stages.status["mean"] = OutcomeStatus.SUCCESS
+    stages.row_times = (ROW_TIME.replace(hour=13),)
+    stages.value = 2.0
+    if on_issue == "raise":
+        with pytest.raises(IssuePolicyError) as caught:
+            rr.fetch(selected, start="2026-01-01", end="2026-01-01", cache="refresh", on_issue="raise")
+        assert original_note in caught.value.issues
+        return
+    mixed = rr.fetch(selected, start="2026-01-01", end="2026-01-01", cache="refresh", on_issue="ignore")
+    assert original_note in mixed.issues
+    assert original in mixed.outcomes
+    expected = pl.DataFrame({"time": [ROW_TIME, ROW_TIME.replace(hour=13)], "value": [1.0, 2.0]})
+    pt.assert_frame_equal(mixed.data.select("time", "value").sort("time"), expected)
+    stored = rr.cache_status(PROVIDER).manifest
+    current_note = next(issue for issue in stored.issues if issue.code == "source.note")
+    assert current_note.details["original_outcome_id"] == original.outcome_id
+    held = rr.fetch(selected, start="2026-01-01", end="2026-01-01", cache="reuse", on_issue="ignore")
+    pt.assert_frame_equal(held.data, mixed.data)
+    assert next(issue for issue in held.issues if issue.code == "source.note").details["count"] == 7
