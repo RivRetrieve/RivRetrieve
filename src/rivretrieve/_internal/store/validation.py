@@ -21,6 +21,7 @@ import pyarrow.parquet as pq
 from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import ValidationError
 
+from rivretrieve._internal.acquisition_dependencies import source_call_dependencies
 from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
@@ -32,6 +33,7 @@ from rivretrieve._internal.source_series import (
     SourceSeries,
     admission,
 )
+from rivretrieve._internal.store.compatibility import required_source_call_fields
 from rivretrieve._internal.store.provenance import decode_source_call
 from rivretrieve._internal.time_axis import TimeAxis, timestamp_on_axis
 
@@ -308,6 +310,22 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
             store,
             provider_id,
             f"unsupported format revision {version!r}",
+        )
+    if (
+        version == 8
+        and isinstance(raw.get("source_calls"), list)
+        and any(
+            isinstance(call, dict) and "call_id" in call and field not in call
+            for call in raw["source_calls"]
+            for field in required_source_call_fields(str(provider_id))
+        )
+    ):
+        _refuse(
+            StoreRefusalKind.INCOMPATIBLE,
+            store,
+            provider_id,
+            f"{provider_id} cache lacks required acquisition evidence; clear_cache before refreshing. "
+            "Refresh creates new acquisition history, not restoration of the original calls.",
         )
 
 
@@ -808,6 +826,10 @@ def _validate_metadata(raw: dict[str, Any], store: StoreRoot, provider_id: Provi
         support = _supporting_outcomes(raw)
     except (ValidationError, ValueError, TypeError) as error:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"series.metadata:{error}")
+    try:
+        source_call_dependencies(metadata["source_calls"])
+    except FatalContractError as error:
+        _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"source_call.prerequisites:{error}")
     definitions = {item.series_id: item for item in metadata["series"]}
     if len(definitions) != len(metadata["series"]) or any(
         item.provider_id != provider_id for item in definitions.values()

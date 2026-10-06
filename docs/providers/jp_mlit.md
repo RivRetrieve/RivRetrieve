@@ -197,11 +197,24 @@ Selecting the specific series tells RivRetrieve exactly which record to reuse.
 Repeating the broader `selection` alone can require another source request because
 RivRetrieve has not established whether other matching series exist.
 
+The saved acquisition history includes both the HTML page and its linked DAT
+download, with their original request details and retrieval times. A local read
+keeps this history even when receipts are disabled. When receipts are enabled,
+direct retrieval can return both publisher responses; reuse returns a generated
+excerpt of the saved observations, not copies of those responses.
+
 If the complete request is not covered, `reuse` retrieves the full requested scope
 again, rather than downloading only missing dates. Saved values can differ from
 later source corrections. Use `cache="refresh"` to request a current answer.
 Set `RIVRETRIEVE_CACHE_DIR` to choose a local cache location; see
 [Usage](../usage.md#cache-and-bulk-downloads).
+
+Older MLIT caches can lack the HTML request in their saved acquisition history.
+RivRetrieve refuses these caches before making a request, including when
+`cache="refresh"` is selected. Use `rr.clear_cache("jp_mlit")` to remove the
+provider’s saved observations, then retrieve the required series again. This
+creates new acquisition history and retrieval times; it cannot restore the
+missing original request.
 
 ## Terms and citation
 

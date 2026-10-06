@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_dependencies import validate_prerequisite_ids
 from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
@@ -351,8 +352,11 @@ class Payload:
     attempt_traces: tuple[TransportAttempt, ...] = field(default=(), kw_only=True)
     acquisition_id: str = field(default_factory=lambda: uuid4().hex, kw_only=True)
     acquisition_axis: TimeAxis = field(default=TimeAxis.NATIVE, kw_only=True)
+    # Actual acquisition support, distinct from sanitized credential exchanges.
+    prerequisite_acquisition_ids: tuple[str, ...] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
+        validate_prerequisite_ids(self.prerequisite_acquisition_ids)
         if not isinstance(self.attempt_traces, tuple) or any(
             not isinstance(attempt, TransportAttempt) for attempt in self.attempt_traces
         ):

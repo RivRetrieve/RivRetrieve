@@ -1593,6 +1593,7 @@ def test_payload_origins_enrich_provenance_as_json_safe_ordered_facts() -> None:
     )
     assert set(enriched.calls_made[3]) == {
         "call_id",
+        "prerequisite_acquisition_ids",
         "url",
         "request_parameters",
         "status_code",
@@ -1603,10 +1604,11 @@ def test_payload_origins_enrich_provenance_as_json_safe_ordered_facts() -> None:
         "station_products",
     }
     assert enriched.calls_made[3]["station_products"] == (("station-3", "level"),)
+    assert enriched.calls_made[3]["prerequisite_acquisition_ids"] == ()
     assert all(
         value == {"status": "unknown", "reason": "unknown"}
         for key, value in enriched.calls_made[3].items()
-        if key not in ("station_products", "call_id")
+        if key not in ("station_products", "call_id", "prerequisite_acquisition_ids")
     )
     assert enriched.calls_made[2]["request_parameters"] == {
         "status": "unknown",

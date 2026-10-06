@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from rivretrieve._internal.acquisition_dependencies import source_call_dependencies, source_call_support
 from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval, remainder
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.source_series import (
@@ -336,6 +337,7 @@ def compact_evidence(
         for call in source_calls
     ):
         raise FatalContractError("Persisted source calls require explicit call or acquisition identity")
+    source_call_dependencies(source_calls)
     acquisitions_by_id: dict[str, RetrievalOutcome] = {}
     for item in (*supporting_outcomes, *outcomes):
         prior = acquisitions_by_id.setdefault(item.outcome_id, item)
@@ -479,13 +481,15 @@ def compact_evidence(
         if isinstance(identity, str) and isinstance(acquisition, str):
             aliases.setdefault(identity, set()).add(acquisition)
             aliases.setdefault(acquisition, set()).add(identity)
-    for needed in (active_references, references):
-        pending = list(needed)
-        while pending:
-            for identity in aliases.get(pending.pop(), ()):
-                if identity not in needed:
-                    needed.add(identity)
-                    pending.append(identity)
+    pending = list(active_references)
+    while pending:
+        for identity in aliases.get(pending.pop(), ()):
+            if identity not in active_references:
+                active_references.add(identity)
+                pending.append(identity)
+
+    # Support retains source calls without making their old diagnoses active.
+    references = source_call_support(source_calls, references)
 
     calls = tuple(
         call for call in source_calls if call.get("call_id") in references or call.get("acquisition_id") in references

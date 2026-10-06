@@ -5,7 +5,7 @@ Contributed by: Thiago von Däniken
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from html.parser import HTMLParser
 from typing import Literal
@@ -187,19 +187,18 @@ def fetch(
                     failures.append(html)
                     continue
                 tag = ((station_id, product_id),)
-                payloads.append(
-                    Payload(
-                        SourceCoordinates(JpMlitPayloadCoordinates(coordinates.kind, "html")),
-                        tag,
-                        window.bounds,
-                        html.content,
-                        _origin(html),
-                        html.prerequisite_calls,
-                        scope=scope,
-                        known_series=known_series,
-                        attempt_traces=html.attempt_traces,
-                    )
+                html_payload = Payload(
+                    SourceCoordinates(JpMlitPayloadCoordinates(coordinates.kind, "html")),
+                    tag,
+                    window.bounds,
+                    html.content,
+                    _origin(html),
+                    html.prerequisite_calls,
+                    scope=scope,
+                    known_series=known_series,
+                    attempt_traces=html.attempt_traces,
                 )
+                payloads.append(html_payload)
                 try:
                     links = _page(html.content, coordinates.kind, station_id)
                 except UnsupportedSourceStructureError:
@@ -226,7 +225,7 @@ def fetch(
                     transport, TransportRequest(method=HttpMethod.GET, url=links[0]), series, bounds
                 )
                 if isinstance(dat, FailedSourceRequest):
-                    failures.append(dat)
+                    failures.append(replace(dat, prerequisite_acquisition_ids=(html_payload.acquisition_id,)))
                     continue
                 payloads.append(
                     Payload(
@@ -237,6 +236,7 @@ def fetch(
                         _origin(dat),
                         dat.prerequisite_calls,
                         attempt_traces=dat.attempt_traces,
+                        prerequisite_acquisition_ids=(html_payload.acquisition_id,),
                         scope=scope,
                         known_series=known_series,
                     )

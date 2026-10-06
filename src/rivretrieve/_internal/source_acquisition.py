@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from uuid import uuid4
 
+from rivretrieve._internal.acquisition_dependencies import validate_prerequisite_ids
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.source_series import SeriesWindow, SourceSeries
 from rivretrieve._internal.transport import (
@@ -68,8 +69,11 @@ class FailedSourceRequest:
     meaning: SourceResponseMeaning = SourceResponseMeaning.UNSPECIFIED
     # Series events may share one physical request without sharing outcome identity.
     call_id: str | None = field(default=None, kw_only=True)
+    # Successful source acquisitions needed to attempt this request.
+    prerequisite_acquisition_ids: tuple[str, ...] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
+        validate_prerequisite_ids(self.prerequisite_acquisition_ids)
         if not isinstance(self.meaning, SourceResponseMeaning):
             raise TypeError("source response meaning must be SourceResponseMeaning")
 

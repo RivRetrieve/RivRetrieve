@@ -98,6 +98,9 @@ their original retrieval time alongside the new diagnostics. Storage details, re
 and replacement rules belong to the [observation-store contract](design/observation-store-layout.md).
 
 Provenance identifies source calls independently of optional receipt retention.
+When one acquisition requires another, retained evidence includes that explicit
+dependency and both original calls. A local read preserves their original request
+details and retrieval times. It does not make the observations newly acquired.
 Publisher receipts preserve bytes at the parse boundary. Store-excerpt receipts encode
 selected stored rows and cannot reconstruct discarded publisher content. This distinction
 makes the available evidence explicit without promising reproducibility from a checksum

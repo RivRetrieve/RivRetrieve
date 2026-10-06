@@ -152,7 +152,30 @@
     "source_calls": {
       "type": "array",
       "items": {
-        "type": "object"
+        "type": "object",
+        "properties": {
+          "prerequisite_acquisition_ids": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "__rivretrieve_value_type__",
+              "value"
+            ],
+            "properties": {
+              "__rivretrieve_value_type__": {
+                "const": "tuple"
+              },
+              "value": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "\\S"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -390,7 +413,30 @@
         "source_calls": {
           "type": "array",
           "items": {
-            "type": "object"
+            "type": "object",
+            "properties": {
+              "prerequisite_acquisition_ids": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "__rivretrieve_value_type__",
+                  "value"
+                ],
+                "properties": {
+                  "__rivretrieve_value_type__": {
+                    "const": "tuple"
+                  },
+                  "value": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "publication_service": {
@@ -399,7 +445,36 @@
         "usgs_publication_service": {
           "const": "usgs-waterdata-v1"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "provider_id": {
+                "const": "jp_mlit"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "source_calls": {
+                "items": {
+                  "if": {
+                    "required": [
+                      "call_id"
+                    ]
+                  },
+                  "then": {
+                    "required": [
+                      "prerequisite_acquisition_ids"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "oneOf": [
