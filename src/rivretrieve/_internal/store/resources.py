@@ -149,15 +149,13 @@ def resolve_sqlite_temp_directory() -> Path:
     if sys.platform == "cygwin":
         raise RuntimeError("Cannot estimate the Cygwin SQLite temporary-directory search")
     override = _sqlite_temp_override()
-    if override:
-        path = Path(override).resolve()
-        if not path.is_dir() or not os.access(path, os.W_OK | os.X_OK):
-            raise OSError("Configured SQLite temporary directory is unavailable")
-        return path
     if sys.platform == "win32":
-        candidates = (_windows_temp_directory(),)
+        candidates = (override,) if override else (_windows_temp_directory(),)
     elif os.name == "posix":
+        # SQLite 3.53.1 unixTempFileDir checks each candidate with access mask 03,
+        # including falling back when the global override is no longer usable.
         candidates = (
+            override,
             os.environ.get("SQLITE_TMPDIR"),
             os.environ.get("TMPDIR"),
             "/var/tmp",

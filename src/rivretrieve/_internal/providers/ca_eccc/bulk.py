@@ -194,6 +194,10 @@ def compile_hydat(request: HydatCompileRequest) -> ValidatedStore:
     Success atomically replaces the previous store and deletes the SQLite artifact.
     Pre-commit failures restore both. A typed post-commit cleanup failure keeps the
     validated new store authoritative and reports residue.
+
+    Disk estimates require the default SQLite VFS and SQLITE_TMPDIR/TMPDIR set
+    before Python starts, then left unchanged for the process lifetime. SQLite can
+    cache its initial environment; late changes are unsupported by the estimate.
     """
     with compilation_transaction(request.destination, request.transaction) as transaction:
         artifact = Path(request.publisher_artifact)

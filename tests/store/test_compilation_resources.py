@@ -183,13 +183,14 @@ def test_late_imgw_sort_disk_failure_preserves_prior_and_external_original(tmp_p
     assert {path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()} == before
 
 
-def test_unavailable_sqlite_global_override_is_not_silently_replaced(tmp_path, monkeypatch) -> None:
+def test_unix_directory_policy_falls_back_from_unavailable_override(tmp_path, monkeypatch) -> None:
     from rivretrieve._internal.store import resources
 
+    monkeypatch.setattr(resources.sys, "platform", "linux")
+    monkeypatch.delenv("SQLITE_TMPDIR", raising=False)
     monkeypatch.setenv("TMPDIR", str(tmp_path))
     monkeypatch.setattr(resources, "_sqlite_temp_override", lambda: str(tmp_path / "absent"))
-    with pytest.raises(OSError, match="Configured SQLite"):
-        resolve_sqlite_temp_directory()
+    assert resolve_sqlite_temp_directory() == tmp_path
 
 
 def test_hydat_checks_exact_extraction_before_creating_payload(tmp_path, monkeypatch) -> None:
