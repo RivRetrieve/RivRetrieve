@@ -109,6 +109,12 @@ def test_public_bulk_stations_share_metadata_and_candidate_hashes(bulk_store, mo
             schema={"station_id": pl.String, "product_id": pl.String, "value": pl.Float64},
         )
         pt.assert_frame_equal(result.data.select(expected.columns).sort("station_id", "product_id"), expected)
+        assert [(item.station_id, item.product_id, item.status) for item in result.outcomes] == [
+            ("ca-001", "discharge", "success"),
+            ("ca-001", "level", "success"),
+            ("ca-002", "discharge", "success"),
+        ]
+        assert len({item.outcome_id for item in result.outcomes}) == 3
         assert len(inspected) == 1
         assert Counter(digested) == expected_hashes
 
