@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 
 import polars as pl
 import pytest
+from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
 import rivretrieve._internal.bulk as lifecycle
@@ -267,7 +268,7 @@ def test_public_failed_refresh_preserves_store_bytes_and_provenance(public_imgw,
 
 
 @pytest.mark.parametrize("replacement", ["missing-year", "missing-terminal-month", "partial-monthly-replacement"])
-def test_public_refresh_cannot_shorten_previously_published_history(public_imgw, monkeypatch, replacement):
+def test_public_refresh_replaces_with_valid_shorter_history(public_imgw, monkeypatch, replacement):
     root, responses, calls = public_imgw
     monkeypatch.setattr(bulk, "FIRST_PUBLISHED_YEAR", 2022)
     if replacement == "missing-terminal-month":
@@ -280,19 +281,101 @@ def test_public_refresh_cannot_shorten_previously_published_history(public_imgw,
             replacement_layout[2023] = ["codz_2023_01.zip", "codz_2023_02.zip"]
     responses.update(publication(original_layout))
     original = rr.download("pl_imgw")
-    before = {path.relative_to(root): path.read_bytes() for path in Path(root).rglob("*") if path.is_file()}
     responses.clear()
-    responses.update(publication(replacement_layout))
+    responses.update(publication(replacement_layout, null=True))
     calls.clear()
 
-    with pytest.raises(ValueError, match="(?i)(shorten|regress|previous|coverage)"):
+    refreshed = rr.download("pl_imgw")
+
+    names = [name for yearly_names in replacement_layout.values() for name in yearly_names]
+    vintage = (
+        date(2022, 10, 31)
+        if replacement == "missing-year"
+        else (date(2022, 11, 30) if replacement == "missing-terminal-month" else date(2022, 12, 31))
+    )
+    assert_provenance(root, refreshed, responses, names, vintage)
+    assert refreshed.manifest.source_vintage < original.manifest.source_vintage
+    assert [url for url in calls if url.endswith(".zip")] == [f"{ROOT}{name[5:9]}/{name}" for name in names]
+    rows = pl.read_parquet(list(Path(root).rglob("*.parquet")), hive_partitioning=True)
+    expected = []
+    definitions = {str(series.product_id): series for series in original.manifest.series}
+    for name in names:
+        year = int(name[5:9])
+        month = int(name[10:12]) if len(name) == 16 else 1
+        # These fixtures use only hydrological months 1 and 2 (November/December).
+        native = ("1", "S", "R", str(year), str(month), "01", "9999", "99999.999", "99.9", str(month + 10))
+        for product, definition in definitions.items():
+            facts = definition.facts[0]
+            expected.append(
+                {
+                    "station_id": "1",
+                    "time": datetime(year - 1, month + 10, 1),
+                    "time_zone": "unknown",
+                    "value": None,
+                    "value_state": "published_null",
+                    "series_id": definition.series_id,
+                    "facts_id": facts.facts_id,
+                    "source_unit": facts.source_unit.value,
+                    **dict(zip((column.name for column in bulk.IMGW_SOURCE_COLUMNS), native, strict=True)),
+                    "product": product,
+                    "year": year - 1,
+                }
+            )
+    # Exact full physical rows detect old-row union, retained-cell loss and fabricated coverage.
+    assert_frame_equal(rows, pl.DataFrame(expected, schema=rows.schema), check_row_order=False)
+
+
+@pytest.mark.parametrize("failure", ["transfer", "invalid-archive", "certification"])
+def test_public_failed_shorter_refresh_preserves_committed_generation(public_imgw, monkeypatch, failure):
+    from rivretrieve._internal.store import certification
+
+    root, responses, calls = public_imgw
+    responses.update(publication({2023: ["codz_2023.zip"]}))
+    original = rr.download("pl_imgw")
+    before = {path.relative_to(root): path.read_bytes() for path in Path(root).rglob("*") if path.is_file()}
+    names = ["codz_2023_01.zip", "codz_2023_02.zip"]
+    responses.clear()
+    responses.update(publication({2023: names}, null=True))
+    calls.clear()
+    failed_url = f"{ROOT}2023/{names[-1]}"
+    error = OSError("shorter candidate failed")
+    if failure == "transfer":
+        responses[failed_url] = error
+    elif failure == "invalid-archive":
+        responses[failed_url] = b"not a ZIP"
+    else:
+        verify = certification._verify_streamed_read_back
+
+        def fail_after_readback(*args, **kwargs):
+            verify(*args, **kwargs)
+            raise error
+
+        monkeypatch.setattr(certification, "_verify_streamed_read_back", fail_after_readback)
+
+    with pytest.raises(OSError if failure == "transfer" else StoreTransactionError) as caught:
         rr.download("pl_imgw")
 
+    assert [url for url in calls if url.endswith(".zip")] == [f"{ROOT}2023/{name}" for name in names]
+    if failure == "transfer":
+        assert caught.value is error
+    else:
+        assert isinstance(caught.value, StoreTransactionError)
+        assert caught.value.committed_path == Path(root)
+        assert caught.value.cleanup_errors == ()
+        if failure == "certification":
+            assert caught.value.original is error
+        else:
+            assert isinstance(caught.value.original, ValueError)
+            assert "valid ZIP" in str(caught.value.original)
+        # Complete downloaded inputs remain discoverable after failed compilation.
+        retained = tuple(Path(root).parent.glob(".store.workspace-*/publisher-artifact.download*"))
+        assert sorted(path.name for path in retained) == sorted("publisher-artifact.download-" + name for name in names)
+        for path in retained:
+            name = path.name.removeprefix("publisher-artifact.download-")
+            assert path.read_bytes() == responses[f"{ROOT}2023/{name}"]
     assert {path.relative_to(root): path.read_bytes() for path in Path(root).rglob("*") if path.is_file()} == before
     assert validate_store(root, ProviderId("pl_imgw")).manifest == original.manifest
     assert rr.cache_status("pl_imgw").source_vintage == original.manifest.source_vintage
-    assert not any(url.endswith(".zip") for url in calls)
-    assert not tuple(Path(root).parent.glob(".store.workspace-*/publisher-artifact.download*"))
 
 
 @pytest.mark.parametrize("refused_manifest", ["incompatible", "malformed"])
@@ -311,7 +394,7 @@ def test_public_download_rebuilds_refused_existing_store(public_imgw, refused_ma
         validate_store(root, ProviderId("pl_imgw"))
     assert refusal.value.refusal.kind.value == refused_manifest
     responses.clear()
-    # A refused store cannot establish a vintage floor. Explicit download rebuilds it.
+    # Explicit download rebuilds refused stores too, including from shorter history.
     names = ["codz_2023_01.zip"]
     responses.update(publication({2023: names}))
     calls.clear()
