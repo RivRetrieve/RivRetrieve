@@ -246,9 +246,13 @@ versions. See the [issues](https://github.com/RivRetrieve/RivRetrieve/issues) fo
 worked on.
 
 The package began as a Python translation of
-[RivRetrieve for R](https://github.com/Ryan-Riggs/RivRetrieve) by Ryan Riggs, made by @kratzert with
-the Gemini CLI and a few manual fixes for API changes. It has grown into a collaborative effort
-since, with @simonmoulds, @thiagovmdon and @CooperBigFoot.
+[RivRetrieve for R](https://github.com/Ryan-Riggs/RivRetrieve) by
+[Ryan Riggs](https://github.com/Ryan-Riggs), made by
+[Frederik Kratzert](https://github.com/kratzert) with the Gemini CLI and a few manual
+fixes for API changes. It has grown into a collaborative effort since, with
+[Simon Moulds](https://github.com/simonmoulds),
+[Thiago Nascimento](https://github.com/thiagovmdon) and
+[Nicolas Lazaro](https://github.com/CooperBigFoot).
 
 Questions, bug reports and collaboration are welcome through the
 [issues](https://github.com/RivRetrieve/RivRetrieve/issues).
