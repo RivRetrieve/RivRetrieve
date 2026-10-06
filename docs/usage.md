@@ -374,7 +374,7 @@ Provenance records request scope, applicable source calls, source terms and cach
 context. Returned calls support observations, successful empty answers, applicable
 diagnostics or inventory evidence. An inventory retains its original scope and
 members, so its dependencies can include evidence beyond the selected rows.
-Unrelated acquisition history is excluded.
+All calls made during the current fetch remain, including attempts outside the requested dates needed for source access, while calls from earlier acquisitions are limited to evidence relevant to the request.
 
 `requested_at` is the local invocation time. `retrieved_at` is the latest known
 original acquisition time among the returned calls, whether the result is fresh,
