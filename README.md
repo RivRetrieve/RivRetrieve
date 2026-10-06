@@ -56,9 +56,9 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Argentina, Australia, Belgium, Chile, Colombia, Denmark, Estonia, Finland, Germany,
-Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Peru, Portugal, Slovenia,
-Somalia, South Africa, South Korea, Spain, Sweden, Taiwan, Türkiye and the United Kingdom.
+Afghanistan, Argentina, Australia, Austria, Belgium, Chile, Colombia, Denmark, Estonia, Finland,
+Germany, Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Peru, Portugal, Rwanda,
+Slovenia, South Africa, South Korea, Spain, Sweden, Taiwan and the United Kingdom.
 
 Some of these have a fetcher in the legacy
 [RivRetrieve-Python](https://github.com/kratzert/RivRetrieve-Python) that awaits porting; others

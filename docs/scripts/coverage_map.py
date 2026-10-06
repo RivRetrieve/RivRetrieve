@@ -11,8 +11,8 @@ Counts are unique provider/station identities for observation-capable providers;
 they do not assert continuous observations or complete national network coverage.
 No station coordinates or station CRS assumptions enter this figure.
 Planned countries are fetchers in the legacy kratzert/RivRetrieve-Python repository,
-merged or in open pull requests, that have no provider here yet, plus countries from the
-suggested porting order in the new-country research.
+merged or in open pull requests, that have no provider here yet, plus countries with an open
+provider:port issue and South Africa.
 """
 
 from __future__ import annotations
@@ -45,6 +45,7 @@ PROVIDER_COUNTRY = {
 PLANNED_COUNTRY = {
     "ARG": "Argentina",
     "AUS": "Australia",
+    "AUT": "Austria",
     "BEL": "Belgium (Flanders, Wallonia)",
     "CHL": "Chile",
     "DEU": "Germany (Berlin)",
@@ -59,12 +60,13 @@ PLANNED_COUNTRY = {
     "KOR": "South Korea",
     "NLD": "Netherlands",
     "PRT": "Portugal",
+    "RWA": "Rwanda",
     "SVN": "Slovenia",
     "SWE": "Sweden",
     "TWN": "Taiwan",
     "ZAF": "South Africa",
 }
-# Suggested order in docs/provider_ports/new_countries.md (research/new-country-candidates), items 1-8.
+# Countries with an open provider:port issue that are not legacy fetchers.
 RESEARCHED_COUNTRY = {
     "AFG": "Afghanistan",
     "COL": "Colombia",
@@ -72,8 +74,6 @@ RESEARCHED_COUNTRY = {
     "MEX": "Mexico",
     "NZL": "New Zealand",
     "PER": "Peru",
-    "SOM": "Somalia",
-    "TUR": "Türkiye",
 }
 PLANNED_COUNTRY |= RESEARCHED_COUNTRY
 ROBINSON = "ESRI:54030"
