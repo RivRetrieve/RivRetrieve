@@ -6,6 +6,7 @@ from io import BytesIO
 from pathlib import Path
 
 import openpyxl
+import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
@@ -141,8 +142,12 @@ def test_france_invalid_pagination_preserves_independent_series(
     result = rr.fetch(
         selection, start="2025-01-03", end="2025-01-03", cache="refresh", receipts=True, on_issue="ignore"
     )
-    # A malformed cursor cannot discard valid observations already received.
-    assert_frame_equal(result.data, baseline.data)
+    # Only the mean route has a failed cursor. Independently complete maximum
+    # observations remain accepted in both the result and saved coverage.
+    maximum_ids = {item.series_id for item in baseline.outcomes if item.product_id == "discharge_daily_max"}
+    expected = baseline.data.filter(pl.col("series_id").is_in(maximum_ids))
+    assert not expected.is_empty()
+    assert_frame_equal(result.data, expected)
     unresolved = [outcome for outcome in result.outcomes if outcome.status == "unresolved"]
     assert len(unresolved) == 1 and unresolved[0].product_id == "discharge_daily_mean"
     assert unresolved[0].reason and unresolved[0].calls
@@ -297,7 +302,7 @@ def test_france_late_bad_continuation_cannot_certify_partial_interval(
     selection = rr.pick(broad, series_id=broad.series[0].series_id)
     kwargs = {"start": "2008-07-09", "end": "2008-07-10T23:59:59", "on_issue": "ignore", "receipts": True}
     partial = rr.fetch(selection, cache="refresh", **kwargs)
-    assert not partial.data.is_empty()
+    assert partial.data.is_empty()
     assert any(outcome.status == "unresolved" and outcome.reason and outcome.calls for outcome in partial.outcomes)
     assert rr.cache_status("fr_hubeau").coverage == ()
     assert len(partial.receipts.entries) == 5

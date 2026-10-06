@@ -390,14 +390,27 @@ def test_all_series_cache_requires_complete_chain_and_retains_every_page(tmp_pat
         )
 
     fresh = run()
-    assert fresh.canonical_rows.height == (1 if duplicate else 2)
+    assert fresh.canonical_rows.height == (0 if duplicate else 2)
     assert len(fresh.source_series) == 3
     if duplicate:
-        assert fresh.canonical_rows["series_id"].to_list() == [definition("beta").series_id]
-        assert any(
-            outcome.series_id == definition("alpha").series_id and outcome.status is OutcomeStatus.UNSUPPORTED
-            for outcome in fresh.outcomes
-        )
+        # A broken cursor chain explicitly leaves beta unresolved too. Partial
+        # page rows cannot be returned as successful while persistence refuses them.
+        for variant, status in (("alpha", OutcomeStatus.UNSUPPORTED), ("beta", OutcomeStatus.UNRESOLVED)):
+            outcome = next(
+                item
+                for item in fresh.outcomes
+                if item.series_id == definition(variant).series_id and item.status is status
+            )
+            assert "repeats" in outcome.reason
+            assert len(outcome.calls) == 2
+        from rivretrieve._internal.store import StoreReader
+
+        manifest = StoreReader().status(store, ProviderId("usgs_nwis")).manifest
+        assert manifest.coverage == ()
+        assert not list(store.rglob("*.parquet"))
+        transport.responses = iter((page(feature()),))
+        run()
+        assert len(transport.requests) == 3
         return
     reused = run()
     pt.assert_frame_equal(reused.canonical_rows, fresh.canonical_rows)
@@ -689,15 +702,15 @@ def test_late_page_failure_never_overlaps_held_and_fresh_values(tmp_path, mode, 
     )
     alpha_id = definition("alpha").series_id
     alpha = result.canonical_rows.filter(pl.col("series_id") == alpha_id).sort("time")
-    expected_first = 12.25 if mode in ("reuse", "refresh") else 99.5
-    expected = pl.DataFrame(
-        {
-            "time": [datetime(2000, 1, 1), datetime(2000, 1, 3)],
-            "value": [expected_first * 0.028316846592, 20 * 0.028316846592],
-        }
-    )
+    # Only the old successful day can serve the failed alpha scope. Neither a
+    # bypass nor a cache refresh grants authority to the incomplete fresh page.
+    expected = pl.DataFrame({"time": [datetime(2000, 1, 1)], "value": [12.25 * 0.028316846592]})
+    if mode == "bypass":
+        expected = expected.clear()
     pt.assert_frame_equal(alpha.select("time", "value"), expected)
-    assert result.canonical_rows.filter(pl.col("series_id") == definition("beta").series_id).height == 1
+    assert result.canonical_rows.filter(pl.col("series_id") == definition("beta").series_id).height == (
+        1 if late == "malformed_value" else 0
+    )
     expected_receipts = [first] if late in ("transport", "bad_link") else [first, second]
     assert [
         entry.content for entry in result.receipts.entries if entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
@@ -796,7 +809,13 @@ def test_continuous_pages_detect_equivalent_published_instants(alias, value):
         receipts=ReceiptMode.INCLUDE,
     )
     beta = next(item for item in assembled.source_series if item.variant == "beta")
-    assert assembled.canonical_rows["series_id"].to_list() == [beta.series_id]
+    assert assembled.canonical_rows.is_empty()
+    assert any(
+        item.series_id == beta.series_id and item.status is OutcomeStatus.UNRESOLVED for item in assembled.outcomes
+    )
+    assert any(
+        item.series_id != beta.series_id and item.status is OutcomeStatus.UNSUPPORTED for item in assembled.outcomes
+    )
     assert [entry.content for entry in assembled.receipts.entries] == [first, second]
 
 

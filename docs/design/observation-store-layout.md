@@ -345,6 +345,21 @@ held rows and successful coverage at their original retrieval instants; their ou
 and issues can still be recorded. Inventory evidence remains separate from successful
 coverage. Matching facts never allow one source identity to cover another.
 
+A failure naming physical facts affects only those facts within its established window.
+An unspecified fact scope remains conservative within the concrete series or failed
+route. Inventory-only uncertainty does not invalidate independently successful observations.
+For example, a failed maximum-stage request preserves its held observations while a
+successful mean-stage request replaces its own observations, including a successful empty
+answer. Each fact keeps the acquisition time and calls that support it, including an
+unknown acquisition time. Independent facts do not share attribution merely because
+one transaction writes them together.
+
+Explicit complete acquired fact membership can remain valid when a named member's
+observations fail. This membership evidence does not supply missing observation coverage.
+Retiring an older fact requires applicable complete acquired membership that establishes
+its absence, with valid inventory dependencies. Caller selection and missing rows do not
+authorize retirement; failed and unestablished fact scopes remain protected.
+
 Both store kinds use the shared publication lifecycle described below. Partition
 files MUST NOT be modified in place. An accumulated update groups replacements by
 partition and rewrites each affected partition once. Unchanged partitions retain
