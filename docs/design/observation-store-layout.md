@@ -532,6 +532,9 @@ Admission estimates are not reservations or guaranteed upper bounds. Later
 refusals identify the preparation phase; they MUST NOT claim that acquisition has
 not started. Late disk failure has the same preservation rules.
 
+See [National preparation measurements](../maintenance/national-preparation.md)
+for measured build costs, resource use and verification limits.
+
 The supported guarantee is local process interruption while the operating system
 and filesystem continue running. Tests use actual subprocess termination at
 persisted boundaries as well as injected exceptions and cleanup failures. These
