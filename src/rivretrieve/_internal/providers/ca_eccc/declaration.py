@@ -39,6 +39,7 @@ def _compile(request: BulkCompileRequest) -> ValidatedStore:
             built_at=request.built_at,
             compiler_version=request.compiler_version,
             transaction=request.transaction,
+            free_space_probe=request.free_space_probe,
         )
     )
 

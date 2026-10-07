@@ -18,6 +18,7 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.registry import EngineProviderModule, ProviderRegistry
 from rivretrieve._internal.store import StoreRoot, ValidatedStore
 from rivretrieve._internal.store.lifecycle import StoreTransaction
+from rivretrieve._internal.store.resources import FreeSpaceProbe, available_bytes
 from rivretrieve._internal.transport import CredentialHeader, _request_origin
 
 
@@ -66,6 +67,7 @@ class BulkCompileRequest:
     built_at: datetime
     compiler_version: str
     transaction: StoreTransaction | None = None
+    free_space_probe: FreeSpaceProbe = available_bytes
 
     def __post_init__(self) -> None:
         if not self.publisher_artifacts:

@@ -506,8 +506,34 @@ boundary. Managed provider directories, journals, ownership files and generation
 contents MUST NOT follow symlinks. Explicit clear removes terminal managed symlinks
 themselves, never their targets or unrelated siblings. All owned staging, workspace
 and preserved-download namespaces participate in lifecycle inspection and deletion.
-Workspace locations are resolved before source decoding; disk admission is an
-estimate, not a reservation. Late disk failure has the same preservation rules.
+Workspace locations are resolved before source decoding. National preparation
+keeps the configured free-space minimum before acquisition. After transfer, it
+estimates additional growth from source counts and expanded source sizes before
+compilation and replay. It checks each filesystem that receives this growth.
+Existing inputs, the previous store and an existing candidate already reduce free
+space and MUST NOT be charged again. Sequential compilation and replay workspaces
+MUST NOT be added as if they coexist.
+
+Poland keeps its ordering index in the managed workspace. Canada's source query
+can use native SQLite temporary files. Its admission check reconstructs default
+SQLite VFS routing only when `SQLITE_TMPDIR` and `TMPDIR` were set before process
+startup and remain unchanged for the process lifetime. SQLite can cache its
+initialization-time environment. The check cannot recover that state after late
+changes, so those sessions are unsupported even if their environment stays fixed
+during compilation. Restart Python with the intended environment before preparing
+Canada in such a session.
+
+The check changes no environment variables or SQLite globals. Unix resolution
+follows SQLite's directory search; desktop Windows uses `GetTempPathW`, matching
+the reviewed SQLite 3.53.1 default VFS. Cygwin, UWP and custom VFS routing are not
+covered. SQLite global temp settings must remain unchanged during compilation.
+
+Admission estimates are not reservations or guaranteed upper bounds. Later
+refusals identify the preparation phase; they MUST NOT claim that acquisition has
+not started. Late disk failure has the same preservation rules.
+
+See [National preparation measurements](../maintenance/national-preparation.md)
+for measured build costs, resource use and verification limits.
 
 The supported guarantee is local process interruption while the operating system
 and filesystem continue running. Tests use actual subprocess termination at

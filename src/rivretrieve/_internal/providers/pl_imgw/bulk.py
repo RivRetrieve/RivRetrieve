@@ -48,6 +48,14 @@ from rivretrieve._internal.store import (
 )
 from rivretrieve._internal.store.certification import compilation_transaction
 from rivretrieve._internal.store.lifecycle import StoreTransaction
+from rivretrieve._internal.store.resources import (
+    CompilationPhase,
+    CompilationResources,
+    CompilationSpaceEstimate,
+    FreeSpaceProbe,
+    available_bytes,
+    compiled_store_growth,
+)
 
 PROVIDER_ID: Final = ProviderId("pl_imgw")
 BASE_URL: Final = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/dobowe"
@@ -313,6 +321,7 @@ class ImgwCompileRequest:
     compiler_version: str
     publisher_artifacts: tuple[DownloadedBulkArtifact | DownloadedImgw, ...] = ()
     transaction: StoreTransaction | None = None
+    free_space_probe: FreeSpaceProbe = available_bytes
 
     def __post_init__(self) -> None:
         artifacts = self.publisher_artifacts or (DownloadedImgw(self.publisher_artifact, self.publisher_url),)
@@ -376,26 +385,62 @@ def compile_imgw(request: ImgwCompileRequest) -> ValidatedStore:
             source_columns=IMGW_SOURCE_COLUMNS,
             source_column_dispositions=IMGW_SOURCE_DISPOSITIONS,
         )
+        resources = CompilationResources(PROVIDER_ID, transaction.workspace, request.free_space_probe)
         return certify_store_batches(
             compile_request,
             artifacts,
-            lambda paths: decode_imgw_batches(paths, workspace=transaction.workspace),
+            lambda paths: decode_imgw_batches(paths, workspace=transaction.workspace, resources=resources),
+            replay_decode=lambda paths: decode_imgw_batches(
+                paths, workspace=transaction.workspace, resources=resources, phase=CompilationPhase.REPLAY
+            ),
             transaction=transaction,
         )
 
 
 IMGW_ROWS_PER_BATCH: Final = 65_536
+# Each merged archive keeps one fetched chunk alive, independently of output batches.
+IMGW_SORT_ROWS_PER_FETCH: Final = 1_024
 _ARTIFACT_NAME = re.compile(r"codz_(?P<year>[0-9]{4})(?:_(?P<month>[0-9]{2}))?\.zip$")
 
 
-def decode_imgw_batches(paths: Path | tuple[Path, ...], *, workspace: Path | None = None) -> ObservationBatchStream:
+def decode_imgw_batches(
+    paths: Path | tuple[Path, ...],
+    *,
+    workspace: Path | None = None,
+    resources: CompilationResources | None = None,
+    phase: CompilationPhase = CompilationPhase.COMPILE,
+) -> ObservationBatchStream:
     """decode_imgw_batches : IMGWArchive+ → ObservationBatchStream."""
     from collections import Counter
 
     ordered = paths if isinstance(paths, tuple) else (paths,)
     periods = tuple(_imgw_artifact_period(path) for path in ordered)
-    expected_records, expected_rows, inventory_sha256 = _expected_imgw_inventory(ordered)
+    expected_records, expected_rows, inventory_sha256, calendar_records = _expected_imgw_inventory(ordered)
     years = sorted({year for period in periods for year in _calendar_years(period)})
+    if resources is not None:
+        expanded = 0
+        expanded_by_year = dict.fromkeys(years, 0)
+        for path, period in zip(ordered, periods, strict=True):
+            with zipfile.ZipFile(path) as archive:
+                size = next(
+                    item.file_size
+                    for item in archive.infolist()
+                    if not item.is_dir() and Path(item.filename).suffix.lower() == ".csv"
+                )
+            expanded += size
+            for year in _calendar_years(period):
+                expanded_by_year[year] += size
+        # Only one calendar year's archive sorts coexist. Charge an annual
+        # archive's full expanded width to each possible year, then take the max.
+        active_sort = max(1024 * calendar_records.get(year, 0) + expanded_by_year[year] for year in years)
+        sorting = (3 * active_sort + 1) // 2
+        # The reviewed national CSV width rounds to 80 bytes/record. Count-based
+        # output headroom covers ordinary rows; charge wider source cells only
+        # above that reference, for all three retained product copies. Small
+        # varied-text probes support this allowance; it is not a compression bound.
+        output = 24 * expected_rows + 3 * max(0, expanded - 80 * expected_records)
+        growth = compiled_store_growth(phase, expected_records, output)
+        resources.check(CompilationSpaceEstimate(phase, growth + sorting))
 
     def batches():
         for product, _index, _sentinels in sorted(_PRODUCT_COLUMNS, key=lambda item: str(item[0])):
@@ -437,19 +482,19 @@ def decode_imgw_batches(paths: Path | tuple[Path, ...], *, workspace: Path | Non
     return ObservationBatchStream(IMGW_SOURCE_COLUMNS, batches(), expected_records, expected_rows, inventory_sha256)
 
 
-def _imgw_source_unit(path: Path, artifact_index: int, ordinal: int, source: tuple[str, ...]) -> SourceUnitCount:
+def _imgw_source_unit(artifact_index: int, ordinal: int, source: tuple[str, ...]) -> SourceUnitCount:
     encoded = json.dumps(source, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     record_sha = hashlib.sha256(encoded).hexdigest()
-    artifact_match = _ARTIFACT_NAME.search(path.name)
-    assert artifact_match is not None
-    member = Path(artifact_match.group(0)).with_suffix(".csv").name
-    identity = f"artifact={artifact_index:06d}:{path.name}:{member}:logical_ordinal={ordinal:012d}:sha256={record_sha}"
+    # The ordered artifact provenance binds the index. The ordinal preserves
+    # duplicate records, and the cell digest detects equal-count substitutions.
+    identity = f"{artifact_index:06d}:{ordinal:012d}:{record_sha}"
     return SourceUnitCount(identity, 1, len(_PRODUCT_COLUMNS))
 
 
-def _expected_imgw_inventory(paths: tuple[Path, ...]) -> tuple[int, int, str]:
-    """Inventory exact logical record identities independently from emission."""
+def _expected_imgw_inventory(paths: tuple[Path, ...]) -> tuple[int, int, str, dict[int, int]]:
+    """Inventory record identities, row counts and calendar-year counts independently."""
     total_records = 0
+    calendar_records: dict[int, int] = {}
 
     def units():
         nonlocal total_records
@@ -463,13 +508,15 @@ def _expected_imgw_inventory(paths: tuple[Path, ...]) -> tuple[int, int, str]:
                     raise ValueError("IMGW publisher record did not expand to every declared product cell")
                 artifact_records += 1
                 total_records += 1
-                unit = _imgw_source_unit(path, artifact_index, ordinal, source)
+                year = cast(datetime, emitted[0]["time"]).year
+                calendar_records[year] = calendar_records.get(year, 0) + 1
+                unit = _imgw_source_unit(artifact_index, ordinal, source)
                 yield unit.source_unit, unit.publisher_records, unit.expected_emitted_rows
             if artifact_records == 0:
                 raise ValueError("IMGW publisher artifact contains no logical CSV records")
 
     inventory_sha256 = source_unit_inventory_fingerprint(units())
-    return total_records, total_records * len(_PRODUCT_COLUMNS), inventory_sha256
+    return total_records, total_records * len(_PRODUCT_COLUMNS), inventory_sha256, calendar_records
 
 
 def _imgw_artifact_period(path: Path) -> tuple[int, tuple[int, ...]]:
@@ -499,10 +546,10 @@ def _iter_imgw_product_year(
     period = _imgw_artifact_period(path)
     for ordinal, source in enumerate(_iter_imgw_records(path), start=1):
         output: list[dict[str, object]] = []
-        _emit_source_row(source, path.name, ordinal, output, expected_period=period)
+        _emit_source_row(source, path.name, ordinal, output, expected_period=period, selected_product=product)
         for row in output:
             if row["product"] == str(product) and cast(datetime, row["time"]).year == calendar_year:
-                yield _imgw_source_unit(path, artifact_index, ordinal, source), row
+                yield _imgw_source_unit(artifact_index, ordinal, source), row
 
 
 def _external_station_sort(rows, *, workspace: Path):
@@ -518,6 +565,9 @@ def _external_station_sort(rows, *, workspace: Path):
             connection.execute(
                 "CREATE TABLE rows (station BLOB NOT NULL, ordinal INTEGER NOT NULL, payload BLOB NOT NULL)"
             )
+            # Build the index while empty: both insertion and ordered traversal
+            # stay in this managed database instead of an implicit temp sort.
+            connection.execute("CREATE INDEX station_order ON rows(station, ordinal)")
             pending: list[tuple[bytes, int, bytes]] = []
             for ordinal, item in enumerate(rows):
                 pending.append((str(item[1]["station_id"]).encode("utf-8"), ordinal, pickle.dumps(item, protocol=5)))
@@ -526,9 +576,10 @@ def _external_station_sort(rows, *, workspace: Path):
                     pending = []
             if pending:
                 connection.executemany("INSERT INTO rows VALUES (?, ?, ?)", pending)
+            pending.clear()
             connection.commit()
             cursor = connection.execute("SELECT payload FROM rows ORDER BY station, ordinal")
-            while chunk := cursor.fetchmany(IMGW_ROWS_PER_BATCH):
+            while chunk := cursor.fetchmany(IMGW_SORT_ROWS_PER_FETCH):
                 for (payload,) in chunk:
                     yield pickle.loads(payload)
         finally:
@@ -652,6 +703,7 @@ def _emit_source_row(
     output: list[dict[str, object]],
     *,
     expected_period: tuple[int, tuple[int, ...]] | None = None,
+    selected_product: ProductId | None = None,
 ) -> None:
     station = source[0].strip()
     if not station:
@@ -679,6 +731,8 @@ def _emit_source_row(
         raise ValueError(f"IMGW member {member!r} row {ordinal} has an invalid calendar date") from error
     retained = dict(zip(_RETAINED_NAMES, source, strict=True))
     for product, value_index, null_sentinels in _PRODUCT_COLUMNS:
+        if selected_product is not None and product != selected_product:
+            continue
         definition = source_series(station, str(product))
         facts = definition.facts[0]
         value, state = _native_value(source[value_index], member, ordinal, _SOURCE_FIELDS[value_index], null_sentinels)

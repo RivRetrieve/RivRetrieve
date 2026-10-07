@@ -1643,6 +1643,10 @@ def download(provider: str):
         If provider is not a bulk provider.
     InsufficientDiskSpaceError
         If free space is below the declared requirement before any transfer.
+    InsufficientPreparationSpaceError
+        If estimated additional growth exceeds free space after transfer.
+        This check covers each workspace filesystem and does not reserve space.
+        Retained inputs or cleanup residue can wrap this in StoreTransactionError.
     FatalContractError
         If a source response or store validation violates a contract.
     StoreCertificationError
@@ -1670,6 +1674,11 @@ def download(provider: str):
     store and publisher inputs. Use recover_cache for interrupted work; use
     clear_cache only when deleting all owned state is intended.
     Transport failures can also propagate rather than becoming result issues.
+
+    Canada's disk estimate requires ``SQLITE_TMPDIR`` and ``TMPDIR`` to be set
+    before Python starts and unchanged for the process lifetime. SQLite can cache
+    those settings. If they changed after startup, restart Python with the intended
+    environment before downloading Canada; admission cannot recover the old state.
 
     An existing compiled store that passes validation supplies its source
     vintage, so the provider can refuse a download whose published history

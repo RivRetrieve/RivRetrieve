@@ -81,7 +81,8 @@ def test_invalid_late_stream_batch_cannot_replace_previous_store_or_delete_artif
     assert not tuple(tmp_path.glob(".store.previous-*"))
 
 
-def test_streaming_readback_detects_exact_value_mutation_and_rolls_back(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("mutation", ["stage-bytes", "stage-values", "after-replay"])
+def test_streaming_readback_detects_exact_value_mutation_and_rolls_back(tmp_path: Path, monkeypatch, mutation) -> None:
     import polars as pl
 
     import rivretrieve._internal.store.certification as certification
@@ -100,20 +101,38 @@ def test_streaming_readback_detects_exact_value_mutation_and_rolls_back(tmp_path
             ArtifactChecksum("sha256:" + hashlib.sha256(artifact.read_bytes()).hexdigest()),
         ),
     )
+
+    def change_value(stage):
+        path = Path(stage) / "product=discharge" / "year=1998" / "part-0.parquet"
+        frame = pl.read_parquet(path).with_columns(pl.lit(999.0).alias("value"))
+        frame.write_parquet(path)
+
     original = certification.compile_store_batches
 
     def mutating_writer(staged_request, stream):
         evidence = original(staged_request, stream)
-        path = Path(staged_request.destination) / "product=discharge" / "year=1998" / "part-0.parquet"
-        frame = pl.read_parquet(path).with_columns(pl.lit(999.0).alias("value"))
-        frame.write_parquet(path)
+        change_value(staged_request.destination)
+        if mutation == "stage-values":
+            from rivretrieve._internal.store.integrity import seal_store
+
+            # Reach independent source equality, rather than byte-integrity refusal.
+            seal_store(staged_request.destination, staged_request.provider_id)
         return evidence
 
-    monkeypatch.setattr(certification, "compile_store_batches", mutating_writer)
+    original_replay = certification._verify_streamed_read_back
+
+    def mutating_replay(stage, *args):
+        original_replay(stage, *args)
+        change_value(stage)
+
+    if mutation == "after-replay":
+        monkeypatch.setattr(certification, "_verify_streamed_read_back", mutating_replay)
+    else:
+        monkeypatch.setattr(certification, "compile_store_batches", mutating_writer)
     batch = NativeObservationBatch(
         rows(value=2.0), (SourceUnitCount("unit-1", 1, 1),), (SourceUnitContribution("unit-1", 1),)
     )
-    with pytest.raises(Exception, match="read-back differs"):
+    with pytest.raises(Exception, match="read-back differs" if mutation == "stage-values" else "file_identity|digest"):
         certify_store_batches(
             request,
             artifact,

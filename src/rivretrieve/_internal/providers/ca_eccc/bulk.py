@@ -46,6 +46,15 @@ from rivretrieve._internal.store import (
 )
 from rivretrieve._internal.store.certification import compilation_transaction
 from rivretrieve._internal.store.lifecycle import StoreTransaction
+from rivretrieve._internal.store.resources import (
+    CompilationPhase,
+    CompilationResources,
+    CompilationSpaceEstimate,
+    FreeSpaceProbe,
+    available_bytes,
+    compiled_store_growth,
+    resolve_sqlite_temp_directory,
+)
 
 PROVIDER_ID: Final = ProviderId("ca_eccc")
 HYDAT_MONTHS_PER_BATCH: Final = 512
@@ -168,6 +177,7 @@ class HydatCompileRequest:
     built_at: datetime
     compiler_version: str
     transaction: StoreTransaction | None = None
+    free_space_probe: FreeSpaceProbe = available_bytes
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +194,10 @@ def compile_hydat(request: HydatCompileRequest) -> ValidatedStore:
     Success atomically replaces the previous store and deletes the SQLite artifact.
     Pre-commit failures restore both. A typed post-commit cleanup failure keeps the
     validated new store authoritative and reports residue.
+
+    Disk estimates require the default SQLite VFS and SQLITE_TMPDIR/TMPDIR set
+    before Python starts, then left unchanged for the process lifetime. SQLite can
+    cache its initial environment; late changes are unsupported by the estimate.
     """
     with compilation_transaction(request.destination, request.transaction) as transaction:
         artifact = Path(request.publisher_artifact)
@@ -201,23 +215,40 @@ def compile_hydat(request: HydatCompileRequest) -> ValidatedStore:
             source_columns=schema.source_columns,
             source_column_dispositions=schema.dispositions,
         )
+        resources = CompilationResources(
+            PROVIDER_ID, transaction.workspace, request.free_space_probe, resolve_sqlite_temp_directory()
+        )
         return certify_store_batches(
             compile_request,
             artifact,
-            lambda path: decode_hydat_batches(_require_single_path(path), schema, workspace=transaction.workspace),
+            lambda path: decode_hydat_batches(
+                _require_single_path(path), schema, workspace=transaction.workspace, resources=resources
+            ),
+            replay_decode=lambda path: decode_hydat_batches(
+                _require_single_path(path),
+                schema,
+                workspace=transaction.workspace,
+                resources=resources,
+                phase=CompilationPhase.REPLAY,
+            ),
             transaction=transaction,
         )
 
 
 def decode_hydat_batches(
-    path: Path, declared_schema: _HydatSchema | None = None, *, workspace: Path | None = None
+    path: Path,
+    declared_schema: _HydatSchema | None = None,
+    *,
+    workspace: Path | None = None,
+    resources: CompilationResources | None = None,
+    phase: CompilationPhase = CompilationPhase.COMPILE,
 ) -> ObservationBatchStream:
     """decode_hydat_batches : HYDATSQLite → ObservationBatchStream."""
     artifact = Path(path)
     schema = declared_schema or _declared_schema()
 
     def batches() -> Iterator[NativeObservationBatch]:
-        with _sqlite_payload(artifact, workspace=workspace) as sqlite_path:
+        with _sqlite_payload(artifact, workspace=workspace, resources=resources) as sqlite_path:
             observed = _inspect_schema(sqlite_path)
             if observed.source_columns != schema.source_columns:
                 raise ValueError("HYDAT source schema changed between declaration and decoding")
@@ -258,7 +289,28 @@ def decode_hydat_batches(
             finally:
                 connection.close()
 
-    expected_records, expected_rows, inventory_sha256 = _expected_hydat_inventory(artifact, schema, workspace=workspace)
+    expected_records, expected_rows, inventory_sha256 = _expected_hydat_inventory(
+        artifact, schema, workspace=workspace, resources=resources
+    )
+    if resources is not None:
+        if zipfile.is_zipfile(artifact):
+            with zipfile.ZipFile(artifact) as archive:
+                expanded = next(
+                    item.file_size for item in archive.infolist() if Path(item.filename).suffix.lower() == ".sqlite3"
+                )
+            extraction = expanded
+        else:
+            expanded = artifact.stat().st_size
+            extraction = 0
+        # The whole SQLite size is a coarse width proxy, including unrelated
+        # tables. Neither this allowance nor the row term bounds the entropy of
+        # repeated monthly cells; native-input acceptance must measure the result.
+        output = max(24 * expected_rows, (expanded + 1) // 2)
+        growth = compiled_store_growth(phase, expected_records, output)
+        # The publisher's ORDER BY can use native SQLite temp files. The coarse
+        # expanded-database allowance is provisional, not a measured spill bound.
+        sorting = (3 * expanded + 1) // 2
+        resources.check(CompilationSpaceEstimate(phase, extraction + growth, sorting))
     return ObservationBatchStream(schema.source_columns, batches(), expected_records, expected_rows, inventory_sha256)
 
 
@@ -269,12 +321,16 @@ def _iter_hydat_source_rows(connection: sqlite3.Connection, quoted_table: str):
 
 
 def _expected_hydat_inventory(
-    artifact: Path, schema: _HydatSchema, *, workspace: Path | None = None
+    artifact: Path,
+    schema: _HydatSchema,
+    *,
+    workspace: Path | None = None,
+    resources: CompilationResources | None = None,
 ) -> tuple[int, int, str]:
     """Inventory exact monthly row identities independently from emission."""
     records = 0
     rows = 0
-    with _sqlite_payload(artifact, workspace=workspace) as sqlite_path:
+    with _sqlite_payload(artifact, workspace=workspace, resources=resources) as sqlite_path:
         observed = _inspect_schema(sqlite_path)
         if observed.source_columns != schema.source_columns:
             raise ValueError("HYDAT source schema changed before expected-cell census")
@@ -450,7 +506,12 @@ def _declared_schema() -> _HydatSchema:
 
 
 @contextmanager
-def _sqlite_payload(artifact: Path, *, workspace: Path | None = None) -> Iterator[Path]:
+def _sqlite_payload(
+    artifact: Path,
+    *,
+    workspace: Path | None = None,
+    resources: CompilationResources | None = None,
+) -> Iterator[Path]:
     """Yield SQLite directly or the sole SQLite member of a complete HYDAT ZIP."""
     if not zipfile.is_zipfile(artifact):
         yield artifact
@@ -459,6 +520,10 @@ def _sqlite_payload(artifact: Path, *, workspace: Path | None = None) -> Iterato
         members = [name for name in archive.namelist() if Path(name).suffix.lower() == ".sqlite3"]
         if len(members) != 1:
             raise ValueError(f"HYDAT ZIP must contain exactly one SQLite member; found {members!r}")
+        if resources is not None:
+            resources.check(
+                CompilationSpaceEstimate(CompilationPhase.EXTRACTION, archive.getinfo(members[0]).file_size)
+            )
         with tempfile.TemporaryDirectory(prefix="rivretrieve-hydat-", dir=workspace or artifact.parent) as directory:
             destination = Path(directory) / "Hydat.sqlite3"
             with archive.open(members[0]) as source, destination.open("wb") as target:
