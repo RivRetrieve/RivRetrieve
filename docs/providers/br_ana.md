@@ -148,8 +148,8 @@ selection and period, not continuous history or national coverage.
 
 ## Daily consistency levels: bruto and consistido
 
-ANA identifies daily records by *NivelConsistencia*: level 1, *Bruto*, and level 2,
-*Consistido*. Unofficially, these mean raw and consistency-checked values. They are source
+ANA identifies daily records by *NivelConsistencia*: level 1, *bruto*, and level 2,
+*consistido*. Unofficially, these mean raw and consistency-checked values. They are source
 categories, not a quality ranking assigned by RivRetrieve.
 
 Inspect the daily discharge candidates selected above:

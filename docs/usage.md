@@ -2,10 +2,10 @@
 
 [Documentation index](README.md) · [API reference](reference.md)
 
-Find source series by physical facts, retrieve observations, then inspect both values
-and retrieval outcomes. Run these examples in order in one Python session. Searches
-work offline; downloads need network access. The displayed observations come from
-recorded source responses, which can differ from a current live response.
+Search for series by what they measure, download their data, and check the results.
+Run these examples in order in one Python session. Searches work offline, but
+downloads need network access. The displayed observations come from recorded source
+responses, which can differ from a current live response.
 
 ## Find stations
 
@@ -66,10 +66,10 @@ source_attributes = rr.metadata(chosen_gauges, view="source")
 ```
 
 The station table contains names and coordinates with their CRS, plus lists of
-water-body, drainage-area and elevation fields. When a gauge has no name or
-several different names, the summary name is null. The source view preserves names
-and separate drainage-area fields with exact values, units where established, and
-explicit absence states. Both views work offline. The
+water-body, drainage-area and elevation fields. When the provider gives a gauge no
+name, or several different names, the summary name is null. The source view
+preserves names and separate drainage-area fields with exact values, units where
+established, and explicit absence states. Both views work offline. The
 [column table](station-metadata.md#columns-at-a-glance) lists what to expect, and
 [station metadata](station-metadata.md) explains how to interpret it.
 
@@ -112,7 +112,7 @@ print(result.issues)
 
 ### Series inspection and result views
 
-`result.data` is a Polars table. Discharge uses m³/s, stage metres and water
+`result.data` is a Polars table. Discharge uses cubic meters per second, stage metres and water
 temperature degrees Celsius. The original unit remains in `source_unit`.
 Inspect the source facts and outcomes as well as the numeric values:
 
@@ -175,8 +175,8 @@ See the [API reference](reference.md) for returned fields and export methods.
 
 ### When an agency publishes more than one version
 
-Brazil's ANA publishes Bruto (raw) and Consistido (quality-checked) daily records.
-ANA performs that checking, not RivRetrieve. These labels do not determine which
+Brazil's ANA publishes `bruto` (raw) and `consistido` (quality-checked) daily records.
+ANA performs that checking, not RivRetrieve. RivRetrieve does not determine which
 record suits a study. Inspect both, then optionally narrow the selection:
 
 ```python
@@ -224,12 +224,12 @@ are included. Use ISO date strings, naive ISO datetime strings or naive Python
 `end` uses the caller machine's current local date. `start` is required.
 
 Read `time` together with `time_zone`. An `unknown` zone supplies no basis for UTC
-conversion. `to_utc(result)` requires established zones for every row and raises
-otherwise, including for the USGS daily result above. Its returned `time` remains
+conversion. The function `to_utc(result)` requires established zones for every row and
+raises an error otherwise, including for the USGS daily result above. Its returned `time` remains
 naive, paired with `time_zone="+00:00"`. Converting labels does not establish a
 daily aggregation definition. Equal units do not establish equal day definitions,
 a water-level datum or scientific comparability. Source quality judgements remain
-uninterpreted; provider quality flags are not added to the observation table.
+uninterpreted.
 
 ### Issues
 
@@ -285,7 +285,7 @@ print(status.exists)
 
 Reuse is decided separately for each station and access route. A covered route can
 be reused while another is fetched. Coverage needs both the matching series inventory
-and successful retrieval for the requested interval. Cached Consistido data alone
+and successful retrieval for the requested interval. Cached `consistido` data alone
 cannot answer a request for both Brazilian versions. An uncovered route fetches its
 full requested scope with normal source padding, not only the missing dates.
 

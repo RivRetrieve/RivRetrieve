@@ -78,7 +78,7 @@ origins; it does not activate observation retrieval.
 
 Brazil retains all acquired source rows in its native table. Its six internal access routes describe two telemetry quantities and two daily-mean
 physical products. The daily routes retain separate source-series identities. Both
-Bruto (raw) and Consistido (quality-checked by ANA) daily series are included without
+`bruto` (raw) and `consistido` (quality-checked by ANA) daily series are included without
 preference. Each certified river gauge is a candidate; availability remains unknown
 unless exact source-variant observations establish bounded positive evidence. Request
 windows never become published record bounds. Build from the attested native table;

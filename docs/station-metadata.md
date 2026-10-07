@@ -110,7 +110,8 @@ print(row["drainage_area_unit"])
 ```
 
 Explode a role's aligned columns together. Exploding them separately can pair a
-field with another field's value or unit. Select a particular field by its native
+field with another field's value or unit. RivRetrieve does not say which area to use,
+and the order of the list does not rank them. Select a particular field by its native
 name rather than taking the first entry:
 
 ```python
@@ -180,18 +181,25 @@ its source spelling. Blank names are not removed.
 
 ### Missing fields and source-null values
 
-The Canadian station above has no exposed water-body name field. The following
-Norwegian station has four exposed area fields, but all four values are null:
+The Canadian station `05AA003` from the drainage-area example above has no water-body
+name field, so its list cells are null:
 
 ```python
 print(row["water_body_name_field"], row["water_body_name_value"])
 # None None
+```
 
+The following Norwegian station has four drainage-area fields, but the source gives
+null for all four. The fields and their unit are kept; only the values are null:
+
+```python
 missing_areas = rr.metadata(rr.pick(norway, station="16.28.0")).row(0, named=True)
 print(missing_areas["drainage_area_field"])
 # ['drainageBasinArea', 'drainageBasinAreaNorway', 'transferAreaIn', 'transferAreaOut']
 print(missing_areas["drainage_area_value"])
 # [None, None, None, None]
+print(missing_areas["drainage_area_unit"])
+# ['km2', 'km2', 'km2', 'km2']
 ```
 
 The first case has null list cells. The second keeps the named entries and their

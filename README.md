@@ -138,7 +138,7 @@ given, briefly confirm readiness.
 
 The packaged catalogue contains station locations and known source-series facts.
 Searching it does not contact the agencies. The following example then contacts USGS to retrieve
-one day of daily mean streamflow, without credentials.
+one day of daily mean streamflow.
 
 ```python
 import rivretrieve as rr
@@ -175,7 +175,7 @@ comparability. Downloading observations requires internet access.
 
 ### When an agency publishes different versions for the same variable
 
-Brazil's ANA publishes Bruto (raw) and Consistido (quality-checked) daily records.
+Brazil's ANA publishes `bruto` (raw) and `consistido` (quality-checked) daily records.
 ANA performs that checking, not RivRetrieve. Both are available. You choose whether to request
 both or just one. You can inspect and select them without credentials or network access:
 

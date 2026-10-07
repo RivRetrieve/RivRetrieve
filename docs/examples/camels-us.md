@@ -123,8 +123,7 @@ fig.savefig("camels_daily_discharge.png", dpi=150)
 
 
 The figure above was made with this code (plus some styling, see
-`docs/scripts/camels_example_plot.py`) from a request on 5 October 2026. Leave
-`end` out and a later request returns more days.
+`docs/scripts/camels_example_plot.py`) from a request on 5 October 2026.
 
 ## Gauge metadata
 
