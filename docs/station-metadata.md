@@ -45,6 +45,38 @@ explains these columns. `rr.metadata(selection, view="source")` returns a differ
 table with one row per source attribute, described in
 [Inspect source attributes and scope](#inspect-source-attributes-and-scope).
 
+## Fields by provider
+
+Each agency names its metadata fields in its own way: `station_nm` at USGS, `Estacao_Nome` at
+ANA, `観測所名` at MLIT. The table shows the native field names behind each role, in the source's
+own spelling, with the unit the source publishes. A field without a unit has none established.
+A dash means the provider exposes no field for that role. These are the names you see in the `*_field` columns and in the `source_field` column
+of the source view.
+
+<!-- fields-by-provider:start -->
+| Provider | Station name | Water body | Drainage area | Elevation |
+|---|---|---|---|---|
+| [`ba_fhmzbih`](providers/ba_fhmzbih.md) | — | — | `metadata_CATCHMENT_SIZE` (km²) | — |
+| [`br_ana`](providers/br_ana.md) | `Estacao_Nome` | `Rio_Nome` | `Area_Drenagem` | `Altitude` |
+| [`ca_eccc`](providers/ca_eccc.md) | `STATION_NAME` | — | `DRAINAGE_AREA_EFFECT`, `DRAINAGE_AREA_GROSS` (km2) | — |
+| [`ch_foen`](providers/ch_foen.md) | `data-name` | `data-hydro-body` | `Catchment size` (km2) | `Station altitude` (m) |
+| [`cz_chmi`](providers/cz_chmi.md) | `STATION_NAME` | `STREAM_NAME` | `PLO_STA` (km²) | — |
+| [`fr_hubeau`](providers/fr_hubeau.md) | `libelle_station` | `libelle_cours_eau`, `libelle_masse_eau` | `superficie_reelle`, `superficie_topo`; `surface_bv` (km²) | `altitude`, `altitude_site`; `altitude_ref_alti_station` (m) |
+| [`fr_hydroportail`](providers/fr_hydroportail.md) | — | — | — | — |
+| [`jp_mlit`](providers/jp_mlit.md) | `観測所名` | `河川名` | `流域面積` (km2) | `零点高` (m) |
+| [`lt_lhmt`](providers/lt_lhmt.md) | `name` | `waterBody` | — | — |
+| [`no_nve`](providers/no_nve.md) | `stationName` | `lakeName`, `reservoirName`, `riverName` | `drainageBasinArea`, `drainageBasinAreaNorway`, `transferAreaIn`, `transferAreaOut` (km2) | `masl` (m) |
+| [`pl_imgw`](providers/pl_imgw.md) | — | — | `area` (square kilometre) | `gauge_altitude` (m) |
+| [`th_thaiwater`](providers/th_thaiwater.md) | — | — | — | — |
+| [`usgs_nwis`](providers/usgs_nwis.md) | `station_nm` | — | `contrib_drain_area_va`, `drain_area_va` (sq mi) | `alt_va` (feet) |
+| `za_dws` | — | — | `Catchment Area km**2` (km**2) | — |
+<!-- fields-by-provider:end -->
+
+The table lists names only. What a field means is defined by the agency: Norway's `transferAreaIn`
+and `transferAreaOut` are not total areas, and elevation fields refer to different reference
+points. See [Work with multiple fields](#work-with-multiple-fields) and
+[Interpret elevations](#interpret-elevations).
+
 ## Read the station summary
 
 `provider_id` and `station_id` identify each gauge. Station identifiers remain
