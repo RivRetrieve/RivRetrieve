@@ -74,12 +74,12 @@ RivRetrieve reads the daily and continuous collections of the
 
 ## What you can retrieve
 
-| Quantity filter | Published observations | Source unit | Returned unit |
-|---|---|---|---|
-| `discharge` | Daily mean | ft³/s | m³/s |
-| `stage` | Daily mean, maximum and minimum | ft | m |
-| `discharge` | Continuous observations | ft³/s | m³/s |
-| `stage` | Continuous observations | ft | m |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | Daily values | Daily | Mean | ft³/s | m³/s |
+| `stage` | Daily values | Daily | Mean, maximum or minimum | ft | m |
+| `discharge` | Continuous observations | Unknown | Instantaneous; Unknown for some series | ft³/s | m³/s |
+| `stage` | Continuous observations | Unknown | Instantaneous; Unknown for some series | ft | m |
 
 RivRetrieve converts cubic feet per second to cubic metres per second, and feet
 to metres. Source values already in m³/s or m are also supported and retain those

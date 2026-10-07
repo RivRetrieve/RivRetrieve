@@ -81,12 +81,12 @@ For station-own instantaneous discharge and stage, use the separate
 [HydroPortail provider](fr_hydroportail.md). The services retain separate station
 inventories, source identities and terms.
 
-| Quantity filter | Source field / `variant` | Published statistic | Source unit | Returned unit |
-|---|---|---|---|---|
-| `discharge` | `QmnJ` | Daily mean | l/s | m³/s |
-| `discharge` | `QIXnJ` | Daily maximum | l/s | m³/s |
-| `stage` | `HIXnJ` | Daily maximum | mm | m |
-| `temperature` | `resultat`, parameter `1301` | Not established | °C | °C |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | `QmnJ` | Daily | Mean | l/s | m³/s |
+| `discharge` | `QIXnJ` | Daily | Maximum | l/s | m³/s |
+| `stage` | `HIXnJ` | Daily | Maximum | mm | m |
+| `temperature` | `resultat`, parameter `1301` | Unknown | Unknown | °C | °C |
 
 These source fields identify the published observations; there is no separate
 `variant` to choose for these Hub'Eau products.

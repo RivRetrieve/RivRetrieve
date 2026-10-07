@@ -123,10 +123,10 @@ the latest available edition. Retrieval does not check for a newer archive.
 
 ## What you can retrieve
 
-| Quantity filter | Published statistic | Source and returned unit |
-|---|---|---|
-| `discharge` | Daily mean | m³/s |
-| `stage` | Daily mean | m |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | `FLOW` in `DLY_FLOWS` | Daily | Mean | m³/s | m³/s |
+| `stage` | `LEVEL` in `DLY_LEVELS` | Daily | Mean | m | m |
 
 Use `frequency="daily"` and `statistic="mean"` for either quantity.
 Stage is water level, not water depth or automatically an elevation above sea

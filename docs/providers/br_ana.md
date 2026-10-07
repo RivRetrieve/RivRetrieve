@@ -108,12 +108,12 @@ selected by consistency level, `bruto` or `consistido` (see
 Telemetry series are ANA's adopted discharge and stage values, `Vazao_Adotada`
 and `Cota_Adotada`, each labelled with its measurement time.
 
-| Quantity filter | Source selection / `variant` | Published statistic | Source unit | Returned unit |
-|---|---|---|---|---|
-| `discharge` | `bruto`, `consistido` | Daily mean | m³/s | m³/s |
-| `stage` | `bruto`, `consistido` | Daily mean | cm | m |
-| `discharge` | `Vazao_Adotada` | Not established | m³/s | m³/s |
-| `stage` | `Cota_Adotada` | Not established | cm | m |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | `bruto`, `consistido` | Daily | Mean | m³/s | m³/s |
+| `stage` | `bruto`, `consistido` | Daily | Mean | cm | m |
+| `discharge` | `Vazao_Adotada` | Unknown | Unknown | m³/s | m³/s |
+| `stage` | `Cota_Adotada` | Unknown | Unknown | cm | m |
 
 RivRetrieve divides stage values by 100 to convert centimetres to metres.
 Discharge is already in m³/s. Water temperature is currently not supported.

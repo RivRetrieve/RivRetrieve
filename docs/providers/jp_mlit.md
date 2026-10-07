@@ -77,12 +77,12 @@ RivRetrieve reads the database's observation pages and their linked download fil
 
 ## What you can retrieve
 
-| Quantity filter | Frequency filter | Source and returned unit |
-|---|---|---|
-| `stage` | `hourly` | m |
-| `stage` | `daily` | m |
-| `discharge` | `hourly` | m³/s |
-| `discharge` | `daily` | m³/s |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `stage` | `KIND` 2 | Hourly | Unknown | m | m |
+| `stage` | `KIND` 3 | Daily | Unknown | m | m |
+| `discharge` | `KIND` 6 | Hourly | Unknown | m³/s | m³/s |
+| `discharge` | `KIND` 7 | Daily | Unknown | m³/s | m³/s |
 
 The catalogue lists these four candidates at each station. A station being listed
 does not guarantee data for every quantity or requested period. The source station

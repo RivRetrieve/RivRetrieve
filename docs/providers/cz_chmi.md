@@ -80,13 +80,13 @@ VD České Údolí. RivRetrieve keeps these source identifiers unchanged.
 
 ## What you can retrieve
 
-| Quantity filter | CHMI code | Published statistic | Source unit | Returned unit |
-|---|---|---|---|---|
-| `discharge` | QD | Daily mean | m³/s | m³/s |
-| `stage` | HD | Daily mean | cm | m |
-| `temperature` | TD | Daily mean | °C | °C |
-| `discharge` | QH | Hourly mean | m³/s | m³/s |
-| `stage` | HH | Hourly mean | cm | m |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | QD | Daily | Mean | m³/s | m³/s |
+| `stage` | HD | Daily | Mean | cm | m |
+| `temperature` | TD | Daily | Mean | °C | °C |
+| `discharge` | QH | Hourly | Mean | m³/s | m³/s |
+| `stage` | HH | Hourly | Mean | cm | m |
 
 Select `frequency="daily"` or `frequency="hourly"`, with `statistic="mean"`.
 CHMI's [dataset description](https://opendata.chmi.cz/hydrology/read_me/Popis_datovych_sad_historical.pdf)

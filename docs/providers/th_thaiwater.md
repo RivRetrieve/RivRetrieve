@@ -91,10 +91,10 @@ on 2026-09-24 it listed 804. Neither list is a complete inventory of Thai river 
 
 ## What you can retrieve
 
-| Quantity filter | Published frequency and statistic | Source and returned unit |
-|---|---|---|
-| `stage` | Not established | m |
-| `discharge` | Not established | m³/s |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `stage` | `value` | Unknown | Unknown | m | m |
+| `discharge` | `discharge` | Unknown | Unknown | m³/s | m³/s |
 
 These units require no numerical scaling. ThaiWater labels stage in metres above
 mean sea level (ม.รทก.). The water-data exchange standard published at

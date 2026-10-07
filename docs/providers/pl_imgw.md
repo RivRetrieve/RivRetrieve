@@ -139,11 +139,11 @@ time or compilation time.
 
 IMGW-PIB's field description (`CODZ_publiczne_format.txt`) names each field:
 
-| Quantity filter | Frequency | Statistic | IMGW-PIB field | Source unit | Returned unit |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
 |---|---|---|---|---|---|
-| `discharge` | Daily | Unknown | `COPRZP`: Przepływ [m^3/s] (discharge) | m³/s | m³/s |
-| `stage` | Daily | Unknown | `COSTAN`: Stan wody [cm] (water level) | cm | m |
-| `temperature` | Daily | Unknown | `COPTMP`: Temperatura wody [st. C] (water temperature) | °C | °C |
+| `discharge` | `COPRZP`: Przepływ [m^3/s] (discharge) | Daily | Unknown | m³/s | m³/s |
+| `stage` | `COSTAN`: Stan wody [cm] (water level) | Daily | Unknown | cm | m |
+| `temperature` | `COPTMP`: Temperatura wody [st. C] (water temperature) | Daily | Unknown | °C | °C |
 
 RivRetrieve converts stage from centimetres to metres. Stage is water level, not
 water depth or an elevation above sea level. RivRetrieve has not established its

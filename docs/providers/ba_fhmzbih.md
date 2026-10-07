@@ -97,11 +97,11 @@ provider name with compatibility for `ba_fhmzbih` are on the roadmap
 
 ## What you can retrieve
 
-| Quantity filter | Source parameter | Source unit | Returned unit |
-|---|---|---|---|
-| `discharge` | Proticaj | m³/s | m³/s |
-| `stage` | Vodostaj | cm | m |
-| `temperature` | Temperatura vode | °C | °C |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | Proticaj | Unknown | Unknown | m³/s | m³/s |
+| `stage` | Vodostaj | Unknown | Unknown | cm | m |
+| `temperature` | Temperatura vode | Unknown | Unknown | °C | °C |
 
 RivRetrieve converts stage from centimetres to metres. Discharge and water
 temperature need no unit conversion. Stage is water level; its vertical

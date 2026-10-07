@@ -107,11 +107,17 @@ than treating a failed request as missing observations.
 
 ## What you can retrieve
 
-| Quantity filter | Published resolutions | Published statistics | Source and returned unit |
-|---|---|---|---|
-| `discharge` | Raw, hourly, daily | Mean or instantaneous, depending on series | m³/s |
-| `stage` | Raw, hourly, daily | Mean or instantaneous, depending on series | m |
-| `temperature` | Raw, hourly, daily | Mean or instantaneous, depending on series | °C |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | Raw resolution | Unknown | Mean or instantaneous, depending on series | m³/s | m³/s |
+| `discharge` | Hourly resolution | Hourly | Mean or instantaneous, depending on series | m³/s | m³/s |
+| `discharge` | Daily resolution | Daily | Mean or instantaneous, depending on series | m³/s | m³/s |
+| `stage` | Raw resolution | Unknown | Mean or instantaneous, depending on series | m | m |
+| `stage` | Hourly resolution | Hourly | Mean or instantaneous, depending on series | m | m |
+| `stage` | Daily resolution | Daily | Mean or instantaneous, depending on series | m | m |
+| `temperature` | Raw resolution | Unknown | Mean or instantaneous, depending on series | °C | °C |
+| `temperature` | Hourly resolution | Hourly | Mean or instantaneous, depending on series | °C | °C |
+| `temperature` | Daily resolution | Daily | Mean or instantaneous, depending on series | °C | °C |
 
 These units require no numerical scaling. Stage is water level; RivRetrieve has
 not established its vertical reference or datum.

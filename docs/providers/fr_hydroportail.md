@@ -81,10 +81,10 @@ monitoring network.
 
 ## What you can retrieve
 
-| Quantity filter | Source field / `variant` | Source unit | Returned unit |
-|---|---|---|---|
-| `discharge` | `Q`; four selectors below | l/s | m³/s |
-| `stage` | `H`; four selectors below | mm | m |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | `Q`; four selectors below | Unknown | Instantaneous | l/s | m³/s |
+| `stage` | `H`; four selectors below | Unknown | Instantaneous | mm | m |
 
 Both quantities are instantaneous. Each source field supports the same four
 `variant` selectors: `raw`, `validated`, `pre_validated_and_validated`, and

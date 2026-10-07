@@ -80,13 +80,13 @@ for you.
 
 ## What you can retrieve
 
-| Quantity filter | Source field / `variant` | Source unit | Returned unit |
-|---|---|---|---|
-| `discharge` | `flow` | m³/s | m³/s |
-| `discharge` | `flow_ls` | l/s | m³/s |
-| `stage` | `height` | m | m |
-| `stage` | `height_abs` | m | m |
-| `temperature` | `temperature` | °C | °C |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | `flow` | Unknown | Unknown | m³/s | m³/s |
+| `discharge` | `flow_ls` | Unknown | Unknown | l/s | m³/s |
+| `stage` | `height` | Unknown | Unknown | m | m |
+| `stage` | `height_abs` | Unknown | Unknown | m | m |
+| `temperature` | `temperature` | Unknown | Unknown | °C | °C |
 
 Swiss variants identify **source fields**, not processing or consistency statuses.
 Existenz publishes discharge in two fields: `flow` in m³/s and `flow_ls` in litres per second.

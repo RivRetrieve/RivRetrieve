@@ -81,10 +81,10 @@ for example `nemajunu-vms`.
 
 ## What you can retrieve
 
-| Quantity filter | API field | Published statistic | Source unit | Returned unit |
-|---|---|---|---|---|
-| `discharge` | `waterDischarge` | Daily mean | m³/s | m³/s |
-| `stage` | `waterLevel` | Daily mean | cm | m |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | `waterDischarge` | Daily | Mean | m³/s | m³/s |
+| `stage` | `waterLevel` | Daily | Mean | cm | m |
 
 The API documents both fields as daily means ("Vidurkis per parą"). RivRetrieve
 converts stage from centimetres to metres; discharge needs no conversion. The
