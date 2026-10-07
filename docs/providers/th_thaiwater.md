@@ -11,6 +11,7 @@
 | Station agencies | HII, Royal Irrigation Department, Friend in Need (of "Pa") Volunteers Foundation, Electricity Generating Authority of Thailand |
 | Quantities | Discharge and stage |
 | Stations in the catalogue | 825. Availability depends on quantity and period |
+| Station metadata | Coordinates only. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | No personal credentials required |
 | Terms | No licence or citation request found for the API; see [Terms and citation](#terms-and-citation) |
 | Agency documentation | [ThaiWater](https://www.thaiwater.net/), [ThaiWater data standards](https://standard.thaiwater.net/docs/) |

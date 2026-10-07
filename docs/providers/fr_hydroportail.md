@@ -9,6 +9,7 @@
 | Published by | HydroPortail (`hydro.eaufrance.fr`), Service Central Vigicrues |
 | Variables | Instantaneous discharge and stage |
 | Stations in the catalogue | 6,409. Availability depends on quantity, source selection and period |
+| Station metadata | Coordinates only. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | None |
 | Terms | Reuse licence and standard citation not established |
 | Agency documentation | [HydroPortail help](https://hydro.eaufrance.fr/aide/accueil) |

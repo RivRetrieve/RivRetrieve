@@ -10,6 +10,7 @@
 | Read from | AVP Sava's hydrological monitoring site (`vodostaji.voda.ba`) |
 | Quantities | Discharge, stage and water temperature |
 | Stations in the catalogue | 60. Availability depends on quantity and period |
+| Station metadata | Drainage area. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | None |
 | History available | Rolling yearly workbooks; records can be shorter and have gaps |
 | Terms | Data are informational, not official. See [Terms and citation](#terms-and-citation) |

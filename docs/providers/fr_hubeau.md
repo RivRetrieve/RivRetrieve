@@ -9,6 +9,7 @@
 | Published by | Hub'Eau (`hubeau.eaufrance.fr`) |
 | Variables | Discharge, stage, water temperature |
 | Stations in the catalogue | 7,347 (6,475 hydrometry and 872 temperature). Availability depends on quantity and period |
+| Station metadata | Station name, water-body name, drainage area and elevation. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | None |
 | Licence stated by Hub'Eau | Licence ouverte Etalab |
 | Agency documentation | [Hub'Eau hydrometry API](https://hubeau.eaufrance.fr/page/api-hydrometrie), [Hub'Eau river temperature API](https://hubeau.eaufrance.fr/page/api-temperature-continu) |

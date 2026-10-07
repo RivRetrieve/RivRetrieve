@@ -9,6 +9,7 @@
 | Published by | U.S. Geological Survey, through Water Data for the Nation |
 | Quantities | Discharge and stage |
 | Selectable stations | 26,201 in the packaged catalogue. Availability depends on quantity and period |
+| Station metadata | Station name, drainage area and elevation. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | No personal credentials required for modest public requests; optional `USGS_API_KEY` |
 | Terms stated by USGS | USGS-produced data are in the U.S. Public Domain |
 | Agency documentation | [Water Data APIs](https://api.waterdata.usgs.gov/), [Water Data for the Nation](https://waterdata.usgs.gov/) |

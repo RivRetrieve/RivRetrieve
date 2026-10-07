@@ -9,6 +9,7 @@
 | Published by | Agência Nacional de Águas e Saneamento Básico (ANA) |
 | Quantities | Discharge and stage |
 | Stations in the catalogue | 17,914. Availability depends on quantity, source selection and period |
+| Station metadata | Station name, water-body name, drainage area and elevation. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | Required for retrieval: `ANA_IDENTIFICADOR`, `ANA_SENHA` |
 | Terms stated by ANA | Open data made freely available; see [Terms and citation](#terms-and-citation) |
 | Agency documentation | [HidroWebService](https://www.ana.gov.br/hidrowebservice/swagger-ui/index.html), [Hidroweb](https://www.snirh.gov.br/hidroweb/) |

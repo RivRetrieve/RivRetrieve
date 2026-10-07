@@ -10,6 +10,7 @@
 | Read from | 水文水質データベース, the Water Information System (`www1.river.go.jp`) |
 | Quantities | Discharge and stage, hourly and daily |
 | Stations in the catalogue | 1,023. Availability depends on quantity and period |
+| Station metadata | Station name, water-body name, drainage area and elevation. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | No personal credentials required |
 | Terms | Numerical data may be used freely; automated access has separate restrictions (see below) |
 | Agency documentation | [水文水質データベース](https://www1.river.go.jp/), [利用上の注意 (notes on use)](https://www1.river.go.jp/caution.html) |

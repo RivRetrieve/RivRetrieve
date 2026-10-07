@@ -9,6 +9,7 @@
 | Published by | Norges vassdrags- og energidirektorat (NVE), the Norwegian Water Resources and Energy Directorate |
 | Quantities | Discharge, stage, water temperature |
 | Stations in the catalogue | 4,902 locations; 3,804 have catalogued series for the supported quantities and resolutions |
+| Station metadata | Station name, water-body name, drainage area and elevation. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | Required for retrieval: `NVE_API_KEY`; see [Credentials and requests](#credentials-and-requests) |
 | Licence stated by NVE | Norwegian Licence for Open Government Data (NLOD) |
 | Agency documentation | [HydAPI documentation](https://hydapi.nve.no/UserDocumentation/) |

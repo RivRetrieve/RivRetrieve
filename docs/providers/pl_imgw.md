@@ -9,6 +9,7 @@
 | Published by | Instytut Meteorologii i Gospodarki Wodnej – Państwowy Instytut Badawczy (IMGW-PIB), the Institute of Meteorology and Water Management – National Research Institute |
 | Quantities | Daily discharge, stage and water temperature |
 | Stations in the catalogue | 1,301. Availability depends on quantity and period |
+| Station metadata | Drainage area and elevation. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | None |
 | Access | Explicit download of IMGW-PIB's national daily archive, then local retrieval |
 | Terms | IMGW-PIB's data regulations: conditional free use, an agreement for business and other listed uses, and prescribed attribution; see [Terms and citation](#terms-and-citation) |

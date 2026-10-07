@@ -9,6 +9,7 @@
 | Published by | Water Survey of Canada, Environment and Climate Change Canada |
 | Quantities | Daily mean discharge and stage |
 | Stations in the catalogue | 8,057. Availability depends on quantity and period |
+| Station metadata | Station name and drainage area. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | None |
 | Access | Explicit national HYDAT download, then local retrieval |
 | Terms | The official HYDAT dataset record lists the Open Government Licence – Canada; see [Terms and citation](#terms-and-citation) |

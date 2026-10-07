@@ -10,6 +10,7 @@
 | Read from | CHMI open data, historical hydrology files (`opendata.chmi.cz`) |
 | Quantities | Daily mean discharge, stage and water temperature; hourly mean discharge and stage |
 | Stations in the catalogue | 831. Availability depends on quantity and period |
+| Station metadata | Station name, water-body name and drainage area. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | None |
 | Licence stated by CHMI | Creative Commons Attribution 4.0 (CC BY 4.0) |
 | Agency documentation | [CHMI open data, hydrology](https://opendata.chmi.cz/hydrology/), [dataset descriptions](https://opendata.chmi.cz/hydrology/read_me/) |

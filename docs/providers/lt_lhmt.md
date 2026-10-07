@@ -10,6 +10,7 @@
 | Read from | Meteo.lt API (`api.meteo.lt`) |
 | Quantities | Historical daily mean discharge and stage |
 | Stations in the catalogue | 97. Availability depends on quantity and period |
+| Station metadata | Station name and water-body name. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | None |
 | Licence stated by LHMT | Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0), unless stated otherwise |
 | Agency documentation | [Meteo.lt API](https://api.meteo.lt/) |

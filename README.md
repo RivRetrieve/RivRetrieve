@@ -227,6 +227,8 @@ streamflow for several gauges at once.
 Start with the [documentation index](docs/README.md).
 
 - [Usage](docs/usage.md): selections, results, windows, issues, credentials, cache and receipts.
+- [Station metadata](docs/station-metadata.md): names, coordinates, areas and elevations, and the
+  [field names each provider uses](docs/station-metadata.md#fields-by-provider).
 - [Example: Recent streamflow for CAMELS-US gauges](docs/examples/camels-us.md).
 - [Public API and software reference](docs/reference.md).
 - [Architecture](docs/architecture.md): responsibilities, a traced request and contracts.

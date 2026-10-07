@@ -10,6 +10,7 @@
 | Read from | Existenz.ch's API and InfluxDB archive, an unofficial third-party service |
 | Quantities | Discharge, stage, water temperature |
 | Stations in the catalogue | 246 locations, not confirmed availability for every quantity |
+| Station metadata | Station name, water-body name, drainage area and elevation. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | No personal credentials required |
 | Terms | FOEN: free use, citation recommended; Existenz.ch: public and non-commercial use, FOEN credit and link requested |
 | Agency documentation | [hydrodaten.admin.ch](https://www.hydrodaten.admin.ch/en), [Existenz.ch API](https://api.existenz.ch/) |
