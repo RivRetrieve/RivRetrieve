@@ -117,9 +117,9 @@ test("inspection and exact-pair selection survive changed filters", async ({
   await expect(copy).toBeEnabled();
   await copy.click();
   const code = await page.evaluate(() => navigator.clipboard.readText());
-  expect(code).toContain('provider="alpha"');
-  expect(code).toContain('provider="beta"');
-  expect(code.match(/"001",/g)).toHaveLength(2);
+  expect(code).toContain('"alpha"');
+  expect(code).toContain('"beta"');
+  expect(code).toContain('"001"');
   expect(code).toContain('rr.download("beta")');
   expect(code).toContain("SOURCE_KEY");
   await page.getByRole("tab", { name: "Filtering", exact: true }).click();
@@ -177,18 +177,6 @@ test("map fills viewport with one compact tabbed panel", async ({ page }) => {
       () => document.documentElement.scrollHeight <= window.innerHeight,
     ),
   ).toBe(true);
-});
-
-test("basemap failures are visible without hiding catalogue gauges", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await expect(
-    page.getByText(
-      "Some basemap tiles are unavailable. Gauge points remain visible.",
-    ),
-  ).toBeVisible();
-  await expect(page.getByTestId("match-count")).toHaveText("3 matching gauges");
 });
 
 test("native clusters zoom and spiderfy co-located provider identities", async ({
@@ -268,7 +256,7 @@ test("reduced Filtering panel owns dates and omits removed UI", async ({
   ).not.toBeVisible();
 });
 
-test("outside-world space is not reported as a tile failure", async ({
+test("native map stops zooming out at the configured world scale", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 2600, height: 900 });
@@ -299,11 +287,6 @@ test("outside-world space is not reported as a tile failure", async ({
   await expect(
     page.getByRole("button", { name: "Zoom out", exact: true }),
   ).toHaveAttribute("aria-disabled", "true");
-  await expect(
-    page.getByText(
-      "Some basemap tiles are unavailable. Gauge points remain visible.",
-    ),
-  ).toHaveCount(0);
 });
 
 test("Python preview highlights syntax while clipboard stays exact plain code", async ({
@@ -319,8 +302,13 @@ test("Python preview highlights syntax while clipboard stays exact plain code", 
     .click();
   await page.getByRole("tab", { name: "Python", exact: true }).click();
   const code = page.getByLabel("Python request");
-  await expect(code.locator(".token.keyword").first()).toHaveText("import");
-  await expect(code.locator(".token.string").first()).toBeVisible();
+  await expect(
+    code
+      .locator("span")
+      .filter({ hasText: /^import$/ })
+      .first(),
+  ).toHaveText("import");
+  await expect(code.locator('span[style*="#A31515"]').first()).toBeVisible();
   const plain = await code.textContent();
   await page.getByRole("button", { name: "Copy Python request" }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(plain);
@@ -523,4 +511,54 @@ test("theme switch safely retires pending tile loads", async ({ page }) => {
   } finally {
     release();
   }
+});
+
+test("gauge pins show measurement symbols and non-color selection cues", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("provider", { exact: true }).selectOption("alpha");
+  await page.getByRole("button", { name: "Zoom to matches" }).click();
+  const pin = page.locator(".gauge-point svg");
+  await expect(pin).toHaveCount(1);
+  await expect(pin.locator('[data-part="staff"]')).toHaveCount(1);
+  await expect(pin.locator('[data-part="river"]')).toHaveCount(1);
+  await expect(
+    page.locator('.legend [data-state="selected"] [data-badge="check"]'),
+  ).toHaveCount(1);
+  await expect(
+    page.locator('.legend [data-state="conflict"] [data-badge="warning"]'),
+  ).toHaveCount(1);
+  const light = await pin.evaluate((el) =>
+    getComputedStyle(el).getPropertyValue("--gauge-match"),
+  );
+  await page.evaluate(() => {
+    document.documentElement.dataset.mdColorScheme = "slate";
+  });
+  await expect
+    .poll(() =>
+      pin.evaluate((el) =>
+        getComputedStyle(el).getPropertyValue("--gauge-match"),
+      ),
+    )
+    .not.toBe(light);
+  await page.evaluate(() => {
+    document.documentElement.dataset.mdColorScheme = "default";
+  });
+  await page
+    .getByRole("button", { name: "Add all matches", exact: true })
+    .click();
+  const canvas = page.locator("canvas.station-points");
+  const bodyPixel = () =>
+    canvas.evaluate((node) =>
+      Array.from(
+        node
+          .getContext("2d")!
+          .getImageData(node.width / 2, node.height / 2 - 10, 1, 1).data,
+      ),
+    );
+  await expect.poll(bodyPixel).toEqual([8, 124, 112, 255]);
+  await expect(page.locator(".gauge-point")).toHaveCount(0);
+  await page.getByLabel("provider", { exact: true }).selectOption("beta");
+  await expect.poll(bodyPixel).toEqual([173, 79, 14, 255]);
 });

@@ -77,9 +77,13 @@ The snapshot has 78,175 catalogue entries, of which 77,020 have matching series.
 Entries without described series are not individually browsable in this reduced UI.
 This catalogue limit does not establish absence of observations.
 
-Python previews use syntax highlighting from the documentation palette. Copying
-still returns the complete plain Python request, including when the visible preview
-is shortened. Unresolved requests remain commented and cannot be copied.
+Python previews use Shiki with the official VS Code Light+ and Dark+ themes,
+selected by the documentation scheme. The preview shows at most ten station IDs;
+copying returns every selected gauge in complete plain Python. Shortened previews
+contain non-executable omission markers. Unresolved requests remain commented and
+cannot be copied. Normal multi-provider requests use one
+combined selection and `fetch_by_provider`. A provider-specific fallback preserves
+exact pairs when station identifiers would otherwise select extra gauges.
 
 ## Basemap configuration
 
@@ -92,7 +96,8 @@ commit the configuration or include keys or keyed tile URLs in review artifacts.
 
 With a key configured, the existing documentation scheme selects CARTO Positron
 (`light_all`) or Dark Matter (`dark_all`) automatically. Without a local key, the
-map uses OpenStreetMap and shows an explicit notice. Restrict the key to approved
+map uses OpenStreetMap. Tile failures do not add a banner; browser checks retain
+sanitized diagnostics without keyed request URLs. Restrict the key to approved
 localhost and production hosts, check account quotas, and retain CARTO and
 OpenStreetMap attribution. Report rejected hosts rather than removing restrictions.
 

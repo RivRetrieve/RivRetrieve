@@ -1,0 +1,70 @@
+:root {
+  --gauge-match: #147da3;
+  --gauge-selected: #087c70;
+  --gauge-conflict: #ad4f0e;
+  --gauge-ink: #fff;
+}
+:root[data-md-color-scheme="slate"] {
+  --gauge-match: #4bc3e7;
+  --gauge-selected: #50d6bb;
+  --gauge-conflict: #ffbb69;
+  --gauge-ink: #102b34;
+}
+.gauge-icon {
+  display: inline-flex;
+  flex: none;
+  width: 26px;
+  height: 31px;
+  vertical-align: middle;
+}
+.gauge-symbol {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.gauge-body {
+  fill: var(--gauge-match);
+  stroke: var(--gauge-ink);
+  stroke-width: 1.3;
+}
+[data-state="selected"] .gauge-body {
+  fill: var(--gauge-selected);
+}
+[data-state="conflict"] .gauge-body {
+  fill: var(--gauge-conflict);
+}
+.gauge-measurement {
+  fill: none;
+  stroke: var(--gauge-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.gauge-badge {
+  fill: var(--gauge-ink);
+  stroke: var(--gauge-selected);
+  stroke-width: 1.3;
+}
+.gauge-badge-mark {
+  fill: none;
+  stroke: var(--gauge-selected);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+[data-state="conflict"] .gauge-badge,
+[data-state="conflict"] .gauge-badge-mark {
+  stroke: var(--gauge-conflict);
+}
+.gauge-point {
+  background: none;
+  border: 0;
+}
+.legend span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.legend .gauge-icon {
+  width: 20px;
+  height: 24px;
+}

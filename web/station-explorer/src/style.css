@@ -282,7 +282,7 @@ pre {
   display: block;
   font-size: 12px;
 }
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .panel {
     top: auto;
     left: 8px;
@@ -301,29 +301,6 @@ pre {
   }
   .panel-content {
     padding: 10px;
-  }
-}
-
-.tile-warning {
-  position: absolute;
-  z-index: 500;
-  left: 12px;
-  bottom: 52px;
-  max-width: min(340px, calc(100% - 24px));
-  padding: 6px 9px;
-  border-radius: 5px;
-  background: color-mix(
-    in srgb,
-    var(--md-accent-fg-color, #ff6e42) 12%,
-    var(--md-default-bg-color, #fff)
-  );
-  color: var(--md-default-fg-color, #8a320d);
-  font-size: 12px;
-}
-@media (max-width: 640px) {
-  .tile-warning {
-    top: 115px;
-    bottom: auto;
   }
 }
 
@@ -359,40 +336,4 @@ pre {
 
 .leaflet-container {
   background: var(--md-default-bg-color, #fff);
-}
-
-.python-preview .token.keyword,
-.python-preview .token.boolean {
-  color: var(--md-code-hl-keyword-color, #3f6ec6);
-}
-.python-preview .token.string {
-  color: var(--md-code-hl-string-color, #1c7d4d);
-}
-.python-preview .token.number {
-  color: var(--md-code-hl-number-color, #d52a2a);
-}
-.python-preview .token.comment {
-  color: var(--md-code-hl-comment-color, #707070);
-}
-.python-preview .token.function,
-.python-preview .token.builtin {
-  color: var(--md-code-hl-function-color, #7e3db8);
-}
-.python-preview .token.class-name {
-  color: var(--md-code-hl-name-color, #36464e);
-}
-.python-preview .token.operator {
-  color: var(--md-code-hl-operator-color, #36464e);
-}
-.python-preview .token.punctuation {
-  color: var(--md-code-hl-punctuation-color, #36464e);
-}
-.python-preview .token.decorator {
-  color: var(--md-code-hl-special-color, #db1457);
-}
-
-.gauge-point {
-  background: #136f91;
-  border: 1px solid white;
-  border-radius: 50%;
 }

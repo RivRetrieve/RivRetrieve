@@ -54,6 +54,8 @@ export interface Conflict {
 }
 export interface RequestPreview {
   code: string;
+  previewCode: string;
+  omittedStationCount: number;
   blockingReasons: string[];
   conflicts: Conflict[];
 }
@@ -175,6 +177,7 @@ export function generateRequest(
   filters: Filters,
   dates: RequestDates,
   providers: Provider[],
+  catalogueStations: Station[],
 ): RequestPreview {
   const conflicts = selectionConflicts(selected, filters);
   const blockingReasons: string[] = [];
@@ -207,90 +210,145 @@ export function generateRequest(
         `${id} is catalogue-only. Remove its gauges to generate a retrieval request.`,
       );
   }
-  const lines = [
-    "import rivretrieve as rr",
-    "",
-    "# Catalogue listings do not guarantee observations in these dates.",
-    "# Dates use source wall-clock labels; a date-only end includes the whole day.",
-    "# Source responses may reveal additional matching series unless explicitly restricted.",
+  const selectedKeys = new Set(selected.map(stationKey));
+  const stationIds = [
+    ...new Set(selected.map((station) => station.station_id)),
   ];
-  if (!dates.end)
-    lines.push(
-      "# end=None uses the caller machine's current local date when Python runs.",
-      "# The start must not be after that date.",
-    );
-  const args = activeFilters(filters).map(
-    ([field, value]) => `    ${field}=${pythonString(value)},`,
+  const selectedIds = new Set(stationIds);
+  const hasCrossPair = catalogueStations.some(
+    (station) =>
+      groups.has(station.provider_id) &&
+      selectedIds.has(station.station_id) &&
+      !selectedKeys.has(stationKey(station)),
   );
-  lines.push(
-    "selection = rr.find(",
-    ...args,
-    ")",
-    "for issue in selection.issues:",
-    "    print(issue)",
-    "",
-  );
-  if (groups.size > 1) lines.push("results_by_provider = {}", "");
-  for (const [id, stations] of groups) {
-    const provider = providers.find((item) => item.provider_id === id);
-    if (provider?.credentials.length) {
-      lines.push(
-        `# Required credentials for ${pythonString(id)}: ${provider.credentials.map(pythonString).join(", ")}.`,
-        "# Set them in the process environment or working-directory .env file.",
-        "# Keep secret values out of this script and the browser.",
-      );
-    }
-    if (provider?.bulk) {
-      lines.push(
-        "# Download and compile the national archive. This can use substantial bandwidth and disk space.",
-      );
-      if (id === "ca_eccc")
+  const combined = groups.size > 1 && !hasCrossPair;
+  const writeCode = (limit: number) => {
+    const lines = ["import rivretrieve as rr", ""];
+    for (const id of groups.keys()) {
+      const provider = providers.find((item) => item.provider_id === id);
+      if (provider?.credentials.length)
         lines.push(
-          "# Set SQLITE_TMPDIR and TMPDIR to suitable scratch directories before starting Python.",
+          `# ${pythonString(id)} credentials: ${provider.credentials.map(pythonString).join(", ")}.`,
         );
-      lines.push(`rr.download(${pythonString(id)})`, "");
+      if (provider?.bulk) {
+        lines.push(
+          "# National archive preparation uses bandwidth and disk space.",
+        );
+        if (id === "ca_eccc")
+          lines.push(
+            "# Set SQLITE_TMPDIR and TMPDIR to suitable scratch directories.",
+          );
+        lines.push(`rr.download(${pythonString(id)})`);
+      }
     }
-    lines.push(
-      "gauges = rr.pick(",
-      "    selection,",
-      `    provider=${pythonString(id)},`,
-      "    station=[",
-      ...stations.map((station) => `        ${pythonString(station)},`),
-      "    ],",
-      ")",
-      "for issue in gauges.issues:",
-      "    print(issue)",
-      `results = rr.fetch(gauges, start=${pythonString(dates.start)}, end=${dates.end ? pythonString(dates.end) : "None"})`,
-      "# Inspect issues even when observation rows are returned.",
-      "for issue in results.issues:",
-      "    print(issue)",
+    const args = activeFilters(filters).map(
+      ([field, value]) => `${field}=${pythonString(value)}`,
     );
-    if (groups.size > 1)
-      lines.push(`results_by_provider[${pythonString(id)}] = results`);
-    lines.push("");
-  }
-  if (groups.size === 1)
+    const findCall = `selection = rr.find(${args.join(", ")})`;
     lines.push(
-      "# To save the observations as CSV:",
-      '# results.to_polars().write_csv("observations.csv")',
+      findCall.length <= 72
+        ? findCall
+        : [
+            "selection = rr.find(",
+            ...args.map((arg) => `    ${arg},`),
+            ")",
+          ].join("\n"),
     );
-  else if (groups.size > 1)
-    lines.push(
-      "# To save observations as one CSV per provider:",
-      "# for provider, result in results_by_provider.items():",
-      '#     result.to_polars().write_csv(f"observations_{provider}.csv")',
-    );
-  let code = lines.join("\n");
-  if (blockingReasons.length) {
-    // Keep the unresolved request visible, but make even a manual preview copy inert.
-    code = [
-      "# UNRESOLVED REQUEST: copy/export is blocked.",
-      ...blockingReasons.flatMap((reason) =>
-        reason.split(/\r\n|\r|\n/).map((line) => `# ${line}`),
-      ),
-      "",
-      ...lines.map((line) => `# ${line}`),
-    ].join("\n");
-  }
-  return { code, blockingReasons, conflicts };
+    const fetchCall = (target: string, method: string, indent = "") =>
+      [
+        `${indent}${target} = rr.${method}(`,
+        `${indent}    gauges,`,
+        `${indent}    start=${pythonString(dates.start)},`,
+        `${indent}    end=${dates.end ? pythonString(dates.end) : "None"},`,
+        `${indent})`,
+      ].join("\n");
+    let remaining = limit;
+    const stationList = (stations: string[]) => {
+      const visible = stations.slice(0, remaining);
+      remaining -= visible.length;
+      const rows = visible.map((id) => `        ${pythonString(id)},`);
+      const omitted = stations.length - visible.length;
+      // A displayed omission is deliberately invalid Python, never a wildcard [].
+      // Parsing the whole preview fails before imports, downloads or retrieval.
+      if (omitted) rows.push(`        … ${omitted} more station IDs omitted`);
+      return rows.length ? `[\n${rows.join("\n")}\n    ]` : "[]";
+    };
+    if (combined) {
+      lines.push(
+        "gauges = rr.pick(",
+        "    selection,",
+        `    provider=[${Array.from(groups.keys()).map(pythonString).join(", ")}],`,
+        `    station=${stationList(stationIds)},`,
+        ")",
+        fetchCall("results_by_provider", "fetch_by_provider"),
+        "for result in results_by_provider.values():",
+        "    for issue in result.issues:",
+        "        print(issue)",
+        "",
+        "# for provider, result in results_by_provider.items():",
+        '#     result.to_polars().write_csv(f"observations_{provider}.csv")',
+      );
+    } else if (groups.size > 1) {
+      lines.push(
+        "# Keep provider/station pairs exact where IDs overlap.",
+        "stations_by_provider = {",
+        ...Array.from(groups, ([id, stations]) => {
+          return `    ${pythonString(id)}: ${stationList(stations)},`;
+        }),
+        "}",
+        "results_by_provider = {}",
+        "for provider, station_ids in stations_by_provider.items():",
+        "    gauges = rr.pick(",
+        "        selection, provider=provider, station=station_ids,",
+        "    )",
+        fetchCall("result", "fetch", "    "),
+        "    results_by_provider[provider] = result",
+        "    for issue in result.issues:",
+        "        print(issue)",
+        "",
+        "# for provider, result in results_by_provider.items():",
+        '#     result.to_polars().write_csv(f"observations_{provider}.csv")',
+      );
+    } else if (groups.size === 1) {
+      const [id, stations] = Array.from(groups)[0];
+      lines.push(
+        "gauges = rr.pick(",
+        "    selection,",
+        `    provider=${pythonString(id)},`,
+        `    station=${stationList(stations)},`,
+        ")",
+        fetchCall("results", "fetch"),
+        "for issue in results.issues:",
+        "    print(issue)",
+        "",
+        '# results.to_polars().write_csv("observations.csv")',
+      );
+    }
+    let code = lines.join("\n");
+    if (blockingReasons.length) {
+      // Keep the unresolved request visible, but make even a manual preview copy inert.
+      code = [
+        "# UNRESOLVED REQUEST: copy/export is blocked.",
+        ...blockingReasons.flatMap((reason) =>
+          reason.split(/\r\n|\r|\n/).map((line) => `# ${line}`),
+        ),
+        "",
+        ...code.split("\n").map((line) => `# ${line}`),
+      ].join("\n");
+    }
+    return code;
+  };
+  const stationCount = combined
+    ? stationIds.length
+    : Array.from(groups.values()).reduce(
+        (count, stations) => count + stations.length,
+        0,
+      );
+  return {
+    code: writeCode(Infinity),
+    previewCode: writeCode(10),
+    omittedStationCount: Math.max(0, stationCount - 10),
+    blockingReasons,
+    conflicts,
+  };
 }

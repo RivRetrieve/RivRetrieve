@@ -1,0 +1,101 @@
+.explorer .panel {
+  width: min(460px, calc(100% - 24px));
+}
+
+.selection-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.selection-list .selection-card {
+  padding: 12px;
+  border: 1px solid var(--md-default-fg-color--lightest, #cad9de);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.selection-card-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.selection-card-heading > svg {
+  flex-shrink: 0;
+}
+
+.selection-card-identity {
+  min-width: 0;
+  flex: 1;
+}
+
+.selection-card-identity h3 {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.selection-card-identity p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.selection-state {
+  margin: 9px 0;
+  font-size: 12px;
+}
+
+.selection-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selection-card-actions button {
+  min-height: 36px;
+  font-size: 12px;
+}
+
+.selection-card .warning {
+  margin: 8px 0 0;
+}
+
+@media (max-width: 900px) {
+  .explorer .panel {
+    width: auto;
+    height: 50%;
+  }
+}
+
+.coordinate-info {
+  position: relative;
+}
+.coordinate-warning {
+  display: inline-block;
+  margin-left: 5px;
+}
+.coordinate-warning-trigger {
+  padding: 2px 6px;
+  min-width: 28px;
+  min-height: 28px;
+  color: var(--md-default-fg-color, #8a320d);
+  background: color-mix(
+    in srgb,
+    var(--md-accent-fg-color, #ff6e42) 12%,
+    var(--md-default-bg-color, #fff)
+  );
+}
+.coordinate-warning-tooltip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  z-index: 1;
+  padding: 9px;
+  border: 1px solid var(--md-default-fg-color--lightest, #cad9de);
+  border-radius: 5px;
+  background: var(--md-default-bg-color, #fff);
+  color: var(--md-default-fg-color, #173746);
+  box-shadow: 0 2px 8px #17374625;
+}

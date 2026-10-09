@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { expandCatalogue } from "./catalogue";
 import {
   addStations,
@@ -13,7 +13,9 @@ import {
 } from "./domain";
 import { StationMap } from "./StationMap";
 import { PythonPreview } from "./PythonPreview";
+import { GaugeIcon } from "./GaugeIcon";
 import "./style.css";
+import "./panel.css";
 
 const physicalControls = [
   "quantity",
@@ -22,6 +24,43 @@ const physicalControls = [
   "temporal_support",
 ] as const;
 const label = (field: string) => field.replaceAll("_", " ");
+function CoordinateWarning({ children }: { children: string }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <span
+      className="coordinate-warning"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={(event) => {
+        if (!event.currentTarget.contains(document.activeElement))
+          setOpen(false);
+      }}
+    >
+      <button
+        className="coordinate-warning-trigger"
+        aria-label="Coordinate reference warning"
+        aria-describedby={id}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={() => setOpen(true)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setOpen(false);
+        }}
+      >
+        <span aria-hidden="true">⚠</span>
+      </button>
+      <span
+        id={id}
+        role="tooltip"
+        className="coordinate-warning-tooltip"
+        hidden={!open}
+      >
+        {children}
+      </span>
+    </span>
+  );
+}
+
 export function App() {
   const [catalogue, setCatalogue] = useState<{
     stations: Station[];
@@ -34,7 +73,6 @@ export function App() {
   const [dates, setDates] = useState({ start: "", end: "" });
   const [copyStatus, setCopyStatus] = useState("");
   const [selectionPage, setSelectionPage] = useState(0);
-  const [showCode, setShowCode] = useState(false);
   const [tab, setTab] = useState<"filtering" | "selection" | "python">(
     "filtering",
   );
@@ -60,7 +98,14 @@ export function App() {
     [catalogue, filters],
   );
   const preview = useMemo(
-    () => generateRequest(selected, filters, dates, catalogue?.providers ?? []),
+    () =>
+      generateRequest(
+        selected,
+        filters,
+        dates,
+        catalogue?.providers ?? [],
+        catalogue?.stations ?? [],
+      ),
     [selected, filters, dates, catalogue],
   );
   const conflicts = useMemo(
@@ -115,9 +160,8 @@ export function App() {
       setCopyStatus("Complete Python request copied.");
     } catch {
       setCopyStatus(
-        "Clipboard unavailable. Select the complete preview text to copy it.",
+        "Clipboard unavailable. Allow clipboard access and try again.",
       );
-      setShowCode(true);
     }
   }
   const control = (field: FilterField) => (
@@ -159,11 +203,6 @@ export function App() {
         <p role="status">Loading public catalogue…</p>
       </main>
     );
-  const shownCode =
-    showCode || preview.code.length < 5000
-      ? preview.code
-      : preview.code.slice(0, 4000) +
-        "\n# … Preview shortened. Copy includes every selected station.\n";
   const safeSelectionPage = Math.min(
     selectionPage,
     Math.max(0, Math.ceil(selected.length / 30) - 1),
@@ -319,23 +358,23 @@ export function App() {
                 <p>
                   {inspected.station_name ?? "Station name not established"}
                 </p>
-                <p>
+                <p className="coordinate-info">
                   Coordinates: {inspected.latitude ?? "unknown"},{" "}
                   {inspected.longitude ?? "unknown"}. CRS:{" "}
                   {inspected.crs ?? "unknown"}.
+                  {(!inspected.crs || inspected.crs === "unknown") && (
+                    <CoordinateWarning key={stationKey(inspected)}>
+                      Unknown CRS. Plotted as EPSG:4326 for exploration only.
+                    </CoordinateWarning>
+                  )}
+                  {inspected.crs === "EPSG:4269" && (
+                    <CoordinateWarning key={stationKey(inspected)}>
+                      NAD83 (EPSG:4269) coordinates displayed on the WGS84
+                      basemap without a datum transformation. Approximate
+                      location only.
+                    </CoordinateWarning>
+                  )}
                 </p>
-                {(!inspected.crs || inspected.crs === "unknown") && (
-                  <p className="warning">
-                    ⚠ Unknown CRS. Plotted as EPSG:4326 for exploration only.
-                  </p>
-                )}
-                {inspected.crs === "EPSG:4269" && (
-                  <p className="warning">
-                    ⚠ NAD83 (EPSG:4269) coordinates displayed on the WGS84
-                    basemap without a datum transformation. Approximate location
-                    only.
-                  </p>
-                )}
                 {!catalogue.providers.find(
                   (provider) => provider.provider_id === inspected.provider_id,
                 )?.retrieval && (
@@ -403,26 +442,47 @@ export function App() {
                 {selected
                   .slice(safeSelectionPage * 30, safeSelectionPage * 30 + 30)
                   .map((station) => (
-                    <li key={stationKey(station)}>
-                      <strong>
-                        {conflicts.has(stationKey(station)) ? "⚠" : "◆"}{" "}
-                        {station.provider_id} / {station.station_id}
-                      </strong>
-                      <button
-                        onClick={() => {
-                          setInspected(station);
-                          setTab("filtering");
-                        }}
-                        aria-label={`Inspect selected ${station.provider_id} / ${station.station_id}`}
-                      >
-                        Inspect
-                      </button>
-                      <button
-                        onClick={() => remove(station)}
-                        aria-label={`Remove ${station.provider_id} / ${station.station_id}`}
-                      >
-                        Remove
-                      </button>
+                    <li className="selection-card" key={stationKey(station)}>
+                      <div className="selection-card-heading">
+                        <GaugeIcon
+                          state={
+                            conflicts.has(stationKey(station))
+                              ? "conflict"
+                              : "selected"
+                          }
+                        />
+                        <div className="selection-card-identity">
+                          <h3>
+                            {station.station_name ??
+                              "Station name not established"}
+                          </h3>
+                          <p>
+                            {station.provider_id} / {station.station_id}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="selection-state">
+                        {conflicts.has(stationKey(station))
+                          ? "Does not match current filters"
+                          : "Matches current filters"}
+                      </p>
+                      <div className="selection-card-actions">
+                        <button
+                          onClick={() => {
+                            setInspected(station);
+                            setTab("filtering");
+                          }}
+                          aria-label={`Inspect selected ${station.provider_id} / ${station.station_id}`}
+                        >
+                          Inspect
+                        </button>
+                        <button
+                          onClick={() => remove(station)}
+                          aria-label={`Remove ${station.provider_id} / ${station.station_id}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
                       {conflicts
                         .get(stationKey(station))
                         ?.reasons.map((reason) => (
@@ -495,11 +555,12 @@ export function App() {
               <span role="status" className="copy-status">
                 {copyStatus}
               </span>
-              <PythonPreview code={shownCode} />
-              {preview.code.length >= 5000 && (
-                <button onClick={() => setShowCode(!showCode)}>
-                  {showCode ? "Shorten preview" : "Show complete preview"}
-                </button>
+              {tab === "python" && <PythonPreview code={preview.previewCode} />}
+              {preview.omittedStationCount > 0 && (
+                <p className="hint">
+                  10 gauge IDs shown. Copy includes all{" "}
+                  {selected.length.toLocaleString()} gauges.
+                </p>
               )}
             </section>
           </div>

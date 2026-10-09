@@ -161,7 +161,14 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   ).toBeVisible();
   await expect(
     app.getByText(/NAD83.*without a datum transformation/),
+  ).toBeHidden();
+  await app
+    .getByRole("button", { name: "Coordinate reference warning", exact: true })
+    .focus();
+  await expect(
+    app.getByText(/NAD83.*without a datum transformation/),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(
     app.getByRole("tab", { name: "Selection (0)", exact: true }),
   ).toBeVisible();
@@ -201,14 +208,22 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   await app.getByRole("tab", { name: "Python", exact: true }).click();
   await app.getByRole("button", { name: "Copy Python request" }).click();
   const code = await page.evaluate(() => navigator.clipboard.readText());
-  expect(code.match(/^        ".*",$/gm)).toHaveLength(26201);
+  const allIds = JSON.parse(
+    code.match(/station=(\[[\s\S]*?\])/)![1].replace(/,\s*]$/, "]"),
+  ) as string[];
+  expect(allIds).toHaveLength(26201);
+  expect(new Set(allIds).size).toBe(26201);
   expect(code).toContain('"07374000"');
   expect(code).not.toContain("<span");
   expect(code).not.toContain("Preview shortened");
-  await app
-    .getByRole("button", { name: "Show complete preview", exact: true })
-    .click();
-  expect(await app.getByLabel("Python request").textContent()).toBe(code);
+  const shown = await app.getByLabel("Python request").textContent();
+  expect(shown).not.toBe(code);
+  const shownIds = shown!.match(/"[0-9]+"/g) ?? [];
+  expect(shownIds).toHaveLength(10);
+  await expect(app.getByText(/Copy includes all 26,201 gauges/)).toBeVisible();
+  await expect(
+    app.getByRole("button", { name: "Show complete preview", exact: true }),
+  ).toHaveCount(0);
   await app.getByRole("tab", { name: /Selection/ }).click();
   await app
     .getByRole("button", { name: "Clear selection", exact: true })
@@ -328,15 +343,6 @@ test("explorer and Python syntax follow the existing docs palette without losing
         node.dataset.centerLng,
         node.dataset.zoom,
       ]);
-  const keywordColor = () =>
-    page.evaluate(() => {
-      const sample = document.createElement("span");
-      sample.style.color = "var(--md-code-hl-keyword-color)";
-      document.body.append(sample);
-      const result = getComputedStyle(sample).color;
-      sample.remove();
-      return result;
-    });
   await page.locator('label[title="Switch to dark mode"]').click();
   await expect(page.locator("body")).toHaveAttribute(
     "data-md-color-scheme",
@@ -366,20 +372,38 @@ test("explorer and Python syntax follow the existing docs palette without losing
   const beforeZoom = Number((await view())[2]);
   await app.getByRole("button", { name: "Zoom in", exact: true }).click();
   await expect.poll(async () => Number((await view())[2])).toBe(beforeZoom + 1);
-  const initial = await view();
   await app.getByLabel("provider", { exact: true }).selectOption("ch_foen");
   await app.getByLabel("station", { exact: true }).fill("2004");
   await app.getByLabel("Start date", { exact: true }).fill("2020-01-01");
   await app
+    .getByRole("button", { name: "Zoom to matches", exact: true })
+    .click();
+  await expect.poll(async () => Number((await view())[2])).toBe(12);
+  const initial = await view();
+  await app
     .getByRole("button", { name: "Add all matches", exact: true })
     .click();
+  await app.getByRole("tab", { name: /Selection/ }).click();
+  await expect(app.locator(".selection-card")).toHaveCount(1);
+  await waitForBasemap(app);
+  if (process.env.EVIDENCE_DIR)
+    await page.screenshot({
+      path: `${process.env.EVIDENCE_DIR}/selection-dark.png`,
+    });
   await app.getByRole("tab", { name: "Python", exact: true }).click();
   const code = app.getByLabel("Python request");
-  await expect(code.locator(".token.keyword").first()).toHaveText("import");
-  await expect(code.locator(".token.keyword").first()).toHaveCSS(
-    "color",
-    await keywordColor(),
-  );
+  await expect(
+    code
+      .locator("span")
+      .filter({ hasText: /^import$/ })
+      .first(),
+  ).toHaveText("import");
+  await expect(
+    code
+      .locator("span")
+      .filter({ hasText: /^import$/ })
+      .first(),
+  ).toHaveCSS("color", "rgb(197, 134, 192)");
   const original = await code.textContent();
   await waitForBasemap(app);
   if (process.env.EVIDENCE_DIR)
@@ -406,10 +430,12 @@ test("explorer and Python syntax follow the existing docs palette without losing
     "background-color",
     light,
   );
-  await expect(code.locator(".token.keyword").first()).toHaveCSS(
-    "color",
-    await keywordColor(),
-  );
+  await expect(
+    code
+      .locator("span")
+      .filter({ hasText: /^import$/ })
+      .first(),
+  ).toHaveCSS("color", "rgb(175, 0, 219)");
   expect(await code.textContent()).toBe(original);
   const after = (await view()).map(Number);
   expect(after[2]).toBe(Number(initial[2]));
@@ -428,6 +454,11 @@ test("explorer and Python syntax follow the existing docs palette without losing
   if (process.env.EVIDENCE_DIR)
     await page.screenshot({
       path: `${process.env.EVIDENCE_DIR}/python-light.png`,
+    });
+  await app.getByRole("tab", { name: /Selection/ }).click();
+  if (process.env.EVIDENCE_DIR)
+    await page.screenshot({
+      path: `${process.env.EVIDENCE_DIR}/selection-light.png`,
     });
   await page.locator('label[title="Switch to dark mode"]').click();
   await page.getByRole("link", { name: "Usage", exact: true }).first().click();

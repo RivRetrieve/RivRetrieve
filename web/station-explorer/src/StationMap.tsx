@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
@@ -6,6 +6,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { stationKey, type Station } from "./domain";
 import { basemapTiles } from "./basemap";
+import { GaugeIcon, gaugePinSvg, gaugeSprites } from "./GaugeIcon";
 
 export function canPlot(station: Station): boolean {
   return (
@@ -34,7 +35,6 @@ export function StationMap({
   basemapKey,
   onInspect,
 }: Props) {
-  const [tileError, setTileError] = useState(false);
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const data = useRef({ matches, selected, onInspect });
@@ -55,8 +55,8 @@ export function StationMap({
       {
         paddingTopLeft: [32, 32],
         paddingBottomRight: [
-          32,
-          host.current!.clientWidth <= 640
+          host.current!.clientWidth <= 900 ? 32 : 484,
+          host.current!.clientWidth <= 900
             ? host.current!.clientHeight / 2 + 32
             : 32,
         ],
@@ -78,15 +78,12 @@ export function StationMap({
         tiles.off();
       }
       tileStyle = source.style;
-      setTileError(false);
       host.current!.dataset.basemap = source.style;
       tiles = L.tileLayer(source.url, {
         maxZoom: 18,
         noWrap: true,
         attribution: source.attribution,
-      })
-        .on("tileerror", () => setTileError(true))
-        .addTo(map);
+      }).addTo(map);
     };
     applyBasemap();
     const themeObserver = new MutationObserver(applyBasemap);
@@ -100,9 +97,9 @@ export function StationMap({
     const markerCache = new Map<string, L.Marker>();
     const pointIcon = L.divIcon({
       className: "gauge-point",
-      html: "",
-      iconSize: [10, 10],
-      iconAnchor: [5, 5],
+      html: gaugePinSvg("match"),
+      iconSize: [25.5, 30],
+      iconAnchor: [12, 28.5],
     });
     const canvas = L.DomUtil.create(
       "canvas",
@@ -125,9 +122,15 @@ export function StationMap({
           );
         });
     };
+    let sprites: ReturnType<typeof gaugeSprites> | undefined;
+    let spriteRatio = 0;
     const draw = () => {
       const size = map.getSize(),
         ratio = window.devicePixelRatio || 1;
+      if (!sprites || ratio !== spriteRatio) {
+        sprites = gaugeSprites(host.current!, ratio);
+        spriteRatio = ratio;
+      }
       canvas.width = size.x * ratio;
       canvas.height = size.y * ratio;
       canvas.style.width = `${size.x}px`;
@@ -141,26 +144,12 @@ export function StationMap({
           station.latitude!,
           station.longitude!,
         ]);
-        if (x < -8 || x > size.x + 8 || y < -8 || y > size.y + 8) continue;
-        selectedPoints.push({ x, y, station });
-        ctx.beginPath();
-        if (matchingKeys.has(stationKey(station))) {
-          ctx.moveTo(x, y - 6);
-          ctx.lineTo(x + 6, y);
-          ctx.lineTo(x, y + 6);
-          ctx.lineTo(x - 6, y);
-          ctx.fillStyle = "#6d28d9";
-        } else {
-          ctx.moveTo(x, y - 8);
-          ctx.lineTo(x + 7, y + 6);
-          ctx.lineTo(x - 7, y + 6);
-          ctx.fillStyle = "#ad3909";
-        }
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        if (x < -24 || x > size.x + 24 || y < 0 || y > size.y + 30) continue;
+        selectedPoints.push({ x, y: y - 17, station });
+        const state = matchingKeys.has(stationKey(station))
+          ? "selected"
+          : "conflict";
+        ctx.drawImage(sprites![state], x - 12, y - 28.5, 25.5, 30);
       }
       canvas.dataset.drawn = String(plotted);
       canvas.dataset.zoom = String(map.getZoom());
@@ -172,6 +161,14 @@ export function StationMap({
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(draw);
     };
+    const symbolObserver = new MutationObserver(() => {
+      sprites = undefined;
+      schedule();
+    });
+    symbolObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-md-color-scheme"],
+    });
     let lastMatches: Station[] | undefined, lastSelected: Station[] | undefined;
     update.current = () => {
       const current = data.current;
@@ -237,6 +234,7 @@ export function StationMap({
     update.current();
     return () => {
       themeObserver.disconnect();
+      symbolObserver.disconnect();
       resizeObserver.disconnect();
       cancelAnimationFrame(frame);
       map.remove();
@@ -271,21 +269,16 @@ export function StationMap({
       >
         Zoom to matches
       </button>
-      {(tileError || !basemapKey) && (
-        <p className="tile-warning" role="status">
-          {[
-            !basemapKey && "Basemap key not configured. Using OpenStreetMap.",
-            tileError &&
-              "Some basemap tiles are unavailable. Gauge points remain visible.",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        </p>
-      )}
       <div className="legend">
-        <span>● Match</span>
-        <span>◆ Selected</span>
-        <span>▲ Conflict</span>
+        <span>
+          <GaugeIcon state="match" /> Match
+        </span>
+        <span>
+          <GaugeIcon state="selected" /> Selected
+        </span>
+        <span>
+          <GaugeIcon state="conflict" /> Conflict
+        </span>
       </div>
     </div>
   );
