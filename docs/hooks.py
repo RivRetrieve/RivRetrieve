@@ -2,7 +2,7 @@
 
 Automatically:
 1. Syncs the root README.md into docs/index.md, adjusting internal links.
-2. Ensures docs/assets/stations_map.html is up to date with packaged catalogues.
+2. Requires the prepared station explorer app and catalogue assets.
 3. Automatically fixes and resolves relative markdown links:
    - External repo files (src/, tests/, maintenance/, .env) become GitHub blob links.
    - Cross-references to README.md become proper relative paths to index.md.
@@ -20,7 +20,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = REPO_ROOT / "docs"
 README_PATH = REPO_ROOT / "README.md"
 INDEX_MD_PATH = DOCS_DIR / "index.md"
-STATIONS_MAP_PATH = DOCS_DIR / "assets" / "stations_map.html"
 GITHUB_REPO_BLOB = "https://github.com/RivRetrieve/RivRetrieve/blob/main"
 
 
@@ -28,6 +27,15 @@ def on_pre_build(config: dict) -> None:
     """Invoked before building the docs site."""
     # Check committed factual tables before any build preparation writes files.
     subprocess.run([sys.executable, str(REPO_ROOT / "scripts/generate_reference.py"), "--check"], check=True)
+
+    app = DOCS_DIR / "assets" / "station-explorer"
+    missing = [name for name in ("index.html", "catalogue.json") if not (app / name).is_file()]
+    if missing:
+        raise RuntimeError(
+            f"Station explorer assets are missing: {', '.join(missing)}. "
+            "Follow docs/maintenance/station-explorer-preview.md to export the catalogue "
+            "and build the frontend before building or serving the documentation."
+        )
 
     # 1. Sync README.md to docs/index.md
     if README_PATH.is_file():
@@ -59,13 +67,6 @@ def on_pre_build(config: dict) -> None:
         content = re.sub(r"<details(?![^>]*markdown=)>", r'<details markdown="1">', content)
 
         INDEX_MD_PATH.write_text(content, encoding="utf-8")
-
-    # 2. Generate stations_map.html if missing
-    if not STATIONS_MAP_PATH.is_file():
-        generator = DOCS_DIR / "scripts" / "generate_station_map.py"
-        if generator.is_file():
-            print("Generating stations_map.html for documentation build...")
-            subprocess.run([sys.executable, str(generator)], check=True)
 
 
 def on_page_markdown(markdown: str, page, config: dict, files) -> str:

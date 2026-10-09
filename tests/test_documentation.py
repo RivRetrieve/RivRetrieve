@@ -62,6 +62,7 @@ PAGES = [
     "docs/development-conventions.md",
     "docs/contributing.md",
     "docs/maintenance/testing.md",
+    "docs/maintenance/station-explorer-preview.md",
     "CONTEXT.md",
 ]
 
@@ -102,33 +103,42 @@ def test_documentation_home_keeps_interactive_map_link(tmp_path, monkeypatch):
     hooks = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(hooks)
     monkeypatch.setattr(hooks, "INDEX_MD_PATH", tmp_path / "index.md")
-    monkeypatch.setattr(hooks.subprocess, "run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(hooks, "DOCS_DIR", tmp_path)
+    app = tmp_path / "assets/station-explorer"
+    app.mkdir(parents=True)
+    (app / "index.html").write_text("<html></html>")
+    (app / "catalogue.json").write_text("{}")
+    commands = []
+    monkeypatch.setattr(hooks.subprocess, "run", lambda command, **kwargs: commands.append(command))
     hooks.on_pre_build({})
+    assert len(commands) == 1
+    assert commands[0][-1] == "--check"
     home = hooks.INDEX_MD_PATH.read_text()
     assert "[**Interactive Station Map**](map.md)" in home
+
+
+@pytest.mark.parametrize("missing", ["index.html", "catalogue.json"])
+def test_documentation_requires_prepared_station_explorer(tmp_path, monkeypatch, missing):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("documentation_hooks", ROOT / "docs/hooks.py")
+    hooks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hooks)
+    monkeypatch.setattr(hooks, "DOCS_DIR", tmp_path)
+    monkeypatch.setattr(hooks, "INDEX_MD_PATH", tmp_path / "index.md")
+    monkeypatch.setattr(hooks.subprocess, "run", lambda *args, **kwargs: None)
+    app = tmp_path / "assets/station-explorer"
+    app.mkdir(parents=True)
+    for name in {"index.html", "catalogue.json"} - {missing}:
+        (app / name).write_text("synthetic prepared asset")
+    with pytest.raises(RuntimeError, match="station-explorer-preview") as error:
+        hooks.on_pre_build({})
+    assert missing in str(error.value)
 
 
 def test_generated_reference_is_current():
     namespace = runpy.run_path(str(ROOT / "scripts/generate_reference.py"))
     assert (ROOT / "docs/_generated/reference-tables.md").read_text() == namespace["render_tables"]()
-
-
-def test_station_map_counts_match_packaged_catalogues():
-    text = (ROOT / "docs/map.md").read_text()
-    documented = {
-        provider: int(count.replace(",", "")) for provider, count in re.findall(r"\| `([^`]+)` \| ([\d,]+) \|", text)
-    }
-    from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
-    from rivretrieve._internal.providers.registration import load_manifest
-
-    actual = {
-        item.provider_id: pl.read_parquet(item.declaration.catalogue / "stations.parquet").height
-        for item in load_manifest(BUILTIN_PROVIDER_IDS)
-    }
-    assert documented == actual
-    total = re.search(r"Explore \*\*([\d,]+)\*\*", text)
-    assert total is not None
-    assert int(total.group(1).replace(",", "")) == sum(actual.values())
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")

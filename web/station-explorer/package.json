@@ -1,0 +1,30 @@
+{
+  "name": "rivretrieve-station-explorer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "format": "prettier --write src tests *.ts *.json index.html"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/leaflet": "^1.9.21",
+    "@types/node": "^24.19.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.0",
+    "vitest": "^5.0.3"
+  }
+}
