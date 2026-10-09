@@ -50,8 +50,8 @@ def on_pre_build(config: dict) -> None:
             "[**Interactive Station Map**](map.md).\n"
         )
         content = content.replace(
-            "![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](assets/coverage-map.png)",
-            "![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](assets/coverage-map.png)"
+            "![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)",
+            "![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)"
             + map_note,
         )
 

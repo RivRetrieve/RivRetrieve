@@ -88,6 +88,26 @@ def test_documentation_local_links_and_python_syntax():
                 assert fragment in anchors, (name, destination, anchors)
 
 
+def test_readme_links_work_outside_the_repository():
+    text = (ROOT / "README.md").read_text()
+    destinations = re.findall(r"\]\(([^)]+)\)", text)
+    relative = [destination for destination in destinations if not destination.startswith(("https://", "mailto:", "#"))]
+    assert relative == [], f"PyPI needs absolute README links: {relative}"
+
+
+def test_documentation_home_keeps_interactive_map_link(tmp_path, monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("documentation_hooks", ROOT / "docs/hooks.py")
+    hooks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hooks)
+    monkeypatch.setattr(hooks, "INDEX_MD_PATH", tmp_path / "index.md")
+    monkeypatch.setattr(hooks.subprocess, "run", lambda *args, **kwargs: None)
+    hooks.on_pre_build({})
+    home = hooks.INDEX_MD_PATH.read_text()
+    assert "[**Interactive Station Map**](map.md)" in home
+
+
 def test_generated_reference_is_current():
     namespace = runpy.run_path(str(ROOT / "scripts/generate_reference.py"))
     assert (ROOT / "docs/_generated/reference-tables.md").read_text() == namespace["render_tables"]()
