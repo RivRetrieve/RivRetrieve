@@ -79,13 +79,14 @@ test("inspection and exact-pair selection survive changed filters", async ({
   const copy = page.getByRole("button", { name: "Copy Python request" });
   await page.getByRole("tab", { name: "Python", exact: true }).click();
   await expect(copy).toBeDisabled();
+  await page.getByRole("tab", { name: "Filtering", exact: true }).click();
   await page.getByLabel("Start date", { exact: true }).fill("2020-01-01");
   await page.getByLabel("End date", { exact: true }).fill("2020-01-02");
-  await page.getByRole("tab", { name: "Discover", exact: true }).click();
-  await page.getByText("Browse gauge list", { exact: true }).click();
-  await page
-    .getByRole("button", { name: "Inspect alpha / 001", exact: true })
-    .click();
+  await page.getByLabel("provider", { exact: true }).selectOption("alpha");
+  await page.getByRole("button", { name: "Zoom to matches" }).click();
+  const map = page.getByLabel("Gauge map", { exact: true });
+  const box = await map.boundingBox();
+  await map.click({ position: { x: box!.width / 2, y: box!.height / 2 } });
   await expect(
     page.getByRole("tab", { name: "Selection (0)", exact: true }),
   ).toBeVisible();
@@ -100,7 +101,7 @@ test("inspection and exact-pair selection survive changed filters", async ({
   await expect(page.getByLabel("Python request")).toContainText(
     "UNRESOLVED REQUEST",
   );
-  await page.getByRole("tab", { name: "Discover", exact: true }).click();
+  await page.getByRole("tab", { name: "Filtering", exact: true }).click();
   await page
     .getByRole("button", { name: "Add all matches", exact: true })
     .click();
@@ -116,7 +117,7 @@ test("inspection and exact-pair selection survive changed filters", async ({
   expect(code.match(/"001",/g)).toHaveLength(2);
   expect(code).toContain('rr.download("beta")');
   expect(code).toContain("SOURCE_KEY");
-  await page.getByRole("tab", { name: "Discover", exact: true }).click();
+  await page.getByRole("tab", { name: "Filtering", exact: true }).click();
   await page.getByText("More filters", { exact: true }).click();
   await page.getByLabel("frequency", { exact: true }).fill("daily");
   await page.getByRole("tab", { name: /Selection/ }).click();
@@ -134,9 +135,7 @@ test("inspection and exact-pair selection survive changed filters", async ({
   await expect(page.getByLabel("Python request")).not.toContainText("rr.pick(");
 });
 
-test("catalogue-only and zero-series entries remain inspectable and block output", async ({
-  page,
-}) => {
+test("catalogue-only selection blocks output", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("provider", { exact: true }).selectOption("catalogue");
   await page
@@ -157,34 +156,13 @@ test("catalogue-only and zero-series entries remain inspectable and block output
   await page
     .getByRole("button", { name: "Clear selection", exact: true })
     .click();
-  await page.getByRole("tab", { name: "Discover", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Clear filters", exact: true })
-    .click();
-  await page.getByText("Browse gauge list", { exact: true }).click();
-  await page
-    .getByLabel("Include entries without matching series", { exact: false })
-    .check();
-  await page
-    .getByRole("button", { name: "Inspect alpha / empty", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Add gauge", exact: true }).click();
-  await page.getByRole("tab", { name: /Selection/ }).click();
-  await expect(page.getByTestId("selection-counts")).toHaveText(
-    "0 matching · 1 conflicting",
-  );
-  await expect(
-    page.getByText(
-      "No source series is established for this catalogue entry. It cannot match the current discovery request.",
-    ),
-  ).toBeVisible();
 });
 
 test("map fills viewport with one compact tabbed panel", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await expect(
-    page.getByRole("tab", { name: "Discover", exact: true }),
+    page.getByRole("tab", { name: "Filtering", exact: true }),
   ).toBeVisible();
   const box = await page.getByLabel("Gauge map", { exact: true }).boundingBox();
   expect(box!.width).toBeGreaterThan(1400);
@@ -222,6 +200,9 @@ test("counted groups zoom, then expose co-located gauges individually", async ({
     name: "Zoom to group of 2 gauges",
     exact: true,
   });
+  await page
+    .getByRole("button", { name: "Zoom to matches", exact: true })
+    .click();
   await expect(group).toBeVisible();
   await group.click();
   await expect(page.locator("canvas.station-points")).toHaveAttribute(
@@ -229,15 +210,15 @@ test("counted groups zoom, then expose co-located gauges individually", async ({
     "18",
   );
   await group.click();
-  await expect(
-    page.getByText("2 gauges in the clicked group.", { exact: false }),
-  ).toBeVisible();
   await page
-    .getByRole("button", { name: "Inspect beta / 001", exact: true })
-    .click();
+    .getByLabel("Gauge in this group", { exact: true })
+    .selectOption({ label: "beta / 001" });
   await expect(
     page.getByRole("region", { name: "Gauge details" }),
   ).toContainText("beta / 001");
+  await expect(
+    page.getByText(/Catalogue series and physical facts/),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("tab", { name: "Selection (0)", exact: true }),
   ).toBeVisible();
@@ -245,13 +226,176 @@ test("counted groups zoom, then expose co-located gauges individually", async ({
     .getByRole("button", { name: "Clear filters", exact: true })
     .click();
   await expect(
-    page.getByText("2 gauges in the clicked group.", { exact: false }),
+    page.getByLabel("Gauge in this group", { exact: true }),
   ).toHaveCount(0);
   await group.click();
-  await page
-    .getByLabel("Include entries without matching series", { exact: false })
-    .check();
+  await page.getByLabel("quantity", { exact: true }).fill("discharge");
   await expect(
-    page.getByText("2 gauges in the clicked group.", { exact: false }),
+    page.getByLabel("Gauge in this group", { exact: true }),
   ).toHaveCount(0);
+});
+
+test("reduced Filtering panel owns dates and omits removed UI", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("tab", { name: "Filtering", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Start date", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("End date", { exact: true })).toBeVisible();
+  await page.getByText("More filters", { exact: true }).click();
+  for (const label of [
+    "day definition",
+    "timestamp anchor",
+    "time zone",
+    "vertical reference",
+    "vertical datum",
+    "variant",
+    "series id",
+  ])
+    await expect(page.getByLabel(label, { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText("Browse gauge list", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("About this catalogue", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(/Catalogue series and physical facts/),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(/Source wall-clock dates; both endpoints/),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Date documentation", exact: true }),
+  ).toHaveAttribute("href", "../../usage/#time-labels-and-request-windows");
+  await page.getByLabel("Start date", { exact: true }).fill("2020-01-01");
+  await expect(page.getByTestId("match-count")).toHaveText("3 matching gauges");
+  await page.getByRole("tab", { name: "Python", exact: true }).click();
+  await expect(
+    page.getByLabel("Start date", { exact: true }),
+  ).not.toBeVisible();
+});
+
+test("outside-world space is not reported as a tile failure", async ({
+  page,
+}) => {
+  await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.fulfill({
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1sAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    }),
+  );
+  await page.goto("/");
+  await expect
+    .poll(() => page.locator(".leaflet-tile-loaded").count())
+    .toBeGreaterThan(0);
+  const view = page.locator("canvas.station-points");
+  while (Number(await view.getAttribute("data-zoom")) > 2) {
+    const before = Number(await view.getAttribute("data-zoom"));
+    await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+    await expect
+      .poll(async () => Number(await view.getAttribute("data-zoom")))
+      .toBeLessThan(before);
+  }
+  await expect(
+    page.getByText(
+      "Some basemap tiles are unavailable. Gauge points remain visible.",
+    ),
+  ).toHaveCount(0);
+});
+
+test("Python preview highlights syntax while clipboard stays exact plain code", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  await page.getByLabel("Start date", { exact: true }).fill("2020-01-01");
+  await page.getByLabel("provider", { exact: true }).selectOption("alpha");
+  await page
+    .getByRole("button", { name: "Add all matches", exact: true })
+    .click();
+  await page.getByRole("tab", { name: "Python", exact: true }).click();
+  const code = page.getByLabel("Python request");
+  await expect(code.locator(".token.keyword").first()).toHaveText("import");
+  await expect(code.locator(".token.string").first()).toBeVisible();
+  const plain = await code.textContent();
+  await page.getByRole("button", { name: "Copy Python request" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(plain);
+  await page.getByRole("tab", { name: "Filtering", exact: true }).click();
+  await page.getByLabel("provider", { exact: true }).selectOption("beta");
+  await page
+    .getByRole("button", { name: "Add all matches", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await page.getByRole("tab", { name: "Python", exact: true }).click();
+  const multi = await code.textContent();
+  await page.getByRole("button", { name: "Copy Python request" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(multi);
+  expect(multi).toContain("results_by_provider");
+});
+
+test("initial view is around Switzerland without narrowing discovery or selecting gauges", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const view = page.locator("canvas.station-points");
+  await expect
+    .poll(async () => Number(await view.getAttribute("data-center-lat")))
+    .toBeGreaterThan(46);
+  expect(Number(await view.getAttribute("data-center-lat"))).toBeLessThan(48);
+  expect(Number(await view.getAttribute("data-center-lng"))).toBeGreaterThan(6);
+  expect(Number(await view.getAttribute("data-center-lng"))).toBeLessThan(11);
+  expect(Number(await view.getAttribute("data-zoom"))).toBeGreaterThanOrEqual(
+    6,
+  );
+  await expect(page.getByLabel("provider", { exact: true })).toHaveValue("");
+  await expect(page.getByTestId("match-count")).toHaveText("3 matching gauges");
+  await expect(
+    page.getByRole("tab", { name: "Selection (0)", exact: true }),
+  ).toBeVisible();
+});
+
+test("initial mobile view keeps Switzerland above the bottom panel", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const canvas = page.locator("canvas.station-points");
+  await expect(canvas).toHaveAttribute("data-zoom", /^[0-9]+$/);
+  const center = await canvas.evaluate((node) => ({
+    lat: Number(node.dataset.centerLat),
+    lng: Number(node.dataset.centerLng),
+    zoom: Number(node.dataset.zoom),
+  }));
+  const map = (await page
+    .getByLabel("Gauge map", { exact: true })
+    .boundingBox())!;
+  const panel = (await page
+    .getByRole("complementary", { name: "Gauge request panel" })
+    .boundingBox())!;
+  const world = 256 * 2 ** center.zoom;
+  const mercatorY = (latitude: number) => {
+    const radians = (latitude * Math.PI) / 180;
+    return (
+      ((1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) /
+        2) *
+      world
+    );
+  };
+  // Bern is an independent Swiss reference point, not a map implementation value.
+  const bernX = map.x + map.width / 2 + ((7.4474 - center.lng) / 360) * world;
+  const bernY =
+    map.y + map.height / 2 + mercatorY(46.948) - mercatorY(center.lat);
+  expect(bernX).toBeGreaterThan(map.x + 20);
+  expect(bernX).toBeLessThan(map.x + map.width - 20);
+  expect(bernY).toBeGreaterThan(map.y + 80);
+  expect(bernY).toBeLessThan(panel.y - 20);
 });

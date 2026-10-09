@@ -67,14 +67,50 @@ function initCopyAgentPromptButton() {
   });
 }
 
-function initCopyButtons() {
+// CSS variables do not cross an iframe boundary. Reuse the active docs palette.
+let stationExplorerThemeObserver;
+function syncStationExplorerTheme() {
+  const frame = document.getElementById("station-explorer");
+  const target = frame?.contentDocument?.documentElement;
+  if (!target || !frame.contentDocument.body) return;
+  const palette = getComputedStyle(document.body);
+  for (const name of [
+    "--md-default-bg-color", "--md-default-fg-color",
+    "--md-default-fg-color--light", "--md-default-fg-color--lightest",
+    "--md-primary-fg-color", "--md-primary-bg-color", "--md-accent-fg-color",
+    "--md-code-bg-color", "--md-code-fg-color",
+    "--md-code-hl-keyword-color", "--md-code-hl-string-color", "--md-code-hl-number-color",
+    "--md-code-hl-comment-color", "--md-code-hl-function-color", "--md-code-hl-name-color",
+    "--md-code-hl-operator-color", "--md-code-hl-punctuation-color", "--md-code-hl-special-color",
+  ]) target.style.setProperty(name, palette.getPropertyValue(name));
+  target.style.colorScheme = document.body.dataset.mdColorScheme === "slate" ? "dark" : "light";
+  frame.contentDocument.body.style.fontFamily = palette.fontFamily;
+}
+function initStationExplorerTheme() {
+  const frame = document.getElementById("station-explorer");
+  if (!frame) return;
+  if (!frame.dataset.themeConnected) {
+    frame.addEventListener("load", syncStationExplorerTheme);
+    frame.dataset.themeConnected = "true";
+  }
+  syncStationExplorerTheme();
+  if (!stationExplorerThemeObserver) {
+    stationExplorerThemeObserver = new MutationObserver(syncStationExplorerTheme);
+    stationExplorerThemeObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["data-md-color-scheme", "data-md-color-primary", "data-md-color-accent"],
+    });
+  }
+}
+function initPageControls() {
   initCopyPageButton();
   initCopyAgentPromptButton();
+  initStationExplorerTheme();
 }
 
 // Support both instant navigation (document$) and standard DOMContentLoaded
 if (typeof document$ !== "undefined") {
-  document$.subscribe(initCopyButtons);
+  document$.subscribe(initPageControls);
 } else {
-  document.addEventListener("DOMContentLoaded", initCopyButtons);
+  document.addEventListener("DOMContentLoaded", initPageControls);
 }

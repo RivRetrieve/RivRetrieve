@@ -4,7 +4,6 @@ import {
   addStations,
   filterStations,
   generateRequest,
-  physicalFields,
   removeStation,
   stationKey,
   type FilterField,
@@ -12,9 +11,16 @@ import {
   type Provider,
   type Station,
 } from "./domain";
-import { canPlot, StationMap } from "./StationMap";
+import { StationMap } from "./StationMap";
+import { PythonPreview } from "./PythonPreview";
 import "./style.css";
 
+const physicalControls = [
+  "quantity",
+  "frequency",
+  "statistic",
+  "temporal_support",
+] as const;
 const label = (field: string) => field.replaceAll("_", " ");
 export function App() {
   const [catalogue, setCatalogue] = useState<{
@@ -27,13 +33,11 @@ export function App() {
   const [inspected, setInspected] = useState<Station | null>(null);
   const [dates, setDates] = useState({ start: "", end: "" });
   const [copyStatus, setCopyStatus] = useState("");
-  const [page, setPage] = useState(0);
-  const [browseAll, setBrowseAll] = useState(false);
   const [groupStations, setGroupStations] = useState<Station[] | null>(null);
   const [selectionPage, setSelectionPage] = useState(0);
   const [showCode, setShowCode] = useState(false);
-  const [tab, setTab] = useState<"discover" | "selection" | "python">(
-    "discover",
+  const [tab, setTab] = useState<"filtering" | "selection" | "python">(
+    "filtering",
   );
   const [panelOpen, setPanelOpen] = useState(true);
   useEffect(() => {
@@ -72,7 +76,7 @@ export function App() {
   const options = useMemo(
     () =>
       Object.fromEntries(
-        physicalFields.map((field) => [
+        physicalControls.map((field) => [
           field,
           [
             ...new Set(
@@ -94,7 +98,6 @@ export function App() {
       else next[field] = value;
       return next;
     });
-    setPage(0);
     setGroupStations(null);
     setCopyStatus("");
   }
@@ -126,7 +129,7 @@ export function App() {
         aria-label={label(field)}
         value={filters[field] ?? ""}
         list={
-          physicalFields.includes(field as (typeof physicalFields)[number])
+          physicalControls.includes(field as (typeof physicalControls)[number])
             ? `values-${field}`
             : undefined
         }
@@ -163,16 +166,6 @@ export function App() {
       ? preview.code
       : preview.code.slice(0, 4000) +
         "\n# … Preview shortened. Copy includes every selected station.\n";
-  const browsed =
-    groupStations ??
-    (browseAll
-      ? catalogue.stations.filter(
-          (station) =>
-            (!filters.provider || station.provider_id === filters.provider) &&
-            (!filters.station || station.station_id === filters.station),
-        )
-      : matches);
-  const pageCount = Math.ceil(browsed.length / 30);
   const safeSelectionPage = Math.min(
     selectionPage,
     Math.max(0, Math.ceil(selected.length / 30) - 1),
@@ -184,13 +177,12 @@ export function App() {
         selected={selected}
         onGroup={(stations) => {
           setGroupStations(stations);
-          setPage(0);
-          setTab("discover");
+          setTab("filtering");
           setPanelOpen(true);
         }}
         onInspect={(station) => {
           setInspected(station);
-          setTab("discover");
+          setTab("filtering");
           setPanelOpen(true);
         }}
       />
@@ -208,10 +200,10 @@ export function App() {
         <div className="tabs" role="tablist" aria-label="Request steps">
           <button
             role="tab"
-            aria-selected={tab === "discover"}
-            onClick={() => setTab("discover")}
+            aria-selected={tab === "filtering"}
+            onClick={() => setTab("filtering")}
           >
-            Discover
+            Filtering
           </button>
           <button
             role="tab"
@@ -230,7 +222,7 @@ export function App() {
           </button>
         </div>
         <div className="panel-content">
-          <div role="tabpanel" hidden={tab !== "discover"}>
+          <div role="tabpanel" hidden={tab !== "filtering"}>
             <h2 data-testid="match-count">
               {matches.length.toLocaleString()} matching gauges
             </h2>
@@ -262,15 +254,42 @@ export function App() {
             <details>
               <summary>More filters</summary>
               <div className="filter-row">
-                {physicalFields.slice(1).map(control)}
-                {control("variant")}
-                {control("series_id")}
+                {physicalControls.slice(1).map(control)}
               </div>
-              <p className="hint">
-                Exact, case-sensitive facts. Unknown facts do not match explicit
-                filters.
-              </p>
             </details>
+            <div className="dates">
+              <label>
+                Start date (required)
+                <input
+                  aria-label="Start date"
+                  type="date"
+                  value={dates.start}
+                  onChange={(event) => {
+                    setDates({ ...dates, start: event.target.value });
+                    setCopyStatus("");
+                  }}
+                />
+              </label>
+              <label>
+                End date (optional)
+                <input
+                  aria-label="End date"
+                  type="date"
+                  value={dates.end}
+                  onChange={(event) => {
+                    setDates({ ...dates, end: event.target.value });
+                    setCopyStatus("");
+                  }}
+                />
+              </label>
+            </div>
+            <a
+              className="date-help"
+              href="../../usage/#time-labels-and-request-windows"
+              target="_top"
+            >
+              Date documentation
+            </a>
             <div className="actions">
               <button
                 className="primary"
@@ -283,7 +302,6 @@ export function App() {
                 onClick={() => {
                   setFilters({});
                   setGroupStations(null);
-                  setPage(0);
                   setCopyStatus("");
                 }}
               >
@@ -341,111 +359,38 @@ export function App() {
                     ? "Remove gauge"
                     : "Add gauge"}
                 </button>
-                <details>
-                  <summary>
-                    Catalogue series and physical facts (
-                    {inspected.series.length} fact segments)
-                  </summary>
-                  {inspected.series.map((series, index) => (
-                    <dl key={index}>
-                      <dt>Series identity</dt>
-                      <dd>{series.series_id}</dd>
-                      <dt>Source variant / published ID</dt>
-                      <dd>
-                        {series.variant ?? "not established"} /{" "}
-                        {series.published_id ?? "not established"}
-                      </dd>
-                      {physicalFields.map((field) => (
-                        <div key={field}>
-                          <dt>{label(field)}</dt>
-                          <dd>
-                            {series[field] ??
-                              `not established (${series[`${field}_state`] ?? "unknown"})`}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ))}
-                </details>
               </section>
             )}
-            <details
-              className="match-list"
-              open={groupStations ? true : undefined}
-            >
-              <summary>Browse gauge list</summary>
-              {groupStations && (
-                <p className="hint">
-                  {groupStations.length} gauges in the clicked group.{" "}
-                  <button onClick={() => setGroupStations(null)}>
-                    Return to matches
-                  </button>
-                </p>
-              )}
-              <label className="browse-all">
-                <input
-                  type="checkbox"
-                  checked={browseAll}
-                  onChange={(event) => {
-                    setBrowseAll(event.target.checked);
-                    setGroupStations(null);
-                    setPage(0);
-                  }}
-                />
-                Include entries without matching series (provider and station
-                filters still apply)
-              </label>
-              <p>
-                {browsed.length.toLocaleString()} entries in this list. Adding a
-                non-match creates a conflict.
-              </p>
-              <ul>
-                {browsed.slice(page * 30, page * 30 + 30).map((station) => (
-                  <li key={stationKey(station)}>
-                    <button onClick={() => setInspected(station)}>
-                      Inspect {station.provider_id} / {station.station_id}
-                    </button>
-                    <span>{station.station_name}</span>
-                    {selectedKeys.has(stationKey(station)) && (
-                      <strong>◆ Selected</strong>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <div className="pagination">
-                <button disabled={page === 0} onClick={() => setPage(page - 1)}>
-                  Previous matches
-                </button>
-                <span>
-                  Page {pageCount ? page + 1 : 0} of {pageCount}
-                </span>
-                <button
-                  disabled={page + 1 >= pageCount}
-                  onClick={() => setPage(page + 1)}
+            {groupStations && (
+              <label>
+                Gauge in this group
+                <select
+                  aria-label="Gauge in this group"
+                  value={
+                    inspected && groupStations.includes(inspected)
+                      ? stationKey(inspected)
+                      : ""
+                  }
+                  onChange={(event) =>
+                    setInspected(
+                      groupStations.find(
+                        (station) => stationKey(station) === event.target.value,
+                      ) ?? null,
+                    )
+                  }
                 >
-                  Next matches
-                </button>
-              </div>
-            </details>
-
-            <details className="about">
-              <summary>About this catalogue</summary>
-              <p className="hint">
-                {catalogue.stations.length.toLocaleString()} catalogue entries.
-                Some have no series described; include them in the list to
-                inspect them.{" "}
-                {matches
-                  .filter((station) => !canPlot(station))
-                  .length.toLocaleString()}{" "}
-                matches cannot be plotted.
-              </p>
-              <p className="hint">
-                A listing does not guarantee observations in any period, or a
-                unique physical site across providers. Retrieval may reveal more
-                matching series. Unknown-CRS and NAD83 positions are approximate
-                displays, not certified coordinates.
-              </p>
-            </details>
+                  <option value="">Choose a gauge</option>
+                  {groupStations.map((station) => (
+                    <option
+                      key={stationKey(station)}
+                      value={stationKey(station)}
+                    >
+                      {station.provider_id} / {station.station_id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           <div role="tabpanel" hidden={tab !== "selection"}>
             {" "}
@@ -501,7 +446,7 @@ export function App() {
                       <button
                         onClick={() => {
                           setInspected(station);
-                          setTab("discover");
+                          setTab("filtering");
                         }}
                         aria-label={`Inspect selected ${station.provider_id} / ${station.station_id}`}
                       >
@@ -553,8 +498,8 @@ export function App() {
             </section>
             {!!preview.blockingReasons.length && (
               <p className="warning">
-                ⚠ Request unresolved. Review the Python tab for dates and copy
-                requirements.
+                ⚠ Request unresolved. Check dates in Filtering and copy
+                requirements in Python.
               </p>
             )}
             <button className="primary" onClick={() => setTab("python")}>
@@ -565,38 +510,6 @@ export function App() {
             {" "}
             <section className="request">
               <h2>Request preview</h2>
-              <div className="dates">
-                <label>
-                  Start date (required)
-                  <input
-                    aria-label="Start date"
-                    type="date"
-                    value={dates.start}
-                    onChange={(event) => {
-                      setDates({ ...dates, start: event.target.value });
-                      setCopyStatus("");
-                    }}
-                  />
-                </label>
-                <label>
-                  End date (optional)
-                  <input
-                    aria-label="End date"
-                    type="date"
-                    value={dates.end}
-                    onChange={(event) => {
-                      setDates({ ...dates, end: event.target.value });
-                      setCopyStatus("");
-                    }}
-                  />
-                </label>
-              </div>
-              <p className="hint">
-                Source wall-clock dates; both endpoints are included. An omitted
-                end uses the caller machine’s current local date; start must not
-                be later than that date at execution. These dates do not test
-                observation coverage.
-              </p>
               {!!preview.blockingReasons.length && (
                 <div className="warning" role="status">
                   <strong>⚠ Request unresolved. Copy is blocked.</strong>
@@ -617,9 +530,7 @@ export function App() {
               <span role="status" className="copy-status">
                 {copyStatus}
               </span>
-              <pre aria-label="Python request">
-                <code>{shownCode}</code>
-              </pre>
+              <PythonPreview code={shownCode} />
               {preview.code.length >= 5000 && (
                 <button onClick={() => setShowCode(!showCode)}>
                   {showCode ? "Shorten preview" : "Show complete preview"}

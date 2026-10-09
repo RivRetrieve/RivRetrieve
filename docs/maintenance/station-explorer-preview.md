@@ -3,7 +3,11 @@
 This branch contains a prototype for review. It does not authorize publication,
 merging, or deployment. Review the explorer inside the documentation, where its
 map fills the viewport below the documentation navigation. One compact panel holds
-Discover, Selection and Python tabs. Other documentation pages keep their normal layout.
+Filtering, Selection and Python tabs. Other documentation pages keep their normal layout.
+The explorer uses the active documentation palette, including the existing scheme
+toggle; it has no separate theme control. The map opens around Switzerland without
+restricting provider filters or selecting gauges. Space beyond the basemap extent
+uses the documentation background color.
 
 ## Prepare and serve the documentation
 
@@ -39,11 +43,12 @@ the built site are local outputs, not source files to commit or review evidence.
 ## Review the request workflow
 
 - Click a count bubble to zoom into its gauges. Groups split as projected points
-  separate. At maximum zoom, a group opens its individual gauges in the same panel.
-  Selected gauges and conflicts remain separate map symbols.
+  separate. At maximum zoom, use the small gauge chooser to inspect co-located
+  members. Selected gauges and conflicts remain separate map symbols.
 - Change discovery filters, inspect a gauge, and add it individually. Try **Add
   all matches** with a larger selection.
-- Configure dates and inspect single-provider and multi-provider Python requests.
+- Set retrieval dates in **Filtering**, then inspect single-provider and
+  multi-provider requests in **Python**. Changing dates must not change matches.
   Station identifiers must stay complete in copied code, including leading zeros.
 - Change filters after selecting gauges. Confirm that selected non-matching gauges
   remain visible and block copying until their conflicts are resolved.
@@ -62,11 +67,25 @@ is separate from a filter conflict. Unknown-CRS and NAD83 (EPSG:4269) coordinate
 are displayed on the WGS84 basemap without datum transformation. These are
 approximate display positions, not certified coordinates.
 
-The snapshot has 78,175 catalogue entries. Of these, 77,020 have matching series.
-The 1,155 entries with no described series remain available through **Browse gauge
-list**, then **Include entries without matching series**. Selecting one preserves
-it as an explained conflict; absence of catalogue series does not establish
-absence of observations.
+The owner-requested reduced surface exposes provider, station, quantity, frequency,
+statistic and temporal-support filters. Dates are retrieval settings, not catalogue
+coverage filters. Advanced physical and source-identity controls, series-fact details,
+and the general gauge list are not exposed in this iteration. Inspect individual
+gauges on the map; only co-located groups have a direct member chooser.
+
+The snapshot has 78,175 catalogue entries, of which 77,020 have matching series.
+Entries without described series are not individually browsable in this reduced UI.
+This catalogue limit does not establish absence of observations.
+
+Python previews use syntax highlighting from the documentation palette. Copying
+still returns the complete plain Python request, including when the visible preview
+is shortened. Unresolved requests remain commented and cannot be copied.
+
+The requested CARTO Positron/Dark Matter raster switch is blocked on a basemap key.
+[Current CARTO guidance](https://docs.carto.com/faqs/carto-basemaps) requires a key
+for raster tiles; anonymous requests no longer return a usable basemap. This local
+iteration keeps OpenStreetMap tiles. It does not request a key, create an account,
+or establish permission for production use.
 
 The browser handoff ends at Python code. It does not execute that code or collect
 credentials. Background map tiles may use the basemap service; they are not

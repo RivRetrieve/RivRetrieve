@@ -34,11 +34,29 @@ export function StationMap({ matches, selected, onInspect, onGroup }: Props) {
   data.current = { matches, selected, onInspect, onGroup };
   useEffect(() => {
     const map = L.map(host.current!, {
-      center: [28, 0],
-      zoom: 2,
+      center: [46.8, 8.2],
+      zoom: 7,
       minZoom: 2,
       worldCopyJump: false,
     });
+    // Initial country view only; discovery remains all-provider and unselected.
+    map.fitBounds(
+      [
+        [45.7, 5.8],
+        [47.9, 10.6],
+      ],
+      {
+        paddingTopLeft: [32, 32],
+        paddingBottomRight: [
+          32,
+          host.current!.clientWidth <= 640
+            ? host.current!.clientHeight / 2 + 32
+            : 32,
+        ],
+        maxZoom: 8,
+        animate: false,
+      },
+    );
     mapRef.current = map;
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
@@ -176,6 +194,8 @@ export function StationMap({ matches, selected, onInspect, onGroup }: Props) {
         groups.filter((group) => group.members.length > 1).length,
       );
       canvas.dataset.zoom = String(map.getZoom());
+      canvas.dataset.centerLat = String(map.getCenter().lat);
+      canvas.dataset.centerLng = String(map.getCenter().lng);
     };
     const schedule = () => {
       cancelAnimationFrame(frame);
