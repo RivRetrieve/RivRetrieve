@@ -48,6 +48,7 @@ def _assert_payload(names: list[str]) -> None:
             or path.name.startswith(".env.")
             or path.suffix in {".env", ".pem", ".key", ".pyc"}
             or name.endswith("/catalogue/native.parquet")
+            or "/docs/assets/station-explorer/" in name
             or "/tests/test_data/" in name
             or "/tests/recordings/" in name
             or "br_ana_inventory" in name
@@ -106,6 +107,8 @@ def test_distributions_exclude_local_files(distribution: str) -> None:
         # These are harmless markers, never copies of real credentials or private evidence.
         local_paths = [
             "web/station-explorer/src/App.tsx",
+            "web/station-explorer/.env.local",
+            "docs/assets/station-explorer/assets/index.js",
             "web/station-explorer/node_modules/example/index.js",
             "web/station-explorer/public/catalogue.json",
             "planning/visions/release.md",

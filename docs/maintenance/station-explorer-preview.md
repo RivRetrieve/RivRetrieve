@@ -43,8 +43,8 @@ the built site are local outputs, not source files to commit or review evidence.
 ## Review the request workflow
 
 - Click a count bubble to zoom into its gauges. Groups split as projected points
-  separate. At maximum zoom, use the small gauge chooser to inspect co-located
-  members. Selected gauges and conflicts remain separate map symbols.
+  separate. Co-located markers spread out when clicked (MarkerCluster's spiderfy behavior),
+  so each gauge remains inspectable. Selected gauges and conflicts remain separate map symbols.
 - Change discovery filters, inspect a gauge, and add it individually. Try **Add
   all matches** with a larger selection.
 - Set retrieval dates in **Filtering**, then inspect single-provider and
@@ -71,7 +71,7 @@ The owner-requested reduced surface exposes provider, station, quantity, frequen
 statistic and temporal-support filters. Dates are retrieval settings, not catalogue
 coverage filters. Advanced physical and source-identity controls, series-fact details,
 and the general gauge list are not exposed in this iteration. Inspect individual
-gauges on the map; only co-located groups have a direct member chooser.
+gauges on the map; co-located gauges remain reachable through MarkerCluster spiderfy.
 
 The snapshot has 78,175 catalogue entries, of which 77,020 have matching series.
 Entries without described series are not individually browsable in this reduced UI.
@@ -81,11 +81,26 @@ Python previews use syntax highlighting from the documentation palette. Copying
 still returns the complete plain Python request, including when the visible preview
 is shortened. Unresolved requests remain commented and cannot be copied.
 
-The requested CARTO Positron/Dark Matter raster switch is blocked on a basemap key.
-[Current CARTO guidance](https://docs.carto.com/faqs/carto-basemaps) requires a key
-for raster tiles; anonymous requests no longer return a usable basemap. This local
-iteration keeps OpenStreetMap tiles. It does not request a key, create an account,
-or establish permission for production use.
+## Basemap configuration
+
+For local CARTO tiles, configure `VITE_CARTO_BASEMAP_API_KEY` in
+`web/station-explorer/.env.local`, which Git ignores. Use a project-owned public
+client key under [CARTO's basemap terms](https://docs.carto.com/faqs/carto-basemaps).
+Rebuild the frontend after changing the configuration. Vite embeds `VITE_` values
+in browser bundles by design; this key is public, not a server credential. Do not
+commit the configuration or include keys or keyed tile URLs in review artifacts.
+
+With a key configured, the existing documentation scheme selects CARTO Positron
+(`light_all`) or Dark Matter (`dark_all`) automatically. Without a local key, the
+map uses OpenStreetMap and shows an explicit notice. Restrict the key to approved
+localhost and production hosts, check account quotas, and retain CARTO and
+OpenStreetMap attribution. Report rejected hosts rather than removing restrictions.
+
+The prepared GitHub workflow maps the repository secret `CARTO_BASEMAP_API_KEY`
+to `VITE_CARTO_BASEMAP_API_KEY` during the frontend build. It fails clearly if the
+secret is missing. A future authorized build serves that public client key to all
+visitors; visitors do not need individual keys. This source preparation does not
+authorize running the deployment workflow or publishing the prototype.
 
 The browser handoff ends at Python code. It does not execute that code or collect
 credentials. Background map tiles may use the basemap service; they are not

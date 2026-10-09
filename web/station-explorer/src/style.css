@@ -327,24 +327,6 @@ pre {
   }
 }
 
-.gauge-cluster {
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  border: 5px solid
-    color-mix(in srgb, var(--md-primary-fg-color, #009485) 35%, transparent);
-  background: var(--md-default-bg-color, #fff);
-  color: var(--md-default-fg-color, #173746);
-  box-shadow: 0 1px 4px #17374635;
-  font:
-    600 12px system-ui,
-    sans-serif;
-}
-.gauge-cluster:focus-visible {
-  outline: 3px solid var(--md-accent-fg-color, #ff6e42);
-  outline-offset: 2px;
-}
-
 .map-shell {
   z-index: 0;
 }
@@ -407,4 +389,10 @@ pre {
 }
 .python-preview .token.decorator {
   color: var(--md-code-hl-special-color, #db1457);
+}
+
+.gauge-point {
+  background: #136f91;
+  border: 1px solid white;
+  border-radius: 50%;
 }

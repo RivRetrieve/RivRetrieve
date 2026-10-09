@@ -1,4 +1,41 @@
-import { test, expect } from "@playwright/test";
+import { captureClipboardWrites } from "./clipboard";
+import { test, expect, type FrameLocator } from "@playwright/test";
+
+async function waitForBasemap(app: FrameLocator) {
+  await expect
+    .poll(
+      () =>
+        app.locator(".map").evaluate((map) => {
+          const bounds = map.getBoundingClientRect();
+          const tiles = [
+            ...map.querySelectorAll<HTMLImageElement>(".leaflet-tile"),
+          ].filter((tile) => {
+            const r = tile.getBoundingClientRect();
+            return (
+              r.right > bounds.left &&
+              r.left < bounds.right &&
+              r.bottom > bounds.top &&
+              r.top < bounds.bottom
+            );
+          });
+          return (
+            tiles.length > 0 &&
+            tiles.every(
+              (tile) =>
+                tile.complete &&
+                tile.naturalWidth > 0 &&
+                Number(getComputedStyle(tile).opacity) >= 0.99,
+            )
+          );
+        }),
+      { timeout: 15000, message: "Visible basemap tiles finish loading" },
+    )
+    .toBe(true);
+}
+
+test.beforeEach(async ({ page }) => {
+  await captureClipboardWrites(page);
+});
 test("full catalogue and USGS points work in the viewport docs map", async ({
   page,
   context,
@@ -11,11 +48,18 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   const explorerRequests: string[] = [];
   const errors: string[] = [];
   page.on("request", (r) => {
-    requests.push(r.url());
+    const parsed = new URL(r.url());
+    const safe =
+      parsed.origin +
+      "/" +
+      (parsed.hostname === "a.basemaps.cartocdn.com"
+        ? parsed.pathname.split("/")[1]
+        : "");
+    requests.push(safe);
     if (r.frame().url().includes("/assets/station-explorer/"))
-      explorerRequests.push(r.url());
+      explorerRequests.push(safe);
   });
-  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("pageerror", () => errors.push("pageerror"));
   const start = Date.now();
   await page.goto(`${process.env.DOCS_URL}/map/`);
   const app = page.frameLocator("#station-explorer");
@@ -27,7 +71,18 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     "data-drawn",
     /^[1-9][0-9]+$/,
   );
+  await expect(app.locator("canvas.station-points")).toHaveAttribute(
+    "data-clustered",
+    "77020",
+  );
   const initialMs = Date.now() - start;
+  await expect(app.locator(".map")).toHaveAttribute(
+    "data-basemap",
+    "light_all",
+  );
+  await expect(
+    app.getByRole("link", { name: "CARTO", exact: true }),
+  ).toBeVisible();
   const iframeBox = await page.locator("#station-explorer").boundingBox();
   expect(iframeBox!.width).toBeGreaterThan(1500);
   expect(iframeBox!.height).toBeGreaterThan(950);
@@ -50,7 +105,7 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   expect(
     Number(await initialView.getAttribute("data-center-lng")),
   ).toBeLessThan(11);
-  await page.waitForLoadState("networkidle");
+  await waitForBasemap(app);
   if (process.env.EVIDENCE_DIR)
     await page.screenshot({
       path: `${process.env.EVIDENCE_DIR}/docs-desktop.png`,
@@ -64,8 +119,20 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   await app
     .getByRole("button", { name: "Zoom to matches", exact: true })
     .click();
-  const cluster = app.getByRole("button", { name: /Zoom to group of/ }).first();
-  await expect(cluster).toBeVisible();
+  const candidates = app.locator(".marker-cluster");
+  const hittable = () =>
+    candidates.evaluateAll((nodes) =>
+      nodes.findIndex((node) => {
+        const r = node.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          r.x + r.width / 2,
+          r.y + r.height / 2,
+        );
+        return !!hit && node.contains(hit);
+      }),
+    );
+  await expect.poll(hittable).toBeGreaterThanOrEqual(0);
+  const cluster = candidates.nth(await hittable());
   const zoomBefore = Number(
     await app.locator("canvas.station-points").getAttribute("data-zoom"),
   );
@@ -154,7 +221,7 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     "77,020 matching gauges",
     { timeout: 60000 },
   );
-  await page.waitForLoadState("networkidle");
+  await waitForBasemap(app);
   await expect
     .poll(() =>
       page.evaluate(
@@ -195,7 +262,8 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     explorerRequests.filter(
       (url) =>
         !url.startsWith("http://127.0.0.1:") &&
-        !url.startsWith("https://tile.openstreetmap.org/"),
+        !url.startsWith("https://tile.openstreetmap.org/") &&
+        !url.startsWith("https://a.basemaps.cartocdn.com/"),
     ),
   ).toEqual([]);
   expect(
@@ -204,6 +272,7 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
         !origin.startsWith("http://127.0.0.1:") &&
         ![
           "https://tile.openstreetmap.org",
+          "https://a.basemaps.cartocdn.com",
           "https://fonts.googleapis.com",
           "https://fonts.gstatic.com",
           "https://api.github.com",
@@ -219,10 +288,30 @@ test("explorer and Python syntax follow the existing docs palette without losing
   test.skip(!process.env.DOCS_URL, "Set DOCS_URL for prepared MkDocs preview.");
   const errors: string[] = [];
   const tileFailures: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("pageerror", () => errors.push("pageerror"));
   page.on("requestfailed", (request) => {
-    if (request.url().startsWith("https://tile.openstreetmap.org/"))
-      tileFailures.push(request.failure()?.errorText ?? "failed");
+    const url = new URL(request.url());
+    if (
+      [
+        "https://tile.openstreetmap.org",
+        "https://a.basemaps.cartocdn.com",
+      ].includes(url.origin) &&
+      request.failure()?.errorText !== "net::ERR_ABORTED"
+    )
+      tileFailures.push(
+        url.origin +
+          (url.hostname === "a.basemaps.cartocdn.com"
+            ? "/" + url.pathname.split("/")[1]
+            : "") +
+          ":failed",
+      );
+  });
+  page.on("response", (response) => {
+    const url = new URL(response.url());
+    if (url.origin === "https://a.basemaps.cartocdn.com" && !response.ok())
+      tileFailures.push(
+        url.origin + "/" + url.pathname.split("/")[1] + ":" + response.status(),
+      );
   });
   await page.setViewportSize({ width: 1600, height: 1100 });
   await page.goto(`${process.env.DOCS_URL}/map/`);
@@ -253,6 +342,10 @@ test("explorer and Python syntax follow the existing docs palette without losing
     "data-md-color-scheme",
     "slate",
   );
+  await expect(app.locator(".map")).toHaveAttribute("data-basemap", "dark_all");
+  await expect(app.locator(".leaflet-tile-pane > .leaflet-layer")).toHaveCount(
+    1,
+  );
   const dark = await page
     .locator("body")
     .evaluate((node) => getComputedStyle(node).backgroundColor);
@@ -265,7 +358,7 @@ test("explorer and Python syntax follow the existing docs palette without losing
     "background-color",
     dark,
   );
-  await page.waitForLoadState("networkidle");
+  await waitForBasemap(app);
   if (process.env.EVIDENCE_DIR)
     await page.screenshot({
       path: `${process.env.EVIDENCE_DIR}/docs-dark.png`,
@@ -288,6 +381,7 @@ test("explorer and Python syntax follow the existing docs palette without losing
     await keywordColor(),
   );
   const original = await code.textContent();
+  await waitForBasemap(app);
   if (process.env.EVIDENCE_DIR)
     await page.screenshot({
       path: `${process.env.EVIDENCE_DIR}/python-dark.png`,
@@ -296,6 +390,13 @@ test("explorer and Python syntax follow the existing docs palette without losing
   await expect(page.locator("body")).toHaveAttribute(
     "data-md-color-scheme",
     "default",
+  );
+  await expect(app.locator(".map")).toHaveAttribute(
+    "data-basemap",
+    "light_all",
+  );
+  await expect(app.locator(".leaflet-tile-pane > .leaflet-layer")).toHaveCount(
+    1,
   );
   const light = await page
     .locator("body")
@@ -323,6 +424,7 @@ test("explorer and Python syntax follow the existing docs palette without losing
   await expect(
     app.getByRole("button", { name: /light mode|dark mode/ }),
   ).toHaveCount(0);
+  await waitForBasemap(app);
   if (process.env.EVIDENCE_DIR)
     await page.screenshot({
       path: `${process.env.EVIDENCE_DIR}/python-light.png`,

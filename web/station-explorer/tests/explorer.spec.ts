@@ -1,3 +1,4 @@
+import { captureClipboardWrites } from "./clipboard";
 import { test, expect } from "@playwright/test";
 
 const fields = [
@@ -62,10 +63,14 @@ const fixture = {
   ],
 };
 test.beforeEach(async ({ page }) => {
+  await captureClipboardWrites(page);
   await page.route("**/catalogue.json", (route) =>
     route.fulfill({ json: fixture }),
   );
   await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.abort(),
+  );
+  await page.route("https://a.basemaps.cartocdn.com/**", (route) =>
     route.abort(),
   );
 });
@@ -186,7 +191,7 @@ test("basemap failures are visible without hiding catalogue gauges", async ({
   await expect(page.getByTestId("match-count")).toHaveText("3 matching gauges");
 });
 
-test("counted groups zoom, then expose co-located gauges individually", async ({
+test("native clusters zoom and spiderfy co-located provider identities", async ({
   page,
 }) => {
   const grouped = structuredClone(fixture);
@@ -196,40 +201,25 @@ test("counted groups zoom, then expose co-located gauges individually", async ({
     route.fulfill({ json: grouped }),
   );
   await page.goto("/");
-  const group = page.getByRole("button", {
-    name: "Zoom to group of 2 gauges",
-    exact: true,
-  });
   await page
     .getByRole("button", { name: "Zoom to matches", exact: true })
     .click();
-  await expect(group).toBeVisible();
-  await group.click();
+  const cluster = page.locator(".marker-cluster").first();
+  await expect(cluster).toHaveText("2");
+  await cluster.click();
   await expect(page.locator("canvas.station-points")).toHaveAttribute(
-    "data-zoom",
-    "18",
+    "data-spiderfied",
+    "2",
   );
-  await group.click();
   await page
-    .getByLabel("Gauge in this group", { exact: true })
-    .selectOption({ label: "beta / 001" });
+    .getByRole("button", { name: "Inspect beta / 001", exact: true })
+    .click();
   await expect(
     page.getByRole("region", { name: "Gauge details" }),
   ).toContainText("beta / 001");
   await expect(
-    page.getByText(/Catalogue series and physical facts/),
-  ).toHaveCount(0);
-  await expect(
     page.getByRole("tab", { name: "Selection (0)", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Clear filters", exact: true })
-    .click();
-  await expect(
-    page.getByLabel("Gauge in this group", { exact: true }),
-  ).toHaveCount(0);
-  await group.click();
-  await page.getByLabel("quantity", { exact: true }).fill("discharge");
   await expect(
     page.getByLabel("Gauge in this group", { exact: true }),
   ).toHaveCount(0);
@@ -281,27 +271,34 @@ test("reduced Filtering panel owns dates and omits removed UI", async ({
 test("outside-world space is not reported as a tile failure", async ({
   page,
 }) => {
-  await page.route("https://tile.openstreetmap.org/**", (route) =>
-    route.fulfill({
-      contentType: "image/png",
-      body: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1sAAAAASUVORK5CYII=",
-        "base64",
-      ),
-    }),
+  await page.setViewportSize({ width: 2600, height: 900 });
+  await page.route(
+    /https:\/\/(?:tile\.openstreetmap\.org|a\.basemaps\.cartocdn\.com)\//,
+    (route) =>
+      route.fulfill({
+        contentType: "image/png",
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1sAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      }),
   );
   await page.goto("/");
   await expect
     .poll(() => page.locator(".leaflet-tile-loaded").count())
     .toBeGreaterThan(0);
   const view = page.locator("canvas.station-points");
-  while (Number(await view.getAttribute("data-zoom")) > 2) {
+  while (Number(await view.getAttribute("data-zoom")) > 3) {
     const before = Number(await view.getAttribute("data-zoom"));
     await page.getByRole("button", { name: "Zoom out", exact: true }).click();
     await expect
       .poll(async () => Number(await view.getAttribute("data-zoom")))
       .toBeLessThan(before);
   }
+  await expect(view).toHaveAttribute("data-zoom", "3");
+  await expect(
+    page.getByRole("button", { name: "Zoom out", exact: true }),
+  ).toHaveAttribute("aria-disabled", "true");
   await expect(
     page.getByText(
       "Some basemap tiles are unavailable. Gauge points remain visible.",
@@ -398,4 +395,132 @@ test("initial mobile view keeps Switzerland above the bottom panel", async ({
   expect(bernX).toBeLessThan(map.x + map.width - 20);
   expect(bernY).toBeGreaterThan(map.y + 80);
   expect(bernY).toBeLessThan(panel.y - 20);
+});
+
+test("configured CARTO changes style without resetting the map or selection", async ({
+  page,
+}) => {
+  const styles: string[] = [];
+  await page.route("https://a.basemaps.cartocdn.com/**", (route) => {
+    styles.push(new URL(route.request().url()).pathname.split("/")[1]);
+    return route.abort();
+  });
+  await page.goto("/");
+  const map = page.getByLabel("Gauge map", { exact: true });
+  await expect(map).toHaveAttribute("data-basemap", "light_all");
+  await expect(
+    page.getByRole("link", { name: "CARTO", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("provider", { exact: true }).selectOption("alpha");
+  await page
+    .getByRole("button", { name: "Add all matches", exact: true })
+    .click();
+  const canvas = page.locator("canvas.station-points");
+  const zoom = Number(await canvas.getAttribute("data-zoom"));
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(canvas).toHaveAttribute("data-zoom", String(zoom + 1));
+  const before = await canvas.evaluate((node) => [
+    node.dataset.centerLat,
+    node.dataset.centerLng,
+    node.dataset.zoom,
+  ]);
+  await page.evaluate(() => {
+    document.documentElement.dataset.mdColorScheme = "slate";
+  });
+  await expect(map).toHaveAttribute("data-basemap", "dark_all");
+  await expect(page.locator(".leaflet-tile-pane > .leaflet-layer")).toHaveCount(
+    1,
+  );
+  expect(
+    await canvas.evaluate((node) => [
+      node.dataset.centerLat,
+      node.dataset.centerLng,
+      node.dataset.zoom,
+    ]),
+  ).toEqual(before);
+  await expect(
+    page.getByRole("tab", { name: "Selection (1)", exact: true }),
+  ).toBeVisible();
+  expect(styles).toContain("light_all");
+  expect(styles).toContain("dark_all");
+});
+
+test("native cluster click separates nearby gauges as zoom increases", async ({
+  page,
+}) => {
+  const nearby = structuredClone(fixture);
+  nearby.stations[1][3] = 10;
+  nearby.stations[1][4] = 10.001;
+  await page.route("**/catalogue.json", (route) =>
+    route.fulfill({ json: nearby }),
+  );
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Zoom to matches", exact: true })
+    .click();
+  const before = Number(
+    await page.locator("canvas.station-points").getAttribute("data-zoom"),
+  );
+  await page.locator(".marker-cluster").first().click();
+  await expect
+    .poll(async () =>
+      Number(
+        await page.locator("canvas.station-points").getAttribute("data-zoom"),
+      ),
+    )
+    .toBeGreaterThan(before);
+  await expect(
+    page.getByRole("button", { name: "Inspect alpha / 001", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Inspect beta / 001", exact: true }),
+  ).toBeVisible();
+});
+
+test("theme switch safely retires pending tile loads", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", () => errors.push("pageerror"));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("https://a.basemaps.cartocdn.com/**", async (route) => {
+    if (new URL(route.request().url()).pathname.startsWith("/light_all/"))
+      await gate;
+    try {
+      await route.fulfill({
+        contentType: "image/png",
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1sAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      });
+    } catch {
+      /* The retired layer may cancel its request. */
+    }
+  });
+  try {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".map")).toHaveAttribute(
+      "data-basemap",
+      "light_all",
+    );
+    await page.evaluate(() => {
+      document.documentElement.dataset.mdColorScheme = "slate";
+    });
+    await expect(page.locator(".map")).toHaveAttribute(
+      "data-basemap",
+      "dark_all",
+    );
+    release();
+    await expect
+      .poll(() => page.locator(".leaflet-tile-loaded").count())
+      .toBeGreaterThan(0);
+    await expect(
+      page.locator(".leaflet-tile-pane > .leaflet-layer"),
+    ).toHaveCount(1);
+    expect(errors).toEqual([]);
+  } finally {
+    release();
+  }
 });

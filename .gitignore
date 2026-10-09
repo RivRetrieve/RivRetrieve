@@ -36,6 +36,7 @@ docs/index.md
 docs/assets/stations_map.html
 
 # Station explorer generated assets and local tools
+web/station-explorer/.env.local
 web/station-explorer/node_modules/
 web/station-explorer/public/catalogue.json
 web/station-explorer/test-results/

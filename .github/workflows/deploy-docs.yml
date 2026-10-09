@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "docs/**"
+      - "web/**"
       - "src/**"
       - "scripts/**"
       - "README.md"
@@ -39,6 +40,29 @@ jobs:
 
       - name: Install package and dependencies
         run: uv sync --all-extras --dev
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/station-explorer/package-lock.json
+
+      - name: Install station explorer dependencies
+        run: npm --prefix web/station-explorer ci
+
+      - name: Export public station catalogue offline
+        run: uv run python docs/scripts/generate_station_catalogue.py
+
+      - name: Build station explorer
+        env:
+          VITE_CARTO_BASEMAP_API_KEY: ${{ secrets.CARTO_BASEMAP_API_KEY }}
+        run: |
+          if [ -z "$VITE_CARTO_BASEMAP_API_KEY" ]; then
+            echo "::error::CARTO_BASEMAP_API_KEY is required to build the documentation basemap."
+            exit 1
+          fi
+          npm --prefix web/station-explorer run build
 
       - name: Build documentation site
         run: uv run mkdocs build --strict

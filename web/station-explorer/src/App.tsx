@@ -33,7 +33,6 @@ export function App() {
   const [inspected, setInspected] = useState<Station | null>(null);
   const [dates, setDates] = useState({ start: "", end: "" });
   const [copyStatus, setCopyStatus] = useState("");
-  const [groupStations, setGroupStations] = useState<Station[] | null>(null);
   const [selectionPage, setSelectionPage] = useState(0);
   const [showCode, setShowCode] = useState(false);
   const [tab, setTab] = useState<"filtering" | "selection" | "python">(
@@ -98,7 +97,6 @@ export function App() {
       else next[field] = value;
       return next;
     });
-    setGroupStations(null);
     setCopyStatus("");
   }
   function add(stations: Station[]) {
@@ -175,11 +173,9 @@ export function App() {
       <StationMap
         matches={matches}
         selected={selected}
-        onGroup={(stations) => {
-          setGroupStations(stations);
-          setTab("filtering");
-          setPanelOpen(true);
-        }}
+        basemapKey={
+          import.meta.env.VITE_CARTO_BASEMAP_API_KEY?.trim() || undefined
+        }
         onInspect={(station) => {
           setInspected(station);
           setTab("filtering");
@@ -301,7 +297,6 @@ export function App() {
               <button
                 onClick={() => {
                   setFilters({});
-                  setGroupStations(null);
                   setCopyStatus("");
                 }}
               >
@@ -360,36 +355,6 @@ export function App() {
                     : "Add gauge"}
                 </button>
               </section>
-            )}
-            {groupStations && (
-              <label>
-                Gauge in this group
-                <select
-                  aria-label="Gauge in this group"
-                  value={
-                    inspected && groupStations.includes(inspected)
-                      ? stationKey(inspected)
-                      : ""
-                  }
-                  onChange={(event) =>
-                    setInspected(
-                      groupStations.find(
-                        (station) => stationKey(station) === event.target.value,
-                      ) ?? null,
-                    )
-                  }
-                >
-                  <option value="">Choose a gauge</option>
-                  {groupStations.map((station) => (
-                    <option
-                      key={stationKey(station)}
-                      value={stationKey(station)}
-                    >
-                      {station.provider_id} / {station.station_id}
-                    </option>
-                  ))}
-                </select>
-              </label>
             )}
           </div>
           <div role="tabpanel" hidden={tab !== "selection"}>

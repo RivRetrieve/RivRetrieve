@@ -83,6 +83,7 @@ function syncStationExplorerTheme() {
     "--md-code-hl-comment-color", "--md-code-hl-function-color", "--md-code-hl-name-color",
     "--md-code-hl-operator-color", "--md-code-hl-punctuation-color", "--md-code-hl-special-color",
   ]) target.style.setProperty(name, palette.getPropertyValue(name));
+  target.dataset.mdColorScheme = document.body.dataset.mdColorScheme || "default";
   target.style.colorScheme = document.body.dataset.mdColorScheme === "slate" ? "dark" : "light";
   frame.contentDocument.body.style.fontFamily = palette.fontFamily;
 }
