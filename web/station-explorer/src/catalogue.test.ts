@@ -21,7 +21,7 @@ function catalogue(): WireCatalogue {
     admission: "supported" as const,
   };
   return {
-    version: 1,
+    version: 2,
     providers: [
       { provider_id: "alpha", retrieval: true, bulk: true, credentials: [] },
       {
@@ -32,8 +32,8 @@ function catalogue(): WireCatalogue {
       },
     ],
     stations: [
-      [0, "001", "River é", 1.123456789, 2, "unknown"],
-      [1, "001", null, null, null, null],
+      [0, "001", "River é", 1.123456789, 2, "unknown", ["Mår", "MÅRVATN"]],
+      [1, "001", null, null, null, null, []],
     ],
     facts: [
       first,
@@ -59,6 +59,7 @@ describe("compact catalogue decoding", () => {
       latitude: 1.123456789,
       longitude: 2,
       crs: "unknown",
+      water_body_names: ["Mår", "MÅRVATN"],
     });
     expect(result.stations[1]).toEqual({
       provider_id: "beta",
@@ -67,6 +68,7 @@ describe("compact catalogue decoding", () => {
       latitude: null,
       longitude: null,
       crs: null,
+      water_body_names: [],
       series: [],
     });
     expect(result.stations[0].series).toHaveLength(2);
@@ -121,9 +123,9 @@ describe("compact catalogue decoding", () => {
     },
   );
 
-  it("rejects an unsupported wire version", () => {
+  it.each([1, 3])("rejects unsupported wire version %s", (version) => {
     const wire = catalogue();
-    wire.version = 2;
+    wire.version = version;
     expect(() => expandCatalogue(wire)).toThrow(/Unsupported catalogue format/);
   });
 });

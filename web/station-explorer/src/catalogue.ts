@@ -20,6 +20,7 @@ interface CompactCatalogue {
     number | null,
     number | null,
     string | null,
+    string[],
   ][];
   facts: Profile[];
   series: [number, string, string | null, string | null, number[]][];
@@ -30,10 +31,18 @@ export function expandCatalogue(data: CompactCatalogue): {
   stations: Station[];
   providers: Provider[];
 } {
-  if (data.version !== 1)
+  if (data.version !== 2)
     throw new Error("Unsupported catalogue format. Regenerate the catalogue.");
   const stations: Station[] = data.stations.map(
-    ([provider, station_id, station_name, latitude, longitude, crs]) => {
+    ([
+      provider,
+      station_id,
+      station_name,
+      latitude,
+      longitude,
+      crs,
+      water_body_names,
+    ]) => {
       if (!data.providers[provider])
         throw new Error("Catalogue station references a missing provider.");
       return {
@@ -43,6 +52,7 @@ export function expandCatalogue(data: CompactCatalogue): {
         latitude,
         longitude,
         crs,
+        water_body_names,
         series: [],
       };
     },

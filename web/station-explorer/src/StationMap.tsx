@@ -25,6 +25,7 @@ export function canPlot(station: Station): boolean {
 interface Props {
   matches: Station[];
   selected: Station[];
+  conflictKeys: ReadonlySet<string>;
   basemapKey: string | undefined;
   onInspect: (station: Station) => void;
 }
@@ -32,13 +33,14 @@ interface Props {
 export function StationMap({
   matches,
   selected,
+  conflictKeys,
   basemapKey,
   onInspect,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const data = useRef({ matches, selected, onInspect });
-  data.current = { matches, selected, onInspect };
+  const data = useRef({ matches, selected, conflictKeys, onInspect });
+  data.current = { matches, selected, conflictKeys, onInspect };
   const update = useRef<() => void>(() => {});
   useEffect(() => {
     const map = L.map(host.current!, {
@@ -146,9 +148,9 @@ export function StationMap({
         ]);
         if (x < -24 || x > size.x + 24 || y < 0 || y > size.y + 30) continue;
         selectedPoints.push({ x, y: y - 17, station });
-        const state = matchingKeys.has(stationKey(station))
-          ? "selected"
-          : "conflict";
+        const state = data.current.conflictKeys.has(stationKey(station))
+          ? "conflict"
+          : "selected";
         ctx.drawImage(sprites![state], x - 12, y - 28.5, 25.5, 30);
       }
       canvas.dataset.drawn = String(plotted);
@@ -170,10 +172,18 @@ export function StationMap({
       attributeFilter: ["data-md-color-scheme"],
     });
     let lastMatches: Station[] | undefined, lastSelected: Station[] | undefined;
+    let lastConflicts: ReadonlySet<string> | undefined;
     update.current = () => {
       const current = data.current;
-      if (current.matches === lastMatches && current.selected === lastSelected)
+      if (
+        current.matches === lastMatches &&
+        current.selected === lastSelected
+      ) {
+        if (current.conflictKeys !== lastConflicts) schedule();
+        lastConflicts = current.conflictKeys;
         return;
+      }
+      lastConflicts = current.conflictKeys;
       lastMatches = current.matches;
       lastSelected = current.selected;
       matchingKeys = new Set(current.matches.map(stationKey));
@@ -245,7 +255,7 @@ export function StationMap({
   }, [basemapKey]);
   useEffect(() => {
     update.current();
-  }, [matches, selected]);
+  }, [matches, selected, conflictKeys]);
   const fit = () => {
     const coordinates = matches
       .filter(canPlot)

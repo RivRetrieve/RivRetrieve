@@ -6,19 +6,11 @@ import {
   removeStation,
   stationKey,
   selectionConflicts,
-  generateRequest as generateWithCatalogue,
+  generateRequest,
   physicalFields,
+  dateErrors,
   type Station,
 } from "./domain";
-
-// Most cases use the selected synthetic rows as their complete catalogue.
-const generateRequest = (
-  selected: Station[],
-  filters: Parameters<typeof generateWithCatalogue>[1],
-  dates: Parameters<typeof generateWithCatalogue>[2],
-  providers: Parameters<typeof generateWithCatalogue>[3],
-  catalogue: Station[] = selected,
-) => generateWithCatalogue(selected, filters, dates, providers, catalogue);
 
 const gauge: Station = {
   provider_id: "alpha",
@@ -72,6 +64,42 @@ it("preserves provider-qualified selection and never clears selection with filte
     ),
   ).toEqual([]);
 });
+it("keeps browsing changes out of selected requests and measurement conflicts", () => {
+  const selected = [
+    gauge,
+    { ...gauge, provider_id: "beta", station_id: "002" },
+  ];
+  const declarations = [...providers, { ...providers[0], provider_id: "beta" }];
+  const settings = { quantity: "discharge" };
+  const expected = generateRequest(selected, settings, dates, declarations);
+  for (const browse of [
+    { provider: "alpha", station: "001" },
+    { provider: "beta", station: "002" },
+    { provider: "outside", station: "not-selected" },
+    {},
+  ]) {
+    expect(
+      generateRequest(
+        selected,
+        { ...settings, ...browse },
+        dates,
+        declarations,
+      ),
+    ).toEqual(expected);
+    expect(selectionConflicts(selected, { ...settings, ...browse })).toEqual(
+      [],
+    );
+  }
+  const incompatible = generateRequest(
+    selected,
+    { quantity: "stage", provider: "outside" },
+    dates,
+    declarations,
+  );
+  expect(incompatible.conflicts).toHaveLength(2);
+  expect(incompatible.blockingReasons.join()).toContain("request settings");
+});
+
 it("requires all filters on one supported fact segment", () => {
   const split: Station = {
     ...gauge,
@@ -101,6 +129,7 @@ it("blocks empty, conflicting, missing-date, invalid-date and catalogue-only out
     const preview = generateRequest(selected, {}, dates, providers);
     expect(preview.blockingReasons.length).toBeGreaterThan(0);
     expect(preview.code).not.toContain("rr.pick(");
+    expect(preview.code).not.toContain("rr.find(");
   }
   for (const invalid of [
     { start: "", end: "" },
@@ -148,7 +177,11 @@ it.each(["combined", "fallback"])(
         station_id: '001"\nprint("not executable")\\',
       },
       { ...gauge, provider_id: "no_nve", station_id: "0001" },
-    ];
+    ].map((station) =>
+      mode === "combined"
+        ? { ...station, station_id: '001"\nprint("not executable")\\' }
+        : station,
+    );
     const declarations = selected.map((station) => ({
       provider_id: station.provider_id,
       retrieval: true,
@@ -173,7 +206,6 @@ it.each(["combined", "fallback"])(
       { quantity: "discharge" },
       dates,
       declarations,
-      catalogue,
     );
     expect(preview.blockingReasons).toEqual([]);
     for (const name of [
@@ -184,6 +216,9 @@ it.each(["combined", "fallback"])(
       "TMPDIR",
     ])
       expect(preview.code).toContain(name);
+    expect(preview.code).toContain(
+      "https://rivretrieve.github.io/usage/#supplied-credentials",
+    );
     expect(preview.code).toContain("#     result.to_polars().write_csv(");
     const execution = spawnSync(
       "uv",
@@ -267,7 +302,7 @@ print(json.dumps(calls))
     if (mode === "combined") {
       const filters = {
         provider: ["ca_eccc", "pl_imgw", "br_ana", "no_nve"],
-        station: ["0001", "0002", selected[2].station_id],
+        station: [selected[2].station_id],
       };
       expect(calls.filter((call: unknown[]) => call[0] === "pick")).toEqual([
         ["pick", filters],
@@ -386,6 +421,22 @@ it("keeps provider and station restrictions exact, including leading zeros", () 
   expect(matchesStation(gauge, { station: "1" })).toBe(false);
 });
 
+it("assigns date errors to inputs and shares them with request blocking", () => {
+  expect(dateErrors({ start: "2024-02-29", end: "" })).toEqual({});
+  for (const [invalid, field] of [
+    [{ start: "", end: "" }, "start"],
+    [{ start: "2023-02-29", end: "" }, "start"],
+    [{ start: "2023-01-01", end: "2023-02-30" }, "end"],
+    [{ start: "2023-02-01", end: "2023-01-01" }, "end"],
+  ] as const) {
+    const errors = dateErrors(invalid);
+    expect(errors[field]).toBeTruthy();
+    expect(
+      generateRequest([gauge], {}, invalid, providers).blockingReasons,
+    ).toContain(errors[field]);
+  }
+});
+
 it("leaves optional end to Python runtime and never invents a date", () => {
   const preview = generateRequest(
     [gauge],
@@ -413,37 +464,21 @@ it("explains a selected catalogue entry with no source series without discarding
   );
 });
 
-it("combines non-overlapping provider identities in one native retrieval", () => {
+it("uses exact provider groups even when today's catalogue has no cross-pairs", () => {
   const selected = [
     gauge,
     { ...gauge, provider_id: "beta", station_id: "002" },
   ];
-  const preview = generateRequest(selected, { quantity: "discharge" }, dates, [
-    ...providers,
-    { ...providers[0], provider_id: "beta" },
-  ]);
-  expect(preview.code).toBe(`import rivretrieve as rr
-
-selection = rr.find(quantity="discharge")
-gauges = rr.pick(
-    selection,
-    provider=["alpha", "beta"],
-    station=[
-        "001",
-        "002",
-    ],
-)
-results_by_provider = rr.fetch_by_provider(
-    gauges,
-    start="2023-01-01",
-    end="2023-01-31",
-)
-for result in results_by_provider.values():
-    for issue in result.issues:
-        print(issue)
-
-# for provider, result in results_by_provider.items():
-#     result.to_polars().write_csv(f"observations_{provider}.csv")`);
+  const declarations = [...providers, { ...providers[0], provider_id: "beta" }];
+  const today = generateRequest(
+    selected,
+    { quantity: "discharge" },
+    dates,
+    declarations,
+  );
+  expect(today.code).not.toContain("rr.fetch_by_provider(");
+  expect(today.code).toContain('"alpha": [\n        "001",\n    ]');
+  expect(today.code).toContain('"beta": [\n        "002",\n    ]');
 });
 
 it("combines an ID selected in both providers but falls back for an unselected cross-pair", () => {
@@ -454,10 +489,7 @@ it("combines an ID selected in both providers but falls back for an unselected c
   expect(shared.code).toContain('station=[\n        "001",\n    ]');
   expect(shared.code).toContain("rr.fetch_by_provider(");
   const selected = [gauge, { ...beta, station_id: "002" }];
-  const crossed = generateRequest(selected, {}, dates, declarations, [
-    ...selected,
-    beta,
-  ]);
+  const crossed = generateRequest(selected, {}, dates, declarations);
   expect(crossed.code).not.toContain("rr.fetch_by_provider(");
   expect(crossed.code).toContain('"alpha": [\n        "001",\n    ]');
   expect(crossed.code).toContain('"beta": [\n        "002",\n    ]');
@@ -499,10 +531,7 @@ it("limits only displayed IDs to ten, preserving provider keys and omitted count
     ...providers[0],
     provider_id,
   }));
-  const ten = generateRequest(selected.slice(0, 10), {}, dates, declarations, [
-    ...selected,
-    { ...gauge, provider_id: "gamma", station_id: "0000" },
-  ]);
+  const ten = generateRequest(selected.slice(0, 10), {}, dates, declarations);
   expect(ten.previewCode).toBe(ten.code);
   expect(ten.omittedStationCount).toBe(0);
   const eleven = generateRequest(
@@ -510,16 +539,12 @@ it("limits only displayed IDs to ten, preserving provider keys and omitted count
     {},
     dates,
     declarations,
-    [...selected, { ...gauge, provider_id: "beta", station_id: "0000" }],
   );
   expect(eleven.omittedStationCount).toBe(1);
   expect(eleven.previewCode).toContain(
     '"beta": [\n        "0009",\n        … 1 more station IDs omitted\n    ],',
   );
-  const twelve = generateRequest(selected, {}, dates, declarations, [
-    ...selected,
-    { ...gauge, provider_id: "gamma", station_id: "0000" },
-  ]);
+  const twelve = generateRequest(selected, {}, dates, declarations);
   expect(twelve.omittedStationCount).toBe(2);
   expect(twelve.previewCode).toContain(
     '"gamma": [\n        … 1 more station IDs omitted\n    ],',
@@ -587,26 +612,19 @@ it.each(["combined", "fallback"])(
         provider_id: "alpha",
         station_id: `gauge-${i}`,
       })),
-      { ...gauge, provider_id: "beta", station_id: "later-provider" },
+      ...(mode === "combined"
+        ? Array.from({ length: 11 }, (_, i) => ({
+            ...gauge,
+            provider_id: "beta",
+            station_id: `gauge-${i}`,
+          }))
+        : [{ ...gauge, provider_id: "beta", station_id: "later-provider" }]),
     ];
     const declarations = [
       { provider_id: "alpha", retrieval: true, bulk: true, credentials: [] },
       { provider_id: "beta", retrieval: true, bulk: false, credentials: [] },
     ];
-    const complete =
-      mode === "fallback"
-        ? [
-            ...selected,
-            { ...gauge, provider_id: "alpha", station_id: "later-provider" },
-          ]
-        : selected;
-    const preview = generateRequest(
-      selected,
-      {},
-      dates,
-      declarations,
-      complete,
-    );
+    const preview = generateRequest(selected, {}, dates, declarations);
     const run = spawnSync(
       "uv",
       [

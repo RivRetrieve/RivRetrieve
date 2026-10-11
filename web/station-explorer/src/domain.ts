@@ -19,6 +19,8 @@ export const filterFields = [
 export type PhysicalField = (typeof physicalFields)[number];
 export type FilterField = (typeof filterFields)[number];
 export type Filters = Partial<Record<FilterField, string>>;
+export type BrowseFilters = Pick<Filters, "provider" | "station">;
+export type RequestSettings = Omit<Filters, "provider" | "station">;
 export type FactState = "known" | "source_silent" | "not_established";
 export type Series = Partial<Record<PhysicalField, string | null>> &
   Partial<Record<`${PhysicalField}_state`, FactState>> & {
@@ -31,6 +33,7 @@ export interface Station {
   provider_id: string;
   station_id: string;
   station_name: string | null;
+  water_body_names?: string[];
   latitude: number | null;
   longitude: number | null;
   crs: string | null;
@@ -117,14 +120,22 @@ export function addStations(
 export function removeStation(selected: Station[], key: string): Station[] {
   return selected.filter((station) => stationKey(station) !== key);
 }
+function requestSettings({
+  provider: _provider,
+  station: _station,
+  ...settings
+}: Filters): RequestSettings {
+  return settings;
+}
 export function selectionConflicts(
   selected: Station[],
   filters: Filters,
 ): Conflict[] {
+  const settings = requestSettings(filters);
   return selected
-    .filter((station) => !matchesStation(station, filters))
+    .filter((station) => !matchesStation(station, settings))
     .map((station) => {
-      const reasons = activeFilters(filters).flatMap(([field, requested]) => {
+      const reasons = activeFilters(settings).flatMap(([field, requested]) => {
         const values = station.series.flatMap((series) =>
           fieldValues(station, series, field),
         );
@@ -151,7 +162,7 @@ export function selectionConflicts(
       }
       if (!reasons.length)
         reasons.push(
-          "No single supported catalogue series and fact segment matches this combination of filters.",
+          "No single supported catalogue series and fact segment matches this combination of request settings.",
         );
       return { key: stationKey(station), station, reasons };
     });
@@ -166,6 +177,18 @@ function validDate(value: string): boolean {
     parsed.toISOString().slice(0, 10) === value
   );
 }
+export function dateErrors(
+  dates: RequestDates,
+): Partial<Record<keyof RequestDates, string>> {
+  const errors: Partial<Record<keyof RequestDates, string>> = {};
+  if (!validDate(dates.start))
+    errors.start = "Enter a valid start date (YYYY-MM-DD).";
+  if (dates.end && !validDate(dates.end))
+    errors.end = "Enter a valid end date (YYYY-MM-DD).";
+  if (validDate(dates.start) && validDate(dates.end) && dates.start > dates.end)
+    errors.end = "Start date must not be after end date.";
+  return errors;
+}
 // JSON string escaping also produces Python string literals (not JSON booleans/null).
 function pythonString(value: string): string {
   return JSON.stringify(value)
@@ -177,9 +200,9 @@ export function generateRequest(
   filters: Filters,
   dates: RequestDates,
   providers: Provider[],
-  catalogueStations: Station[],
 ): RequestPreview {
-  const conflicts = selectionConflicts(selected, filters);
+  const settings = requestSettings(filters);
+  const conflicts = selectionConflicts(selected, settings);
   const blockingReasons: string[] = [];
   if (!selected.length)
     blockingReasons.push(
@@ -187,14 +210,9 @@ export function generateRequest(
     );
   if (conflicts.length)
     blockingReasons.push(
-      `${conflicts.length} selected gauge(s) conflict with the filters. Change filters or remove non-matching gauges.`,
+      `${conflicts.length} selected ${conflicts.length === 1 ? "gauge conflicts" : "gauges conflict"} with the request settings. Change request settings or remove non-matching gauges.`,
     );
-  if (!validDate(dates.start))
-    blockingReasons.push("Enter a valid start date (YYYY-MM-DD).");
-  if (dates.end && !validDate(dates.end))
-    blockingReasons.push("Enter a valid end date (YYYY-MM-DD).");
-  if (validDate(dates.start) && validDate(dates.end) && dates.start > dates.end)
-    blockingReasons.push("Start date must not be after end date.");
+  blockingReasons.push(...Object.values(dateErrors(dates)));
   const groups = new Map<string, string[]>();
   for (const station of addStations([], selected)) {
     const group = groups.get(station.provider_id) ?? [];
@@ -210,25 +228,25 @@ export function generateRequest(
         `${id} is catalogue-only. Remove its gauges to generate a retrieval request.`,
       );
   }
-  const selectedKeys = new Set(selected.map(stationKey));
   const stationIds = [
     ...new Set(selected.map((station) => station.station_id)),
   ];
-  const selectedIds = new Set(stationIds);
-  const hasCrossPair = catalogueStations.some(
-    (station) =>
-      groups.has(station.provider_id) &&
-      selectedIds.has(station.station_id) &&
-      !selectedKeys.has(stationKey(station)),
-  );
-  const combined = groups.size > 1 && !hasCrossPair;
+  // Combined lists are exact only when every provider selects every listed ID.
+  const combined =
+    groups.size > 1 &&
+    Array.from(groups.values()).every(
+      (ids) => ids.length === stationIds.length,
+    );
   const writeCode = (limit: number) => {
+    if (!selected.length)
+      return "# Select at least one gauge to build a request.";
     const lines = ["import rivretrieve as rr", ""];
     for (const id of groups.keys()) {
       const provider = providers.find((item) => item.provider_id === id);
       if (provider?.credentials.length)
         lines.push(
           `# ${pythonString(id)} credentials: ${provider.credentials.map(pythonString).join(", ")}.`,
+          "# https://rivretrieve.github.io/usage/#supplied-credentials",
         );
       if (provider?.bulk) {
         lines.push(
@@ -241,7 +259,7 @@ export function generateRequest(
         lines.push(`rr.download(${pythonString(id)})`);
       }
     }
-    const args = activeFilters(filters).map(
+    const args = activeFilters(settings).map(
       ([field, value]) => `${field}=${pythonString(value)}`,
     );
     const findCall = `selection = rr.find(${args.join(", ")})`;

@@ -52,8 +52,9 @@ def encode_catalogue(providers: list[dict], stations: pl.DataFrame, series: Iter
     Returns
     -------
     dict
-        Version 1 wire data. Station tuples contain provider index, station ID,
-        name, latitude, longitude and CRS. Series tuples contain station index,
+        Version 2 wire data. Station tuples contain provider index, station ID,
+        name, latitude, longitude, CRS and distinct nonblank water-body names in
+        metadata order. Name spelling is unchanged. Series tuples contain station index,
         series ID, variant, published ID and physical-profile indices.
     """
     provider_indexes = {item["provider_id"]: index for index, item in enumerate(providers)}
@@ -65,7 +66,15 @@ def encode_catalogue(providers: list[dict], stations: pl.DataFrame, series: Iter
             raise ValueError(f"Duplicate station identity: {key}")
         station_indexes[key] = len(records)
         records.append(
-            [provider_indexes[key[0]], key[1], row["station_name"], row["latitude"], row["longitude"], row["crs"]]
+            [
+                provider_indexes[key[0]],
+                key[1],
+                row["station_name"],
+                row["latitude"],
+                row["longitude"],
+                row["crs"],
+                list(dict.fromkeys(name for name in (row["water_body_name_value"] or []) if name and name.strip())),
+            ]
         )
     facts = []
     fact_indexes = {}
@@ -93,7 +102,7 @@ def encode_catalogue(providers: list[dict], stations: pl.DataFrame, series: Iter
                 references,
             ]
         )
-    return {"version": 1, "providers": providers, "stations": records, "facts": facts, "series": series_records}
+    return {"version": 2, "providers": providers, "stations": records, "facts": facts, "series": series_records}
 
 
 def build_catalogue(output_path: Path) -> None:

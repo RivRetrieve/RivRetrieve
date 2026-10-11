@@ -91,7 +91,7 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
       () => document.documentElement.scrollHeight <= innerHeight + 2,
     ),
   ).toBe(true);
-  await expect(app.getByLabel("provider", { exact: true })).toHaveValue("");
+  await expect(app.getByLabel("Provider", { exact: true })).toHaveValue("");
   const initialView = app.locator("canvas.station-points");
   expect(
     Number(await initialView.getAttribute("data-center-lat")),
@@ -111,7 +111,7 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
       path: `${process.env.EVIDENCE_DIR}/docs-desktop.png`,
     });
   const filterStart = Date.now();
-  await app.getByLabel("provider", { exact: true }).selectOption("usgs_nwis");
+  await app.getByLabel("Provider", { exact: true }).selectOption("usgs_nwis");
   await expect(app.getByTestId("match-count")).toHaveText(
     "26,201 matching gauges",
   );
@@ -146,8 +146,8 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     )
     .toBeGreaterThan(zoomBefore);
   const clusterZoomMs = Date.now() - clusterStart;
-  await app.getByLabel("station", { exact: true }).fill("07374000");
-  await expect(app.getByTestId("match-count")).toHaveText("1 matching gauges");
+  await app.getByLabel("Station", { exact: true }).fill("07374000");
+  await expect(app.getByTestId("match-count")).toHaveText("1 matching gauge");
   await app.getByRole("button", { name: "Zoom to matches" }).click();
   await expect(app.locator("canvas.station-points")).toHaveAttribute(
     "data-drawn",
@@ -173,15 +173,17 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     app.getByRole("tab", { name: "Selection (0)", exact: true }),
   ).toBeVisible();
   await app.getByRole("button", { name: "Add gauge", exact: true }).click();
+  await app.getByRole("tab", { name: "Python", exact: true }).click();
   await app.getByLabel("Start date", { exact: true }).fill("2020-01-01");
   await app.getByLabel("End date", { exact: true }).fill("2020-01-02");
-  await expect(app.getByTestId("match-count")).toHaveText("1 matching gauges");
+  await app.getByRole("tab", { name: "Filtering", exact: true }).click();
+  await expect(app.getByTestId("match-count")).toHaveText("1 matching gauge");
   await app.getByRole("tab", { name: "Python", exact: true }).click();
   await expect(
     app.getByRole("button", { name: "Copy Python request" }),
   ).toBeEnabled();
   await app.getByRole("tab", { name: "Filtering", exact: true }).click();
-  await app.getByLabel("quantity", { exact: true }).fill("not-a-quantity");
+  await app.getByLabel("Quantity", { exact: true }).fill("not-a-quantity");
   await expect(app.locator("canvas.station-points")).toHaveAttribute(
     "data-drawn",
     "1",
@@ -195,8 +197,8 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     app.getByRole("button", { name: "Copy Python request" }),
   ).toBeDisabled();
   await app.getByRole("tab", { name: "Filtering", exact: true }).click();
-  await app.getByLabel("quantity", { exact: true }).fill("");
-  await app.getByLabel("station", { exact: true }).fill("");
+  await app.getByLabel("Quantity", { exact: true }).fill("");
+  await app.getByLabel("Station", { exact: true }).fill("");
   const addStart = Date.now();
   await app
     .getByRole("button", { name: "Add all matches", exact: true })
@@ -229,7 +231,7 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     .getByRole("button", { name: "Clear selection", exact: true })
     .click();
   await app.getByRole("tab", { name: "Filtering", exact: true }).click();
-  await app.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await app.getByRole("button", { name: "Clear search", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   await expect(app.getByTestId("match-count")).toHaveText(
@@ -256,6 +258,35 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     await page.screenshot({
       path: `${process.env.EVIDENCE_DIR}/docs-mobile.png`,
     });
+  await app.getByLabel("Provider", { exact: true }).selectOption("ch_foen");
+  await app.getByLabel("Station", { exact: true }).fill("2004");
+  await app.getByRole("button", { name: "Zoom to matches" }).click();
+  await app.getByRole("button", { name: "Hide panel" }).click();
+  await app
+    .getByRole("button", { name: "Inspect ch_foen / 2004", exact: true })
+    .click();
+  const mobileDetails = app.getByRole("region", { name: "Gauge details" });
+  await expect(mobileDetails).toContainText("Water body: Murtensee");
+  const mobileAdd = mobileDetails.getByRole("button", {
+    name: "Add gauge",
+    exact: true,
+  });
+  const contentBox = (await app.locator(".panel-content").boundingBox())!;
+  const addBox = (await mobileAdd.boundingBox())!;
+  expect(addBox.y).toBeGreaterThanOrEqual(contentBox.y);
+  expect(addBox.y + addBox.height).toBeLessThanOrEqual(
+    contentBox.y + contentBox.height,
+  );
+  await mobileAdd.click();
+  await expect(
+    app.getByRole("tab", { name: "Selection (1)", exact: true }),
+  ).toBeVisible();
+  if (process.env.EVIDENCE_DIR)
+    await page.screenshot({
+      path: `${process.env.EVIDENCE_DIR}/docs-mobile-inspection.png`,
+    });
+
+  await app.getByRole("tab", { name: "Python", exact: true }).click();
   await app
     .getByRole("link", { name: "Date documentation", exact: true })
     .click();
@@ -360,7 +391,7 @@ test("explorer and Python syntax follow the existing docs palette without losing
     "background-color",
     dark,
   );
-  await expect(app.getByLabel("station", { exact: true })).toHaveCSS(
+  await expect(app.getByLabel("Station", { exact: true })).toHaveCSS(
     "background-color",
     dark,
   );
@@ -372,9 +403,11 @@ test("explorer and Python syntax follow the existing docs palette without losing
   const beforeZoom = Number((await view())[2]);
   await app.getByRole("button", { name: "Zoom in", exact: true }).click();
   await expect.poll(async () => Number((await view())[2])).toBe(beforeZoom + 1);
-  await app.getByLabel("provider", { exact: true }).selectOption("ch_foen");
-  await app.getByLabel("station", { exact: true }).fill("2004");
+  await app.getByLabel("Provider", { exact: true }).selectOption("ch_foen");
+  await app.getByLabel("Station", { exact: true }).fill("2004");
+  await app.getByRole("tab", { name: "Python", exact: true }).click();
   await app.getByLabel("Start date", { exact: true }).fill("2020-01-01");
+  await app.getByRole("tab", { name: "Filtering", exact: true }).click();
   await app
     .getByRole("button", { name: "Zoom to matches", exact: true })
     .click();

@@ -21,6 +21,7 @@ def test_compact_catalogue_preserves_identity_unknowns_and_fact_segments():
             "latitude": [1.123456789, None, 3.0],
             "longitude": [2.0, None, 4.0],
             "crs": ["unknown", None, "EPSG:4326"],
+            "water_body_name_value": [["Mår", "MÅRVATN", "Mår", None, "  ", " Mår "], None, [None, "\t"]],
         }
     )
     providers = [
@@ -56,10 +57,11 @@ def test_compact_catalogue_preserves_identity_unknowns_and_fact_segments():
         ),
     ]
     result = encode_catalogue(providers, stations, series)
+    assert result["version"] == 2
     assert result["stations"] == [
-        [0, "001", "River é", 1.123456789, 2.0, "unknown"],
-        [1, "001", None, None, None, None],
-        [0, "002", "No series", 3.0, 4.0, "EPSG:4326"],
+        [0, "001", "River é", 1.123456789, 2.0, "unknown", ["Mår", "MÅRVATN", " Mår "]],
+        [1, "001", None, None, None, None, []],
+        [0, "002", "No series", 3.0, 4.0, "EPSG:4326", []],
     ]
     assert result["series"] == [[0, "exact-id", "original", "published", [0, 1]], [1, "another-id", None, None, [0]]]
     assert len(result["facts"]) == 2
@@ -105,6 +107,7 @@ def test_export_uses_declared_capabilities_and_never_credential_values(tmp_path,
                     "latitude": [None],
                     "longitude": [None],
                     "crs": ["unknown"],
+                    "water_body_name_value": [["Murtensee"]],
                 }
             ),
         )
@@ -125,4 +128,5 @@ def test_export_uses_declared_capabilities_and_never_credential_values(tmp_path,
     ]
     assert "must-never-be-exported" not in text
     assert len(result["stations"]) == 3
+    assert all(station[6] == ["Murtensee"] for station in result["stations"])
     assert result["series"] == []

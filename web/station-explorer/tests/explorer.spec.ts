@@ -33,7 +33,7 @@ const fact = (quantity: string, frequency: string | null) => ({
   admission: "supported",
 });
 const fixture = {
-  version: 1,
+  version: 2,
   providers: [
     { provider_id: "alpha", retrieval: true, bulk: false, credentials: [] },
     {
@@ -50,10 +50,10 @@ const fixture = {
     },
   ],
   stations: [
-    [0, "001", "River one", 10, 10, "EPSG:4326"],
-    [1, "001", "Other provider", 20, 20, "unknown"],
-    [2, "C", "Catalogue gauge", null, null, null],
-    [0, "empty", "No series described", 15, 15, "EPSG:4326"],
+    [0, "001", "River one", 10, 10, "EPSG:4326", []],
+    [1, "001", "Other provider", 20, 20, "unknown", []],
+    [2, "C", "Catalogue gauge", null, null, null, []],
+    [0, "empty", "No series described", 15, 15, "EPSG:4326", []],
   ],
   facts: [fact("discharge", "daily"), fact("stage", null)],
   series: [
@@ -85,9 +85,11 @@ test("inspection and exact-pair selection survive changed filters", async ({
   await page.getByRole("tab", { name: "Python", exact: true }).click();
   await expect(copy).toBeDisabled();
   await page.getByRole("tab", { name: "Filtering", exact: true }).click();
+  await page.getByRole("tab", { name: "Python", exact: true }).click();
   await page.getByLabel("Start date", { exact: true }).fill("2020-01-01");
   await page.getByLabel("End date", { exact: true }).fill("2020-01-02");
-  await page.getByLabel("provider", { exact: true }).selectOption("alpha");
+  await page.getByRole("tab", { name: "Filtering", exact: true }).click();
+  await page.getByLabel("Provider", { exact: true }).selectOption("alpha");
   await page.getByRole("button", { name: "Zoom to matches" }).click();
   const map = page.getByLabel("Gauge map", { exact: true });
   const box = await map.boundingBox();
@@ -96,23 +98,21 @@ test("inspection and exact-pair selection survive changed filters", async ({
     page.getByRole("tab", { name: "Selection (0)", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Add gauge", exact: true }).click();
-  await page.getByLabel("provider", { exact: true }).selectOption("beta");
+  await page.getByLabel("Provider", { exact: true }).selectOption("beta");
   await page.getByRole("tab", { name: /Selection/ }).click();
   await expect(page.getByTestId("selection-counts")).toHaveText(
-    "0 matching · 1 conflicting",
+    "1 matching · 0 conflicting",
   );
   await page.getByRole("tab", { name: "Python", exact: true }).click();
-  await expect(copy).toBeDisabled();
-  await expect(page.getByLabel("Python request")).toContainText(
-    "UNRESOLVED REQUEST",
+  await expect(copy).toBeEnabled();
+  await expect(page.getByLabel("Python request")).not.toContainText(
+    'provider="beta"',
   );
   await page.getByRole("tab", { name: "Filtering", exact: true }).click();
   await page
     .getByRole("button", { name: "Add all matches", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Clear filters", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Clear search", exact: true }).click();
   await page.getByRole("tab", { name: "Python", exact: true }).click();
   await expect(copy).toBeEnabled();
   await copy.click();
@@ -124,13 +124,13 @@ test("inspection and exact-pair selection survive changed filters", async ({
   expect(code).toContain("SOURCE_KEY");
   await page.getByRole("tab", { name: "Filtering", exact: true }).click();
   await page.getByText("More filters", { exact: true }).click();
-  await page.getByLabel("frequency", { exact: true }).fill("daily");
+  await page.getByLabel("Frequency", { exact: true }).fill("daily");
   await page.getByRole("tab", { name: /Selection/ }).click();
   await expect(
     page.getByText(/frequency is not established in the catalogue/),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Remove non-matching gauges" })
+    .getByRole("button", { name: "Remove incompatible gauges" })
     .click();
   await page
     .getByRole("button", { name: "Remove alpha / 001", exact: true })
@@ -142,7 +142,7 @@ test("inspection and exact-pair selection survive changed filters", async ({
 
 test("catalogue-only selection blocks output", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("provider", { exact: true }).selectOption("catalogue");
+  await page.getByLabel("Provider", { exact: true }).selectOption("catalogue");
   await page
     .getByRole("button", { name: "Add all matches", exact: true })
     .click();
@@ -213,15 +213,17 @@ test("native clusters zoom and spiderfy co-located provider identities", async (
   ).toHaveCount(0);
 });
 
-test("reduced Filtering panel owns dates and omits removed UI", async ({
+test("retrieval dates are separate from browsing and omitted controls stay absent", async ({
   page,
 }) => {
   await page.goto("/");
   await expect(
     page.getByRole("tab", { name: "Filtering", exact: true }),
   ).toBeVisible();
-  await expect(page.getByLabel("Start date", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("End date", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Start date", { exact: true }),
+  ).not.toBeVisible();
+  await expect(page.getByLabel("End date", { exact: true })).not.toBeVisible();
   await page.getByText("More filters", { exact: true }).click();
   for (const label of [
     "day definition",
@@ -245,15 +247,16 @@ test("reduced Filtering panel owns dates and omits removed UI", async ({
   await expect(
     page.getByText(/Source wall-clock dates; both endpoints/),
   ).toHaveCount(0);
+  await page.getByRole("tab", { name: "Python", exact: true }).click();
   await expect(
     page.getByRole("link", { name: "Date documentation", exact: true }),
   ).toHaveAttribute("href", "../../usage/#time-labels-and-request-windows");
+  await page.getByRole("tab", { name: "Python", exact: true }).click();
   await page.getByLabel("Start date", { exact: true }).fill("2020-01-01");
+  await page.getByRole("tab", { name: "Filtering", exact: true }).click();
   await expect(page.getByTestId("match-count")).toHaveText("3 matching gauges");
   await page.getByRole("tab", { name: "Python", exact: true }).click();
-  await expect(
-    page.getByLabel("Start date", { exact: true }),
-  ).not.toBeVisible();
+  await expect(page.getByLabel("Start date", { exact: true })).toBeVisible();
 });
 
 test("native map stops zooming out at the configured world scale", async ({
@@ -295,8 +298,10 @@ test("Python preview highlights syntax while clipboard stays exact plain code", 
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/");
+  await page.getByRole("tab", { name: "Python", exact: true }).click();
   await page.getByLabel("Start date", { exact: true }).fill("2020-01-01");
-  await page.getByLabel("provider", { exact: true }).selectOption("alpha");
+  await page.getByRole("tab", { name: "Filtering", exact: true }).click();
+  await page.getByLabel("Provider", { exact: true }).selectOption("alpha");
   await page
     .getByRole("button", { name: "Add all matches", exact: true })
     .click();
@@ -313,13 +318,11 @@ test("Python preview highlights syntax while clipboard stays exact plain code", 
   await page.getByRole("button", { name: "Copy Python request" }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(plain);
   await page.getByRole("tab", { name: "Filtering", exact: true }).click();
-  await page.getByLabel("provider", { exact: true }).selectOption("beta");
+  await page.getByLabel("Provider", { exact: true }).selectOption("beta");
   await page
     .getByRole("button", { name: "Add all matches", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Clear filters", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Clear search", exact: true }).click();
   await page.getByRole("tab", { name: "Python", exact: true }).click();
   const multi = await code.textContent();
   await page.getByRole("button", { name: "Copy Python request" }).click();
@@ -341,7 +344,7 @@ test("initial view is around Switzerland without narrowing discovery or selectin
   expect(Number(await view.getAttribute("data-zoom"))).toBeGreaterThanOrEqual(
     6,
   );
-  await expect(page.getByLabel("provider", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Provider", { exact: true })).toHaveValue("");
   await expect(page.getByTestId("match-count")).toHaveText("3 matching gauges");
   await expect(
     page.getByRole("tab", { name: "Selection (0)", exact: true }),
@@ -399,7 +402,7 @@ test("configured CARTO changes style without resetting the map or selection", as
   await expect(
     page.getByRole("link", { name: "CARTO", exact: true }),
   ).toBeVisible();
-  await page.getByLabel("provider", { exact: true }).selectOption("alpha");
+  await page.getByLabel("Provider", { exact: true }).selectOption("alpha");
   await page
     .getByRole("button", { name: "Add all matches", exact: true })
     .click();
@@ -517,7 +520,7 @@ test("gauge pins show measurement symbols and non-color selection cues", async (
   page,
 }) => {
   await page.goto("/");
-  await page.getByLabel("provider", { exact: true }).selectOption("alpha");
+  await page.getByLabel("Provider", { exact: true }).selectOption("alpha");
   await page.getByRole("button", { name: "Zoom to matches" }).click();
   const pin = page.locator(".gauge-point svg");
   await expect(pin).toHaveCount(1);
@@ -559,6 +562,48 @@ test("gauge pins show measurement symbols and non-color selection cues", async (
     );
   await expect.poll(bodyPixel).toEqual([8, 124, 112, 255]);
   await expect(page.locator(".gauge-point")).toHaveCount(0);
-  await page.getByLabel("provider", { exact: true }).selectOption("beta");
+  await page.getByLabel("Provider", { exact: true }).selectOption("beta");
+  await expect.poll(bodyPixel).toEqual([8, 124, 112, 255]);
+  await page.getByLabel("Quantity", { exact: true }).fill("stage");
   await expect.poll(bodyPixel).toEqual([173, 79, 14, 255]);
+  await page.getByLabel("Quantity", { exact: true }).fill("");
+  await expect.poll(bodyPixel).toEqual([8, 124, 112, 255]);
+});
+
+test("collecting stations and clearing search preserves shared discharge request", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const catalogue = structuredClone(fixture);
+  catalogue.stations.push([0, "002", "Second river", 11, 11, "EPSG:4326", []]);
+  catalogue.series.push([4, "series-two", null, null, [0]]);
+  await page.route("**/catalogue.json", (route) =>
+    route.fulfill({ json: catalogue }),
+  );
+  await page.goto("/");
+  await page.getByLabel("Quantity", { exact: true }).fill("discharge");
+  await page.getByLabel("Provider", { exact: true }).selectOption("alpha");
+  for (const id of ["001", "002"]) {
+    await page.getByLabel("Station", { exact: true }).fill(id);
+    await page
+      .getByRole("button", { name: "Add all matches", exact: true })
+      .click();
+  }
+  await page.getByRole("button", { name: "Clear search", exact: true }).click();
+  await expect(page.getByLabel("Quantity", { exact: true })).toHaveValue(
+    "discharge",
+  );
+  await page.getByRole("tab", { name: /Selection/ }).click();
+  await expect(page.getByTestId("selection-counts")).toHaveText(
+    "2 matching · 0 conflicting",
+  );
+  await page.getByRole("tab", { name: "Python", exact: true }).click();
+  await page.getByLabel("Start date", { exact: true }).fill("2020-01-01");
+  await page.getByRole("button", { name: "Copy Python request" }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain('quantity="discharge"');
+  expect(copied).toContain('"001"');
+  expect(copied).toContain('"002"');
+  expect(copied).toContain("rr.pick(");
 });

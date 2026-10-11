@@ -47,28 +47,35 @@ the built site are local outputs, not source files to commit or review evidence.
   so each gauge remains inspectable. Selected gauges and conflicts remain separate map symbols.
 - Change discovery filters, inspect a gauge, and add it individually. Try **Add
   all matches** with a larger selection.
-- Set retrieval dates in **Filtering**, then inspect single-provider and
+- Set retrieval dates in **Python**, then inspect single-provider and
   multi-provider requests in **Python**. Changing dates must not change matches.
   Station identifiers must stay complete in copied code, including leading zeros.
-- Change filters after selecting gauges. Confirm that selected non-matching gauges
-  remain visible and block copying until their conflicts are resolved.
+- Set quantity to discharge, add one station, then search for and add another.
+  Change provider or use **Clear search**. Both selections and the discharge setting
+  must remain unchanged.
+- Change the shared measurement settings. Incompatible selected gauges remain
+  visible and block copying until those settings change or the gauges are removed.
+- Inspect **Water body** in gauge details. Norway `16.24.0` shows `Mår · MÅRVATN`;
+  Switzerland `2004` shows `Murtensee`. Missing names show **Not available**.
 - Remove the final gauge. Copying executable code must remain blocked for an empty
-  selection or invalid dates.
+  selection or invalid dates. Date errors also appear beside the inputs.
 - Browse a catalogue-only provider. Selecting it must show an unsupported-retrieval
   warning and block copying, without silently removing it from the selection.
 - Inspect bulk-download steps and credential-name comments in generated code.
   Do not execute national downloads or observation requests as a prototype check.
 - Compare this page with the Usage page to check that only the explorer uses the
-  full-width layout. Try a narrow browser window and a long station selection.
+  full-width layout. At 390 px, inspect a gauge and use **Add gauge** at the top of
+  the panel. Hide the panel to reach covered map points. Try a long station selection.
 
 Catalogue entries do not guarantee observations for a requested period, and counts
 need not represent unique physical sites across providers. Unknown availability
-is separate from a filter conflict. Unknown-CRS and NAD83 (EPSG:4269) coordinates
+is separate from a measurement-setting conflict. Unknown-CRS and NAD83 (EPSG:4269) coordinates
 are displayed on the WGS84 basemap without datum transformation. These are
 approximate display positions, not certified coordinates.
 
-The owner-requested reduced surface exposes provider, station, quantity, frequency,
-statistic and temporal-support filters. Dates are retrieval settings, not catalogue
+Provider and station controls browse gauges. Quantity, frequency, statistic and
+temporal support configure the requested observations for the entire selection
+and also narrow the map matches. Dates are retrieval settings, not catalogue
 coverage filters. Advanced physical and source-identity controls, series-fact details,
 and the general gauge list are not exposed in this iteration. Inspect individual
 gauges on the map; co-located gauges remain reachable through MarkerCluster spiderfy.
@@ -82,8 +89,9 @@ selected by the documentation scheme. The preview shows at most ten station IDs;
 copying returns every selected gauge in complete plain Python. Shortened previews
 contain non-executable omission markers. Unresolved requests remain commented and
 cannot be copied. Normal multi-provider requests use one
-combined selection and `fetch_by_provider`. A provider-specific fallback preserves
-exact pairs when station identifiers would otherwise select extra gauges.
+combined selection and `fetch_by_provider`. Provider-specific requests preserve
+exact pairs whenever a combined provider/station selection would include other pairs,
+including pairs that could appear in a later catalogue.
 
 ## Basemap configuration
 

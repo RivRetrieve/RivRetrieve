@@ -1,7 +1,10 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { expandCatalogue } from "./catalogue";
 import {
   addStations,
+  dateErrors,
+  type BrowseFilters,
+  type RequestSettings,
   filterStations,
   generateRequest,
   removeStation,
@@ -23,7 +26,8 @@ const physicalControls = [
   "statistic",
   "temporal_support",
 ] as const;
-const label = (field: string) => field.replaceAll("_", " ");
+const label = (field: string) =>
+  field[0].toUpperCase() + field.slice(1).replaceAll("_", " ");
 function CoordinateWarning({ children }: { children: string }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -67,16 +71,26 @@ export function App() {
     providers: Provider[];
   } | null>(null);
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState<Filters>({});
+  const [browse, setBrowse] = useState<BrowseFilters>({});
+  const [settings, setSettings] = useState<RequestSettings>({});
+  const filters = useMemo(
+    () => ({ ...browse, ...settings }),
+    [browse, settings],
+  );
   const [selected, setSelected] = useState<Station[]>([]);
   const [inspected, setInspected] = useState<Station | null>(null);
   const [dates, setDates] = useState({ start: "", end: "" });
+  const dateFeedback = dateErrors(dates);
   const [copyStatus, setCopyStatus] = useState("");
   const [selectionPage, setSelectionPage] = useState(0);
   const [tab, setTab] = useState<"filtering" | "selection" | "python">(
     "filtering",
   );
   const [panelOpen, setPanelOpen] = useState(true);
+  const panelContent = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    panelContent.current?.scrollTo({ top: 0 });
+  }, [tab, inspected]);
   useEffect(() => {
     const controller = new AbortController();
     fetch(new URL("catalogue.json", document.baseURI), {
@@ -101,18 +115,18 @@ export function App() {
     () =>
       generateRequest(
         selected,
-        filters,
+        settings,
         dates,
         catalogue?.providers ?? [],
-        catalogue?.stations ?? [],
       ),
-    [selected, filters, dates, catalogue],
+    [selected, settings, dates, catalogue],
   );
   const conflicts = useMemo(
     () =>
       new Map(preview.conflicts.map((conflict) => [conflict.key, conflict])),
     [preview],
   );
+  const conflictKeys = useMemo(() => new Set(conflicts.keys()), [conflicts]);
   const selectedKeys = useMemo(
     () => new Set(selected.map(stationKey)),
     [selected],
@@ -136,7 +150,9 @@ export function App() {
     [catalogue],
   );
   function updateFilter(field: FilterField, value: string) {
-    setFilters((current) => {
+    const setValues =
+      field === "provider" || field === "station" ? setBrowse : setSettings;
+    setValues((current: Filters) => {
       const next = { ...current };
       if (value === "") delete next[field];
       else next[field] = value;
@@ -212,6 +228,7 @@ export function App() {
       <StationMap
         matches={matches}
         selected={selected}
+        conflictKeys={conflictKeys}
         basemapKey={
           import.meta.env.VITE_CARTO_BASEMAP_API_KEY?.trim() || undefined
         }
@@ -256,92 +273,8 @@ export function App() {
             Python
           </button>
         </div>
-        <div className="panel-content">
+        <div className="panel-content" ref={panelContent}>
           <div role="tabpanel" hidden={tab !== "filtering"}>
-            <h2 data-testid="match-count">
-              {matches.length.toLocaleString()} matching gauges
-            </h2>
-            <div className="filter-row">
-              <label>
-                provider
-                <select
-                  aria-label="provider"
-                  value={filters.provider ?? ""}
-                  onChange={(event) =>
-                    updateFilter("provider", event.target.value)
-                  }
-                >
-                  <option value="">All providers</option>
-                  {catalogue.providers.map((provider) => (
-                    <option
-                      key={provider.provider_id}
-                      value={provider.provider_id}
-                    >
-                      {provider.provider_id}
-                      {provider.retrieval ? "" : " (catalogue only)"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {control("station")}
-              {control("quantity")}
-            </div>
-            <details>
-              <summary>More filters</summary>
-              <div className="filter-row">
-                {physicalControls.slice(1).map(control)}
-              </div>
-            </details>
-            <div className="dates">
-              <label>
-                Start date (required)
-                <input
-                  aria-label="Start date"
-                  type="date"
-                  value={dates.start}
-                  onChange={(event) => {
-                    setDates({ ...dates, start: event.target.value });
-                    setCopyStatus("");
-                  }}
-                />
-              </label>
-              <label>
-                End date (optional)
-                <input
-                  aria-label="End date"
-                  type="date"
-                  value={dates.end}
-                  onChange={(event) => {
-                    setDates({ ...dates, end: event.target.value });
-                    setCopyStatus("");
-                  }}
-                />
-              </label>
-            </div>
-            <a
-              className="date-help"
-              href="../../usage/#time-labels-and-request-windows"
-              target="_top"
-            >
-              Date documentation
-            </a>
-            <div className="actions">
-              <button
-                className="primary"
-                disabled={!matches.length}
-                onClick={() => add(matches)}
-              >
-                Add all matches
-              </button>
-              <button
-                onClick={() => {
-                  setFilters({});
-                  setCopyStatus("");
-                }}
-              >
-                Clear filters
-              </button>
-            </div>
             {inspected && (
               <section className="inspection" aria-label="Gauge details">
                 <div className="section-heading">
@@ -355,8 +288,25 @@ export function App() {
                     ×
                   </button>
                 </div>
+                <button
+                  onClick={() =>
+                    selectedKeys.has(stationKey(inspected))
+                      ? remove(inspected)
+                      : add([inspected])
+                  }
+                >
+                  {selectedKeys.has(stationKey(inspected))
+                    ? "Remove gauge"
+                    : "Add gauge"}
+                </button>
                 <p>
                   {inspected.station_name ?? "Station name not established"}
+                </p>
+                <p>
+                  <strong>Water body:</strong>{" "}
+                  {inspected.water_body_names?.length
+                    ? inspected.water_body_names.join(" · ")
+                    : "Not available"}
                 </p>
                 <p className="coordinate-info">
                   Coordinates: {inspected.latitude ?? "unknown"},{" "}
@@ -382,19 +332,67 @@ export function App() {
                     ⚠ Catalogue only. Observation retrieval is unsupported.
                   </p>
                 )}
-                <button
-                  onClick={() =>
-                    selectedKeys.has(stationKey(inspected))
-                      ? remove(inspected)
-                      : add([inspected])
-                  }
-                >
-                  {selectedKeys.has(stationKey(inspected))
-                    ? "Remove gauge"
-                    : "Add gauge"}
-                </button>
               </section>
             )}
+            <h2 data-testid="match-count">
+              {matches.length.toLocaleString()} matching{" "}
+              {matches.length === 1 ? "gauge" : "gauges"}
+            </h2>
+            <div className="filter-row">
+              <label>
+                Provider
+                <select
+                  aria-label="Provider"
+                  value={filters.provider ?? ""}
+                  onChange={(event) =>
+                    updateFilter("provider", event.target.value)
+                  }
+                >
+                  <option value="">All providers</option>
+                  {catalogue.providers.map((provider) => (
+                    <option
+                      key={provider.provider_id}
+                      value={provider.provider_id}
+                    >
+                      {provider.name ?? provider.provider_id} (
+                      {provider.provider_id})
+                      {provider.retrieval ? "" : " (catalogue only)"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {control("station")}
+            </div>
+            <section
+              className="request-settings"
+              aria-label="Measurement settings"
+            >
+              <h3>Requested observations</h3>
+              {control("quantity")}
+              <details>
+                <summary>More filters</summary>
+                <div className="filter-row">
+                  {physicalControls.slice(1).map(control)}
+                </div>
+              </details>
+            </section>
+            <div className="actions">
+              <button
+                className="primary"
+                disabled={!matches.length}
+                onClick={() => add(matches)}
+              >
+                Add all matches
+              </button>
+              <button
+                onClick={() => {
+                  setBrowse({});
+                  setCopyStatus("");
+                }}
+              >
+                Clear search
+              </button>
+            </div>
           </div>
           <div role="tabpanel" hidden={tab !== "selection"}>
             {" "}
@@ -410,8 +408,8 @@ export function App() {
               {!!conflicts.size && (
                 <>
                   <p className="warning">
-                    ⚠ Filters changed. Your gauges are preserved. Change filters
-                    or remove non-matching gauges.
+                    ⚠ Selected gauges do not match the requested observations.
+                    Change measurement settings or remove incompatible gauges.
                   </p>
                   <button
                     onClick={() => {
@@ -423,7 +421,7 @@ export function App() {
                       setSelectionPage(0);
                     }}
                   >
-                    Remove non-matching gauges
+                    Remove incompatible gauges
                   </button>
                 </>
               )}
@@ -463,8 +461,8 @@ export function App() {
                       </div>
                       <p className="selection-state">
                         {conflicts.has(stationKey(station))
-                          ? "Does not match current filters"
-                          : "Matches current filters"}
+                          ? "Does not match measurement settings"
+                          : "Matches measurement settings"}
                       </p>
                       <div className="selection-card-actions">
                         <button
@@ -523,8 +521,8 @@ export function App() {
             </section>
             {!!preview.blockingReasons.length && (
               <p className="warning">
-                ⚠ Request unresolved. Check dates in Filtering and copy
-                requirements in Python.
+                ⚠ Request unresolved. Check dates and copy requirements in
+                Python.
               </p>
             )}
             <button className="primary" onClick={() => setTab("python")}>
@@ -534,6 +532,58 @@ export function App() {
           <div role="tabpanel" hidden={tab !== "python"}>
             {" "}
             <section className="request">
+              <h2>Retrieval dates</h2>
+              <div className="dates">
+                <label>
+                  Start date (required)
+                  <input
+                    aria-label="Start date"
+                    aria-invalid={!!dateFeedback.start}
+                    aria-describedby={
+                      dateFeedback.start ? "start-date-error" : undefined
+                    }
+                    type="date"
+                    value={dates.start}
+                    onChange={(event) => {
+                      setDates({ ...dates, start: event.target.value });
+                      setCopyStatus("");
+                    }}
+                  />
+                  {dateFeedback.start && (
+                    <span id="start-date-error" className="warning">
+                      {dateFeedback.start}
+                    </span>
+                  )}
+                </label>
+                <label>
+                  End date (optional)
+                  <input
+                    aria-label="End date"
+                    aria-invalid={!!dateFeedback.end}
+                    aria-describedby={
+                      dateFeedback.end ? "end-date-error" : undefined
+                    }
+                    type="date"
+                    value={dates.end}
+                    onChange={(event) => {
+                      setDates({ ...dates, end: event.target.value });
+                      setCopyStatus("");
+                    }}
+                  />
+                  {dateFeedback.end && (
+                    <span id="end-date-error" className="warning">
+                      {dateFeedback.end}
+                    </span>
+                  )}
+                </label>
+              </div>
+              <a
+                className="date-help"
+                href="../../usage/#time-labels-and-request-windows"
+                target="_top"
+              >
+                Date documentation
+              </a>
               <h2>Request preview</h2>
               {!!preview.blockingReasons.length && (
                 <div className="warning" role="status">

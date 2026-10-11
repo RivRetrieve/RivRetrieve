@@ -16,9 +16,15 @@ const fields = [
   "vertical_datum",
 ];
 const fixture = {
-  version: 1,
+  version: 2,
   providers: [
-    { provider_id: "alpha", retrieval: true, bulk: false, credentials: [] },
+    {
+      name: "Alpha Hydrology",
+      provider_id: "alpha",
+      retrieval: true,
+      bulk: false,
+      credentials: [],
+    },
     {
       provider_id: "catalogue",
       retrieval: false,
@@ -34,8 +40,9 @@ const fixture = {
       47,
       8,
       "EPSG:4326",
+      ["Mår", "MÅRVATN"],
     ],
-    [1, "001", null, null, null, null],
+    [1, "001", null, null, null, null, []],
   ],
   facts: [
     {
@@ -81,7 +88,7 @@ test("selection cards expose names, qualified identities, state and separate act
   await expect(alpha).toContainText(
     "River at the old bridge with a long published station name",
   );
-  await expect(alpha).toContainText("Matches current filters");
+  await expect(alpha).toContainText("Matches measurement settings");
   const other = page
     .locator(".selection-list li")
     .filter({ hasText: "catalogue / 001" });
@@ -97,9 +104,9 @@ test("selection cards expose names, qualified identities, state and separate act
   await expect(
     page.getByRole("region", { name: "Gauge details" }),
   ).toContainText("alpha / 001");
-  await page.getByLabel("provider", { exact: true }).selectOption("alpha");
+  await page.getByLabel("Provider", { exact: true }).selectOption("alpha");
   await page.getByRole("tab", { name: /Selection/ }).click();
-  await expect(other).toContainText("Does not match current filters");
+  await expect(other).toContainText("Matches measurement settings");
   await other
     .getByRole("button", { name: "Remove catalogue / 001", exact: true })
     .click();
@@ -162,6 +169,7 @@ test("Python tab limits displayed gauge IDs while copying the full selection", a
       47,
       8,
       "EPSG:4326",
+      [],
     ]),
     series: Array.from({ length: 12 }, (_, i) => [
       i,
@@ -175,7 +183,9 @@ test("Python tab limits displayed gauge IDs while copying the full selection", a
     route.fulfill({ json: many }),
   );
   await page.goto("/");
+  await page.getByRole("tab", { name: "Python", exact: true }).click();
   await page.getByLabel("Start date", { exact: true }).fill("2020-01-01");
+  await page.getByRole("tab", { name: "Filtering", exact: true }).click();
   await page
     .getByRole("button", { name: "Add all matches", exact: true })
     .click();
@@ -260,4 +270,60 @@ test("Python preview mounts only while the Python tab is active", async ({
   await expect(page.getByLabel("Python request")).toBeVisible();
   await page.getByRole("tab", { name: "Filtering", exact: true }).click();
   await expect(page.locator(".python-preview")).toHaveCount(0);
+});
+
+test("mobile inspection puts add action and water body before browsing controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByLabel("Provider", { exact: true }).selectOption("alpha");
+  await expect(
+    page.getByLabel("Provider", { exact: true }).locator("option:checked"),
+  ).toHaveText("Alpha Hydrology (alpha)");
+  await page.getByRole("button", { name: "Zoom to matches" }).click();
+  await page.getByRole("button", { name: "Hide panel" }).click();
+  await page
+    .getByRole("button", { name: "Inspect alpha / 001", exact: true })
+    .click();
+  const details = page.getByRole("region", { name: "Gauge details" });
+  await expect(details).toContainText("Water body: Mår · MÅRVATN");
+  const add = details.getByRole("button", { name: "Add gauge", exact: true });
+  const panel = page.locator(".panel-content");
+  const bounds = (await panel.boundingBox())!;
+  const action = (await add.boundingBox())!;
+  expect(action.y).toBeGreaterThanOrEqual(bounds.y);
+  expect(action.y + action.height).toBeLessThanOrEqual(
+    bounds.y + bounds.height,
+  );
+  await add.click();
+  await expect(
+    page.getByRole("tab", { name: "Selection (1)", exact: true }),
+  ).toBeVisible();
+});
+
+test("retrieval date errors are beside inputs and block copying without changing matches", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Provider", { exact: true }).selectOption("alpha");
+  await page
+    .getByRole("button", { name: "Add all matches", exact: true })
+    .click();
+  await page.getByRole("tab", { name: "Python", exact: true }).click();
+  const start = page.getByLabel("Start date", { exact: true });
+  const end = page.getByLabel("End date", { exact: true });
+  const copy = page.getByRole("button", { name: "Copy Python request" });
+  await expect(start).toHaveAttribute("aria-invalid", "true");
+  await expect(start).toHaveAccessibleDescription(/valid start date/);
+  await expect(copy).toBeDisabled();
+  await start.fill("2020-02-02");
+  await end.fill("2020-02-01");
+  await expect(end).toHaveAccessibleDescription(/must not be after/);
+  await expect(copy).toBeDisabled();
+  await end.fill("2020-02-03");
+  await expect(end).toHaveAttribute("aria-invalid", "false");
+  await expect(copy).toBeEnabled();
+  await page.getByRole("tab", { name: "Filtering", exact: true }).click();
+  await expect(page.getByTestId("match-count")).toHaveText("1 matching gauge");
 });
