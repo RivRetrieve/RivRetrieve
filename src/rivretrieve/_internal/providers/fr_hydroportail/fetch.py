@@ -44,53 +44,54 @@ def fetch(
 ) -> SourceAcquisition:
     payloads: list[Payload] = []
     failures: list[FailedSourceRequest] = []
-    request_window = SeriesWindow(
-        start=datetime.fromisoformat(fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(fetch_window.end.isoformat()),
-    )
     for station in stations:
         for product in products:
             source = config.products[product].coordinates
             coordinates = source.value
             if not isinstance(coordinates, FrHydroportailSourceCoordinates):
                 raise FatalContractError(f"fr_hydroportail product has invalid source coordinates: {product}")
-            (window,) = rendered_windows[product]
-            if window.stop is None:
-                raise FatalContractError("fr_hydroportail product requires a rendered stop")
-            start = window.start
-            stop = window.stop
-            for variant in VARIANTS:
-                target = source_series(station, product, variant)
-                if scope is not None and not scope.matches(target):
-                    continue
-                request = TransportRequest(
-                    HttpMethod.GET,
-                    f"{_HYDROPORTAIL_ROOT}/stationhydro/ajax/{station}/series",
-                    {
-                        "hydro_series[startAt]": start,
-                        "hydro_series[endAt]": stop,
-                        "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable",
-                        "hydro_series[simpleAndInterpolatedAndHourlyVariable]": coordinates.field,
-                        "hydro_series[statusData]": variant,
-                    },
-                    {"Accept": "application/json"},
+            for window in rendered_windows[product]:
+                if window.stop is None:
+                    raise FatalContractError("fr_hydroportail product requires a rendered stop")
+                start = window.start
+                stop = window.stop
+                sub_fetch_window = window.bounds or fetch_window
+                sub_request_window = SeriesWindow(
+                    start=datetime.fromisoformat(sub_fetch_window.start.isoformat()),
+                    end=datetime.fromisoformat(sub_fetch_window.end.isoformat()),
                 )
-                response = attempt_series_request(transport, request, target, request_window)
-                if isinstance(response, FailedSourceRequest):
-                    failures.append(response)
-                    continue
-                payloads.append(
-                    Payload(
-                        SourceCoordinates(replace(coordinates, variant=variant)),
-                        ((station, product),),
-                        fetch_window,
-                        response.content,
-                        _origin(response),
-                        response.prerequisite_calls,
-                        scope=scope,
-                        known_series=(target,),
+                for variant in VARIANTS:
+                    target = source_series(station, product, variant)
+                    if scope is not None and not scope.matches(target):
+                        continue
+                    request = TransportRequest(
+                        HttpMethod.GET,
+                        f"{_HYDROPORTAIL_ROOT}/stationhydro/ajax/{station}/series",
+                        {
+                            "hydro_series[startAt]": start,
+                            "hydro_series[endAt]": stop,
+                            "hydro_series[variableType]": "simple_and_interpolated_and_hourly_variable",
+                            "hydro_series[simpleAndInterpolatedAndHourlyVariable]": coordinates.field,
+                            "hydro_series[statusData]": variant,
+                        },
+                        {"Accept": "application/json"},
                     )
-                )
+                    response = attempt_series_request(transport, request, target, sub_request_window)
+                    if isinstance(response, FailedSourceRequest):
+                        failures.append(response)
+                        continue
+                    payloads.append(
+                        Payload(
+                            SourceCoordinates(replace(coordinates, variant=variant)),
+                            ((station, product),),
+                            sub_fetch_window,
+                            response.content,
+                            _origin(response),
+                            response.prerequisite_calls,
+                            scope=scope,
+                            known_series=(target,),
+                        )
+                    )
     return SourceAcquisition(value=tuple(payloads), failed_requests=tuple(failures))
 
 
