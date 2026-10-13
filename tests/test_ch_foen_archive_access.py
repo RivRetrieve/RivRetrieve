@@ -59,8 +59,7 @@ def _intercept(monkeypatch, *, status=200, echo=False, fail=False, payload=CSV):
             content = authorization.removeprefix("Token ").encode()
         return SimpleNamespace(content=content, status_code=status, headers={"Content-Type": "application/csv"})
 
-    monkeypatch.setattr(requests, "get", lambda url, **kw: send("GET", url, **kw))
-    monkeypatch.setattr(requests, "post", lambda url, **kw: send("POST", url, **kw))
+    monkeypatch.setattr(requests.Session, "request", lambda self, method, url, **kw: send(method, url, **kw))
     return calls, secrets
 
 
