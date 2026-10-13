@@ -1,4 +1,4 @@
-name: Deploy Documentation
+name: Check Documentation
 
 on:
   push:
@@ -12,17 +12,15 @@ on:
       - "README.md"
       - "pyproject.toml"
       - "mkdocs.yml"
-      - ".github/workflows/deploy-docs.yml"
-  release:
-    types:
-      - published
+      - ".github/workflows/check-docs.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build-and-deploy:
+  check-docs:
+    name: Build and check documentation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -66,12 +64,3 @@ jobs:
 
       - name: Build documentation site
         run: uv run mkdocs build --strict
-
-      - name: Deploy to RivRetrieve.github.io
-        uses: peaceiris/actions-gh-pages@v4
-        if: github.ref == 'refs/heads/main'
-        with:
-          deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
-          external_repository: RivRetrieve/RivRetrieve.github.io
-          publish_branch: main
-          publish_dir: ./site

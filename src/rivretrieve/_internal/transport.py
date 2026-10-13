@@ -13,6 +13,7 @@ import re
 import ssl
 import time
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -23,6 +24,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 import requests
+from requests.auth import AuthBase
 from urllib3 import exceptions as urllib3_exceptions
 
 from rivretrieve._internal.issues import FatalContractError
@@ -408,36 +410,40 @@ class _SystemClock:
         return datetime.now(UTC)
 
 
+class _ExplicitAuthentication(AuthBase):
+    def __call__(self, r: requests.PreparedRequest) -> requests.PreparedRequest:
+        # A truthy auth object prevents Requests from consulting netrc or URL userinfo.
+        return r
+
+
+class _RequestsSession(requests.Session):
+    def __init__(self) -> None:
+        super().__init__()
+        self.auth = _ExplicitAuthentication()
+
+    def rebuild_auth(self, prepared_request: requests.PreparedRequest, response: requests.Response) -> None:
+        # Keep Requests' cross-origin stripping, but never acquire ambient netrc auth.
+        if "Authorization" in prepared_request.headers:
+            assert response.request.url is not None and prepared_request.url is not None
+            if self.should_strip_auth(response.request.url, prepared_request.url):
+                del prepared_request.headers["Authorization"]
+
+
 def _send_with_requests(request: _ExecutableTransportRequest, timeout_seconds: float) -> SenderResponse:
-    params = dict(request.params) if request.params is not None else None
-    headers = dict(request.headers)
-    if request.method is HttpMethod.GET:
-        response = requests.get(
+    allow_redirects = (
+        request.redirect_policy is not RedirectPolicy.REFUSE
+        and request.method is not HttpMethod.HEAD
+        and (request.method is HttpMethod.GET or request.replay_safety is ReplaySafety.SAFE)
+    )
+    with _RequestsSession() as session:
+        response = session.request(
+            request.method.value,
             request.url,
-            params=params,
-            headers=headers,
-            data=request.body,
+            params=dict(request.params) if request.params is not None else None,
+            headers=dict(request.headers),
+            data=request.body if request.method is not HttpMethod.HEAD else None,
             timeout=timeout_seconds,
-            allow_redirects=request.redirect_policy is not RedirectPolicy.REFUSE,
-        )
-    elif request.method is HttpMethod.HEAD:
-        response = requests.head(
-            request.url,
-            params=params,
-            headers=headers,
-            timeout=timeout_seconds,
-            allow_redirects=False,
-        )
-    else:
-        response = requests.post(
-            request.url,
-            params=params,
-            headers=headers,
-            data=request.body,
-            timeout=timeout_seconds,
-            allow_redirects=(
-                request.redirect_policy is not RedirectPolicy.REFUSE and request.replay_safety is ReplaySafety.SAFE
-            ),
+            allow_redirects=allow_redirects,
         )
     return SenderResponse(
         response.content,
@@ -789,7 +795,7 @@ class AuthenticatedTransport:
         if sanitized_request is not None:
             request = sanitized_request
             raise TransportFailure(request, TransportFailureReason.TERMINAL_SENDER_FAILURE, 1) from None
-        origin = _request_origin(request.url)
+        origin = _transport_request_origin(request)
         applicable = tuple(credential for credential in self.credentials if origin in credential.origins)
         if not applicable:
             failure = None
@@ -947,10 +953,8 @@ def _send_with_credentials(
         return _CredentialSendFailure(
             error.reason, error.attempts, error.status_code, error.category, error.response, error.attempt_traces
         )
-    except FatalContractError:
-        return _CredentialContractFailure.FATAL
     except Exception:
-        return _CredentialSendFailure(TransportFailureReason.TERMINAL_SENDER_FAILURE, 1, None)
+        return _CredentialContractFailure.FATAL
 
 
 def _request_credential_header_names(request: _ExecutableTransportRequest) -> tuple[str, ...]:
@@ -1232,6 +1236,28 @@ def _credential_origin(value: str) -> str:
     normalized_port = None if port == default_port else port
     authority = _serialize_authority(split.hostname.lower(), normalized_port)
     return f"{scheme}://{authority}"
+
+
+def _transport_request_origin(request: TransportRequest) -> str:
+    origin = None
+    with suppress(ValueError):
+        origin = _request_origin(request.url)
+    if origin is None:
+        trace = TransportAttempt(
+            str(uuid4()),
+            request.url,
+            request.params or {},
+            datetime.now(UTC),
+            failure_category=TransportFailureCategory.INVALID_REQUEST,
+        )
+        raise TransportFailure(
+            request,
+            TransportFailureReason.TERMINAL_SENDER_FAILURE,
+            1,
+            category=TransportFailureCategory.INVALID_REQUEST,
+            attempt_traces=(trace,),
+        ) from None
+    return origin
 
 
 def _request_origin(url: str) -> str:

@@ -11,10 +11,14 @@ from rivretrieve._internal.authentication import (
     CredentialExchangeTransport,
     ExchangeSpec,
 )
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.transport import (
     CredentialHeader,
     ExecutedRequestEvidence,
     HttpMethod,
+    TransportFailure,
+    TransportFailureCategory,
+    TransportFailureReason,
     TransportRequest,
     TransportResponse,
 )
@@ -130,6 +134,7 @@ def test_exchange_is_lazy_cached_refreshable_and_returns_only_ordered_redacted_t
         (b"redirect", 302, AuthenticationFailureReason.EXCHANGE_REDIRECT_REFUSED),
         (b"denied", 401, AuthenticationFailureReason.EXCHANGE_HTTP_STATUS),
         (b"not-json", 200, AuthenticationFailureReason.RESPONSE_JSON_INVALID),
+        (b"\xff", 200, AuthenticationFailureReason.RESPONSE_JSON_INVALID),
         (b"[]", 200, AuthenticationFailureReason.RESPONSE_ENVELOPE_INVALID),
         (b'{"items":{}}', 200, AuthenticationFailureReason.TOKEN_MISSING),
         (b'{"items":{"tokenautenticacao":""}}', 200, AuthenticationFailureReason.TOKEN_EMPTY),
@@ -148,14 +153,43 @@ def test_exchange_failures_are_reason_bearing_and_secret_free(auth_body, status,
     assert raised.value.__cause__ is None and raised.value.__context__ is None
 
 
-def test_bearer_send_failure_withholds_token_and_auth_response_from_traceback() -> None:
-    transport, _, _ = wrapper([(_AUTH_BODY, 200), RuntimeError("sender failed")])
-    with pytest.raises(CredentialExchangeError) as raised:
+@pytest.mark.parametrize("stage", ["exchange", "data", "json"])
+def test_programming_failure_is_fatal_without_secret_traceback_locals(stage, monkeypatch, caplog) -> None:
+    def fail(*args, **kwargs):
+        secret_local = _AUTH_BODY
+        raise RuntimeError(f"{_IDENTIFIER} {_PASSWORD} {_TOKEN} {secret_local!r}")
+
+    transport, raw, _ = wrapper([(_AUTH_BODY, 200)])
+    if stage == "json":
+        monkeypatch.setattr("rivretrieve._internal.authentication.json.loads", fail)
+    else:
+        original_send = raw.send
+
+        def send(request):
+            if stage == "exchange" or request.url != ExchangeSpec.ana().exchange_url:
+                return fail()
+            return original_send(request)
+
+        monkeypatch.setattr(raw, "send", send)
+    with pytest.raises(FatalContractError) as raised:
         transport.send(data_request())
-    assert raised.value.reason is AuthenticationFailureReason.DATA_SEND_FAILED
     rendered = "".join(traceback.TracebackException.from_exception(raised.value, capture_locals=True).format())
     for secret in (_IDENTIFIER, _PASSWORD, _TOKEN, "FULL-AUTH-RESPONSE"):
-        assert secret not in rendered
+        assert secret not in rendered + repr(raised.value) + caplog.text
+    assert raised.value.__cause__ is None and raised.value.__context__ is None
+
+
+@pytest.mark.parametrize("url", ["http://[invalid", "https://www.ana.gov.br:bad/data", "missing-scheme"])
+def test_malformed_data_request_is_terminal_before_exchange(url) -> None:
+    transport, raw, _ = wrapper([])
+    with pytest.raises(TransportFailure) as raised:
+        transport.send(TransportRequest(HttpMethod.GET, url))
+    assert raised.value.category is TransportFailureCategory.INVALID_REQUEST
+    assert raised.value.reason is TransportFailureReason.TERMINAL_SENDER_FAILURE
+    assert raised.value.attempts == 1
+    assert len(raised.value.attempt_traces) == 1
+    assert raised.value.attempt_traces[0].failure_category is TransportFailureCategory.INVALID_REQUEST
+    assert raw.requests == []
     assert raised.value.__cause__ is None and raised.value.__context__ is None
 
 
@@ -259,7 +293,6 @@ def test_real_cross_origin_redirect_never_forwards_exchange_or_bearer_credential
 @pytest.mark.parametrize(
     ("action", "reason"),
     [
-        (RuntimeError("exchange sender failed"), AuthenticationFailureReason.EXCHANGE_SEND_FAILED),
         ((b'{"items":{"tokenautenticacao":"   "}}', 200), AuthenticationFailureReason.TOKEN_EMPTY),
         ((b'{"items":{"tokenautenticacao":"bad\\nvalue"}}', 200), AuthenticationFailureReason.TOKEN_INVALID),
     ],
@@ -369,10 +402,21 @@ def test_successful_bearer_response_rejects_every_known_secret_echo(echo_kind: s
 
 def test_acquisition_trace_survives_first_data_failure_until_one_success() -> None:
     transport, _, _ = wrapper(
-        [(_AUTH_BODY, 200), RuntimeError("first data failure"), (b'{"data":2}', 200), (b'{"data":3}', 200)]
+        [
+            (_AUTH_BODY, 200),
+            TransportFailure(
+                data_request(), TransportFailureReason.RETRY_EXHAUSTED, 3, category=TransportFailureCategory.TIMEOUT
+            ),
+            (b'{"data":2}', 200),
+            (b'{"data":3}', 200),
+        ]
     )
-    with pytest.raises(CredentialExchangeError):
+    with pytest.raises(CredentialExchangeError) as raised:
         transport.send(data_request())
+    assert raised.value.reason is AuthenticationFailureReason.DATA_SEND_FAILED
+    assert raised.value.transport_reason is TransportFailureReason.RETRY_EXHAUSTED
+    assert raised.value.category is TransportFailureCategory.TIMEOUT
+    assert raised.value.attempts == 3
     second = transport.send(data_request())
     third = transport.send(data_request())
     assert len(second.prerequisite_calls) == 1
@@ -406,7 +450,7 @@ def test_refresh_uses_injected_monotonic_clock_before_at_and_after_boundaries() 
 
 def test_sanitized_auth_failures_emit_no_logs(caplog) -> None:
     transport, _, _ = wrapper([RuntimeError("secret sender detail")])
-    with pytest.raises(CredentialExchangeError):
+    with pytest.raises(FatalContractError):
         transport.send(data_request())
     assert caplog.records == []
 
