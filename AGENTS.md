@@ -52,6 +52,12 @@ when no further explanation is needed. Add examples when they clarify use.
 All docstring prose must follow `docs/AGENTS.md`. Keep documentation accurate
 when changing an interface.
 
+## Provider ports
+
+When researching or implementing a provider port, use the
+[provider port guide](docs/maintenance/provider-ports.md) for progressive research,
+implementation steps and evidence expectations.
+
 ## Verification evidence
 
 Use [the maintainer guide](docs/maintenance/evidence.md) for verification and the
