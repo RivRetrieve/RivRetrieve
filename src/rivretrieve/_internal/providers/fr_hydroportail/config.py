@@ -47,7 +47,14 @@ _CONFIG = ProviderConfig(
         ),
     },
 )
-_DMY = WindowDeclaration(WindowGranularity("date"), WindowRenderingVocabulary.DATE_DMY, StopConvention.INCLUSIVE)
+# HydroPortail rejects requests exceeding 1,735 days (HTTP 400).
+# A capped span splits larger windows into sub-windows.
+_DMY = WindowDeclaration(
+    granularity=WindowGranularity("capped-span"),
+    rendering=WindowRenderingVocabulary.DATE_DMY,
+    stop_convention=StopConvention.INCLUSIVE,
+    size=1000,
+)
 _WINDOWS = ProductWindowDeclarations(dict.fromkeys(_CONFIG.products, _DMY))
 
 

@@ -62,6 +62,13 @@ def _pairs(windows: tuple[engine.RenderedWindow, ...]) -> tuple[tuple[str, str |
             (("2021-01-01", "2021-12-31"), ("2022-01-01", "2022-01-01")),
         ),
         (
+            "fr_hydroportail",
+            datetime(2021, 1, 1, 12),
+            datetime(2022, 1, 1, 13),
+            _declaration("capped-span", engine.WindowRenderingVocabulary.DATE_DMY, size=365),
+            (("01/01/2021", "31/12/2021"), ("01/01/2022", "01/01/2022")),
+        ),
+        (
             "jp_mlit_hourly",
             datetime(2019, 12, 20),
             datetime(2020, 1, 10),
@@ -206,7 +213,7 @@ def test_unknown_window_granularity_is_refused() -> None:
         (_declaration("n-year-chunk", engine.WindowRenderingVocabulary.DATE), "a positive size and date rendering"),
         (
             _declaration("capped-span", engine.WindowRenderingVocabulary.YEAR, size=2),
-            "a positive size and date or iso-instant rendering",
+            "a positive size and date, date-dmy, or iso-instant rendering",
         ),
         (_declaration("none", engine.WindowRenderingVocabulary.NONE, size=1), "size None and none rendering"),
     ],
