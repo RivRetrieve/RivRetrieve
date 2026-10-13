@@ -73,7 +73,7 @@ pinned by `tests/test_provider_row_withholding.py`.
 `ORIGIN_GATE_ENROLLED_PROVIDERS` in `catalogue_origins.py` is the executable certification boundary.
 Every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS` has complete audited catalogue origin declarations.
 All fourteen providers are enrolled: eleven live providers, Canada and Poland with bulk
-stores, and South Africa with catalogue-only access. Certification concerns catalogue
+stores, and the deferred South African catalogue. Certification concerns catalogue
 origins; it does not activate observation retrieval.
 
 Brazil retains all acquired source rows in its native table. Its six internal access routes describe two telemetry quantities and two daily-mean

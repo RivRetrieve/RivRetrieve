@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import polars as pl
 
 from docs.scripts.generate_station_catalogue import encode_catalogue
@@ -10,6 +12,7 @@ from rivretrieve._internal.source_series import (
     SourceSeries,
     known,
 )
+from tests.test_discovery import EXPECTED_PRODUCTS_BY_PROVIDER
 
 
 def test_compact_catalogue_preserves_identity_unknowns_and_fact_segments():
@@ -130,3 +133,15 @@ def test_export_uses_declared_capabilities_and_never_credential_values(tmp_path,
     assert len(result["stations"]) == 3
     assert all(station[6] == ["Murtensee"] for station in result["stations"])
     assert result["series"] == []
+
+
+def test_export_offers_only_supported_countries(tmp_path):
+    from docs.scripts.generate_station_catalogue import build_catalogue
+
+    path = tmp_path / "catalogue.json"
+    build_catalogue(path)
+    result = json.loads(path.read_text())
+    providers = [item["provider_id"] for item in result["providers"]]
+    assert providers == list(EXPECTED_PRODUCTS_BY_PROVIDER)
+    assert {providers[station[0]] for station in result["stations"]} == set(providers)
+    assert {providers[result["stations"][series[0]][0]] for series in result["series"]} == set(providers)

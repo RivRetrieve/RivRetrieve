@@ -1,6 +1,38 @@
 import { captureClipboardWrites } from "./clipboard";
 import { test, expect, type FrameLocator } from "@playwright/test";
 
+test("built explorer offers only supported providers", async ({ page }) => {
+  test.skip(!process.env.DOCS_URL, "Set DOCS_URL for prepared MkDocs preview.");
+  await page.goto(`${process.env.DOCS_URL}/map/`);
+  const providers = page
+    .frameLocator("#station-explorer")
+    .getByLabel("Provider", { exact: true });
+  await expect
+    .poll(() =>
+      providers
+        .locator("option")
+        .evaluateAll((options) =>
+          options.map((option) => (option as HTMLOptionElement).value),
+        ),
+    )
+    .toEqual([
+      "",
+      "ba_fhmzbih",
+      "br_ana",
+      "ca_eccc",
+      "ch_foen",
+      "cz_chmi",
+      "fr_hubeau",
+      "fr_hydroportail",
+      "jp_mlit",
+      "lt_lhmt",
+      "no_nve",
+      "pl_imgw",
+      "th_thaiwater",
+      "usgs_nwis",
+    ]);
+});
+
 async function waitForBasemap(app: FrameLocator) {
   await expect
     .poll(
@@ -64,7 +96,7 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   await page.goto(`${process.env.DOCS_URL}/map/`);
   const app = page.frameLocator("#station-explorer");
   await expect(app.getByTestId("match-count")).toHaveText(
-    "77,020 matching gauges",
+    "74,115 matching gauges",
     { timeout: 60000 },
   );
   await expect(app.locator("canvas.station-points")).toHaveAttribute(
@@ -73,7 +105,7 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   );
   await expect(app.locator("canvas.station-points")).toHaveAttribute(
     "data-clustered",
-    "77020",
+    "74115",
   );
   const initialMs = Date.now() - start;
   await expect(app.locator(".map")).toHaveAttribute(
@@ -235,7 +267,7 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   await expect(app.getByTestId("match-count")).toHaveText(
-    "77,020 matching gauges",
+    "74,115 matching gauges",
     { timeout: 60000 },
   );
   await waitForBasemap(app);
@@ -363,7 +395,7 @@ test("explorer and Python syntax follow the existing docs palette without losing
   await page.goto(`${process.env.DOCS_URL}/map/`);
   const app = page.frameLocator("#station-explorer");
   await expect(app.getByTestId("match-count")).toHaveText(
-    "77,020 matching gauges",
+    "74,115 matching gauges",
     { timeout: 60000 },
   );
   const view = () =>
@@ -504,7 +536,7 @@ test("explorer and Python syntax follow the existing docs palette without losing
     .first()
     .click();
   await expect(app.getByTestId("match-count")).toHaveText(
-    "77,020 matching gauges",
+    "74,115 matching gauges",
     { timeout: 60000 },
   );
   await expect(app.locator(".panel")).toHaveCSS("background-color", dark);

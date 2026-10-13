@@ -69,7 +69,6 @@ of the source view.
 | [`pl_imgw`](providers/pl_imgw.md) | — | — | `area` (square kilometre) | `gauge_altitude` (m) |
 | [`th_thaiwater`](providers/th_thaiwater.md) | — | — | — | — |
 | [`usgs_nwis`](providers/usgs_nwis.md) | `station_nm` | — | `contrib_drain_area_va`, `drain_area_va` (sq mi) | `alt_va` (feet) |
-| `za_dws` | — | — | `Catchment Area km**2` (km**2) | — |
 <!-- fields-by-provider:end -->
 
 The table lists names only. What a field means is defined by the agency: Norway's `transferAreaIn`

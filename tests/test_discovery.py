@@ -115,11 +115,6 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "stage_daily_min",
         "stage_instantaneous",
     ],
-    "za_dws": [
-        "discharge_daily_mean",
-        "discharge_instantaneous",
-        "stage_instantaneous",
-    ],
 }
 
 
@@ -162,11 +157,15 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "pl_imgw",
         "th_thaiwater",
         "usgs_nwis",
-        "za_dws",
     ]
     credentials = dict(result.select("provider_id", "credentials").iter_rows())
     assert credentials["no_nve"] == ["NVE_API_KEY"]
     assert credentials["br_ana"] == ["ANA_IDENTIFICADOR", "ANA_SENHA"]
+
+
+def test_south_african_station_discovery_is_not_offered() -> None:
+    with pytest.raises(UnknownProviderError):
+        rr.find(provider="za_dws", station="X3H001")
 
 
 def test_providers_sorted_independent_of_registration_order(
