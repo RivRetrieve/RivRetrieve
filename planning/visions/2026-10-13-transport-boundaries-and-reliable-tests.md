@@ -71,12 +71,14 @@ Acceptance must establish:
 
 Record exact revisions, commands, results, and limitations. Review the scope of any large diff and remove changes without a demonstrated need.
 
-## Update PR #549 only after verification
+## Follow-up comment on PR #549 after verification
 
-[PR #549](https://github.com/RivRetrieve/RivRetrieve/pull/549), `fix: bound HydroPortail requests and verify chunk assembly`, currently states that its full logic suite is red because the malformed-URL transport case also fails on untouched target `f419b739`. Its historical results are not superseded merely because this vision is published or a focused test passes.
+[PR #549](https://github.com/RivRetrieve/RivRetrieve/pull/549), `fix: bound HydroPortail requests and verify chunk assembly`, records a full source-independent suite failure at revision `ab62b1684b2b430f0a0f43d25bd2160cd0a4ab56`, also reproduced on its untouched target `f419b7395801ea7f05293c779b00187255b0f380`. That historical result remains accurate. Delivering this repair separately does not make the unchanged PR revision green.
 
-After the fixes are delivered, incorporate them into the PR's then-current revision through the normal safe workflow and run the applicable checks there, including its full source-independent suite and affected HydroPortail checks. Only after successful verification update the stale limitation and check results in the PR body. State the newly verified revision and results; keep historical evidence only where useful and clearly labeled. If checks remain red or mandatory verification is unavailable, retain an accurate limitation instead.
+After delivering the repair, test an exact combined revision containing the PR's then-current HydroPortail change and repaired `main`. Run the full source-independent suite and affected HydroPortail checks on that combination. This does not require updating the PR branch; a separate integration checkout can establish the result without changing the contribution.
 
-Preserve Freddy's authorship, publisher-observation limits, related issue references and no-auto-close safeguards, retained-replay limitations where still applicable, and the PR's draft/review-only status. This task does not authorize marking that contribution ready, merging PR #549, or claiming its unrelated timeout/503 issues are solved. Re-read its current body before editing so concurrent changes are preserved.
+Post a follow-up comment on PR #549, separate from its body, reporting the exact PR head, repaired base, combined revision, commands, results, skips, and remaining limitations. Leave the original body and its historical verification record unchanged. Claim that the tested combination passes only when the checks establish it. A passing repair on `main` alone supports only a statement that the underlying defect is fixed, not that PR #549's suite is green. If verification fails or mandatory inputs are unavailable, report that limitation without a green claim.
 
-This is a standalone vision. Publication authorizes no implementation or PR #549 text change by itself.
+Preserve Freddy's authorship, publisher-observation limits, related issue references and no-auto-close safeguards, retained-replay limitations where still applicable, and the PR's draft/review-only status. This task does not authorize updating its branch, marking the contribution ready, merging PR #549, or claiming its unrelated timeout/503 issues are solved. Re-read the current PR and discussion before commenting so the follow-up reflects the current state.
+
+This is a standalone vision. Publication authorizes no implementation or follow-up comment on PR #549 by itself.
