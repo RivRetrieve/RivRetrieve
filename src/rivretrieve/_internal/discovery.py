@@ -1006,6 +1006,8 @@ def fetch(
     _require_cache_mode_available(provider_ids, cache)
     credentials = _resolve_credentials(provider_ids, require_all=True)
     provider_id = provider_ids[0]
+    transport = _credentialed_transport(provider_id, credentials[provider_id])
+    del credentials
     result = _fetch_provider_series(
         provider_id,
         partitions[provider_id],
@@ -1013,7 +1015,7 @@ def fetch(
         start=normalized_start,
         end=normalized_end,
         future_local_date=future_local_date,
-        credentials=credentials[provider_id],
+        transport=transport,
         receipts=ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT,
         cache=cache,
         store=_resolve_store_root(provider_id, _registry.get(provider_id)._store_root),
@@ -1079,6 +1081,10 @@ def fetch_by_provider(
     provider_ids = tuple(partitions)
     _require_cache_mode_available(provider_ids, cache)
     credentials = _resolve_credentials(provider_ids, require_all=True)
+    transports = {
+        provider_id: _credentialed_transport(provider_id, credentials[provider_id]) for provider_id in provider_ids
+    }
+    del credentials
     results = {}
     for provider_id, members in partitions.items():
         result = _fetch_provider_series(
@@ -1088,7 +1094,7 @@ def fetch_by_provider(
             start=normalized_start,
             end=normalized_end,
             future_local_date=future_local_date,
-            credentials=credentials[provider_id],
+            transport=transports[provider_id],
             receipts=ReceiptMode.INCLUDE if receipts else ReceiptMode.OMIT,
             cache=cache,
             store=_resolve_store_root(provider_id, _registry.get(provider_id)._store_root),
@@ -1372,7 +1378,7 @@ def _fetch_provider_series(
     start: datetime,
     end: datetime,
     future_local_date: date | None,
-    credentials: dict[str, str],
+    transport: Transport,
     receipts: ReceiptMode,
     cache: CacheMode,
     store: StoreRoot,
@@ -1388,7 +1394,6 @@ def _fetch_provider_series(
         product_ids = by_station.setdefault(selected_series.station_id, [])
         if selected_series.product_id not in product_ids:
             product_ids.append(selected_series.product_id)
-    transport = _credentialed_transport(provider_id, credentials)
     if handle.public_archive_access is not None:
         from rivretrieve._internal.coverage import RequestedInterval
         from rivretrieve._internal.driver import _padded_interval

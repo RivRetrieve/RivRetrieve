@@ -29,6 +29,7 @@ from rivretrieve._internal.transport import (
     _request_origin,
     _response_contains_values,
     _sanitized_source_request,
+    _transport_request_origin,
 )
 
 
@@ -173,7 +174,7 @@ class CredentialExchangeTransport:
         if sanitized_request is not None:
             request = sanitized_request
             raise CredentialExchangeError(request, AuthenticationFailureReason.DATA_SEND_FAILED) from None
-        if not self.can_authenticate(request.url):
+        if _transport_request_origin(request) != self.spec.allowed_data_origin:
             result = self.transport.send(request)
             if _exchange_response_contains_secrets(result, self.secret_headers, self._cached):
                 attempts = result.attempts
@@ -303,9 +304,7 @@ def _acquire(
             return _Failure(
                 AuthenticationFailureReason.RESPONSE_JSON_AMBIGUOUS, response.status_code, attempts=response.attempts
             )
-        except FatalContractError:
-            return _FatalContractViolation()
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return _Failure(
                 AuthenticationFailureReason.RESPONSE_JSON_INVALID, response.status_code, attempts=response.attempts
             )
@@ -376,10 +375,8 @@ def _acquire(
             attempts=error.attempts,
             transport_reason=error.reason,
         )
-    except FatalContractError:
-        return _FatalContractViolation()
     except Exception:
-        return _Failure(AuthenticationFailureReason.EXCHANGE_SEND_FAILED)
+        return _FatalContractViolation()
 
 
 def _send_acquired(
@@ -429,10 +426,8 @@ def _send_acquired(
             attempts=error.attempts,
             transport_reason=error.reason,
         )
-    except FatalContractError:
-        return _FatalContractViolation()
     except Exception:
-        return _Failure(AuthenticationFailureReason.DATA_SEND_FAILED)
+        return _FatalContractViolation()
 
 
 def _require_exact_origin_url(url: str, *, allow_path: bool) -> str:

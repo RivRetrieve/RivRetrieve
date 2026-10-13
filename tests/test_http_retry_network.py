@@ -98,12 +98,6 @@ BETWEEN_CHUNKS_INTERRUPTION = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\
 INTERRUPTIONS = [FIXED_INTERRUPTION, CHUNKED_INTERRUPTION, BETWEEN_CHUNKS_INTERRUPTION]
 
 
-@pytest.fixture(autouse=True)
-def loopback_bypasses_environment_proxies(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
-    monkeypatch.setenv("no_proxy", "127.0.0.1")
-
-
 @pytest.mark.parametrize("interruption", INTERRUPTIONS, ids=["fixed-length", "chunked", "between-chunks"])
 def test_interrupted_response_restarts_and_returns_only_complete_bytes(interruption: bytes) -> None:
     with source([interruption, complete()]) as server:
@@ -192,14 +186,48 @@ def test_complete_malformed_source_payload_is_not_reinterpreted_by_transport() -
         assert len(server.calls) == 1
 
 
+@pytest.mark.parametrize("error", [ValueError("sender bug"), RuntimeError("sender bug")])
+def test_plain_client_propagates_unrelated_sender_errors(error):
+    calls = []
+    clock = VirtualClock()
+
+    def sender(request, timeout):
+        calls.append(request)
+        raise error
+
+    with pytest.raises(type(error)) as caught:
+        HttpClient(sender=sender, clock=clock, sleeper=clock.sleep).send(
+            TransportRequest(HttpMethod.GET, "https://synthetic.invalid/data")
+        )
+    assert caught.value is error
+    assert len(calls) == 1
+    assert clock.sleeps == []
+
+
 @pytest.mark.parametrize("url", ["unsupported://127.0.0.1/data", "http://[invalid"])
-def test_invalid_request_is_terminal_before_network_access(url: str) -> None:
+@pytest.mark.parametrize("netrc_exists", [False, True], ids=["missing-netrc", "empty-netrc"])
+def test_invalid_request_is_terminal_before_network_access(url, netrc_exists, tmp_path, monkeypatch) -> None:
+    netrc = tmp_path / "netrc"
+    if netrc_exists:
+        netrc.write_text("")
+    monkeypatch.setenv("NETRC", str(netrc))
+    calls = []
+
+    def deny_network(*args, **kwargs):
+        calls.append(args)
+        raise AssertionError("invalid request reached network adapter")
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", deny_network)
     clock = VirtualClock()
     with pytest.raises(TransportFailure) as caught:
         HttpClient(clock=clock, sleeper=clock.sleep).send(TransportRequest(HttpMethod.GET, url))
     assert caught.value.reason is TransportFailureReason.TERMINAL_SENDER_FAILURE
     assert caught.value.attempts == 1
     assert clock.sleeps == []
+    assert calls == []
+    assert caught.value.category is TransportFailureCategory.INVALID_REQUEST
+    assert len(caught.value.attempt_traces) == 1
+    assert caught.value.attempt_traces[0].failure_category is TransportFailureCategory.INVALID_REQUEST
 
 
 @pytest.mark.parametrize(
@@ -324,3 +352,85 @@ def test_closed_loopback_port_exhausts_connection_failure_budget() -> None:
     assert caught.value.request is request
     assert isinstance(caught.value.__cause__, requests.ConnectionError)
     assert clock.sleeps == [1.0, 2.0]
+
+
+@pytest.mark.parametrize(("credentialed", "userinfo"), [(False, ""), (True, ""), (False, "url-user:url-password@")])
+def test_real_preparation_uses_only_explicit_credentials(credentialed, userinfo, tmp_path, monkeypatch):
+    from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader
+
+    netrc = tmp_path / "netrc"
+    netrc.write_text("machine synthetic.invalid login ambient-user password ambient-password\n")
+    monkeypatch.setenv("NETRC", str(netrc))
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:8443")
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.setenv("no_proxy", "")
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", str(tmp_path / "ca.pem"))
+    prepared = []
+
+    def capture(session, request, **kwargs):
+        prepared.append((request, kwargs))
+        response = requests.Response()
+        response.status_code = 200
+        response._content = b"observations"
+        response.request = request
+        response.url = request.url
+        return response
+
+    monkeypatch.setattr(requests.Session, "send", capture)
+    client = HttpClient()
+    if credentialed:
+        client = AuthenticatedTransport(
+            client, (CredentialHeader("Authorization", "Bearer explicit-token", ("https://synthetic.invalid",)),)
+        )
+    result = client.send(TransportRequest(HttpMethod.GET, f"https://{userinfo}synthetic.invalid/data"))
+    assert len(prepared) == 1
+    request, settings = prepared[0]
+    assert request.headers.get("Authorization") == ("Bearer explicit-token" if credentialed else None)
+    assert result.executed_request.credential_header_names == (("Authorization",) if credentialed else ())
+    assert settings["proxies"]["https"] == "http://proxy.invalid:8443"
+    assert settings["verify"] == str(tmp_path / "ca.pem")
+
+
+def test_redirect_preparation_does_not_add_ambient_credentials(tmp_path, monkeypatch):
+    netrc = tmp_path / "netrc"
+    netrc.write_text("default login ambient-user password ambient-password\n")
+    monkeypatch.setenv("NETRC", str(netrc))
+    with source([complete(b"", 302, b"Location: /redirected\r\n"), complete()]) as server:
+        # Inspect the real adapter inputs while retaining actual redirect processing.
+        original = requests.adapters.HTTPAdapter.send
+        authorization = []
+
+        def inspect(adapter, request, **kwargs):
+            authorization.append(request.headers.get("Authorization"))
+            return original(adapter, request, **kwargs)
+
+        monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", inspect)
+        server.client().send(TransportRequest(HttpMethod.GET, server.url))
+    assert authorization == [None, None]
+
+
+@pytest.mark.parametrize(
+    "url", ["http://[invalid", "unsupported://source.invalid/data", "https://user@source.invalid/data"]
+)
+def test_authenticated_invalid_origin_is_terminal_before_sender(url):
+    from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader
+
+    calls = []
+
+    class Denied:
+        def send(self, request):
+            calls.append(request)
+            raise AssertionError("invalid origin reached sender")
+
+    transport = AuthenticatedTransport(
+        Denied(), (CredentialHeader("Authorization", "Bearer explicit-token", ("https://source.invalid",)),)
+    )
+    with pytest.raises(TransportFailure) as caught:
+        transport.send(TransportRequest(HttpMethod.GET, url))
+    assert calls == []
+    assert caught.value.category is TransportFailureCategory.INVALID_REQUEST
+    assert caught.value.reason is TransportFailureReason.TERMINAL_SENDER_FAILURE
+    assert caught.value.attempts == 1
+    assert len(caught.value.attempt_traces) == 1
+    assert caught.value.attempt_traces[0].failure_category is TransportFailureCategory.INVALID_REQUEST
+    assert caught.value.__context__ is None
