@@ -54,7 +54,7 @@ def on_pre_build(config: dict) -> None:
         # Add link to interactive map in coverage map section
         map_note = (
             '\n\n!!! tip "Interactive Station Explorer"\n'
-            "    Looking for specific gauges? Explore all 78,000+ stations worldwide on our "
+            "    Looking for specific gauges? Explore the available stations worldwide on our "
             "[**Interactive Station Map**](map.md).\n"
         )
         content = content.replace(

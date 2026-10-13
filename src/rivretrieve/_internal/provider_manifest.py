@@ -14,5 +14,4 @@ BUILTIN_PROVIDER_IDS = (
     "pl_imgw",
     "th_thaiwater",
     "usgs_nwis",
-    "za_dws",
 )

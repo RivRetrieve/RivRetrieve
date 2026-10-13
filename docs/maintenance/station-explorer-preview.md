@@ -58,8 +58,8 @@ the built site are local outputs, not source files to commit or review evidence.
   Switzerland `2004` shows `Murtensee`. Missing names show **Not available**.
 - Remove the final gauge. Copying executable code must remain blocked for an empty
   selection or invalid dates. Date errors also appear beside the inputs.
-- Browse a catalogue-only provider. Selecting it must show an unsupported-retrieval
-  warning and block copying, without silently removing it from the selection.
+- In the synthetic browser tests, selecting a catalogue-only provider must show an
+  unsupported-retrieval warning and block copying without removing the selection.
 - Inspect bulk-download steps and credential-name comments in generated code.
   Do not execute national downloads or observation requests during local preview.
 - Compare this page with the Usage page to check that only the explorer uses the
@@ -79,7 +79,7 @@ coverage filters. Advanced physical and source-identity controls, series-fact de
 and the general gauge list are not exposed in this iteration. Inspect individual
 gauges on the map; co-located gauges remain reachable through MarkerCluster spiderfy.
 
-The snapshot has 78,175 catalogue entries, of which 77,020 have matching series.
+The snapshot has 75,270 catalogue entries, of which 74,115 have matching series.
 Entries without described series are not individually browsable in this reduced UI.
 This catalogue limit does not establish absence of observations.
 

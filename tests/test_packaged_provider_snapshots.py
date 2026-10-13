@@ -13,9 +13,8 @@ from rivretrieve._internal.registry import _registry
 from tests._catalogue import catalogue_reader, provider_info
 
 
-def test_dws_packaged_snapshot_is_discoverable() -> None:
+def test_dws_packaged_snapshot_is_preserved() -> None:
     provider = "za_dws"
-    assert provider in rr.providers()["provider_id"]
     reader = catalogue_reader(provider)
     info = provider_info(provider)
     stations = reader.read_stations().data
@@ -34,10 +33,9 @@ def test_dws_packaged_snapshot_is_discoverable() -> None:
     assert station_products.height == 8715
     assert station_products.height == stations.height * products.height
     assert set(station_products["availability"].cast(str)) == {"unknown"}
-    assert set(rr.products(provider=provider)) == product_ids
 
 
-def test_dws_catalogue_refuses_observation_retrieval() -> None:
+def test_dws_catalogue_refuses_observation_retrieval(registered_dws_catalogue) -> None:
     rr.providers()
     with pytest.raises(ObservationsUnavailableError, match="za_dws"):
         _registry.get("za_dws").observations(stations="unused", products="unused", start=None, end=None)

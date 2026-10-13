@@ -145,7 +145,6 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `pl_imgw` | bulk store | none | 1301 | 0 | 3903 | 0 |
 | `th_thaiwater` | live | none | 825 | 1096 | 554 | 0 |
 | `usgs_nwis` | live | none | 26258 | 58421 | 0 | 99127 |
-| `za_dws` | catalogue-only | none | 2905 | 0 | 8715 | 0 |
 
 ### Packaged access coordinates
 
@@ -204,6 +203,3 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `usgs_nwis` | `stage_daily_mean` | `m` |
 | `usgs_nwis` | `stage_daily_min` | `m` |
 | `usgs_nwis` | `stage_instantaneous` | `m` |
-| `za_dws` | `discharge_daily_mean` | `m3/s` |
-| `za_dws` | `discharge_instantaneous` | `m3/s` |
-| `za_dws` | `stage_instantaneous` | `m` |

@@ -21,6 +21,14 @@ from rivretrieve._internal.catalogues.schemas import AvailabilityDtype
 from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _registry
 
 
+@pytest.fixture
+def registered_dws_catalogue():
+    """Opt in to the deferred DWS catalogue without offering it by default."""
+    from rivretrieve._internal.providers.registration import register_manifest
+
+    register_manifest(_registry, ("za_dws",))
+
+
 @pytest.fixture(autouse=True)
 def isolated_runtime_inputs(monkeypatch, tmp_path):
     """Keep ambient configuration out without replacing test-selected stores or dotenv."""

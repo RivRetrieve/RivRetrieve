@@ -23,7 +23,6 @@ from rivretrieve._internal.providers.registration import (
     load_manifest,
     register_manifest,
 )
-from rivretrieve._internal.providers.za_dws import declaration as za_dws_declaration
 from rivretrieve._internal.registry import ProviderRegistry, _registry
 
 
@@ -135,12 +134,12 @@ def test_missing_catalogue_refuses_manifest_without_partial_registration(
 ) -> None:
     missing = tmp_path / "missing-catalogue"
     monkeypatch.setattr(
-        za_dws_declaration,
+        no_nve_declaration,
         "declaration",
-        replace(za_dws_declaration.declaration, catalogue=missing),
+        replace(no_nve_declaration.declaration, catalogue=missing),
     )
 
-    with pytest.raises(FatalContractError, match=rf"Provider za_dws catalogue {missing}.*does not exist"):
+    with pytest.raises(FatalContractError, match=rf"Provider no_nve catalogue {missing}.*does not exist"):
         rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean")
 
     assert _registry.list_provider_ids() == []
