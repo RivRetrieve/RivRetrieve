@@ -2,16 +2,20 @@
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 
-def test_docs_workflow_prepares_explorer_before_strict_mkdocs_build():
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name"),
+    [("check-docs.yml", "check-docs"), ("publish-pypi.yml", "deploy-docs")],
+)
+def test_docs_workflow_prepares_explorer_before_strict_mkdocs_build(workflow_name, job_name):
     workflow = yaml.load(
-        (Path(__file__).parents[1] / ".github/workflows/deploy-docs.yml").read_text(),
+        (Path(__file__).parents[1] / ".github/workflows" / workflow_name).read_text(),
         Loader=yaml.BaseLoader,
     )
-    assert "web/**" in workflow["on"]["push"]["paths"]
-    steps = workflow["jobs"]["build-and-deploy"]["steps"]
+    steps = workflow["jobs"][job_name]["steps"]
     node = next(step for step in steps if step.get("uses", "").startswith("actions/setup-node@"))
     assert node["with"] == {
         "node-version": "22",
@@ -30,9 +34,28 @@ def test_docs_workflow_prepares_explorer_before_strict_mkdocs_build():
     assert "::error::CARTO_BASEMAP_API_KEY is required" in commands
     assert commands.index("exit 1") < commands.index("npm --prefix web/station-explorer run build")
     docs = next(step for step in steps if step.get("run") == "uv run mkdocs build --strict")
-    deploy = next(step for step in steps if step.get("uses") == "peaceiris/actions-gh-pages@v4")
     assert steps.index(node) < steps.index(npm) < steps.index(frontend)
     assert steps.index(dependencies) < steps.index(catalogue) < steps.index(frontend)
-    assert steps.index(frontend) < steps.index(docs) < steps.index(deploy)
-    assert deploy["if"] == "github.ref == 'refs/heads/main'"
+    assert steps.index(frontend) < steps.index(docs)
+
+
+def test_docs_deploys_only_after_release_publication():
+    workflows = Path(__file__).parents[1] / ".github/workflows"
+    check = yaml.load((workflows / "check-docs.yml").read_text(), Loader=yaml.BaseLoader)
+    assert "web/**" in check["on"]["push"]["paths"]
+    assert not any(
+        step.get("uses", "").startswith("peaceiris/actions-gh-pages@")
+        for job in check["jobs"].values()
+        for step in job["steps"]
+    )
+    release = yaml.load((workflows / "publish-pypi.yml").read_text(), Loader=yaml.BaseLoader)
+    assert release["on"]["release"]["types"] == ["published"]
+    job = release["jobs"]["deploy-docs"]
+    assert job["if"] == "github.event_name == 'release'"
+    assert job["needs"] == ["publish-pypi"]
+    steps = job["steps"]
+    docs = next(step for step in steps if step.get("run") == "uv run mkdocs build --strict")
+    deploy = next(step for step in steps if step.get("uses") == "peaceiris/actions-gh-pages@v4")
+    assert "if" not in deploy
+    assert steps.index(docs) < steps.index(deploy)
     assert deploy["with"]["external_repository"] == "RivRetrieve/RivRetrieve.github.io"

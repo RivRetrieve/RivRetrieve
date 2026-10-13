@@ -1,7 +1,6 @@
 # Preview the station explorer locally
 
-This branch contains a prototype for review. It does not authorize publication,
-merging, or deployment. Review the explorer inside the documentation, where its
+Preview the explorer inside the documentation, where its
 map fills the viewport below the documentation navigation. One compact panel holds
 Filtering, Selection and Python tabs. Other documentation pages keep their normal layout.
 The explorer uses the active documentation palette, including the existing scheme
@@ -11,7 +10,7 @@ uses the documentation background color.
 
 ## Prepare and serve the documentation
 
-Use the prototype branch with Python 3.13 or later, `uv`, and Node.js 22.12 or later with `npm`.
+Use Python 3.13 or later, `uv`, and Node.js 22.12 or later with `npm`.
 Run these commands from the repository root:
 
 ```sh
@@ -62,7 +61,7 @@ the built site are local outputs, not source files to commit or review evidence.
 - Browse a catalogue-only provider. Selecting it must show an unsupported-retrieval
   warning and block copying, without silently removing it from the selection.
 - Inspect bulk-download steps and credential-name comments in generated code.
-  Do not execute national downloads or observation requests as a prototype check.
+  Do not execute national downloads or observation requests during local preview.
 - Compare this page with the Usage page to check that only the explorer uses the
   full-width layout. At 390 px, inspect a gauge and use **Add gauge** at the top of
   the panel. Hide the panel to reach covered map points. Try a long station selection.
@@ -109,11 +108,11 @@ sanitized diagnostics without keyed request URLs. Restrict the key to approved
 localhost and production hosts, check account quotas, and retain CARTO and
 OpenStreetMap attribution. Report rejected hosts rather than removing restrictions.
 
-The prepared GitHub workflow maps the repository secret `CARTO_BASEMAP_API_KEY`
-to `VITE_CARTO_BASEMAP_API_KEY` during the frontend build. It fails clearly if the
-secret is missing. A future authorized build serves that public client key to all
-visitors; visitors do not need individual keys. This source preparation does not
-authorize running the deployment workflow or publishing the prototype.
+The documentation workflows map the repository secret `CARTO_BASEMAP_API_KEY`
+to `VITE_CARTO_BASEMAP_API_KEY` during the frontend build and fail if it is missing.
+The build embeds that public client key; visitors do not need individual keys.
+Relevant changes on `main` trigger a documentation build check without deployment.
+Documentation deploys only after a published release succeeds on PyPI.
 
 The browser handoff ends at Python code. It does not execute that code or collect
 credentials. Background map tiles may use the basemap service; they are not
