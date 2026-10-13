@@ -47,7 +47,14 @@ _CONFIG = ProviderConfig(
         ),
     },
 )
-_DMY = WindowDeclaration(WindowGranularity("date"), WindowRenderingVocabulary.DATE_DMY, StopConvention.INCLUSIVE)
+# Bound request sizes to reduce exposure to HydroPortail's response-point limit.
+# Dense series can still exceed that limit within a chunk.
+_DMY = WindowDeclaration(
+    granularity=WindowGranularity("capped-span"),
+    rendering=WindowRenderingVocabulary.DATE_DMY,
+    stop_convention=StopConvention.INCLUSIVE,
+    size=1000,
+)
 _WINDOWS = ProductWindowDeclarations(dict.fromkeys(_CONFIG.products, _DMY))
 
 
