@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path, PurePosixPath
 from tarfile import open as open_tar
 from tempfile import TemporaryDirectory
@@ -15,6 +16,7 @@ import pytest
 from tests._distribution import InstalledDistribution
 
 _FORBIDDEN_PARTS = {
+    "web",
     "planning",
     "scratchpad",
     ".pce",
@@ -46,6 +48,7 @@ def _assert_payload(names: list[str]) -> None:
             or path.name.startswith(".env.")
             or path.suffix in {".env", ".pem", ".key", ".pyc"}
             or name.endswith("/catalogue/native.parquet")
+            or "/docs/assets/station-explorer/" in name
             or "/tests/test_data/" in name
             or "/tests/recordings/" in name
             or "br_ana_inventory" in name
@@ -83,6 +86,12 @@ def test_distribution_keeps_only_runtime_catalogues(installed_distribution: Inst
     installed_distribution.verify(_VERIFICATION)
 
 
+def test_frontend_source_has_explicit_distribution_exclusion() -> None:
+    repository = Path(__file__).resolve().parents[1]
+    config = tomllib.loads((repository / "pyproject.toml").read_text())
+    assert "/web/**" in config["tool"]["uv"]["build-backend"]["source-exclude"]
+
+
 @pytest.mark.parametrize("distribution", ["wheel", "sdist"])
 def test_distributions_exclude_local_files(distribution: str) -> None:
     repository = Path(__file__).resolve().parents[1]
@@ -97,6 +106,11 @@ def test_distributions_exclude_local_files(distribution: str) -> None:
         shutil.copytree(repository / "src", source / "src", ignore=shutil.ignore_patterns("__pycache__"))
         # These are harmless markers, never copies of real credentials or private evidence.
         local_paths = [
+            "web/station-explorer/src/App.tsx",
+            "web/station-explorer/.env.local",
+            "docs/assets/station-explorer/assets/index.js",
+            "web/station-explorer/node_modules/example/index.js",
+            "web/station-explorer/public/catalogue.json",
             "planning/visions/release.md",
             "planning/execution/events.jsonl",
             "scratchpad/notes.txt",
