@@ -1,6 +1,7 @@
 """Exact explicit-version HydAPI public routes and native cache receipts."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -65,17 +66,29 @@ def test_every_enrolled_route_replays_current_inventory_explicit_version_and_cac
 
     result = fetch("bypass")
     raw = json.loads(observation.content)["data"][0]
+    assert result.data["station_id"].unique().to_list() == [raw["stationId"]]
     assert all(f.frequency.value == frequency for item in result.source_series for f in item.facts)
     expected = pl.DataFrame(
-        {"value": [item["value"] for item in raw["observations"] if item["time"].startswith("2025-07-10")]}
+        [
+            {
+                "time": datetime.fromisoformat(item["time"]).replace(tzinfo=None),
+                "value": item["value"],
+            }
+            for item in raw["observations"]
+            if item["time"].startswith("2025-07-10")
+        ],
+        schema={"time": pl.Datetime, "value": pl.Float64},
     )
-    pl_testing.assert_frame_equal(result.data.select("value"), expected)
+    pl_testing.assert_frame_equal(result.data.select("time", "value"), expected)
+    definition = next(item for item in result.source_series if item.identity.published_id == str(raw["serieVersionNo"]))
+    assert result.data["series_id"].unique().to_list() == [definition.series_id]
     assert result.data.height == (1 if resolution == 1440 else 24)
     assert result.data["time_zone"].unique().to_list() == ["+00:00"]
     assert result.data["source_unit"].unique().to_list() == [raw["unit"]]
     assert result.data["unit"].unique().to_list() == [{1000: "m", 1001: "m3/s", 1003: "degC"}[parameter]]
     assert result.data["quantity"].unique().to_list() == [quantity]
     assert {item.identity.published_id for item in result.source_series} == {"1"}
+    assert result.receipts.entries
     assert all(receipt.content == observation.content for receipt in result.receipts.entries)
     assert len(requests) == 2
     metadata_call = next(call for call in result.provenance.calls_made if call["url"].endswith("/Series"))
@@ -86,6 +99,7 @@ def test_every_enrolled_route_replays_current_inventory_explicit_version_and_cac
     reuse = fetch("reuse")
     pl_testing.assert_frame_equal(reuse.data, refresh.data)
     assert reuse.provenance.served_intervals
+    assert reuse.receipts.entries
     assert all(receipt.authorship is ReceiptAuthorship.STORE_EXCERPT for receipt in reuse.receipts.entries)
     assert all(
         dict(call["request_parameters"])["VersionNumber"] == 1
@@ -230,6 +244,7 @@ def test_subset_cannot_satisfy_all_current_versions_and_refresh_keeps_siblings(
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(()))
     third = fetch(rr.pick(all_series, variant="3"), "reuse")
     pl_testing.assert_frame_equal(third.data, rr.pick(complete, variant="3").data)
+    assert third.receipts.entries
     assert all(entry.authorship is ReceiptAuthorship.STORE_EXCERPT for entry in third.receipts.entries)
     # A later independently refreshed subset cannot renew the older ALL inventory proof.
     monkeypatch.setattr(discovery, "HttpClient", Observed)

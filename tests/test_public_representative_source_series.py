@@ -1,5 +1,7 @@
 """Public source-series workflow replays exact engine-planned publisher interactions."""
 
+import json
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -69,7 +71,30 @@ def test_public_nve_all_versions_include_null_series_without_upstream_selection(
     assert result.data.height == 3
     assert result.data["series_id"].n_unique() == 3
     assert result.data["value"].null_count() == 1
-    assert sorted(result.data["value"].drop_nulls().to_list()) == [26.9778, 74.33918]
+    expected = pl.DataFrame(
+        [
+            {
+                "station_id": raw["stationId"],
+                "variant": str(raw["serieVersionNo"]),
+                "time": datetime.fromisoformat(row["time"]).replace(tzinfo=None),
+                "value": row["value"],
+            }
+            for recording in recordings
+            for raw in json.loads(recording.content)["data"]
+            for row in raw["observations"]
+            if row["time"].startswith("2024-01-02")
+        ],
+        schema={"station_id": pl.String, "variant": pl.String, "time": pl.Datetime, "value": pl.Float64},
+    ).sort("variant", "time")
+    identities = pl.DataFrame(
+        {"series_id": item.series_id, "variant": item.identity.published_id} for item in result.source_series
+    )
+    actual = (
+        result.data.join(identities, on="series_id")
+        .select("station_id", "variant", "time", "value")
+        .sort("variant", "time")
+    )
+    pl_testing.assert_frame_equal(actual, expected)
     assert {
         dict(call["request_parameters"])["VersionNumber"]
         for call in result.provenance.calls_made
@@ -99,6 +124,7 @@ def test_public_ana_physical_daily_scope_returns_both_consistencies_and_narrows(
     before = rr.pick(selection, variant="consistido")
     explicitly_fetched = rr.fetch(before, start="2020-01-10", end="2020-01-20", on_issue="ignore")
     pl_testing.assert_frame_equal(narrowed.data, explicitly_fetched.data)
+    assert result.receipts.entries
     assert all(entry.content == transport.recording.content for entry in result.receipts.entries)
     assert narrowed.provenance.calls_made == result.provenance.calls_made
 
@@ -218,6 +244,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(
     pl_testing.assert_frame_equal(cached.data, live.data)
     assert cached.data["series_id"].n_unique() == 1
     assert cached.provenance.served_intervals
+    assert cached.receipts.entries
     assert all(item.authorship is ReceiptAuthorship.STORE_EXCERPT for item in cached.receipts.entries)
     restored = rr.from_bundle(rr.to_bundle(cached))
     pl_testing.assert_frame_equal(restored.data, cached.data)

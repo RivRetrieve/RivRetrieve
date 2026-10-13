@@ -421,7 +421,7 @@ def test_authenticated_transport_applies_only_to_exact_scoped_origin() -> None:
     assert all(wrapped.can_authenticate(url) is False for url in urls[1:])
     assert capture.requests[0].headers == {"Authorization": sentinel}
     assert all("Authorization" not in request.headers for request in capture.requests[1:])
-    with pytest.raises(ValueError):
+    with pytest.raises(TransportFailure):
         wrapped.send(TransportRequest(HttpMethod.GET, "https://user@influx.konzept.space/data"))
 
 
@@ -553,15 +553,19 @@ def test_credential_failure_traceback_locals_never_expose_value() -> None:
 
     class UnexpectedFailure:
         def send(self, request):
-            raise RuntimeError(f"upstream failed while handling {request!r}")
+            secret_local = request.headers["X-Key"]
+            raise RuntimeError(f"upstream failed while handling {secret_local}")
 
-    for underlying in (ExpectedFailure(), UnexpectedFailure()):
+    from rivretrieve._internal.issues import FatalContractError
+
+    for underlying, expected in ((ExpectedFailure(), TransportFailure), (UnexpectedFailure(), FatalContractError)):
         wrapped = AuthenticatedTransport(
             underlying, (CredentialHeader("X-Key", _TRACE_SENTINEL, ("https://example.test",)),)
         )
         try:
             wrapped.send(TransportRequest(HttpMethod.GET, "https://example.test/data"))
-        except TransportFailure as error:
+        except (TransportFailure, FatalContractError) as error:
+            assert isinstance(error, expected)
             rendered = "".join(traceback.TracebackException.from_exception(error, capture_locals=True).format())
             assert _TRACE_SENTINEL not in rendered
             assert error.__cause__ is None and error.__context__ is None

@@ -785,13 +785,20 @@ def test_shared_observation_order_is_identical_across_provider_parse_orders(prov
 
 
 def test_fetch_defaults_end_to_the_callers_local_calendar_day(
+    monkeypatch,
     recording_stages: _RegisteredRecorders,
 ) -> None:
+    class LocalDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 6, 15)
+
+    monkeypatch.setattr(discovery, "date", LocalDate)
     selection = rr.find(provider="usgs_nwis", station="station-1", variant="level")
 
     result = rr.fetch(selection, start="2026-01-01", on_issue="ignore")
 
-    local_day_end = datetime.combine(date.today(), time.max)
+    local_day_end = datetime.combine(date(2026, 6, 15), time.max)
     assert result.provenance.request is not None
     assert result.provenance.request["end"] == local_day_end.isoformat()
     assert (
@@ -834,10 +841,17 @@ def test_providers_declares_credentials_without_exposing_values(
 
 
 def test_future_end_is_preserved_with_one_info_issue(
+    monkeypatch,
     recording_stages: _RegisteredRecorders,
 ) -> None:
+    class LocalDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 6, 15)
+
+    monkeypatch.setattr(discovery, "date", LocalDate)
     selection = rr.find(provider="usgs_nwis", station="station-1", variant="level")
-    future = date.today() + timedelta(days=365)
+    future = date(2027, 6, 15)
 
     result = rr.fetch(
         selection,
@@ -853,7 +867,7 @@ def test_future_end_is_preserved_with_one_info_issue(
     details = future_issues[0].details
     assert details is not None
     assert details["requested_end"] == datetime.combine(future, time.max).isoformat()
-    assert date.today().isoformat() in future_issues[0].message
+    assert "2026-06-15" in future_issues[0].message
 
 
 def test_fetch_by_provider_on_issue_raise_attempts_every_series_and_carries_all_issues(
