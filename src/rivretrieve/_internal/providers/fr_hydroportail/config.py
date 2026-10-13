@@ -47,8 +47,8 @@ _CONFIG = ProviderConfig(
         ),
     },
 )
-# HydroPortail rejects requests exceeding 1,735 days (HTTP 400).
-# A capped span splits larger windows into sub-windows.
+# Bound request sizes to reduce exposure to HydroPortail's response-point limit.
+# Dense series can still exceed that limit within a chunk.
 _DMY = WindowDeclaration(
     granularity=WindowGranularity("capped-span"),
     rendering=WindowRenderingVocabulary.DATE_DMY,

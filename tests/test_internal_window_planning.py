@@ -323,10 +323,13 @@ def test_annual_bounds_cover_closed_calendar_years(rendering):
 
 
 @pytest.mark.parametrize("convention", list(engine.StopConvention))
-def test_capped_date_bounds_do_not_include_exclusive_stop(convention):
+@pytest.mark.parametrize(
+    "rendering", [engine.WindowRenderingVocabulary.DATE, engine.WindowRenderingVocabulary.DATE_DMY]
+)
+def test_capped_date_bounds_do_not_include_exclusive_stop(convention, rendering):
     windows = window_planning.plan_windows(
         _fetch(datetime(2020, 2, 28), datetime(2020, 3, 2)),
-        _declaration("capped-span", engine.WindowRenderingVocabulary.DATE, convention, 2),
+        _declaration("capped-span", rendering, convention, 2),
     )
     assert [window.bounds for window in windows] == [
         _fetch(datetime(2020, 2, 28), datetime(2020, 2, 29, 23, 59, 59, 999999)),
