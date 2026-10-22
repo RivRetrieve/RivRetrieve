@@ -35,97 +35,90 @@
   "creator": [
     {
       "@type": "sc:Organization",
-      "name": "Federal Office for the Environment (BAFU/FOEN)"
-    },
-    {
-      "@type": "sc:Organization",
-      "name": "Christian Studer, Bureau für digitale Existenz"
-    },
-    {
-      "@type": "sc:Organization",
       "name": "Federal Office for the Environment (FOEN)"
     }
   ],
+  "license": "Freie Nutzung. Quellenangabe ist Pflicht.",
   "distribution": [
     {
       "@id": "provider.json",
       "@type": "cr:FileObject",
       "contentUrl": "provider.json",
       "encodingFormat": "application/json",
-      "sha256": "02d818eeb51c401aa9a74a9d6122406f7cfeb4c1bf16ab109d979c7d238ae622",
-      "contentSize": "327 B"
+      "sha256": "821673eaa97feebf8eed78be4a7f3e8eba99ecb626e0e594e4d4eadcc79a0aa8",
+      "contentSize": "292 B"
     },
     {
       "@id": "products.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "bba16364889b471e98809c2a3e72c3cdf69c82ee6ce7aeff8ba53b0602e6affe",
-      "contentSize": "3683 B"
+      "sha256": "0761012029ff423bfbef2f5a564c607c303ee03dcf8c3d0b6434b1102edae666",
+      "contentSize": "4077 B"
     },
     {
       "@id": "stations.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "stations.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "875a8c15ca885d784b7a50e0188b3b30ffc1c9cab508b5f296d19eedd069a60f",
-      "contentSize": "5429 B"
+      "sha256": "e783bd3bf0eb529678ab16460f29767ca4f45f6e31b08e6d23e74d200cd301ab",
+      "contentSize": "22885 B"
     },
     {
       "@id": "station_products.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "station_products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "74ac0b0b986063bd1e6ea9ab386885ebb5b58eb9f1cc9ba6541efe2d0ec17bec",
-      "contentSize": "5159 B"
+      "sha256": "a58590c8a85af132cc3958233c8a67e1cc9ec066e10ff90e6eaeaae92d93253b",
+      "contentSize": "10955 B"
     },
     {
       "@id": "provenance.json",
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "4aa76e1cf5ad8f3e83bb5b93be4a78749b6bc5e56720b9b8df5c62dc03ff6578",
-      "contentSize": "407383 B"
+      "sha256": "b53123992a638f5085e0e41e9809200c423f676d1113bc28672f29c49fd13749",
+      "contentSize": "431988 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "5994e0494b6f95cf7526d34be74a05218f8a72e1f3897a3ce0bd0ebdd3bb9c3f",
-      "contentSize": "2997 B"
+      "sha256": "2d2bc5aa489b5a2ecb17a8d73f8ce1fb05a197a1cd7ced9ccbd6a3044b262b45",
+      "contentSize": "2876 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_acquisitions.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "a8575f2434f509214ef825b87dce8735f7635b8041b27105cf76d31d086af0cb",
-      "contentSize": "8411 B"
+      "sha256": "b9c8275acdfeea25b1a992a2cd8617da2cbcb5dff4f7012d4df769fbf3d3c686",
+      "contentSize": "9469 B"
     },
     {
       "@id": "provenance_bindings.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "f4504de3771d1b74e075ee126b5db350341066ee97dceda9b156943fa8eda2d8",
-      "contentSize": "2513 B"
+      "sha256": "bd272dfc97052a0d6ffcf9df7205f14f3e78a2d197e20c3a20ea5998059fbdff",
+      "contentSize": "2440 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "4287040f8ac6b6ecc8669199ff7adc1a6e78ab93c92eb154d771174f99b99b1f",
-      "contentSize": "1409 B"
+      "sha256": "1d403af03be4214d3a5ef9ffaacce22d0faa12682bdea701ffe389f25c447c77",
+      "contentSize": "1382 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "d120beac87279ad1748da13fc8d1f1b370b668e9f4a61ca71e14ae440142b095",
-      "contentSize": "1601 B"
+      "sha256": "425226fc97bbe5847ad17266168b129710d955178aab9f2c8aea99bbafdd21c8",
+      "contentSize": "1611 B"
     },
     {
       "@id": "format.json",
@@ -140,8 +133,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "a2190988dba7a8e70c8c6b501c237c8bc077e570c710f82192dd75174249d579",
-      "contentSize": "6963 B"
+      "sha256": "6cbc11955f0694ca81e1ad4a2825c1274f671d7c7fbd5f27e7a5f7b84daae5ef",
+      "contentSize": "9564754 B"
     },
     {
       "@id": "series_claims.parquet",
@@ -156,8 +149,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "station_metadata.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "9e8081838d7fffc871649504bcb5d54ae94f5065455563dfc300a3fdb1aedb9f",
-      "contentSize": "13991 B"
+      "sha256": "0d4440435bface29e90be97793733a07c7fd2d76cfddc17da89cd73f459f5ce6",
+      "contentSize": "36219 B"
     }
   ],
   "recordSet": [
@@ -591,7 +584,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Native column name; conversion identity."
+          "description": "Native column no; conversion identity."
         },
         {
           "@id": "stations/latitude",
@@ -612,7 +605,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Native column details.lat; conversion float."
+          "description": "Native column latitude; conversion identity."
         },
         {
           "@id": "stations/longitude",
@@ -633,7 +626,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Native column details.lon; conversion float."
+          "description": "Native column longitude; conversion identity."
         },
         {
           "@id": "stations/crs",
@@ -654,11 +647,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Not published; evidence https://api.existenz.ch/#hydro.",
-          "rr:absence": {
-            "kind": "not_published",
-            "evidence": "https://api.existenz.ch/#hydro"
-          }
+          "description": "Documented value EPSG:4326; evidence https://data.bafu.admin.ch/dataproduct-water-observations."
         }
       ],
       "subjectOf": {
@@ -1576,15 +1565,15 @@
     "description": "build_inputs records exact adopted archive members, their supported fact names, and build and declaration revisions. transformations records executable and authored declaration references. Historical acquisition identities remain separate.",
     "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
   },
-  "version": "2026-08-02",
-  "datePublished": "2026-08-02",
+  "version": "2026-10-22",
+  "datePublished": "2026-10-22",
   "isBasedOn": {
     "@id": "native-table",
     "@type": "sc:MediaObject",
     "name": "Historical committed native catalogue build input",
-    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/7fe7997d95b7ba2efc294ed4c4bf5910c9f93950/src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
-    "sha256": "71b0a329568df9ad031339d3b77b4c692762c6feab6659c20751bebfbea18b48",
-    "contentSize": "17765 B",
+    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/38a768961815e4e911d0cccadec3dd2a96129db7/maintenance/catalogue/ch_foen/official/native.parquet",
+    "sha256": "941ee440d446a0198a06d21fbb789be38c5cbc87df07cc8ddaa7bbf6a4ff8cda",
+    "contentSize": "60100 B",
     "creator": {
       "@type": "sc:Organization",
       "name": "RivRetrieve"
