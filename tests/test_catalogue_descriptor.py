@@ -320,6 +320,46 @@ def test_generator_rejects_missing_origins_and_unattributed_canonical_column():
         build_catalogue_descriptor(damaged_evidence, origins, files)
 
 
+def test_retained_native_descriptor_uses_archive_identity_without_a_public_blob_url():
+    evidence, origins, files = _inputs("ch_foen")
+    native = evidence.header.native_table.model_copy(update={"location_kind": "retained"})
+    header = evidence.header.model_copy(update={"native_table": native})
+    files = {**files, "provenance.json": header.model_dump_json().encode()}
+    descriptor = build_catalogue_descriptor(evidence.model_copy(update={"header": header}), origins, files)
+    material = descriptor["isBasedOn"]
+    assert "contentUrl" not in material
+    assert "committed" not in material["name"].lower()
+    assert material["sha256"] == native.sha256
+    assert material["contentSize"] == f"{native.byte_size} B"
+    properties = {item["name"]: item["value"] for item in material["additionalProperty"]}
+    assert properties["collection_id"] == next(
+        item.reference.collection_id for item in evidence.header.build_inputs.inputs if item.usage == "native_table"
+    )
+    assert properties["artifact_id"] == "official-native"
+
+
+def test_committed_native_descriptor_keeps_its_repository_url():
+    evidence, origins, files = _inputs("pl_imgw")
+    native = evidence.header.native_table
+    assert native.location_kind == "committed"
+    material = build_catalogue_descriptor(evidence, origins, files)["isBasedOn"]
+    assert material["contentUrl"] == (
+        f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}"
+    )
+    assert material == _descriptor("pl_imgw")["isBasedOn"]
+
+
+def test_native_identity_defaults_to_committed_without_changing_legacy_serialization():
+    from rivretrieve._internal.acquisition_provenance import NativeTableIdentity
+
+    value = {"repository_path": "inputs/native.parquet", "revision": "a" * 40, "sha256": "b" * 64, "byte_size": 12}
+    native = NativeTableIdentity.model_validate(value)
+    assert native.location_kind == "committed"
+    assert "location_kind" not in native.model_dump()
+    retained = NativeTableIdentity.model_validate({**value, "location_kind": "retained"})
+    assert retained.model_dump()["location_kind"] == "retained"
+
+
 def test_generator_rejects_native_byte_identity_without_size():
     evidence, origins, files = _inputs("pl_imgw")
     assert evidence.header.native_table is not None

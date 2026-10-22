@@ -540,6 +540,7 @@ def read_catalogue_sources(
     observed = pl.concat(associations).unique().sort(ASSOCIATION_SCHEMA.names())
     provenance = origins.build_acquisition_provenance(
         NativeTableIdentity(
+            location_kind="retained",
             repository_path=native_path,
             revision=selection["native_revision"],
             sha256=member.sha256,
