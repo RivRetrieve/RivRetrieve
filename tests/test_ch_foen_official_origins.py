@@ -10,7 +10,7 @@ from rivretrieve._internal.acquisition_provenance import (
     SourceStatement,
 )
 from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
-from rivretrieve._internal.providers.ch_foen.official_origins import build_acquisition_provenance
+from rivretrieve._internal.providers.ch_foen.origins import build_acquisition_provenance
 
 
 @pytest.fixture
@@ -126,8 +126,8 @@ def test_shared_publication_preserves_witnessed_and_unknown_inventories(source_i
     from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
     from rivretrieve._internal.catalogues.native import RetrievedAt, stamp_native_table, write_native_table
     from rivretrieve._internal.catalogues.source_series import materialize_series
-    from rivretrieve._internal.providers.ch_foen import official_catalogue
-    from rivretrieve._internal.providers.ch_foen.official_origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.ch_foen import generate_catalogue
+    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
     from rivretrieve._internal.source_series import InventoryCompleteness
 
     native = stamp_native_table(
@@ -156,9 +156,9 @@ def test_shared_publication_preserves_witnessed_and_unknown_inventories(source_i
                 "unitSymbol": "m³/s",
             }
         ],
-        schema=official_catalogue.ASSOCIATION_SCHEMA,
+        schema=generate_catalogue.ASSOCIATION_SCHEMA,
     )
-    catalogue = official_catalogue.build_catalogue(
+    catalogue = generate_catalogue.build_catalogue(
         native,
         STATION_CATALOGUE_ORIGINS,
         associations=associations,
@@ -209,7 +209,7 @@ def test_shared_publication_preserves_witnessed_and_unknown_inventories(source_i
         ),
     )
     output = tmp_path / "catalogue"
-    official_catalogue.write_catalogue(
+    generate_catalogue.write_catalogue(
         catalogue, output, build_inputs=build_inputs, native_table=native, metadata_fields=()
     )
     artifact = load_packaged_catalogue_artifact(output, on_issue="raise")
@@ -234,3 +234,21 @@ def test_selected_license_does_not_invent_recommended_citation(source_inputs):
     assert {reference.fact for reference in citation.external_inputs} == {"source.provider.license"}
     assert bindings["provider.license"].transformation.kind == "derived_value"
     assert all("not_established" not in fact for fact in result.fact_universe)
+
+
+def test_only_adopted_original_receipts_become_build_support(source_inputs):
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import selected_supporting_inputs
+
+    provenance = build_acquisition_provenance(**source_inputs)
+    path = source_inputs["recordings"][0].repository_path
+    selected = {
+        "captures": [
+            {"body": path, "receipt": "selected.receipt"},
+            {"body": "redirect.body", "receipt": "redirect.receipt"},
+        ],
+        "prior_live": {"body": "other.body", "receipt": "other.receipt"},
+        "prior_support": [],
+    }
+    support = selected_supporting_inputs(provenance, selected)
+    assert set(support) == {"selected.receipt"}
+    assert set(support["selected.receipt"]) == set(source_inputs["source_bindings"][0].facts)

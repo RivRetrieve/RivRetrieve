@@ -17,6 +17,7 @@ import polars as pl
 
 from rivretrieve._internal.acquisition_provenance import RecordingReference, RetainedInputReceipt, RetainedInputUse
 from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+from rivretrieve._internal.catalogues.native import NativeTable
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.station_metadata import (
@@ -564,7 +565,9 @@ def verify_adopted_station_metadata(sources: StationMetadataSources, inputs: Seq
             raise FatalContractError("FOEN metadata originals and receipts must match adopted archive members")
 
 
-def project_official_station_metadata(native, stations: pl.DataFrame, supplementary: pl.DataFrame) -> pl.DataFrame:
+def project_official_station_metadata(
+    native: NativeTable, stations: pl.DataFrame, supplementary: pl.DataFrame
+) -> pl.DataFrame:
     """Keep API name fields alongside separately scoped approved page metadata.
 
     Different source spellings remain separate facts. Empty strings and source
@@ -574,12 +577,9 @@ def project_official_station_metadata(native, stations: pl.DataFrame, supplement
     """
     from rivretrieve._internal.catalogue_origins import Field, NativeColumn
     from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
+    from rivretrieve._internal.providers.ch_foen.origins import API_STATION_METADATA_FIELDS
 
-    fields = (
-        MetadataField("station_name", "name", source_scope="station_api"),
-        MetadataField("water_body_name", "riverName", source_scope="station_api"),
-    )
-    api = build_station_metadata("ch_foen", native, stations, Field(NativeColumn("no")), fields)
+    api = build_station_metadata("ch_foen", native, stations, Field(NativeColumn("no")), API_STATION_METADATA_FIELDS)
     values = pl.concat(
         (supplementary.filter(pl.col("state") != "no_metadata"), api.filter(pl.col("state") != "no_metadata"))
     )

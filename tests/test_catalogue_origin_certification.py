@@ -19,6 +19,7 @@ from types import ModuleType
 from urllib.parse import urlparse
 
 import polars as pl
+import polars.testing as pl_testing
 import pytest
 import requests
 from pydantic import TypeAdapter
@@ -91,10 +92,22 @@ def _module(provider: str, leaf: str) -> ModuleType:
     return importlib.import_module(f"rivretrieve._internal.providers.{provider}.{leaf}")
 
 
-def _adapter(retained_evidence_root: Path, provider: str, cases: tuple[DeclarationCase, ...]) -> ProviderAdapter:
+def _adapter(
+    retained_evidence_root: Path, provider: str, cases: tuple[DeclarationCase, ...], *, input_receipt=None
+) -> ProviderAdapter:
     generator = _module(provider, "generate_catalogue")
     native_path = retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     build = generator.build_catalogue
+    if provider == "ch_foen":
+        sources = generator.read_catalogue_sources(retained_evidence_root, input_receipt=input_receipt)
+        native_path = retained_evidence_root / "maintenance/catalogue/ch_foen/official/native.parquet"
+        build = partial(
+            build,
+            associations=sources.associations,
+            checked_on=sources.checked_on,
+            provenance=sources.provenance,
+            station_metadata=sources.station_metadata,
+        )
     if provider == "br_ana":
         from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence, read_capture_record
         from rivretrieve._internal.providers.br_ana.origins import (
@@ -241,7 +254,11 @@ CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case i
 
 
 def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDecorator:
-    paths = [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
+    paths = (
+        ["maintenance/catalogue/ch_foen/official"]
+        if provider == "ch_foen"
+        else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
+    )
     if provider == "br_ana":
         paths.extend(
             (
@@ -266,7 +283,8 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
 
 @pytest.fixture(scope="module")
 def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> ProviderAdapter:
-    return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param])
+    receipt = request.getfixturevalue("catalogue_input_receipt") if request.param == "ch_foen" else None
+    return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param], input_receipt=receipt)
 
 
 def _build(adapter: ProviderAdapter, native: NativeTable | None = None, origins: Mapping[str, object] | None = None):
@@ -328,10 +346,10 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
         },
         (ProviderId("ch_foen"), "stations"): {
             "provider_id": authored("ch_foen"),
-            "station_id": field("name"),
-            "latitude": field("details.lat", FloatConversion()),
-            "longitude": field("details.lon", FloatConversion()),
-            "crs": unpublished("https://api.existenz.ch/#hydro"),
+            "station_id": field("no"),
+            "latitude": field("latitude"),
+            "longitude": field("longitude"),
+            "crs": documented("https://data.bafu.admin.ch/dataproduct-water-observations"),
         },
         (ProviderId("cz_chmi"), "stations"): {
             "provider_id": authored("cz_chmi"),
@@ -494,7 +512,8 @@ def test_receipt_discovery_schema_order_urls_and_statuses_fail_closed(retained_e
         return (row["provider_id"], row["declaration_map"], row["canonical_column"], row["evidence_url"])
 
     retired_poland_geometry_evidence = {("pl_imgw", "stations", "crs", "https://danepubliczne.imgw.pl/pl/apiinfo")}
-    assert keys == _not_published_keys() | retired_poland_geometry_evidence
+    retired_swiss_geometry_evidence = {("ch_foen", "stations", "crs", "https://api.existenz.ch/#hydro")}
+    assert keys == _not_published_keys() | retired_poland_geometry_evidence | retired_swiss_geometry_evidence
     assert receipts == sorted(receipts, key=sort_key)
     assert all(set(row) == RECEIPT_KEYS for row in receipts)
     assert all(isinstance(row["attestation_identity"], str) and row["attestation_identity"] for row in receipts)
@@ -617,7 +636,6 @@ def test_receipt_provider_specific_url_bindings_and_attested_exceptions(retained
 EXPECTED_CRS_COUNTS = {
     (ProviderId("ba_fhmzbih"), "stations"): (60, "unknown"),
     (ProviderId("ca_eccc"), "stations"): (8_057, "EPSG:4326"),
-    (ProviderId("ch_foen"), "stations"): (246, "unknown"),
     (ProviderId("cz_chmi"), "stations"): (831, "unknown"),
     # Native publication inventories acquired 2026-09-21.
     (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): (6_475, "EPSG:4326"),
@@ -654,7 +672,19 @@ def _assert_reviewed_crs(
 
     assert not case_native.data.is_empty() and not stations.is_empty()
     assert stations["crs"].null_count() == 0
-    if isinstance(origin, NotPublished):
+    if adapter.provider_id == ProviderId("ch_foen"):
+        assert isinstance(origin, Documented)
+        assert origin.value == "EPSG:4326"
+        assert stations["crs"].unique().to_list() == ["EPSG:4326"]
+        expected = case_native.data.select(
+            pl.col("no").alias("station_id"), "latitude", "longitude"
+        ).sort("station_id")
+        pl_testing.assert_frame_equal(
+            stations.select("station_id", "latitude", "longitude").sort("station_id"),
+            expected,
+            check_exact=True,
+        )
+    elif isinstance(origin, NotPublished):
         expected_count, expected_value = EXPECTED_CRS_COUNTS[(adapter.provider_id, case.identity)]
         assert stations.height == expected_count
         assert stations["crs"].unique().to_list() == [expected_value]
@@ -849,17 +879,9 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
         pytest.param(
             "ch_foen",
             marks=pytest.mark.governing(
-                *_catalogue_recording_paths(
-                    "ch_foen", scopes=("maintenance/catalogue/station_metadata/sources/ch_foen",)
-                ),
-                "src/rivretrieve/_internal/providers/ch_foen/catalogue/native.parquet",
-                "tests/test_data/ch_foen_2135_flux_2020-01-01.recording.json",
-                "tests/test_data/ch_foen_2135_rest_2026-09-01.recording.json",
-                "tests/test_data/ch_foen_bafu_current_hydrological_data.html",
-                "tests/test_data/ch_foen_bafu_hydrology_data_service.html",
-                "tests/test_data/ch_foen_parameters_2026-09-02.recording.json",
-                "tests/test_data/ch_foen_terms_bafu.html",
-                "tests/test_data/ch_foen_terms_existenz.html",
+                "maintenance/catalogue/ch_foen/official",
+                "maintenance/catalogue/station_metadata/sources/ch_foen",
+                "maintenance/catalogue/station_metadata/review.json",
             ),
         ),
         pytest.param(
@@ -1008,36 +1030,18 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     if product_root.is_relative_to(ROOT.resolve()) or product_root.is_relative_to(retained_evidence_root.resolve()):
         pytest.fail("Catalogue products must stay outside the checkout and retained inputs.", pytrace=False)
     output = product_root / str(adapter.provider_id)
-    output.mkdir(mode=0o700)
+    if adapter.provider_id != "ch_foen":
+        output.mkdir(mode=0o700)
     if adapter.provider_id == "br_ana":
         from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
 
         *_, provenance, generated = read_catalogue_inputs(retained_evidence_root)
     elif adapter.provider_id == "ch_foen":
-        from rivretrieve._internal.providers.ch_foen.origins import (
-            STATION_DIRECTORY_REFERENCE,
-            STATION_PAGE_MANIFEST_SHA256,
-            STATION_PAGE_ROOT,
-        )
-        from rivretrieve._internal.providers.ch_foen.station_metadata import read_station_metadata_sources
-
-        metadata_sources = read_station_metadata_sources(
-            retained_evidence_root,
-            directory_reference=STATION_DIRECTORY_REFERENCE,
-            input_receipt=catalogue_input_receipt,
-            page_root=STATION_PAGE_ROOT,
-            manifest_sha256=STATION_PAGE_MANIFEST_SHA256,
-        )
-        generated = adapter.generator.build_catalogue(
-            read_native_table(adapter.native_path),
-            adapter.origins_argument(),
-            metadata_sources=metadata_sources,
-        )
+        generated = _build(adapter)
         provenance = generated.acquisition_provenance
         source_inputs_before = {
             retained_evidence_root / item.consumer_path: (retained_evidence_root / item.consumer_path).read_bytes()
             for item in catalogue_input_receipt.inputs
-            if item.consumer_path.startswith("maintenance/catalogue/station_metadata/sources/ch_foen/")
         }
     elif adapter.provider_id == "fr_hubeau":
         from rivretrieve._internal.providers.fr_hubeau.origins import (
@@ -1083,7 +1087,9 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     input_selection = product_root / f"{adapter.provider_id}.build-inputs.json"
     with input_selection.open("x", encoding="utf-8") as stream:
         stream.write(adopted.model_dump_json())
-    arguments = ["--native", str(adapter.native_path), "--out", str(output), "--build-inputs", str(input_selection)]
+    arguments = ["--out", str(output), "--build-inputs", str(input_selection)]
+    if adapter.provider_id != "ch_foen":
+        arguments.extend(("--native", str(adapter.native_path)))
     if adapter.provider_id in {
         "ba_fhmzbih",
         "ca_eccc",

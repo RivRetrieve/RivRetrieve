@@ -7,7 +7,7 @@ import pytest
 
 from rivretrieve._internal.catalogues.native import RetrievedAt
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.providers.ch_foen.official_catalogue import station_native_table
+from rivretrieve._internal.providers.ch_foen.generate_catalogue import station_native_table
 
 
 def test_station_snapshot_preserves_source_identity_unknown_geometry_and_status():
@@ -49,7 +49,7 @@ def test_station_snapshot_rejects_nonstring_or_duplicate_numbers(numbers):
 
 
 def test_observed_associations_keep_null_only_variants_and_separate_routes():
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import archive_associations
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import archive_associations
 
     rows = [
         {
@@ -75,7 +75,7 @@ def test_observed_associations_keep_null_only_variants_and_separate_routes():
 
 
 def test_empty_archive_sample_does_not_create_negative_associations():
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import archive_associations
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import archive_associations
 
     payload = {"data": {"water": {"observations": {"archive_route": []}}}}
     assert archive_associations(payload, route="archive_route", station_numbers={"0085"}).is_empty()
@@ -85,7 +85,7 @@ def test_empty_archive_sample_does_not_create_negative_associations():
 
 
 def test_descriptions_scope_variants_and_unit_segments_without_temporal_inference():
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import ASSOCIATION_SCHEMA, describe_associations
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import ASSOCIATION_SCHEMA, describe_associations
 
     associations = pl.DataFrame(
         [
@@ -117,7 +117,7 @@ def test_descriptions_scope_variants_and_unit_segments_without_temporal_inferenc
 def test_catalogue_tables_record_only_observed_pairs_without_sample_record_bounds():
     from datetime import date
 
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import ASSOCIATION_SCHEMA, catalogue_tables
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import ASSOCIATION_SCHEMA, catalogue_tables
 
     native = station_native_table(
         {
@@ -167,7 +167,7 @@ def test_public_discovery_keeps_unknown_route_facts_and_unobserved_intent(monkey
     import rivretrieve as rr
     import rivretrieve._internal.discovery as discovery
     from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import (
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import (
         ASSOCIATION_SCHEMA,
         catalogue_tables,
         describe_associations,
@@ -241,7 +241,7 @@ def test_public_discovery_keeps_unknown_route_facts_and_unobserved_intent(monkey
 
 
 def test_recent_associations_bind_only_station_page_units_without_archive_fallback():
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import recent_associations
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import recent_associations
 
     payload = {
         "data": {
@@ -276,7 +276,7 @@ def test_station_metadata_does_not_coerce_source_scalar_types(field, value):
 
 
 def test_recent_temperature_uses_published_temperature_header():
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import recent_associations
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import recent_associations
 
     payload = {
         "data": {
@@ -295,7 +295,7 @@ def test_original_reader_requires_selected_bytes_before_json_parsing(tmp_path):
         RetainedInputReceipt,
         RetainedInputReference,
     )
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import read_original
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import read_original
 
     body = b'{"data": {}}'
     path = tmp_path / "stations.body"
@@ -341,8 +341,8 @@ def test_station_origins_accept_source_null_geometry():
 
     from rivretrieve._internal.catalogue_origins import enforce_catalogue_origins
     from rivretrieve._internal.primitives import ProviderId
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import ASSOCIATION_SCHEMA, catalogue_tables
-    from rivretrieve._internal.providers.ch_foen.official_origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import ASSOCIATION_SCHEMA, catalogue_tables
+    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
     native = station_native_table(
         {"data": {"water": {"observations": {"stations": [{"no": "0085", "latitude": None, "longitude": None}]}}}},
@@ -356,8 +356,8 @@ def test_catalogue_build_enforces_origins_before_publication():
     from datetime import date
 
     from rivretrieve._internal.catalogue_origins import Field, NativeColumn
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import ASSOCIATION_SCHEMA, build_catalogue
-    from rivretrieve._internal.providers.ch_foen.official_origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import ASSOCIATION_SCHEMA, build_catalogue
+    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
 
     native = station_native_table(
         {"data": {"water": {"observations": {"stations": [{"no": "0085", "latitude": None, "longitude": None}]}}}},
@@ -388,7 +388,7 @@ def test_retained_station_snapshot_builds_native_candidate(retained_evidence_roo
 
     from rivretrieve._internal.acquisition_provenance import RecordingReference
     from rivretrieve._internal.catalogues.native import read_native_table, write_native_table
-    from rivretrieve._internal.providers.ch_foen.official_catalogue import read_original
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import read_original
 
     declaration_path = "maintenance/catalogue/ch_foen/official/selection.json"
     assert declaration_path in {item.consumer_path for item in catalogue_input_receipt.declaration_inputs}
@@ -420,3 +420,68 @@ def test_retained_station_snapshot_builds_native_candidate(retained_evidence_roo
     write_native_table(native, candidate)
     assert_frame_equal(read_native_table(candidate).data, native.data)
     assert (retained_evidence_root / reference.repository_path).read_bytes() == body
+
+
+def test_source_selection_requires_verified_authored_declaration(tmp_path):
+    from rivretrieve._internal.acquisition_provenance import RetainedInputReceipt
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import read_catalogue_sources
+
+    receipt = RetainedInputReceipt(
+        schema_version=3,
+        code_revision="a" * 40,
+        declaration_revision="a" * 40,
+        archive_code_revision="b" * 40,
+        inputs=(),
+    )
+    with pytest.raises(FatalContractError, match="selected authored declaration"):
+        read_catalogue_sources(tmp_path, selection_path="selection.json", input_receipt=receipt)
+
+
+@pytest.mark.governing(
+    "maintenance/catalogue/ch_foen/official",
+    "maintenance/catalogue/ch_foen/official/selection.json",
+    "maintenance/catalogue/station_metadata/sources/ch_foen",
+    "maintenance/catalogue/station_metadata/review.json",
+)
+def test_retained_inputs_publish_offline_candidate(
+    retained_evidence_root, catalogue_input_receipt, catalogue_build_inputs
+):
+    """Build reviewable products; approved packaged equality is checked separately."""
+    import os
+    from pathlib import Path
+
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import main, read_catalogue_sources
+
+    sources = read_catalogue_sources(
+        retained_evidence_root,
+        selection_path="maintenance/catalogue/ch_foen/official/selection.json",
+        input_receipt=catalogue_input_receipt,
+    )
+    configured = os.environ.get("RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT")
+    if not configured:
+        pytest.fail("The reviewed catalogue command must supply restricted product output.", pytrace=False)
+    output = Path(configured).resolve()
+    checkout = Path(__file__).resolve().parents[1]
+    if output.is_relative_to(checkout) or output.is_relative_to(retained_evidence_root.resolve()):
+        pytest.fail("Catalogue candidates must stay outside checkout and retained inputs.", pytrace=False)
+    inputs = output / "ch_foen.build-inputs.json"
+    receipt = output / "ch_foen.input-receipt.json"
+    with inputs.open("x") as stream:
+        stream.write(catalogue_build_inputs(sources.provenance).model_dump_json())
+    with receipt.open("x") as stream:
+        stream.write(catalogue_input_receipt.model_dump_json())
+    assert (
+        main(
+            [
+                "--evidence-root",
+                str(retained_evidence_root),
+                "--input-receipt",
+                str(receipt),
+                "--build-inputs",
+                str(inputs),
+                "--out",
+                str(output / "ch_foen"),
+            ]
+        )
+        == 0
+    )
