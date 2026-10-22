@@ -57,8 +57,8 @@ class _EmptyReason:
 class StationLocation:
     provider_id: str
     station_id: str
-    latitude: float
-    longitude: float
+    latitude: float | None
+    longitude: float | None
     crs: str
 
 

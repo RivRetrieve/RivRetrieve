@@ -126,8 +126,17 @@ def test_projection_keeps_unmatched_gauges_and_distinguishes_absent_from_blank_f
     assert_frame_equal(stations, before)
 
 
-@pytest.mark.parametrize("pages", [{}, {"001": station_page(), "outside": station_page("outside")}])
-def test_projection_does_not_replace_missing_or_extra_adopted_pages_with_absence(pages):
+def test_projection_keeps_directory_metadata_when_no_optional_page_was_selected():
+    source = project_station_metadata(pl.DataFrame({"station_id": ["001"]}), directory_row().encode(), {}, FIELDS)
+    assert source.filter(pl.col("attribute_role") == "station_name")["source_value"].item() == '" Gauge & name "'
+    assert source.filter(pl.col("attribute_role").is_in(["elevation", "drainage_area"]))["state"].to_list() == [
+        "no_metadata",
+        "no_metadata",
+    ]
+
+
+@pytest.mark.parametrize("pages", [{"001": station_page(), "outside": station_page("outside")}])
+def test_projection_rejects_pages_outside_the_directory_linked_scope(pages):
     with pytest.raises(FatalContractError, match="scope"):
         project_station_metadata(pl.DataFrame({"station_id": ["001"]}), directory_row().encode(), pages, FIELDS)
 
@@ -370,3 +379,32 @@ def test_adopted_label_without_its_value_is_not_metadata_absence(following):
     ).encode()
     with pytest.raises(FatalContractError, match="immediate value"):
         parse_station_page(body, "001")
+
+
+def test_official_metadata_keeps_api_names_and_existing_directory_claims_separate():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt, stamp_native_table
+    from rivretrieve._internal.providers.ch_foen.station_metadata import project_official_station_metadata
+
+    native = stamp_native_table(
+        pl.DataFrame(
+            {"no": ["001", "002"], "name": ["API spelling", ""], "riverName": [None, "Historical river"]},
+            schema={"no": pl.String, "name": pl.String, "riverName": pl.String},
+        ),
+        RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    stations = pl.DataFrame({"provider_id": ["ch_foen", "ch_foen"], "station_id": ["001", "002"]})
+    existing = project_station_metadata(stations, directory_row().encode(), {"001": station_page()}, FIELDS)
+    result = project_official_station_metadata(native, stations, existing)
+    api = result.filter(pl.col("source_scope") == "station_api")
+    assert api.select("station_id", "source_field", "source_value", "state").sort(
+        "station_id", "source_field"
+    ).rows() == [
+        ("001", "name", '"API spelling"', "value"),
+        ("001", "riverName", None, "source_null"),
+        ("002", "name", '""', "value"),
+        ("002", "riverName", '"Historical river"', "value"),
+    ]
+    original = existing.filter(pl.col("state") != "no_metadata")
+    assert_frame_equal(result.filter(pl.col("source_scope").is_in(["station_directory", "station_page"])), original)

@@ -136,9 +136,20 @@ def test_station_catalog_validates_five_column_row() -> None:
     assert not [issue for issue in issues if issue.severity == "error"]
 
 
-def test_non_nullable_station_column_rejects_null() -> None:
-    with pytest.raises(FatalContractError):
-        validate_catalogue(station_catalog_df(crs=[None]), STATION_CATALOG_SCHEMA)
+@pytest.mark.parametrize("latitude,longitude", [(None, None), (None, 7.1), (46.2, None)])
+def test_station_coordinates_can_be_unknown(latitude, longitude) -> None:
+    assert (
+        validate_catalogue(
+            station_catalog_df(latitude=[latitude], longitude=[longitude]), STATION_CATALOG_SCHEMA, on_issue="raise"
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize("column", ["provider_id", "station_id", "crs"])
+def test_non_nullable_station_column_rejects_null(column) -> None:
+    with pytest.raises(FatalContractError, match=column):
+        validate_catalogue(station_catalog_df(**{column: [None]}), STATION_CATALOG_SCHEMA)
 
 
 def test_missing_required_column_rejected() -> None:

@@ -175,6 +175,27 @@ def test_station_map_real_backend_renders_five_column_station_frame() -> None:
     assert "nullable-1" in html
 
 
+@pytest.mark.parametrize("include_located", [False, True])
+def test_map_omits_unknown_coordinate_pairs_without_mutating_stations(monkeypatch, include_located):
+    monkeypatch.setattr("rivretrieve._internal.station_map._load_folium", lambda: FakeFolium)
+    stations = _five_column_station_frame().clear()
+    rows = [
+        ("stub_provider", "unknown", None, None, "unknown"),
+        ("stub_provider", "latitude-only", 80.0, None, "unknown"),
+        ("stub_provider", "longitude-only", None, 90.0, "unknown"),
+    ]
+    if include_located:
+        rows.append(("stub_provider", "located", 47.0, 8.0, "unknown"))
+    stations = pl.DataFrame(rows, schema=stations.schema, orient="row")
+    before = stations.clone()
+
+    station_map = StationMap(stations).render()
+
+    assert station_map.location == ([47.0, 8.0] if include_located else [0.0, 0.0])
+    assert [marker.location for marker in station_map.markers] == ([[47.0, 8.0]] if include_located else [])
+    pl_testing.assert_frame_equal(stations, before)
+
+
 def _five_column_station_frame() -> pl.DataFrame:
     return pl.DataFrame(
         [
