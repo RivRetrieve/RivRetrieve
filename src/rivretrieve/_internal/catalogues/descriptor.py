@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 
 import polars as pl
 
@@ -415,7 +415,9 @@ def build_catalogue_descriptor(
             material = _retained_input_node("native-table", adopted[0])
             # Execution revisions remain in build_inputs, not the retained byte identity.
             material["additionalProperty"] = [
-                item for item in material["additionalProperty"] if item["name"] != "archive_revision"
+                item
+                for item in cast("list[dict[str, object]]", material["additionalProperty"])
+                if item["name"] != "archive_revision"
             ]
             descriptor["isBasedOn"] = material
         else:
