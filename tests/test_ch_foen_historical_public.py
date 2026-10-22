@@ -20,7 +20,7 @@ import rivretrieve as rr
 from rivretrieve._internal.observations import ReceiptAuthorship
 from rivretrieve._internal.recordings import read_recording
 
-pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+pytestmark = pytest.mark.usefixtures("existenz_engine_replay")
 
 
 @pytest.fixture

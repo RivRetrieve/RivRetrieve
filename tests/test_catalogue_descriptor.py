@@ -205,15 +205,20 @@ def test_poland_historical_derivation_retains_both_issuers_and_separate_corrobor
 
 def test_field_absences_distinguish_documented_silence_and_missing_acquisition():
     from rivretrieve._internal.catalogue_origins import NotPublished
-    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.no_nve.origins import STATION_CATALOGUE_ORIGINS
 
     assert isinstance(STATION_CATALOGUE_ORIGINS["crs"], NotPublished)
-    swiss = _field(_descriptor("ch_foen"), "stations/crs")
+    norwegian = _field(_descriptor("no_nve"), "stations/crs")
     polish = _field(_descriptor("pl_imgw"), "stations/crs")
-    assert swiss["rr:absence"] == {"kind": "not_published", "evidence": str(STATION_CATALOGUE_ORIGINS["crs"].evidence)}
+    assert norwegian["rr:absence"] == {
+        "kind": "not_published",
+        "evidence": str(STATION_CATALOGUE_ORIGINS["crs"].evidence),
+    }
     assert polish["rr:absence"] == {"kind": "withheld", "reason": "no_acquisition_record_established"}
     assert (
-        swiss["source"] == polish["source"] == {"fileObject": {"@id": "stations.parquet"}, "extract": {"column": "crs"}}
+        norwegian["source"]
+        == polish["source"]
+        == {"fileObject": {"@id": "stations.parquet"}, "extract": {"column": "crs"}}
     )
 
 
@@ -315,6 +320,70 @@ def test_generator_rejects_missing_origins_and_unattributed_canonical_column():
         build_catalogue_descriptor(damaged_evidence, origins, files)
 
 
+def test_retained_native_descriptor_uses_archive_identity_without_a_public_blob_url():
+    evidence, origins, files = _inputs("ch_foen")
+    native = evidence.header.native_table.model_copy(update={"location_kind": "retained"})
+    header = evidence.header.model_copy(update={"native_table": native})
+    files = {**files, "provenance.json": header.model_dump_json().encode()}
+    descriptor = build_catalogue_descriptor(evidence.model_copy(update={"header": header}), origins, files)
+    material = descriptor["isBasedOn"]
+    assert "contentUrl" not in material
+    assert "committed" not in material["name"].lower()
+    assert material["sha256"] == native.sha256
+    assert material["contentSize"] == f"{native.byte_size} B"
+    properties = {item["name"]: item["value"] for item in material["additionalProperty"]}
+    assert properties["collection_id"] == next(
+        item.reference.collection_id for item in evidence.header.build_inputs.inputs if item.usage == "native_table"
+    )
+    assert properties["artifact_id"] == "official-native"
+
+
+def test_retained_native_descriptor_is_stable_across_archive_execution_revisions():
+    evidence, origins, files = _inputs("ch_foen")
+    native = evidence.header.native_table.model_copy(update={"location_kind": "retained"})
+    header = evidence.header.model_copy(update={"native_table": native})
+
+    def describe(value):
+        supplied = {**files, "provenance.json": value.model_dump_json().encode()}
+        return build_catalogue_descriptor(evidence.model_copy(update={"header": value}), origins, supplied)["isBasedOn"]
+
+    build = header.build_inputs
+    updated = build.model_copy(
+        update={
+            "inputs": tuple(
+                item.model_copy(update={"reference": item.reference.model_copy(update={"archive_revision": "9" * 40})})
+                for item in build.inputs
+            )
+        }
+    )
+    current = header.model_copy(update={"build_inputs": updated})
+    assert describe(header) == describe(current)
+    assert {item.reference.archive_revision for item in current.build_inputs.inputs} == {"9" * 40}
+    assert current.build_inputs != header.build_inputs
+
+
+def test_committed_native_descriptor_keeps_its_repository_url():
+    evidence, origins, files = _inputs("pl_imgw")
+    native = evidence.header.native_table
+    assert native.location_kind == "committed"
+    material = build_catalogue_descriptor(evidence, origins, files)["isBasedOn"]
+    assert material["contentUrl"] == (
+        f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}"
+    )
+    assert material == _descriptor("pl_imgw")["isBasedOn"]
+
+
+def test_native_identity_defaults_to_committed_without_changing_legacy_serialization():
+    from rivretrieve._internal.acquisition_provenance import NativeTableIdentity
+
+    value = {"repository_path": "inputs/native.parquet", "revision": "a" * 40, "sha256": "b" * 64, "byte_size": 12}
+    native = NativeTableIdentity.model_validate(value)
+    assert native.location_kind == "committed"
+    assert "location_kind" not in native.model_dump()
+    retained = NativeTableIdentity.model_validate({**value, "location_kind": "retained"})
+    assert retained.model_dump()["location_kind"] == "retained"
+
+
 def test_generator_rejects_native_byte_identity_without_size():
     evidence, origins, files = _inputs("pl_imgw")
     assert evidence.header.native_table is not None
@@ -334,8 +403,9 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
             for statement in provenance.header.source_records[0].statements
             if statement.kind == kind
         )
-    for provider in ("ch_foen", "ca_eccc", "pl_imgw", "fr_hydroportail", "th_thaiwater"):
+    for provider in ("ca_eccc", "pl_imgw", "fr_hydroportail", "th_thaiwater"):
         assert "license" not in _descriptor(provider) and "citation" not in _descriptor(provider)
+    assert _descriptor("ch_foen")["license"] == "Freie Nutzung. Quellenangabe ist Pflicht."
     hubeau = _descriptor("fr_hubeau")
     hubeau_provenance, _, _ = _inputs("fr_hubeau")
     for statement in hubeau_provenance.header.source_records[0].statements:

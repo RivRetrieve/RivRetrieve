@@ -18,10 +18,11 @@ class StationMap:
 
     def render(self) -> object:
         folium = _load_folium()
-        center = _map_center(self.stations)
+        stations = self.stations.drop_nulls(["latitude", "longitude"])
+        center = _map_center(stations)
         station_map = folium.Map(location=center, zoom_start=8, control_scale=True)
 
-        for station in self.stations.iter_rows(named=True):
+        for station in stations.iter_rows(named=True):
             latitude = station["latitude"]
             longitude = station["longitude"]
             marker = folium.Marker(

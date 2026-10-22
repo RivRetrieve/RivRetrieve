@@ -45,7 +45,9 @@ def test_nve_catalogue_preserves_versions_and_per_resolution_statistic():
 
 
 def test_swiss_native_units_and_references_remain_independent():
-    artifact = load_packaged_catalogue_artifact(BASE / "ch_foen/catalogue")
+    from tests._existenz import catalogue_for_replay
+
+    artifact = catalogue_for_replay()
     series, _ = catalogue_series(artifact, scope=SeriesScope(station_ids=("2251",)))
     facts = {item.identity.published_id: item.facts[0] for item in series}
     assert facts["flow"].source_unit.value == "m3/s"
@@ -67,8 +69,9 @@ def test_ana_daily_alternatives_both_remain_quantity_matches():
 
 def test_scoped_materialization_constructs_only_selected_coordinates(monkeypatch):
     import rivretrieve._internal.catalogues.source_series as materializer
+    from tests._existenz import catalogue_for_replay
 
-    artifact = load_packaged_catalogue_artifact(BASE / "ch_foen/catalogue")
+    artifact = catalogue_for_replay()
     original = materializer.SourceSeries
     constructed = []
 

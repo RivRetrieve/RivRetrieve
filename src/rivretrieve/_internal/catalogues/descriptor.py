@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 
 import polars as pl
 
@@ -395,20 +395,46 @@ def build_catalogue_descriptor(
     if native is not None:
         if native.byte_size is None:
             raise FatalContractError("Native table byte size must be established before describing it")
-        descriptor["isBasedOn"] = {
-            "@id": "native-table",
-            "@type": "sc:MediaObject",
-            "name": (
-                "Historical committed native catalogue build input"
-                if evidence.header.build_inputs is not None
-                else "Committed native catalogue build input"
-            ),
-            "contentUrl": f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}",
-            "sha256": native.sha256,
-            "contentSize": f"{native.byte_size} B",
-            "creator": _organization("RivRetrieve"),
-            "description": "RivRetrieve materialization of the separately attributed source inputs.",
-        }
+        if native.location_kind == "retained":
+            from rivretrieve._internal.catalogues.evidence_graph import _retained_input_node
+
+            build = evidence.header.build_inputs
+            adopted = (
+                []
+                if build is None
+                else [
+                    item
+                    for item in build.inputs
+                    if item.usage == "native_table"
+                    and item.reference.sha256 == native.sha256
+                    and item.reference.byte_size == native.byte_size
+                ]
+            )
+            if len(adopted) != 1:
+                raise FatalContractError("Retained native table requires one matching adopted archive input")
+            material = _retained_input_node("native-table", adopted[0])
+            # Execution revisions remain in build_inputs, not the retained byte identity.
+            material["additionalProperty"] = [
+                item
+                for item in cast("list[dict[str, object]]", material["additionalProperty"])
+                if item["name"] != "archive_revision"
+            ]
+            descriptor["isBasedOn"] = material
+        else:
+            descriptor["isBasedOn"] = {
+                "@id": "native-table",
+                "@type": "sc:MediaObject",
+                "name": (
+                    "Historical committed native catalogue build input"
+                    if evidence.header.build_inputs is not None
+                    else "Committed native catalogue build input"
+                ),
+                "contentUrl": f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}",
+                "sha256": native.sha256,
+                "contentSize": f"{native.byte_size} B",
+                "creator": _organization("RivRetrieve"),
+                "description": "RivRetrieve materialization of the separately attributed source inputs.",
+            }
     return descriptor
 
 

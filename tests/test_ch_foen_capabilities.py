@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from tests._catalogue import provider_info
 
-BULK_OBSERVATIONS_DESCRIPTION = "true: uncapped coalesced live requests; source and contract failures fail loud"
+BULK_OBSERVATIONS_DESCRIPTION = "none"
 
 
 def test_ch_foen_provider_info_capabilities_are_declared() -> None:

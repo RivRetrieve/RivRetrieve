@@ -38,8 +38,8 @@ STATION_CATALOG_SCHEMA = CatalogueSchema(
     columns=(
         CatalogueColumn("provider_id", pl.Utf8),
         CatalogueColumn("station_id", pl.Utf8),
-        CatalogueColumn("latitude", pl.Float64),
-        CatalogueColumn("longitude", pl.Float64),
+        CatalogueColumn("latitude", pl.Float64, nullable=True),
+        CatalogueColumn("longitude", pl.Float64, nullable=True),
         CatalogueColumn("crs", pl.Utf8),
     ),
     unique_keys=(("provider_id", "station_id"),),

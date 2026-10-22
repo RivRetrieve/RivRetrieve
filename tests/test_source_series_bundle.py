@@ -68,6 +68,20 @@ def test_post_fetch_pick_preserves_original_request_and_publisher_receipt(
     pl_testing.assert_frame_equal(restored.data, narrowed.data)
 
 
+def test_selection_bundle_preserves_unknown_station_coordinates():
+    from rivretrieve._internal.selection import StationLocation, _Selection
+    from rivretrieve._internal.source_series import SeriesScope
+
+    selected = _Selection(
+        scope=SeriesScope(provider_ids=("synthetic",), station_ids=("0085",)),
+        locations=(StationLocation("synthetic", "0085", None, None, "unknown"),),
+    )
+
+    restored = rr.from_bundle(rr.to_bundle(selected))
+
+    assert restored.locations == selected.locations
+
+
 def test_bundle_refuses_unknown_format_before_scientific_decode():
     output = BytesIO()
     with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:

@@ -769,7 +769,9 @@ def map(selection: _Selection) -> object:
     Parameters
     ----------
     selection : selection
-        Selection from find, pick or from_bundle. Each station is shown once.
+        Selection from find, pick or from_bundle. Stations with both coordinates
+        are shown once. Stations with missing coordinates remain selected but
+        have no marker.
 
     Returns
     -------

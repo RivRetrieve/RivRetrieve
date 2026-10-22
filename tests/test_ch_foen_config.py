@@ -29,26 +29,13 @@ def test_three_reported_products_preserve_all_established_field_units() -> None:
     assert all(d.stop_convention is StopConvention.INCLUSIVE for d in window_declarations().products.values())
 
 
-def test_declaration_selects_route_specific_stop_semantics_from_transport_capability() -> None:
-    from rivretrieve._internal.driver import TransportWindowDeclarationProvider
-    from rivretrieve._internal.providers.ch_foen.declaration import declaration
-    from rivretrieve._internal.providers.registration import LiveStages
-    from rivretrieve._internal.recordings import ReplayTransport
-    from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader
+def test_legacy_routes_keep_distinct_stop_semantics() -> None:
+    from rivretrieve._internal.providers.ch_foen.config import flux_window_declarations
 
-    assert isinstance(declaration.observations, LiveStages)
-    stages = declaration.observations.stages
-    assert isinstance(stages, TransportWindowDeclarationProvider)
-    plain = ReplayTransport(())
-    authenticated = AuthenticatedTransport(
-        plain, (CredentialHeader("Authorization", "Token SENTINEL", ("https://influx.konzept.space",)),)
-    )
-    assert {value.stop_convention for value in stages.window_declarations_for_transport(plain).products.values()} == {
-        StopConvention.INCLUSIVE
+    assert {value.stop_convention for value in window_declarations().products.values()} == {StopConvention.INCLUSIVE}
+    assert {value.stop_convention for value in flux_window_declarations().products.values()} == {
+        StopConvention.EXCLUSIVE
     }
-    assert {
-        value.stop_convention for value in stages.window_declarations_for_transport(authenticated).products.values()
-    } == {StopConvention.EXCLUSIVE}
 
 
 @pytest.mark.recorded("tests/test_data/ch_foen_parameters_2026-09-02.recording.json")

@@ -96,32 +96,24 @@ def test_map_empty_selection_has_no_markers(monkeypatch: pytest.MonkeyPatch) -> 
     assert station_map.markers == []
 
 
-def test_map_ch_foen_selection_renders_unique_unknown_crs_stations_without_mutation(
+def test_map_ch_foen_selection_deduplicates_established_geometry_without_mutation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("rivretrieve._internal.station_map._load_folium", lambda: FakeFolium)
-    selection = rr.find(provider="ch_foen")
+    selection = rr.find(provider="ch_foen", station="2018")
     before = rr.as_frame(selection)
     from tests._catalogue import catalogue_reader
 
     stations_before = catalogue_reader("ch_foen").artifact.stations
-
-    # Five source fields share the same 246 gauge coordinates.
-    assert before.height == 1230
-    assert set(before["published_id"].drop_nulls()) == {"flow", "flow_ls", "height", "height_abs", "temperature"}
-    assert before.select("provider_id", "station_id").unique().height == 246
-    assert stations_before.get_column("crs").unique().sort().to_list() == ["unknown"]
-
+    assert before.height > 1
+    assert before["station_id"].unique().to_list() == ["2018"]
     station_map = rr.map(selection)
-
     assert isinstance(station_map, FakeMap)
-    assert len(station_map.markers) == 246
-    assert all(marker.popup.endswith("<br>crs: unknown") for marker in station_map.markers)
-    assert all(marker.icon.color == "orange" for marker in station_map.markers)
+    assert len(station_map.markers) == 1
+    assert station_map.markers[0].popup.endswith("<br>crs: EPSG:4326")
+    assert station_map.markers[0].icon.color == "blue"
     pl_testing.assert_frame_equal(rr.as_frame(selection), before, check_exact=True)
-    stations_after = catalogue_reader("ch_foen").artifact.stations
-    pl_testing.assert_frame_equal(stations_after, stations_before, check_exact=True)
-    assert stations_after.get_column("crs").unique().sort().to_list() == ["unknown"]
+    pl_testing.assert_frame_equal(catalogue_reader("ch_foen").artifact.stations, stations_before, check_exact=True)
 
 
 def test_map_established_crs_uses_distinct_marker_colour_and_exact_popup(
@@ -173,6 +165,27 @@ def test_station_map_real_backend_renders_five_column_station_frame() -> None:
     html = station_map.get_root().render()
     assert "stub_provider" in html
     assert "nullable-1" in html
+
+
+@pytest.mark.parametrize("include_located", [False, True])
+def test_map_omits_unknown_coordinate_pairs_without_mutating_stations(monkeypatch, include_located):
+    monkeypatch.setattr("rivretrieve._internal.station_map._load_folium", lambda: FakeFolium)
+    stations = _five_column_station_frame().clear()
+    rows = [
+        ("stub_provider", "unknown", None, None, "unknown"),
+        ("stub_provider", "latitude-only", 80.0, None, "unknown"),
+        ("stub_provider", "longitude-only", None, 90.0, "unknown"),
+    ]
+    if include_located:
+        rows.append(("stub_provider", "located", 47.0, 8.0, "unknown"))
+    stations = pl.DataFrame(rows, schema=stations.schema, orient="row")
+    before = stations.clone()
+
+    station_map = StationMap(stations).render()
+
+    assert station_map.location == ([47.0, 8.0] if include_located else [0.0, 0.0])
+    assert [marker.location for marker in station_map.markers] == ([[47.0, 8.0]] if include_located else [])
+    pl_testing.assert_frame_equal(stations, before)
 
 
 def _five_column_station_frame() -> pl.DataFrame:

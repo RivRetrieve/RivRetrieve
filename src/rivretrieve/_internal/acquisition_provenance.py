@@ -802,8 +802,16 @@ class SemanticDigest(_ProvenanceModel):
 
 
 class NativeTableIdentity(_ProvenanceModel):
-    """Immutable repository identity of a committed native build input."""
+    """Byte identity and revision of a native build input.
 
+    For retained derived inputs, the revision identifies the producer rather than
+    a repository commit containing the bytes. Archive membership remains in the
+    adopted build inputs; a retained identity does not imply a public download URL.
+    """
+
+    location_kind: Literal["committed", "retained"] = PydanticField(
+        default="committed", exclude_if=lambda value: value == "committed"
+    )
     repository_path: str
     revision: GitRevision
     sha256: Sha256
