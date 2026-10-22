@@ -273,7 +273,7 @@ def test_prefetch_coordinate_pruning_keeps_every_member_of_retained_broader_snap
 
 def test_source_series_inspection_preserves_each_selected_fact() -> None:
     selected = rr.find(provider="ch_foen")
-    expected = {(item.series_id, fact.facts_id) for item in selected.series for fact in item.facts}
+    expected = {(item.series_id, fact.facts_id) for item in selected.known_series for fact in item.facts}
     inspected = rr.series(selected)
     assert inspected.height == len(expected)
     assert set(inspected.select("series_id", "facts_id").iter_rows()) == expected
