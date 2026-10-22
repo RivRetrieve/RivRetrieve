@@ -131,6 +131,9 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
 }
 
 
+EXPECTED_PRODUCT_IDS = sorted(set(EXPECTED_PRODUCT_IDS) | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"]))
+
+
 def _issue_policy_error_chain(exc: BaseException) -> list[IssuePolicyError]:
     found = []
     seen: set[int] = set()

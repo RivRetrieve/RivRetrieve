@@ -1227,6 +1227,6 @@ def test_registry_terms_come_from_verified_acquisition_statements(
         {"provenance.license_not_established", "provenance.citation_not_established"}
         if provider_id in ("za_dws", "pl_imgw", "fr_hydroportail")
         else {"provenance.citation_not_established"}
-        if provider_id == "br_ana"
+        if provider_id in ("br_ana", "ch_foen")
         else set()
     )

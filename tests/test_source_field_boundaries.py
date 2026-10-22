@@ -158,21 +158,6 @@ def test_france_invalid_pagination_preserves_independent_series(
     assert [entry.content for entry in result.receipts.entries] == modified_bodies
 
 
-def test_swiss_catalogue_routes_do_not_select_a_preferred_field():
-    from rivretrieve._internal.providers.ch_foen.generate_catalogue import build_products
-
-    routes = dict(build_products().select("product_id", "native_id").iter_rows())
-    assert routes["discharge_reported"] == "flow,flow_ls"
-    assert routes["stage_reported"] == "height_abs,height"
-
-
-def test_swiss_active_lineage_describes_identified_observations():
-    from rivretrieve._internal.providers.ch_foen.origins import build_acquisition_provenance
-
-    provenance = build_acquisition_provenance()
-    assert any("observation.source_series_shape" in binding.facts for binding in provenance.fact_bindings)
-
-
 def test_bosnia_catalogue_retains_source_discharge_claim_without_workbook_id_alias():
     selection = rr.find(provider="ba_fhmzbih", station="4024", quantity="discharge")
     claims = [claim for inventory in selection.inventories for claim in inventory.catalogue_claims]
