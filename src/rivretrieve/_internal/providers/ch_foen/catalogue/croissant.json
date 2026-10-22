@@ -77,8 +77,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "f49055c28d31cda763694a018802636594b7d5f19fa5dac6eb4c3acf2e154ed4",
-      "contentSize": "431988 B"
+      "sha256": "c3c0186d3a6a57d50dd5a941d36951f304a59ac642fd5f5ee884b46eafaa288f",
+      "contentSize": "432015 B"
     },
     {
       "@id": "provenance_facts.parquet",
@@ -1570,14 +1570,41 @@
   "isBasedOn": {
     "@id": "native-table",
     "@type": "sc:MediaObject",
-    "name": "Historical committed native catalogue build input",
-    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/a3692b19554374efb826bce4efa97276cc75f07f/maintenance/catalogue/ch_foen/official/native.parquet",
+    "identifier": "official-native",
+    "name": "Adopted retained input",
     "sha256": "941ee440d446a0198a06d21fbb789be38c5cbc87df07cc8ddaa7bbf6a4ff8cda",
     "contentSize": "60100 B",
-    "creator": {
-      "@type": "sc:Organization",
-      "name": "RivRetrieve"
-    },
-    "description": "RivRetrieve materialization of the separately attributed source inputs."
+    "additionalProperty": [
+      {
+        "@type": "sc:PropertyValue",
+        "name": "archive_repository",
+        "value": "https://github.com/RivRetrieve/verification-evidence"
+      },
+      {
+        "@type": "sc:PropertyValue",
+        "name": "collection_id",
+        "value": "ch_foen-official-native-2026-10-22-v1"
+      },
+      {
+        "@type": "sc:PropertyValue",
+        "name": "manifest_sha256",
+        "value": "df782aa99e7207bb4818d96489ba0878843af1a40d218f8dcbccd8b8612cfd96"
+      },
+      {
+        "@type": "sc:PropertyValue",
+        "name": "artifact_id",
+        "value": "official-native"
+      },
+      {
+        "@type": "sc:PropertyValue",
+        "name": "role",
+        "value": "derived_input"
+      },
+      {
+        "@type": "sc:PropertyValue",
+        "name": "usage",
+        "value": "native_table"
+      }
+    ]
   }
 }
