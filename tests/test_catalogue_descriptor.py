@@ -205,15 +205,20 @@ def test_poland_historical_derivation_retains_both_issuers_and_separate_corrobor
 
 def test_field_absences_distinguish_documented_silence_and_missing_acquisition():
     from rivretrieve._internal.catalogue_origins import NotPublished
-    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.no_nve.origins import STATION_CATALOGUE_ORIGINS
 
     assert isinstance(STATION_CATALOGUE_ORIGINS["crs"], NotPublished)
-    swiss = _field(_descriptor("ch_foen"), "stations/crs")
+    norwegian = _field(_descriptor("no_nve"), "stations/crs")
     polish = _field(_descriptor("pl_imgw"), "stations/crs")
-    assert swiss["rr:absence"] == {"kind": "not_published", "evidence": str(STATION_CATALOGUE_ORIGINS["crs"].evidence)}
+    assert norwegian["rr:absence"] == {
+        "kind": "not_published",
+        "evidence": str(STATION_CATALOGUE_ORIGINS["crs"].evidence),
+    }
     assert polish["rr:absence"] == {"kind": "withheld", "reason": "no_acquisition_record_established"}
     assert (
-        swiss["source"] == polish["source"] == {"fileObject": {"@id": "stations.parquet"}, "extract": {"column": "crs"}}
+        norwegian["source"]
+        == polish["source"]
+        == {"fileObject": {"@id": "stations.parquet"}, "extract": {"column": "crs"}}
     )
 
 
@@ -334,8 +339,9 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
             for statement in provenance.header.source_records[0].statements
             if statement.kind == kind
         )
-    for provider in ("ch_foen", "ca_eccc", "pl_imgw", "fr_hydroportail", "th_thaiwater"):
+    for provider in ("ca_eccc", "pl_imgw", "fr_hydroportail", "th_thaiwater"):
         assert "license" not in _descriptor(provider) and "citation" not in _descriptor(provider)
+    assert _descriptor("ch_foen")["license"] == "Freie Nutzung. Quellenangabe ist Pflicht."
     hubeau = _descriptor("fr_hubeau")
     hubeau_provenance, _, _ = _inputs("fr_hubeau")
     for statement in hubeau_provenance.header.source_records[0].statements:

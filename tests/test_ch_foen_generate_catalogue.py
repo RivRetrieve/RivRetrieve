@@ -1,7 +1,7 @@
 """Historical Existenz source snapshots, independent of the official catalogue build.
 
-These approved byte and native-content controls remain unchanged until replacement
-artifacts are approved. Current generator behavior is covered by official tests.
+These approved byte and native-content controls describe retained historical inputs.
+Current generator behavior is covered by official tests.
 """
 
 from __future__ import annotations

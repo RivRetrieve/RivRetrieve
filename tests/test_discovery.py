@@ -59,9 +59,22 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "stage_daily_mean",
     ],
     "ch_foen": [
-        "discharge_reported",
-        "stage_reported",
-        "water_temperature_reported",
+        f"{quantity}_{route}"
+        for quantity in ("discharge", "stage", "water_temperature")
+        for route in (
+            "10min_mean",
+            "1day_max",
+            "1day_mean",
+            "1day_min",
+            "1hour_mean",
+            "1month_max",
+            "1month_mean",
+            "1month_min",
+            "1year_max",
+            "1year_mean",
+            "1year_min",
+            "recent",
+        )
     ],
     "cz_chmi": [
         "discharge_daily_mean",

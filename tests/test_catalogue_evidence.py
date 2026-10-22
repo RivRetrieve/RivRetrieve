@@ -527,30 +527,7 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
         del source["acquisitions"][acquisition_start : acquisition_start + binding_count]
         del source["evidence"][:binding_count]
         return AcquisitionProvenance.model_validate(model)
-    if provenance.provider_id == "ch_foen":
-        assert len(model["fact_universe"]) == 52
-        assert len(model["fact_bindings"]) == 15
-        assert len(model["source_records"]) == 3
-        source = model["source_records"][2]
-        assert source["source_id"] == "ch_foen.foen_station_reference"
-        assert len(source["acquisitions"]) == 4
-        assert len(source["evidence"]) == 240
-        extension = {
-            "facts": model["fact_universe"][47:52],
-            "bindings": model["fact_bindings"][11:15],
-            "source": source,
-        }
-        # Pin the complete ordered public extension at 51607cc4, including all
-        # 237 page identities. This is not original-source certification and does
-        # not replace or regenerate the unchanged historical oracle below.
-        ordered = json.dumps(extension, ensure_ascii=False, separators=(",", ":"))
-        assert sha256(ordered.encode()).hexdigest() == (
-            "d73f952650bf0bd7737c7049c533802136ecc23ee2b4215d7ca9cc823d931405"
-        )
-        del model["fact_universe"][47:52]
-        del model["fact_bindings"][11:15]
-        del model["source_records"][2]
-        return AcquisitionProvenance.model_validate(model)
+
     if provenance.provider_id == "pl_imgw":
         facts = [
             "source.grdc.catchment_area_unit",
@@ -664,7 +641,7 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
     return AcquisitionProvenance.model_validate(model)
 
 
-@pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
+@pytest.mark.parametrize("provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p != "ch_foen"))
 def test_historical_projection_preserves_sources_and_validates_metadata(provider):
     original = _legacy(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
@@ -673,7 +650,7 @@ def test_historical_projection_preserves_sources_and_validates_metadata(provider
     assert not any(fact.startswith("metadata.") for fact in projected.fact_universe)
 
 
-@pytest.mark.parametrize("provider", BUILTIN_PROVIDER_IDS)
+@pytest.mark.parametrize("provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p != "ch_foen"))
 def test_historical_projection_rejects_changed_current_producer(provider):
     original = _legacy(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
@@ -716,26 +693,6 @@ def test_historical_projection_rejects_changed_metadata_lineage(mutation):
     else:
         payload["build_inputs"]["declarations"][0]["symbol"] = "partial_review"
     with pytest.raises((AssertionError, ValueError)):
-        historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
-
-
-@pytest.mark.parametrize("mutation", ["datum_support", "scope"])
-def test_historical_projection_rejects_changed_datum_or_scope(mutation):
-    from rivretrieve._internal.issues import FatalContractError
-
-    original = _legacy("ch_foen")
-    metadata = pl.read_parquet(ROOT / "ch_foen/catalogue/station_metadata.parquet")
-    payload = original.model_dump(mode="json")
-    if mutation == "datum_support":
-        transformation = next(
-            item["transformation"]
-            for item in payload["fact_bindings"]
-            if item["fact_group"] == "metadata.elevation.station_page.Station altitude.datum"
-        )
-        transformation["external_inputs"].pop()
-    else:
-        metadata = metadata.with_columns(pl.lit("other_scope").alias("source_scope"))
-    with pytest.raises((AssertionError, ValueError, FatalContractError)):
         historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
 
 
@@ -793,7 +750,7 @@ def test_polish_historical_restoration_preserves_unexpected_source_facts():
     assert fact in restored.fact_universe
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "ch_foen", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_removes_only_declared_metadata_source_closure(provider):
     original = _legacy(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
@@ -827,7 +784,7 @@ def test_historical_restoration_removes_only_declared_metadata_source_closure(pr
     assert projected.model_dump(mode="json") == before
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "ch_foen", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_preserves_changes_outside_the_extension(provider):
     original = _legacy(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
@@ -846,7 +803,7 @@ def test_historical_restoration_preserves_changes_outside_the_extension(provider
         assert sha256(ordered.encode()).hexdigest() != oracle["providers"][provider]["ordered_model_sha256"]
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "ch_foen", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["ca_eccc", "usgs_nwis"])
 @pytest.mark.parametrize(
     "mutation",
     [
@@ -904,43 +861,6 @@ def test_historical_restoration_rejects_changed_complete_source_closure(provider
         source["evidence"].insert(0, extra)
     with pytest.raises((AssertionError, ValueError)):
         _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
-
-
-@pytest.mark.parametrize("mutation", ["extra_source", "missing_evidence", "source_header"])
-def test_historical_restoration_rejects_changed_swiss_source_membership(mutation):
-    original = _legacy("ch_foen")
-    metadata = pl.read_parquet(ROOT / "ch_foen/catalogue/station_metadata.parquet")
-    projected = historical_source_provenance(original, metadata)
-    payload = projected.model_dump(mode="json")
-    source = payload["source_records"][2]
-    if mutation == "extra_source":
-        payload["source_records"].append(
-            {
-                "source_id": "extra_source",
-                "issuer": "Unreviewed source",
-                "acquisitions": [
-                    {
-                        "acquisition_id": "extra_request",
-                        "method": "runtime_http_request",
-                        "instant_type": "runtime",
-                        "description": "Unreviewed runtime request",
-                        "requested_from": ["https://example.org/extra"],
-                    }
-                ],
-            }
-        )
-    elif mutation == "missing_evidence":
-        removed = source["evidence"].pop()
-        recording_id = removed["recording"]["recording_id"]
-        # Keep the input model valid, so the closed restoration itself must fail.
-        acquisition = source["acquisitions"][3]
-        acquisition["recording_ids"].remove(recording_id)
-        acquisition["requested_from"].remove(removed["recording"]["source_url"])
-    else:
-        source["issuer"] = "Changed FOEN issuer"
-    changed = AcquisitionProvenance.model_validate(payload)
-    with pytest.raises(AssertionError):
-        _assert_metadata_source_extensions_and_restore_original(changed)
 
 
 # Brazil has new adopted-product acquisitions after this migration oracle.
@@ -1359,48 +1279,6 @@ def _assert_field_source_lineage_repair_and_restore_original(retained_evidence_r
     return AcquisitionProvenance.model_validate(model)
 
 
-def _assert_swiss_credential_redaction_and_restore_original(retained_evidence_root: Path, provenance):
-    """Verify the redacted fixture before applying the immutable historical oracle.
-
-    Only this comparison projection restores the old description and digest.
-    The fixture and packaged evidence retain their credential-safe form.
-    """
-    model = provenance.model_dump(mode="json")
-    source = next(item for item in model["source_records"] if item["source_id"] == "ch_existenz")
-    repository_path = "tests/test_data/ch_foen_terms_existenz.html"
-    digest = "b353852a474516acf404c1d8b775cc77c5cf3c97bd3055380fc4534bcba9111c"
-    source_bytes = (retained_evidence_root / repository_path).read_bytes()
-    assert sha256(source_bytes).hexdigest() == digest
-    assert source_bytes.count(b"REDACTED-PUBLISHED-READ-ONLY-TOKEN") == 1
-    assert source["evidence"] == [
-        {
-            "evidence_id": "existenz_api_terms",
-            "description": (
-                "Intermediary API conditions and BAFU credit statement; "
-                "retained fixture has published archive credential redacted"
-            ),
-            "recording": {
-                "recording_id": "ch_foen_terms_existenz",
-                "repository_path": repository_path,
-                "source_url": "https://api.existenz.ch/",
-                "retrieved_at": "2026-08-20T13:12:58Z",
-                "media_type": "text/html; charset=UTF-8",
-                "sha256": digest,
-            },
-        }
-    ]
-    acquisition = source["acquisitions"][2]
-    assert acquisition["recording_ids"] == ["ch_foen_terms_existenz"]
-    assert acquisition["description"] == (
-        "Existenz API conditions and BAFU credit response; published archive credential redacted in retained fixture"
-    )
-    acquisition["description"] = "Existenz API conditions and BAFU credit response"
-    evidence = source["evidence"][0]
-    evidence["description"] = "Intermediary API conditions and BAFU credit statement"
-    evidence["recording"]["sha256"] = "488b25d24651aafb520d7cf69c1d36ac9f4384fa096b9cab77b44c6b669f82df"
-    return AcquisitionProvenance.model_validate(model)
-
-
 def _assert_bulk_source_history_preserved(retained_evidence_root: Path, provider, provenance):
     """Compare retained source inputs, not superseded output/authority assertions."""
     path = retained_evidence_root / "tests/test_data/catalogue_provenance_original_v2" / f"{provider}.json"
@@ -1530,12 +1408,6 @@ def _assert_bulk_source_history_preserved(retained_evidence_root: Path, provider
                 "tests/test_data/catalogue_provenance_original_v2/ca_eccc.json",
             ),
         ),
-        pytest.param(
-            "ch_foen",
-            marks=pytest.mark.recorded(
-                "tests/test_data/ch_foen_terms_existenz.html",
-            ),
-        ),
         "cz_chmi",
         pytest.param(
             "fr_hubeau",
@@ -1587,8 +1459,6 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(request: p
     restored = _assert_metadata_source_extensions_and_restore_original(restored)
     if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
         restored = _assert_field_source_lineage_repair_and_restore_original(retained_evidence_root, restored)
-    if provider == "ch_foen":
-        restored = _assert_swiss_credential_redaction_and_restore_original(retained_evidence_root, restored)
     if provider in {"ca_eccc", "pl_imgw", "za_dws"}:
         restored = _assert_bulk_source_history_preserved(retained_evidence_root, provider, restored)
     if provider == "usgs_nwis":

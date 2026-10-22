@@ -42,5 +42,6 @@ must not be interpreted as another station's location.
 - [FOEN hydrological stations](https://www.hydrodaten.admin.ch/en)
 - [FOEN terms of use and source citation](https://www.hydrodaten.admin.ch/en/questions#faq-7)
 
-FOEN states that its data can be used freely and recommends citing the source:
+The official catalogue states “Freie Nutzung. Quellenangabe ist Pflicht.”
+This permits free use and requires source attribution. FOEN suggests the citation:
 “Hydrology Division, Federal Office for the Environment FOEN (reference date).”

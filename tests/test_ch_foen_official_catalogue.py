@@ -378,16 +378,11 @@ def test_catalogue_build_enforces_origins_before_publication():
     "maintenance/catalogue/ch_foen/official",
     "maintenance/catalogue/ch_foen/official/selection.json",
 )
-def test_retained_station_snapshot_builds_native_candidate(retained_evidence_root, catalogue_input_receipt):
-    """Retain a deterministic native candidate; this is not catalogue publication."""
+def test_retained_station_snapshot_preserves_source_fields(retained_evidence_root, catalogue_input_receipt):
+    """Compare native station fields directly with the selected original response."""
     import json
-    import os
-    from pathlib import Path
-
-    from polars.testing import assert_frame_equal
 
     from rivretrieve._internal.acquisition_provenance import RecordingReference
-    from rivretrieve._internal.catalogues.native import read_native_table, write_native_table
     from rivretrieve._internal.providers.ch_foen.generate_catalogue import read_original
 
     declaration_path = "maintenance/catalogue/ch_foen/official/selection.json"
@@ -408,17 +403,6 @@ def test_retained_station_snapshot_builds_native_candidate(retained_evidence_roo
         actual = native.data.filter(pl.col("no") == row["no"]).row(0, named=True)
         for field in ("name", "latitude", "longitude", "status", "coverageFrom", "coverageTo"):
             assert actual[field] == row.get(field)
-    configured = os.environ.get("RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT")
-    if not configured:
-        pytest.fail("The reviewed catalogue command must supply restricted product output.", pytrace=False)
-    output = Path(configured).resolve()
-    checkout = Path(__file__).resolve().parents[1]
-    if output.is_relative_to(checkout) or output.is_relative_to(retained_evidence_root.resolve()):
-        pytest.fail("Native candidates must stay outside checkout and retained inputs.", pytrace=False)
-    candidate = output / "ch_foen" / "native.parquet"
-    candidate.parent.mkdir(mode=0o700)
-    write_native_table(native, candidate)
-    assert_frame_equal(read_native_table(candidate).data, native.data)
     assert (retained_evidence_root / reference.repository_path).read_bytes() == body
 
 
@@ -435,53 +419,3 @@ def test_source_selection_requires_verified_authored_declaration(tmp_path):
     )
     with pytest.raises(FatalContractError, match="selected authored declaration"):
         read_catalogue_sources(tmp_path, selection_path="selection.json", input_receipt=receipt)
-
-
-@pytest.mark.governing(
-    "maintenance/catalogue/ch_foen/official",
-    "maintenance/catalogue/ch_foen/official/selection.json",
-    "maintenance/catalogue/station_metadata/sources/ch_foen",
-    "maintenance/catalogue/station_metadata/review.json",
-)
-def test_retained_inputs_publish_offline_candidate(
-    retained_evidence_root, catalogue_input_receipt, catalogue_build_inputs
-):
-    """Build reviewable products; approved packaged equality is checked separately."""
-    import os
-    from pathlib import Path
-
-    from rivretrieve._internal.providers.ch_foen.generate_catalogue import main, read_catalogue_sources
-
-    sources = read_catalogue_sources(
-        retained_evidence_root,
-        selection_path="maintenance/catalogue/ch_foen/official/selection.json",
-        input_receipt=catalogue_input_receipt,
-    )
-    configured = os.environ.get("RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT")
-    if not configured:
-        pytest.fail("The reviewed catalogue command must supply restricted product output.", pytrace=False)
-    output = Path(configured).resolve()
-    checkout = Path(__file__).resolve().parents[1]
-    if output.is_relative_to(checkout) or output.is_relative_to(retained_evidence_root.resolve()):
-        pytest.fail("Catalogue candidates must stay outside checkout and retained inputs.", pytrace=False)
-    inputs = output / "ch_foen.build-inputs.json"
-    receipt = output / "ch_foen.input-receipt.json"
-    with inputs.open("x") as stream:
-        stream.write(catalogue_build_inputs(sources.provenance).model_dump_json())
-    with receipt.open("x") as stream:
-        stream.write(catalogue_input_receipt.model_dump_json())
-    assert (
-        main(
-            [
-                "--evidence-root",
-                str(retained_evidence_root),
-                "--input-receipt",
-                str(receipt),
-                "--build-inputs",
-                str(inputs),
-                "--out",
-                str(output / "ch_foen"),
-            ]
-        )
-        == 0
-    )

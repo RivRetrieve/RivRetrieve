@@ -201,9 +201,8 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
         pytest.param("br_ana", marks=pytest.mark.recorded("tests/recordings/br_ana")),
     ],
 )
-@pytest.mark.usefixtures("existenz_engine_replay")
 def test_public_explicit_series_cache_and_bundle_preserve_identity(
-    retained_evidence_root: Path, provider, monkeypatch, tmp_path
+    retained_evidence_root: Path, provider, monkeypatch, tmp_path, request
 ):
     from rivretrieve._internal.observations import ReceiptAuthorship
 
@@ -219,6 +218,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(
         )
         start, end = "2020-01-10", "2020-01-20"
     elif provider == "ch_foen":
+        request.getfixturevalue("existenz_engine_replay")
         recording = read_recording(
             retained_evidence_root / "tests/test_data" / "ch_foen_2251_rest_engine_2026-09-19.recording.json"
         )
