@@ -126,6 +126,7 @@ def selected_sources(tmp_path, monkeypatch):
     )
     selection = {
         "native_table": "native.parquet",
+        "native_revision": "f" * 40,
         "checked_on": "2026-01-02",
         "captures": [
             {**captures["stations"], "kind": "stations", "outcome": "rows"},
@@ -197,6 +198,22 @@ def test_selected_originals_preserve_null_associations_and_live_unit_scope(selec
     ids = {item.recording.recording_id for source in result.provenance.source_records for item in source.evidence}
     assert "redirect" not in ids
     assert "001" in result.native_table.data["no"].to_list()
+
+
+def test_native_identity_does_not_change_with_archive_execution_revision(selected_sources):
+    root, receipt, _ = selected_sources
+    first = generate_catalogue.read_catalogue_sources(root, selection_path="selection.json", input_receipt=receipt)
+    current = receipt.model_copy(
+        update={
+            "archive_code_revision": "9" * 40,
+            "inputs": tuple(item.model_copy(update={"archive_revision": "9" * 40}) for item in receipt.inputs),
+        }
+    )
+    second = generate_catalogue.read_catalogue_sources(root, selection_path="selection.json", input_receipt=current)
+    assert first.provenance.native_table == second.provenance.native_table
+    assert first.provenance.native_table.revision == "f" * 40
+    assert current.archive_code_revision == "9" * 40
+    assert {item.archive_revision for item in current.inputs} == {"9" * 40}
 
 
 def test_changed_native_member_cannot_reach_parsing(selected_sources):

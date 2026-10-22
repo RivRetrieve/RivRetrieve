@@ -541,7 +541,7 @@ def read_catalogue_sources(
     provenance = origins.build_acquisition_provenance(
         NativeTableIdentity(
             repository_path=native_path,
-            revision=member.archive_revision,
+            revision=selection["native_revision"],
             sha256=member.sha256,
             byte_size=member.byte_size,
         ),
