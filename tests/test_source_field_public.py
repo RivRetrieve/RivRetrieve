@@ -16,6 +16,7 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
 @pytest.mark.recorded("tests/test_data/ch_foen_2135_flux_engine_2020-01-01.recording.json")
+@pytest.mark.usefixtures("existenz_engine_replay")
 def test_public_authenticated_flux_normal_padding_cache_and_receipts(
     retained_evidence_root: Path, monkeypatch, tmp_path
 ):

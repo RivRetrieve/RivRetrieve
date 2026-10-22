@@ -16,6 +16,7 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
 @pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
+@pytest.mark.usefixtures("existenz_engine_replay")
 def test_public_swiss_litre_series_preserves_identity_unit_and_unknown_time(
     retained_evidence_root: Path, monkeypatch, tmp_path
 ):
@@ -130,6 +131,7 @@ def test_public_ana_physical_daily_scope_returns_both_consistencies_and_narrows(
 
 
 @pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
+@pytest.mark.usefixtures("existenz_engine_replay")
 def test_public_explicit_swiss_field_does_not_diagnose_unrequested_sibling(
     retained_evidence_root: Path, monkeypatch, tmp_path
 ):
@@ -199,6 +201,7 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
         pytest.param("br_ana", marks=pytest.mark.recorded("tests/recordings/br_ana")),
     ],
 )
+@pytest.mark.usefixtures("existenz_engine_replay")
 def test_public_explicit_series_cache_and_bundle_preserve_identity(
     retained_evidence_root: Path, provider, monkeypatch, tmp_path
 ):

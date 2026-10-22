@@ -193,7 +193,9 @@ for provider_id in provider_ids:
     catalogue = provider_root.joinpath(provider_id, "catalogue")
     assert not catalogue.joinpath("native.parquet").is_file()
     stations = pl.read_parquet(catalogue.joinpath("stations.parquet"))
-    selection = rr.find(provider=provider_id, station=stations["station_id"][0])
+    pairs = pl.read_parquet(catalogue.joinpath("station_products.parquet"))
+    station_id = pairs.filter(pl.col("availability") == "available")["station_id"][0] if provider_id == "ch_foen" else stations["station_id"][0]
+    selection = rr.find(provider=provider_id, station=station_id)
     assert rr.as_frame(selection).height > 0, provider_id
     assert rr.describe(provider_id)
 """

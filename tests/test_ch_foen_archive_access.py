@@ -2,7 +2,6 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from importlib import import_module
 from io import BytesIO
 from types import SimpleNamespace
 from zipfile import ZipFile
@@ -25,19 +24,8 @@ CSV = b"_time,_value,_field,_measurement,loc\n2024-01-01T00:00:00Z,108.045,flow,
 
 
 @pytest.fixture(autouse=True)
-def fixed_clock_and_safe_credential(monkeypatch):
-    from rivretrieve._internal.transport import CredentialHeader
-
-    module = import_module("rivretrieve._internal.providers.ch_foen.declaration")
-    declaration = module.declaration
-    access = replace(
-        declaration.public_archive_access,
-        credential=CredentialHeader(
-            "Authorization", "Token SOURCE-READONLY-SENTINEL", ("https://influx.konzept.space",)
-        ),
-    )
+def fixed_clock_and_safe_credential(monkeypatch, existenz_engine_replay):
     monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: NOW)
-    monkeypatch.setattr(module, "declaration", replace(declaration, public_archive_access=access))
 
 
 def _intercept(monkeypatch, *, status=200, echo=False, fail=False, payload=CSV):

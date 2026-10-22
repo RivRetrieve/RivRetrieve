@@ -245,6 +245,7 @@ def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(
 
 
 @pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
+@pytest.mark.usefixtures("existenz_engine_replay")
 def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -413,6 +414,7 @@ def test_finite_view_does_not_report_original_all_inventory_uncertainty(
 
 
 @pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
+@pytest.mark.usefixtures("existenz_engine_replay")
 def test_global_id_view_excludes_other_inventory_search_coordinates(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):

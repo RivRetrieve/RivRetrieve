@@ -99,7 +99,11 @@ def _adapter(
     native_path = retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     build = generator.build_catalogue
     if provider == "ch_foen":
-        sources = generator.read_catalogue_sources(retained_evidence_root, input_receipt=input_receipt)
+        sources = generator.read_catalogue_sources(
+            retained_evidence_root,
+            selection_path="maintenance/catalogue/ch_foen/official/selection.json",
+            input_receipt=input_receipt,
+        )
         native_path = retained_evidence_root / "maintenance/catalogue/ch_foen/official/native.parquet"
         build = partial(
             build,
@@ -210,6 +214,24 @@ def _adapter(
         build=build,
         cases=cases,
     )
+
+
+def test_swiss_adapter_passes_explicit_source_selection(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    def read_sources(evidence_root, *, selection_path, input_receipt):
+        assert evidence_root == tmp_path
+        assert selection_path == "maintenance/catalogue/ch_foen/official/selection.json"
+        assert input_receipt is receipt
+        return SimpleNamespace(associations=(), checked_on=None, provenance=None, station_metadata=None)
+
+    receipt = object()
+    generator = SimpleNamespace(
+        read_catalogue_sources=read_sources, build_catalogue=lambda *args, **kwargs: None, main=lambda argv: 0
+    )
+    monkeypatch.setattr(__import__(__name__, fromlist=["_module"]), "_module", lambda *args: generator)
+    adapter = _adapter(tmp_path, "ch_foen", (), input_receipt=receipt)
+    assert adapter.native_path == tmp_path / "maintenance/catalogue/ch_foen/official/native.parquet"
 
 
 def _stations_case(provider: str) -> tuple[DeclarationCase, ...]:
@@ -676,9 +698,7 @@ def _assert_reviewed_crs(
         assert isinstance(origin, Documented)
         assert origin.value == "EPSG:4326"
         assert stations["crs"].unique().to_list() == ["EPSG:4326"]
-        expected = case_native.data.select(
-            pl.col("no").alias("station_id"), "latitude", "longitude"
-        ).sort("station_id")
+        expected = case_native.data.select(pl.col("no").alias("station_id"), "latitude", "longitude").sort("station_id")
         pl_testing.assert_frame_equal(
             stations.select("station_id", "latitude", "longitude").sort("station_id"),
             expected,

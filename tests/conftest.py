@@ -22,6 +22,29 @@ from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _r
 
 
 @pytest.fixture
+def existenz_engine_replay(monkeypatch):
+    """Keep retired-route engine regressions independent of the Swiss catalogue."""
+    from importlib import import_module
+
+    from rivretrieve._internal import discovery
+    from tests._existenz import catalogue_for_replay, declaration_for_replay
+
+    module = import_module("rivretrieve._internal.providers.ch_foen.declaration")
+    declaration = declaration_for_replay(module.declaration)
+    monkeypatch.setattr(module, "declaration", declaration)
+    registry = ProviderRegistry()
+    registry.register(
+        "ch_foen",
+        catalogue_for_replay(),
+        engine_provider_module=declaration.observations.stages,
+        public_archive_access=declaration.public_archive_access,
+    )
+    monkeypatch.setattr(discovery, "_registry", registry)
+    monkeypatch.setattr(discovery, "_provider_lookup", registry.get)
+    monkeypatch.setattr(discovery, "_ensure_default_providers_registered", lambda: None)
+
+
+@pytest.fixture
 def registered_dws_catalogue():
     """Opt in to the deferred DWS catalogue without offering it by default."""
     from rivretrieve._internal.providers.registration import register_manifest

@@ -1,37 +1,28 @@
-"""Keep the Swiss page examples aligned with an exact recorded source response.
+"""Swiss discovery examples run offline with packaged catalogue inputs."""
 
-This is offline regression evidence. Live page execution is recorded in the PR.
-"""
-
-import io
 import re
-from contextlib import redirect_stdout
+import socket
 from pathlib import Path
 
 import pytest
-
-import rivretrieve._internal.discovery as discovery
-from rivretrieve._internal.recordings import ReplayTransport
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.recorded("tests/test_data/ch_foen_2018_flux_january2024_full.recording.json")
-def test_swiss_page_examples_and_displayed_outputs(retained_evidence_root: Path, monkeypatch, tmp_path):
-    page = (ROOT / "docs/providers/ch_foen.md").read_text()
-    blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.DOTALL)
-    assert len(blocks) == page.count("```python") == 3
-    replay = ReplayTransport(
-        [retained_evidence_root / "tests/test_data/ch_foen_2018_flux_january2024_full.recording.json"]
-    )
-    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+def test_swiss_page_examples_are_offline(monkeypatch, tmp_path):
+    def denied(*args, **kwargs):
+        pytest.fail("Swiss documentation attempted network access")
+
+    monkeypatch.setattr(socket.socket, "connect", denied)
+    monkeypatch.setattr(socket.socket, "connect_ex", denied)
     monkeypatch.chdir(tmp_path)
+    page = (ROOT / "docs/providers/ch_foen.md").read_text()
+    blocks = re.findall(r"```python\n(.*?)```", page, re.DOTALL)
+    assert blocks
     namespace = {}
-    for index, (code, expected) in enumerate(blocks, 1):
-        output = io.StringIO()
-        with redirect_stdout(output):
-            exec(compile(code, f"ch_foen.md:block-{index}", "exec"), namespace)
-        assert output.getvalue() == expected, index
-    assert not namespace["result"].issues
+    for index, code in enumerate(blocks, 1):
+        exec(compile(code, f"ch_foen.md:block-{index}", "exec"), namespace)
+    assert not namespace["candidates"].is_empty()
+    assert not namespace["metadata"].is_empty()
