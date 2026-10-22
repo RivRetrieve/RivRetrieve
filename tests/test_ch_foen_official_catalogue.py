@@ -372,3 +372,51 @@ def test_catalogue_build_enforces_origins_before_publication():
             checked_on=date(2026, 1, 1),
             provenance=None,
         )
+
+
+@pytest.mark.governing(
+    "maintenance/catalogue/ch_foen/official",
+    "maintenance/catalogue/ch_foen/official/selection.json",
+)
+def test_retained_station_snapshot_builds_native_candidate(retained_evidence_root, catalogue_input_receipt):
+    """Retain a deterministic native candidate; this is not catalogue publication."""
+    import json
+    import os
+    from pathlib import Path
+
+    from polars.testing import assert_frame_equal
+
+    from rivretrieve._internal.acquisition_provenance import RecordingReference
+    from rivretrieve._internal.catalogues.native import read_native_table, write_native_table
+    from rivretrieve._internal.providers.ch_foen.official_catalogue import read_original
+
+    declaration_path = "maintenance/catalogue/ch_foen/official/selection.json"
+    assert declaration_path in {item.consumer_path for item in catalogue_input_receipt.declaration_inputs}
+    selection = json.loads((retained_evidence_root / declaration_path).read_bytes())
+    station_captures = [capture for capture in selection["captures"] if capture["kind"] == "stations"]
+    assert len(station_captures) == 1
+    capture = station_captures[0]
+    reference = RecordingReference.model_validate(capture["recording"])
+    assert reference.repository_path == capture["body"]
+    body = read_original(retained_evidence_root, reference, input_receipt=catalogue_input_receipt)
+    payload = json.loads(body)
+    native = station_native_table(payload, retrieved_at=RetrievedAt(reference.retrieved_at))
+    rows = payload["data"]["water"]["observations"]["stations"]
+    assert native.data["no"].to_list() == sorted(row["no"] for row in rows)
+    assert native.data.height == len(rows)
+    for row in rows:
+        actual = native.data.filter(pl.col("no") == row["no"]).row(0, named=True)
+        for field in ("name", "latitude", "longitude", "status", "coverageFrom", "coverageTo"):
+            assert actual[field] == row.get(field)
+    configured = os.environ.get("RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT")
+    if not configured:
+        pytest.fail("The reviewed catalogue command must supply restricted product output.", pytrace=False)
+    output = Path(configured).resolve()
+    checkout = Path(__file__).resolve().parents[1]
+    if output.is_relative_to(checkout) or output.is_relative_to(retained_evidence_root.resolve()):
+        pytest.fail("Native candidates must stay outside checkout and retained inputs.", pytrace=False)
+    candidate = output / "ch_foen" / "native.parquet"
+    candidate.parent.mkdir(mode=0o700)
+    write_native_table(native, candidate)
+    assert_frame_equal(read_native_table(candidate).data, native.data)
+    assert (retained_evidence_root / reference.repository_path).read_bytes() == body
