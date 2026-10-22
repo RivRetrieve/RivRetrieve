@@ -77,7 +77,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "b53123992a638f5085e0e41e9809200c423f676d1113bc28672f29c49fd13749",
+      "sha256": "f49055c28d31cda763694a018802636594b7d5f19fa5dac6eb4c3acf2e154ed4",
       "contentSize": "431988 B"
     },
     {
@@ -133,8 +133,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "6cbc11955f0694ca81e1ad4a2825c1274f671d7c7fbd5f27e7a5f7b84daae5ef",
-      "contentSize": "9564754 B"
+      "sha256": "378b005538123c90ca85d67039da14e829475b2351321fba8c3f64ad4ba0e1bf",
+      "contentSize": "9770834 B"
     },
     {
       "@id": "series_claims.parquet",
@@ -1571,7 +1571,7 @@
     "@id": "native-table",
     "@type": "sc:MediaObject",
     "name": "Historical committed native catalogue build input",
-    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/38a768961815e4e911d0cccadec3dd2a96129db7/maintenance/catalogue/ch_foen/official/native.parquet",
+    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/a3692b19554374efb826bce4efa97276cc75f07f/maintenance/catalogue/ch_foen/official/native.parquet",
     "sha256": "941ee440d446a0198a06d21fbb789be38c5cbc87df07cc8ddaa7bbf6a4ff8cda",
     "contentSize": "60100 B",
     "creator": {
