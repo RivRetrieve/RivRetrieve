@@ -412,7 +412,12 @@ def build_catalogue_descriptor(
             )
             if len(adopted) != 1:
                 raise FatalContractError("Retained native table requires one matching adopted archive input")
-            descriptor["isBasedOn"] = _retained_input_node("native-table", adopted[0])
+            material = _retained_input_node("native-table", adopted[0])
+            # Execution revisions remain in build_inputs, not the retained byte identity.
+            material["additionalProperty"] = [
+                item for item in material["additionalProperty"] if item["name"] != "archive_revision"
+            ]
+            descriptor["isBasedOn"] = material
         else:
             descriptor["isBasedOn"] = {
                 "@id": "native-table",

@@ -338,6 +338,30 @@ def test_retained_native_descriptor_uses_archive_identity_without_a_public_blob_
     assert properties["artifact_id"] == "official-native"
 
 
+def test_retained_native_descriptor_is_stable_across_archive_execution_revisions():
+    evidence, origins, files = _inputs("ch_foen")
+    native = evidence.header.native_table.model_copy(update={"location_kind": "retained"})
+    header = evidence.header.model_copy(update={"native_table": native})
+
+    def describe(value):
+        supplied = {**files, "provenance.json": value.model_dump_json().encode()}
+        return build_catalogue_descriptor(evidence.model_copy(update={"header": value}), origins, supplied)["isBasedOn"]
+
+    build = header.build_inputs
+    updated = build.model_copy(
+        update={
+            "inputs": tuple(
+                item.model_copy(update={"reference": item.reference.model_copy(update={"archive_revision": "9" * 40})})
+                for item in build.inputs
+            )
+        }
+    )
+    current = header.model_copy(update={"build_inputs": updated})
+    assert describe(header) == describe(current)
+    assert {item.reference.archive_revision for item in current.build_inputs.inputs} == {"9" * 40}
+    assert current.build_inputs != header.build_inputs
+
+
 def test_committed_native_descriptor_keeps_its_repository_url():
     evidence, origins, files = _inputs("pl_imgw")
     native = evidence.header.native_table
