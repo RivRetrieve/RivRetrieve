@@ -130,7 +130,16 @@ ARCHIVE_ROUTES = (
     "data_1year_max",
 )
 PARAMETERS = {"Q": ("discharge", "discharge"), "W": ("stage", "stage"), "WT": ("water_temperature", "temperature")}
-UNITS = {"m³/s": "m3/s", "m3/s": "m3/s", "l/s": "l/s", "m": "m", "cm": "cm", "°C": "degC"}
+UNITS = {
+    "m³/s": "m3/s",
+    "m3/s": "m3/s",
+    "l/s": "l/s",
+    "m": "m",
+    "cm": "cm",
+    "°C": "degC",
+    "m ü.M.": "m",
+    "m a.s.l.": "m",
+}
 
 
 def product_id(route: str, parameter: str) -> str:
@@ -162,6 +171,9 @@ def describe_associations(associations: pl.DataFrame, *, evidence: str) -> Sourc
                 quantity=known(PARAMETERS[parameter][1], evidence),
                 source_unit=known(unit, evidence) if unit else EvidenceFact(),
                 normalized_unit=UNITS.get(unit),
+                vertical_reference=known("above_sea_level", evidence)
+                if parameter == "W" and unit in {"m ü.M.", "m a.s.l."}
+                else EvidenceFact(),
             )
             for unit in sorted(set(rows["unitSymbol"].to_list()), key=lambda unit: unit or "")
         )

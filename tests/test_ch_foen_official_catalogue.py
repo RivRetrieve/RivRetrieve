@@ -240,6 +240,75 @@ def test_public_discovery_keeps_unknown_route_facts_and_unobserved_intent(monkey
     )
 
 
+@pytest.mark.parametrize("unit,route", [("m ü.M.", "data_1day_mean"), ("m a.s.l.", "data_live")])
+def test_stage_reference_labels_allow_discovery_without_inventing_a_datum(monkeypatch, unit, route):
+    from datetime import date
+
+    import rivretrieve as rr
+    import rivretrieve._internal.discovery as discovery
+    from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
+    from rivretrieve._internal.providers.ch_foen.generate_catalogue import (
+        ASSOCIATION_SCHEMA,
+        catalogue_tables,
+        describe_associations,
+    )
+    from rivretrieve._internal.registry import ProviderRegistry
+    from rivretrieve._internal.source_series import EvidenceState, admission
+
+    native = station_native_table(
+        {"data": {"water": {"observations": {"stations": [{"no": "0085"}]}}}},
+        retrieved_at=RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    associations = pl.DataFrame(
+        [
+            {
+                "station_no": "0085",
+                "station_id": None,
+                "route": route,
+                "parameterName": "W",
+                "tsName": "Level",
+                "unitName": unit,
+                "unitSymbol": unit,
+            },
+        ],
+        schema=ASSOCIATION_SCHEMA,
+    )
+    products, stations, pairs = catalogue_tables(native, associations, checked_on=date(2026, 1, 2))
+    artifact = PackagedCatalogArtifact(
+        {
+            "provider_id": "ch_foen",
+            "name": "Synthetic",
+            "live_stations": False,
+            "live_products": False,
+            "live_station_products": False,
+            "bulk_observations": "none",
+            "catalogue_version": "2026-01-02",
+            "license": None,
+            "citation": None,
+        },
+        products,
+        stations,
+        pairs,
+        source_descriptions=describe_associations(associations, evidence="synthetic:published-label"),
+    )
+    registry = ProviderRegistry()
+    registry.register("ch_foen", artifact)
+    monkeypatch.setattr(discovery, "_registry", registry)
+    monkeypatch.setattr(discovery, "_ensure_default_providers_registered", lambda: None)
+    selected = rr.find(provider="ch_foen", station="0085", quantity="stage", on_issue="ignore")
+    assert len(selected.series) == 1
+    fact = selected.series[0].facts[0]
+    assert fact.source_unit.value == unit
+    assert fact.normalized_unit == "m"
+    assert admission(fact).factor == 1.0
+    assert fact.vertical_reference.value == "above_sea_level"
+    assert fact.vertical_reference.evidence == ("synthetic:published-label",)
+    assert fact.vertical_datum.state is EvidenceState.NOT_ESTABLISHED
+    assert len(rr.find(provider="ch_foen", quantity="stage", vertical_reference="above_sea_level").series) == 1
+    assert not rr.find(provider="ch_foen", quantity="stage", vertical_datum="LN02").series
+    assert fact.frequency.value is None and fact.temporal_support.value is None
+
+
 def test_recent_associations_bind_only_station_page_units_without_archive_fallback():
     from rivretrieve._internal.providers.ch_foen.generate_catalogue import recent_associations
 
