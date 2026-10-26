@@ -13,6 +13,45 @@ from tests.usgs_modern_recordings import ModernReplay, body, coordinates, manife
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
+def _official_replay(monkeypatch, *, variants=("10MinMittel",)):
+    """Authored Q/W responses for shared selection and cache contracts, not source evidence."""
+    import json
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.transport import TransportResponse
+
+    calls = []
+
+    class Transport:
+        def send(self, request):
+            calls.append(request)
+            query = json.loads(request.body)["query"]
+            parameter = "WT" if '"WT"' in query else "W" if '"W"' in query else "Q"
+            rows = [
+                {
+                    "station": {"no": "2018"},
+                    "parameterName": parameter,
+                    "tsName": variant,
+                    "unitSymbol": "°C" if parameter == "WT" else "m" if parameter == "W" else "m3/s",
+                    "timestamp": f"2025-01-01T00:{minute:02}:00Z",
+                    "value": float(minute),
+                }
+                for variant in variants
+                for minute in (0, 10, 20, 30)
+            ]
+            return TransportResponse(
+                json.dumps({"data": {"water": {"observations": {"data_10min_mean": rows}}}}).encode(),
+                200,
+                datetime(2026, 1, 1, tzinfo=UTC),
+                "application/json",
+                request.url,
+                {},
+            )
+
+    monkeypatch.setattr(discovery, "HttpClient", Transport)
+    return calls
+
+
 def _counted_replay(monkeypatch, recordings):
     replay = ReplayTransport(recordings)
     original = replay.send
@@ -244,25 +283,17 @@ def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(
     assert any(item.code == "selection.unresolved_inventory" for item in missing_view.issues)
 
 
-@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
-@pytest.mark.usefixtures("existenz_engine_replay")
-def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(
-    monkeypatch, tmp_path, retained_evidence_root: Path
-):
-    recording = read_recording(
-        retained_evidence_root / "tests" / "test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json"
-    )
-    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
+def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    calls = _counted_replay(monkeypatch, (recording,))
-    broad = rr.find(provider="ch_foen", station="2251")
-    identities = tuple(item.series_id for item in broad.known_series if item.variant in ("flow_ls", "height_abs"))
-    assert len(identities) == 2
+    calls = _official_replay(monkeypatch)
+    broad = rr.find(provider="ch_foen", station="2018", frequency="10min")
+    identities = tuple(item.series_id for item in broad.series)
+    assert len(identities) == 3
     selected = rr.pick(broad, series_id=identities, on_issue="raise")
-    result = rr.fetch(selected, start="2026-09-19T00:00:00", end="2026-09-19T03:00:00", on_issue="raise")
-    assert len(calls) == 2
+    result = rr.fetch(selected, start="2025-01-01T00:00:00", end="2025-01-01T00:30:00", on_issue="raise")
+    assert len(calls) == 3
     assert set(result.data["series_id"]) == set(identities)
-    assert result.data.height == 8
+    assert result.data.height == 12
     assert not any(item.status.value in ("no_match", "unresolved") for item in result.outcomes)
 
 
@@ -413,12 +444,8 @@ def test_finite_view_does_not_report_original_all_inventory_uncertainty(
     assert not positive_warnings
 
 
-@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
-@pytest.mark.usefixtures("existenz_engine_replay")
-def test_global_id_view_excludes_other_inventory_search_coordinates(
-    monkeypatch, tmp_path, retained_evidence_root: Path
-):
-    """Use real Swiss acquisition/parsing with authored ALL-inventory diagnostics."""
+def test_global_id_view_excludes_other_inventory_search_coordinates(monkeypatch, tmp_path):
+    """Use official acquisition/parsing with synthetic rows with authored ALL-inventory diagnostics."""
     import warnings
 
     from rivretrieve._internal.engine import WithIssues
@@ -426,11 +453,8 @@ def test_global_id_view_excludes_other_inventory_search_coordinates(
     from rivretrieve._internal.providers.ch_foen.declaration import declaration
     from rivretrieve._internal.source_series import SeriesScope
 
-    recording = read_recording(
-        retained_evidence_root / "tests" / "test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json"
-    )
-    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
-    calls = _counted_replay(monkeypatch, (recording,))
+    monkeypatch.chdir(tmp_path)
+    calls = _official_replay(monkeypatch)
     original = declaration.observations.stages.fetch
 
     def acquire(stations, products, rendered_windows, fetch_window, config, transport, *, scope=None, known_series=()):
@@ -465,13 +489,13 @@ def test_global_id_view_excludes_other_inventory_search_coordinates(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(declaration.observations.stages, "fetch", staticmethod(acquire))
     result = rr.fetch(
-        rr.find(provider="ch_foen", station="2251"),
-        start="2026-09-19T00:00:00",
-        end="2026-09-19T03:00:00",
+        rr.find(provider="ch_foen", station="2018", frequency="10min"),
+        start="2025-01-01T00:00:00",
+        end="2025-01-01T00:30:00",
         on_issue="ignore",
     )
-    target = next(item.series_id for item in result.source_series if item.variant == "height_abs")
-    assert result.data["series_id"].n_unique() == 2
+    target = next(item.series_id for item in result.source_series if item.product_id == "stage_10min_mean")
+    assert result.data["series_id"].n_unique() == 3
     count = len(calls)
     with warnings.catch_warnings(record=True) as emitted:
         warnings.simplefilter("always")

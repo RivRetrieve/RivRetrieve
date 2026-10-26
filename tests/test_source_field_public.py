@@ -10,55 +10,8 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.observations import ReceiptAuthorship
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
-from rivretrieve._internal.transport import AuthenticatedTransport, CredentialHeader
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
-
-
-@pytest.mark.recorded("tests/test_data/ch_foen_2135_flux_engine_2020-01-01.recording.json")
-@pytest.mark.usefixtures("existenz_engine_replay")
-def test_public_authenticated_flux_normal_padding_cache_and_receipts(
-    retained_evidence_root: Path, monkeypatch, tmp_path
-):
-    recording = read_recording(
-        retained_evidence_root / "tests/test_data" / "ch_foen_2135_flux_engine_2020-01-01.recording.json"
-    )
-    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-
-    def transport():
-        return AuthenticatedTransport(
-            ReplayTransport((recording,)),
-            (CredentialHeader("Authorization", "Token PROTOCOL-SENTINEL", ("https://influx.konzept.space",)),),
-        )
-
-    monkeypatch.setattr(discovery, "HttpClient", transport)
-    selection = rr.pick(rr.find(provider="ch_foen", station="2135", quantity="discharge"), variant="flow")
-    live = rr.fetch(selection, start="2020-01-01T00:00:00", end="2020-01-01T00:50:00", cache="refresh", receipts=True)
-    assert live.data.height == 6
-    pl_testing.assert_series_equal(live.data["value"], pl.Series("value", [67.6, 67.6, 67.6, 67.5, 67.5, 67.39]))
-    assert live.receipts.entries[0].content == recording.content
-    assert live.provenance.endpoints == ("https://influx.konzept.space/api/v2/query",)
-    assert "PROTOCOL-SENTINEL" not in repr(live)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(()))
-    cached = rr.fetch(selection, start="2020-01-01T00:00:00", end="2020-01-01T00:50:00", cache="reuse", receipts=True)
-    pl_testing.assert_frame_equal(cached.data, live.data)
-    assert cached.provenance.served_intervals
-    assert all(receipt.authorship is ReceiptAuthorship.STORE_EXCERPT for receipt in cached.receipts.entries)
-    restored = rr.from_bundle(rr.to_bundle(cached))
-    pl_testing.assert_frame_equal(restored.data, live.data)
-    assert restored.source_series == cached.source_series
-    # Explicit flow coverage cannot certify an unrestricted field inventory.
-    monkeypatch.setattr(discovery, "HttpClient", transport)
-    unrestricted = rr.fetch(
-        rr.find(provider="ch_foen", station="2135", quantity="discharge"),
-        start="2020-01-01T00:00:00",
-        end="2020-01-01T00:50:00",
-        cache="reuse",
-        receipts=True,
-        on_issue="ignore",
-    )
-    assert any(receipt.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD for receipt in unrestricted.receipts.entries)
-    assert any(outcome.status == "unresolved" for outcome in unrestricted.outcomes)
 
 
 @pytest.mark.parametrize(

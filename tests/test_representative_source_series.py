@@ -3,8 +3,6 @@
 from datetime import datetime
 from pathlib import Path
 
-import polars as pl
-import polars.testing as pl_testing
 import pytest
 
 from rivretrieve._internal.engine import (
@@ -17,8 +15,6 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.br_ana.config import config as ana_config
 from rivretrieve._internal.providers.br_ana.parse import parse as ana_parse
-from rivretrieve._internal.providers.ch_foen.config import config as ch_config
-from rivretrieve._internal.providers.ch_foen.parse import parse as ch_parse
 from rivretrieve._internal.providers.no_nve.config import config as nve_config
 from rivretrieve._internal.providers.no_nve.parse import parse as nve_parse
 from rivretrieve._internal.recordings import read_recording
@@ -91,29 +87,6 @@ def test_nve_real_hourly_instantaneous_temperature_is_not_a_mean(retained_eviden
     assert facts.frequency.value == "hourly"
     assert facts.temporal_support.value is None
     assert facts.source_unit.value == "°C"
-
-
-@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json")
-def test_swiss_flow_ls_is_admitted_with_native_litre_unit(retained_evidence_root: Path):
-    config = ch_config()
-    response = payload(
-        retained_evidence_root,
-        "tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json",
-        "2251",
-        "discharge_reported",
-        config,
-        "2026-09-19",
-        "2026-09-19T03:00:00",
-    )
-    parsed = ch_parse(response, config)
-    observed = [item for item in parsed.series if item.identity.origin == "response"]
-    assert len(observed) == 1
-    series = observed[0]
-    assert series.identity.published_id == "flow_ls"
-    assert series.facts[0].quantity.value == "discharge"
-    assert series.facts[0].source_unit.value == "l/s"
-    assert series.facts[0].frequency.value is None
-    pl_testing.assert_frame_equal(parsed.rows.select("value"), pl.DataFrame({"value": [2.64, 2.64, 2.64, 2.73]}))
 
 
 @pytest.mark.recorded(
@@ -235,11 +208,23 @@ def test_nve_all_known_versions_are_requested_separately_with_null_series_preser
     assert not acquired.issues
 
 
-def test_swiss_stage_reference_is_not_inferred_from_field_name():
-    from rivretrieve._internal.providers.ch_foen.series import field_series
+def test_swiss_stage_reference_is_not_inferred_from_variant_name():
+    from rivretrieve._internal.providers.ch_foen.official_series import source_series
 
-    above = field_series("2251", "height")
-    unspecified = field_series("2251", "height_abs")
+    def stage(name, unit):
+        return source_series(
+            "2018",
+            "data_10min_mean",
+            "W",
+            name,
+            units=(unit,),
+            evidence="synthetic:unit",
+            temporal_evidence="synthetic:time",
+            origin="response",
+        )
+
+    above = stage("10MinMittel", "m ü.M.")
+    unspecified = stage("height_above_sea_level", "m")
     assert above.facts[0].vertical_reference.value == "above_sea_level"
     assert above.facts[0].vertical_datum.value is None
     assert unspecified.facts[0].vertical_reference.value is None
@@ -299,26 +284,6 @@ def test_nve_one_failed_explicit_version_does_not_discard_successful_sibling(ret
     assert failed.series.identity.published_id is None
     assert failed.failure.status_code == 404
     assert failed.request.params["VersionNumber"] == 99999
-
-
-@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json")
-def test_swiss_missing_sibling_field_has_unresolved_outcome_not_empty_success(retained_evidence_root: Path):
-    config = ch_config()
-    response = payload(
-        retained_evidence_root,
-        "tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json",
-        "2251",
-        "discharge_reported",
-        config,
-        "2026-09-19",
-        "2026-09-19T03:00:00",
-    )
-    result = ch_parse(response, config)
-    by_id = {item.series_id: item.identity.published_id for item in result.series}
-    assert {by_id[outcome.series_id]: outcome.status.value for outcome in result.outcomes} == {
-        "flow_ls": "success",
-        "flow": "unresolved",
-    }
 
 
 @pytest.mark.recorded("tests/recordings/br_ana/HidroSerieCotas_15400000_2024-01-01_2024-01-31.recording.json")
