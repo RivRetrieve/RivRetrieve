@@ -350,7 +350,7 @@ class MaterialIdentity(_ProvenanceModel):
     sha256: Sha256
 
 
-_PRIVATE_REDACTED_EVIDENCE_LOCATION = "private://grdc-bfg/correspondence"
+_PRIVATE_REDACTED_EVIDENCE_LOCATIONS = {"private://grdc-bfg/correspondence", "private://ch-foen/correspondence"}
 _HOST_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 _INVALID_PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
 _TEMPLATE_TOKEN = re.compile(r"(?:\{[A-Za-z0-9_-]+\}|<[A-Za-z0-9_-]+>)")
@@ -382,12 +382,12 @@ def _validate_uri_component(value: str, allowed_ascii: frozenset[str]) -> None:
 
 
 def _validate_requested_location(location: str) -> str:
-    """Return one valid public URL or the sole private redacted-evidence URI."""
+    """Return one valid public URL or an explicitly allowed redacted-evidence URI."""
     if not location or any(
         character.isspace() or unicodedata.category(character).startswith("C") for character in location
     ):
         raise ValueError("requested_from must contain only valid typed locations without whitespace or controls")
-    if location == _PRIVATE_REDACTED_EVIDENCE_LOCATION:
+    if location in _PRIVATE_REDACTED_EVIDENCE_LOCATIONS:
         return location
     if _INVALID_PERCENT_ESCAPE.search(location):
         raise ValueError("requested_from location contains malformed percent escapes")

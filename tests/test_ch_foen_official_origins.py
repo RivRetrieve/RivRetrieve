@@ -29,6 +29,7 @@ def source_inputs():
         "source.station.documented_crs",
         "source.station_product.source_associations",
         "source.product.native_physics",
+        "source.product.temporal_meaning",
         "source.station.foen_reference_altitude_and_catchment",
         "source.provider.license",
         "source.provider.citation",
@@ -85,16 +86,13 @@ def test_official_provenance_closes_catalogue_without_replacing_selected_identit
     }
 
 
-def test_missing_source_associations_cannot_become_catalogue_facts(source_inputs):
+@pytest.mark.parametrize("missing", ["source.station_product.source_associations", "source.product.temporal_meaning"])
+def test_missing_source_evidence_cannot_become_catalogue_facts(source_inputs, missing):
     binding = source_inputs["source_bindings"][0]
     source_inputs["source_bindings"] = (
-        binding.model_copy(
-            update={
-                "facts": tuple(fact for fact in binding.facts if fact != "source.station_product.source_associations")
-            }
-        ),
+        binding.model_copy(update={"facts": tuple(fact for fact in binding.facts if fact != missing)}),
     )
-    with pytest.raises(ValueError, match="source.station_product.source_associations"):
+    with pytest.raises(ValueError, match=missing):
         build_acquisition_provenance(**source_inputs)
 
 

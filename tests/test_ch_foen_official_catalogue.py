@@ -84,7 +84,7 @@ def test_empty_archive_sample_does_not_create_negative_associations():
         archive_associations(payload, route="archive_route", station_numbers={"0085"})
 
 
-def test_descriptions_scope_variants_and_unit_segments_without_temporal_inference():
+def test_descriptions_scope_variants_and_unit_segments_with_documented_support():
     from rivretrieve._internal.providers.ch_foen.generate_catalogue import ASSOCIATION_SCHEMA, describe_associations
 
     associations = pl.DataFrame(
@@ -110,7 +110,9 @@ def test_descriptions_scope_variants_and_unit_segments_without_temporal_inferenc
     assert first.identity_key == ("data_1day_mean", "Q", "Unresolved")
     assert variant.identity_key == ("data_1day_mean", "Q", "Unresolved.1")
     assert {fact.source_unit.value for fact in first.facts} == {"m³/s", "l/s"}
-    assert all(fact.frequency.value is None and fact.temporal_support.value is None for fact in first.facts)
+    assert all(
+        fact.frequency.value == "daily" and fact.temporal_support.value == "calendar_day" for fact in first.facts
+    )
     assert all(fact.quantity.value == "discharge" for fact in first.facts)
 
 
@@ -161,7 +163,7 @@ def test_catalogue_tables_record_only_observed_pairs_without_sample_record_bound
     assert products.filter(pl.col("product_id") == "discharge_1year_max")["native_id"].item() == "data_1year_max:Q"
 
 
-def test_public_discovery_keeps_unknown_route_facts_and_unobserved_intent(monkeypatch):
+def test_public_discovery_uses_series_facts_and_keeps_unobserved_intent(monkeypatch):
     from datetime import date
 
     import rivretrieve as rr
@@ -228,8 +230,8 @@ def test_public_discovery_keeps_unknown_route_facts_and_unobserved_intent(monkey
     monkeypatch.setattr(discovery, "_ensure_default_providers_registered", lambda: None)
     broad = rr.find(provider="ch_foen", station="0085", quantity="discharge", on_issue="ignore")
     assert len(broad.series) == 1
-    assert not rr.find(provider="ch_foen", station="0085", frequency="daily", on_issue="ignore").series
-    assert not rr.find(provider="ch_foen", station="0085", statistic="mean", on_issue="ignore").series
+    assert len(rr.find(provider="ch_foen", station="0085", frequency="daily", on_issue="ignore").series) == 1
+    assert len(rr.find(provider="ch_foen", station="0085", statistic="mean", on_issue="ignore").series) == 1
     unresolved = rr.find(provider="ch_foen", station="1234", on_issue="ignore")
     assert not unresolved.known_series
     assert unresolved.scope.restriction is RestrictionKind.ALL
@@ -306,7 +308,7 @@ def test_stage_reference_labels_allow_discovery_without_inventing_a_datum(monkey
     assert fact.vertical_datum.state is EvidenceState.NOT_ESTABLISHED
     assert len(rr.find(provider="ch_foen", quantity="stage", vertical_reference="above_sea_level").series) == 1
     assert not rr.find(provider="ch_foen", quantity="stage", vertical_datum="LN02").series
-    assert fact.frequency.value is None and fact.temporal_support.value is None
+    assert fact.temporal_support.value == ("calendar_day" if route == "data_1day_mean" else None)
 
 
 def test_recent_associations_bind_only_station_page_units_without_archive_fallback():

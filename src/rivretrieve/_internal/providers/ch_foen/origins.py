@@ -90,7 +90,7 @@ _CATALOGUE_SOURCE_FACTS = {
         "source.station.native_geometry",
         "source.station.documented_crs",
     ),
-    "product": ("source.product.native_physics",),
+    "product": ("source.product.native_physics", "source.product.temporal_meaning"),
     "station_product": (
         "source.station.native_identity",
         "source.station_product.source_associations",
@@ -118,7 +118,7 @@ def build_acquisition_provenance(
         Acquisition records claiming the selected recordings, including any page campaigns.
     source_bindings
         Direct ``ch_foen`` bindings for station identity, geometry, CRS, physical facts,
-        and source associations. Unresolved temporal fields remain an authored limitation.
+        and source associations. Temporal meaning requires its own source binding.
         Approved station metadata uses its existing source fact names.
     statements
         An exact license statement is required. Citation wording is optional;
@@ -171,7 +171,7 @@ def build_acquisition_provenance(
             transformation=Transformation(
                 name=(
                     f"Official FOEN source facts to canonical {carrier} fields; "
-                    "selected evidence leaves temporal support and record bounds unresolved"
+                    "route-wide temporal fields and sampled record bounds remain unresolved"
                 ),
                 external_inputs=tuple(ExternalFactReference(source_id="ch_foen", fact=fact) for fact in source_facts),
             ),
@@ -376,6 +376,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/ch_foen/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/ch_foen/origins.py", "with_station_metadata_sources"),
     ("src/rivretrieve/_internal/providers/ch_foen/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/ch_foen/official_series.py", "source_series"),
     ("src/rivretrieve/_internal/providers/ch_foen/generate_catalogue.py", "read_catalogue_sources"),
     ("src/rivretrieve/_internal/providers/ch_foen/station_metadata.py", "project_official_station_metadata"),
 )

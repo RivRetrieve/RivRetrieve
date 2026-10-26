@@ -108,7 +108,11 @@ def selected_sources(tmp_path, monkeypatch):
     )
     facts_by_capture = {
         "stations": ("source.station.native_identity", "source.station.native_geometry"),
-        "archive": ("source.station_product.source_associations", "source.product.native_physics"),
+        "archive": (
+            "source.station_product.source_associations",
+            "source.product.native_physics",
+            "source.product.temporal_meaning",
+        ),
         "terms": ("source.station.documented_crs", "source.provider.license"),
     }
     acquisitions = tuple(
