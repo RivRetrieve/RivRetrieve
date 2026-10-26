@@ -55,6 +55,7 @@ from rivretrieve._internal.observations import (
     ReceiptMode,
     Receipts,
 )
+from rivretrieve._internal.physical_window import native_window, native_window_envelope
 from rivretrieve._internal.primitives import CacheMode, ProductId, ProviderId
 from rivretrieve._internal.source_acquisition import SourceResponseMeaning
 from rivretrieve._internal.source_series import (
@@ -63,6 +64,7 @@ from rivretrieve._internal.source_series import (
     InventorySnapshot,
     OutcomeStatus,
     ParsedSeries,
+    PhysicalFacts,
     RequestedSelector,
     RestrictionKind,
     RetrievalOutcome,
@@ -435,10 +437,15 @@ class TransportWindowDeclarationProvider(Protocol):
 
 
 def _requested_interval(
-    window: RequestedWindow, semantics: Instant | Daily | Hourly | UnknownTemporalSupport | None
+    window: RequestedWindow,
+    semantics: Instant | Daily | Hourly | UnknownTemporalSupport | None,
+    *,
+    facts: tuple[PhysicalFacts, ...] = (),
 ) -> RequestedInterval:
     start = datetime.fromisoformat(window.start.isoformat())
     end = datetime.fromisoformat(window.end.isoformat())
+    if facts:
+        return native_window_envelope(start, end, facts)
     if isinstance(semantics, Daily):
         start = datetime.combine(start.date(), time.min)
         end = datetime.combine(end.date(), time.max)
@@ -523,11 +530,8 @@ def _clip_native(rows: Rows, series: tuple[SourceSeries, ...], window: Requested
         if fact is None:
             raise FatalContractError("Native clipping references unknown physical facts")
         timestamp = row["time"]
-        keep.append(
-            start.date() <= timestamp.date() <= end.date()
-            if fact.clipping_axis is ClippingAxis.CALENDAR_DATE
-            else start <= timestamp <= end
-        )
+        interval = native_window(start, end, fact)
+        keep.append(interval.start <= timestamp <= interval.end)
     return rows.filter(pl.Series(keep, dtype=pl.Boolean))
 
 
@@ -877,12 +881,15 @@ def _covered_facts(
     scope: SeriesScope,
     window: SeriesWindow,
     inventories: tuple[InventorySnapshot, ...] = (),
+    requested: RequestedWindow | None = None,
 ) -> bool:
     interval = RequestedInterval(window.start, window.end, axis=window.axis)
     return all(
         any(
             not remainder(
-                interval_envelope(interval, axis),
+                interval_envelope(
+                    _requested_interval(requested, None, facts=(fact,)) if requested is not None else interval, axis
+                ),
                 (
                     *(
                         item.interval
@@ -916,7 +923,12 @@ def _covered_facts(
     )
 
 
-def _explicit_reuse(manifest: AccumulatedStoreManifest, scope: SeriesScope, window: SeriesWindow) -> _ReusePlan | None:
+def _explicit_reuse(
+    manifest: AccumulatedStoreManifest,
+    scope: SeriesScope,
+    window: SeriesWindow,
+    requested: RequestedWindow | None = None,
+) -> _ReusePlan | None:
     """A closed identity scope may use independently acquired member inventories."""
     identity_scope = scope.model_copy(update={"predicates": ()})
     members = []
@@ -960,7 +972,7 @@ def _explicit_reuse(manifest: AccumulatedStoreManifest, scope: SeriesScope, wind
         contributors = tuple(
             item for item in manifest.inventories if f"source-inventory:{item.snapshot_id}" in snapshot.evidence
         )
-        if not _covered_facts(manifest, observed, scope, window, contributors):
+        if not _covered_facts(manifest, observed, scope, window, contributors, requested):
             return None
         members.append(observed)
     ids = {item.series_id for item in members}
@@ -975,10 +987,13 @@ def _explicit_reuse(manifest: AccumulatedStoreManifest, scope: SeriesScope, wind
 
 
 def _reusable_snapshot(
-    manifest: AccumulatedStoreManifest, scope: SeriesScope, window: SeriesWindow
+    manifest: AccumulatedStoreManifest,
+    scope: SeriesScope,
+    window: SeriesWindow,
+    requested: RequestedWindow | None = None,
 ) -> _ReusePlan | None:
     if scope.restriction is RestrictionKind.EXPLICIT:
-        return _explicit_reuse(manifest, scope, window)
+        return _explicit_reuse(manifest, scope, window, requested)
     definitions = {item.series_id: item for item in manifest.series}
     newer_overlaps: list[InventorySnapshot] = []
     for snapshot in reversed(manifest.inventories):
@@ -1067,7 +1082,7 @@ def _reusable_snapshot(
         contributors = tuple(
             item for item in manifest.inventories if f"source-inventory:{item.snapshot_id}" in snapshot.evidence
         )
-        if all(_covered_facts(manifest, definition, scope, window, contributors) for definition in members):
+        if all(_covered_facts(manifest, definition, scope, window, contributors, requested) for definition in members):
             return _ReusePlan((snapshot,), members)
         return None
     return None
@@ -1202,7 +1217,12 @@ def _held_outcomes(
     return tuple(retained)
 
 
-def _inventory_in_request(snapshot: InventorySnapshot, scope: SeriesScope, request: ObservationRequest) -> bool:
+def _inventory_in_request(
+    snapshot: InventorySnapshot,
+    scope: SeriesScope,
+    request: ObservationRequest,
+    definitions: Mapping[str, SourceSeries],
+) -> bool:
     """Select applicable inventory claims without rewriting their source scope."""
     requested = scope.model_copy(update={"station_ids": request.stations, "product_ids": tuple(request.products)})
     for field in ("provider_ids", "station_ids", "product_ids", "series_ids", "variants"):
@@ -1213,9 +1233,16 @@ def _inventory_in_request(snapshot: InventorySnapshot, scope: SeriesScope, reque
         if any(right.field == left.field and right.value != left.value for right in requested.predicates):
             return False
     if snapshot.window is not None:
-        interval = RequestedInterval(
-            datetime.fromisoformat(request.window.start.isoformat()),
-            datetime.fromisoformat(request.window.end.isoformat()),
+        interval = _requested_interval(
+            request.window,
+            None,
+            facts=tuple(
+                fact
+                for key in snapshot.members
+                if key in definitions
+                for fact in definitions[key].facts
+                if scope.matches_facts(fact)
+            ),
         )
         compared = interval_envelope(interval, snapshot.window.axis)
         if snapshot.window.start > compared.end or snapshot.window.end < compared.start:
@@ -1242,11 +1269,7 @@ def _held_issues(
                 if item.station_id == station and item.product_id == product and identity_scope.matches(item)
             )
             facts = tuple(fact for item in members for fact in item.facts if scope.matches_facts(fact))
-            daily = any(fact.clipping_axis is ClippingAxis.CALENDAR_DATE for fact in facts)
-            interval = RequestedInterval(
-                datetime.combine(start.date(), time.min) if daily else start,
-                datetime.combine(end.date(), time.max) if daily else end,
-            )
+            interval = native_window_envelope(start, end, facts)
             pairs.append(
                 (
                     station,
@@ -1302,7 +1325,7 @@ def _project_returned_evidence(
         ),
         outcome_ids=frozenset(item.outcome_id for item in outcomes),
         inventory_ids=frozenset(
-            item.snapshot_id for item in inventories if _inventory_in_request(item, scope, request)
+            item.snapshot_id for item in inventories if _inventory_in_request(item, scope, request, definitions)
         ),
     )
     needed = {
@@ -1933,11 +1956,24 @@ def drive(
                     candidates = {item.series_id: item for item in pair_series}
                     _merge_definitions(candidates, acquired_series)
                     pair_series = tuple(candidates.values())
-            # Daily calendar-date windows retain the established clipping rule.
-            interval = _requested_interval(request.window, config.products[product].semantics)
+            interval = _requested_interval(
+                request.window,
+                config.products[product].semantics,
+                facts=tuple(
+                    fact
+                    for item in pair_series
+                    if pair_scope.matches(item)
+                    for fact in item.facts
+                    if pair_scope.matches_facts(fact)
+                ),
+            )
             window = SeriesWindow(start=interval.start, end=interval.end)
             finite_assessments.append((pair_scope, window))
-            reuse = _reusable_snapshot(manifest, pair_scope, window) if cache == "reuse" and manifest else None
+            reuse = (
+                _reusable_snapshot(manifest, pair_scope, window, request.window)
+                if cache == "reuse" and manifest
+                else None
+            )
             fetch_window = None
             rendered = ()
             if reuse is None:
@@ -2294,10 +2330,15 @@ def drive(
                 )
                 if not pair_scope.matches(definition) or not matching_facts:
                     continue
+                physical = _requested_interval(
+                    request.window,
+                    None,
+                    facts=tuple(established[key] for key in matching_facts),
+                )
                 start, end = (
                     (original.window.start, original.window.end)
                     if original.window.axis is TimeAxis.UTC
-                    else (max(window.start, original.window.start), min(window.end, original.window.end))
+                    else (max(physical.start, original.window.start), min(physical.end, original.window.end))
                 )
                 if start > end:
                     continue
@@ -2638,15 +2679,30 @@ def drive(
                 )
                 if original.facts_ids and not matching_outcome_facts:
                     continue
+                physical = (
+                    _requested_interval(
+                        request.window,
+                        None,
+                        facts=tuple(
+                            fact
+                            for definition in parsed.series
+                            if definition.series_id == original.series_id
+                            for fact in definition.facts
+                            if fact.facts_id in matching_outcome_facts
+                        ),
+                    )
+                    if original.series_id is not None
+                    else interval
+                )
                 overlap_start = (
                     original.window.start
                     if original.window.axis is TimeAxis.UTC
-                    else max(window.start, original.window.start)
+                    else max(physical.start, original.window.start)
                 )
                 overlap_end = (
                     original.window.end
                     if original.window.axis is TimeAxis.UTC
-                    else min(window.end, original.window.end)
+                    else min(physical.end, original.window.end)
                 )
                 if overlap_start > overlap_end:
                     continue
@@ -3107,10 +3163,8 @@ def drive_store(
             facts = tuple(fact for fact in definition.facts if scope.matches_facts(fact) and fact.clipping_axis is axis)
             if not facts:
                 continue
-            window = SeriesWindow(
-                start=datetime.combine(start.date(), time.min) if axis is ClippingAxis.CALENDAR_DATE else start,
-                end=datetime.combine(end.date(), time.max) if axis is ClippingAxis.CALENDAR_DATE else end,
-            )
+            physical = native_window_envelope(start, end, facts)
+            window = SeriesWindow(start=physical.start, end=physical.end)
             supported = tuple(fact.facts_id for fact in facts if admission(fact).status == "supported")
             if supported:
                 concrete = converted.value.filter(
@@ -3175,7 +3229,17 @@ def drive_store(
                 pair_scope = _scope_for_pair(scope, str(request.provider_id), station, str(product)).model_copy(
                     update={"series_ids": local_ids}
                 )
-                interval = _requested_interval(request.window, config.products[product].semantics)
+                interval = _requested_interval(
+                    request.window,
+                    config.products[product].semantics,
+                    facts=tuple(
+                        fact
+                        for definition in selected
+                        if definition.station_id == station and definition.product_id == product
+                        for fact in definition.facts
+                        if scope.matches_facts(fact)
+                    ),
+                )
                 finite_assessments.append((pair_scope, SeriesWindow(start=interval.start, end=interval.end)))
                 continue
             if any(item.station_id == station and item.product_id == product for item in selected):
@@ -3243,7 +3307,20 @@ def drive_store(
         and item.product_id in request.products
         and (item.series_id is None or item.series_id in selected_ids)
         and (not item.facts_ids or not matching_facts or set(item.facts_ids).intersection(matching_facts))
-        and _overlaps(item, _requested_interval(request.window, config.products[ProductId(item.product_id)].semantics))
+        and _overlaps(
+            item,
+            _requested_interval(
+                request.window,
+                config.products[ProductId(item.product_id)].semantics,
+                facts=tuple(
+                    fact
+                    for definition in selected
+                    if definition.series_id == item.series_id
+                    for fact in definition.facts
+                    if scope.matches_facts(fact)
+                ),
+            ),
+        )
     )
     evidence, returned_series = _project_returned_evidence(
         request,
