@@ -31,6 +31,12 @@ def test_original_responses_match_independent_rows_facts_and_outcomes(retained_e
     expectations = json.loads((root / "expectations.json").read_text())
     for case in expectations["cases"]:
         receipt = json.loads((root / f"{case['name']}.receipt.json").read_text())
+        if "request_json" in receipt:
+            acquired = receipt["acquired_at"]
+            query = receipt["request_json"]["query"]
+        else:
+            acquired = receipt["acquired"]
+            query = receipt["query"]
         start = datetime.fromisoformat(case["requested_start"]).replace(tzinfo=None)
         stop = datetime.fromisoformat(case["requested_stop"]).replace(tzinfo=None)
         payload = Payload(
@@ -44,10 +50,10 @@ def test_original_responses_match_independent_rows_facts_and_outcomes(retained_e
                 receipt["url"],
                 {},
                 receipt["status"],
-                datetime.fromisoformat(receipt["acquired"]),
+                datetime.fromisoformat(acquired),
                 "application/json",
                 UnknownOriginFact(),
-                SourceQuery(receipt["query"], ()),
+                SourceQuery(query, ()),
             ),
             (),
         )
