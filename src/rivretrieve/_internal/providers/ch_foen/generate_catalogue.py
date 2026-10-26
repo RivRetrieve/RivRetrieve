@@ -19,6 +19,12 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, st
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.providers.ch_foen.official_series import (
+    ARCHIVE_ROUTES,
+    PARAMETERS,
+    product_id,
+    source_series,
+)
 
 STATION_SOURCE_SCHEMA = pl.Schema(
     {
@@ -116,86 +122,41 @@ def archive_associations(payload: Mapping[str, object], *, route: str, station_n
     return pl.DataFrame(associations, schema=ASSOCIATION_SCHEMA).unique().sort(ASSOCIATION_SCHEMA.names())
 
 
-ARCHIVE_ROUTES = (
-    "data_10min_mean",
-    "data_1hour_mean",
-    "data_1day_mean",
-    "data_1day_min",
-    "data_1day_max",
-    "data_1month_mean",
-    "data_1month_min",
-    "data_1month_max",
-    "data_1year_mean",
-    "data_1year_min",
-    "data_1year_max",
-)
-PARAMETERS = {"Q": ("discharge", "discharge"), "W": ("stage", "stage"), "WT": ("water_temperature", "temperature")}
-UNITS = {
-    "m³/s": "m3/s",
-    "m3/s": "m3/s",
-    "l/s": "l/s",
-    "m": "m",
-    "cm": "cm",
-    "°C": "degC",
-    "m ü.M.": "m",
-    "m a.s.l.": "m",
-}
-
-
-def product_id(route: str, parameter: str) -> str:
-    if route not in (*ARCHIVE_ROUTES, "data_live") or parameter not in PARAMETERS:
-        raise FatalContractError("Swiss association has an unsupported route or parameter")
-    suffix = "recent" if route == "data_live" else route.removeprefix("data_")
-    return f"{PARAMETERS[parameter][0]}_{suffix}"
-
-
 def describe_associations(associations: pl.DataFrame, *, evidence: str) -> SourceDescriptions:
-    """Describe only witnessed station variants; leave temporal meaning unresolved.
+    """Describe witnessed identities using the same definitions as response parsing.
 
-    Distinct source units for the same raw identity remain separate fact segments.
-    No embedded archive station ID is used as a response-series identifier.
+    Distinct native units remain fact segments. Sample times do not establish
+    record boundaries, and archive station IDs do not replace source coordinates.
     """
     from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
-    from rivretrieve._internal.source_series import EvidenceFact, PhysicalFacts, SourceIdentity, known, stable_id
 
     descriptions = []
     groups = associations.sort(ASSOCIATION_SCHEMA.names()).partition_by(
         ["station_no", "route", "parameterName", "tsName"], as_dict=True
     )
     for (station, route, parameter, name), rows in groups.items():
-        product = product_id(route, parameter)
-        identity_key = (route, parameter, name)
-        facts = tuple(
-            PhysicalFacts(
-                facts_id=stable_id("ch_foen", station, *identity_key, unit),
-                quantity=known(PARAMETERS[parameter][1], evidence),
-                source_unit=known(unit, evidence) if unit else EvidenceFact(),
-                normalized_unit=UNITS.get(unit),
-                vertical_reference=known("above_sea_level", evidence)
-                if parameter == "W" and unit in {"m ü.M.", "m a.s.l."}
-                else EvidenceFact(),
-            )
-            for unit in sorted(set(rows["unitSymbol"].to_list()), key=lambda unit: unit or "")
+        series = source_series(
+            station,
+            route,
+            parameter,
+            name,
+            units=tuple(rows["unitSymbol"].to_list()),
+            evidence=evidence,
+            temporal_evidence="catalogue:ch_foen:source.product.temporal_meaning",
+            origin="catalogue",
         )
         descriptions.append(
             SourceDescription(
-                product_id=product,
+                product_id=series.product_id,
                 station_id=station,
-                identity_key=identity_key,
+                identity_key=(route, parameter, name),
                 native_coordinate=parameter,
-                identity=SourceIdentity(
-                    namespace=f"foen.{route}.{parameter}",
-                    published_id=parameter if route == "data_live" else name,
-                    origin="catalogue",
-                    evidence=(evidence,),
-                ),
-                variant=name,
-                facts=facts,
+                identity=series.identity,
+                variant=series.variant,
+                facts=series.facts,
             )
         )
-    from rivretrieve._internal.catalogues.source_descriptions import content_identified_descriptions
-
-    return content_identified_descriptions(SourceDescriptions(provider_id="ch_foen", descriptions=tuple(descriptions)))
+    return SourceDescriptions(provider_id="ch_foen", descriptions=tuple(descriptions))
 
 
 def catalogue_tables(
@@ -203,7 +164,8 @@ def catalogue_tables(
 ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """Build offline tables without expanding station lists into known series.
 
-    Product routes describe supported access, not established physical intervals.
+    Product rows describe access routes. Series descriptions carry physical intervals
+    because exceptions prevent a route-wide temporal classification.
     Station-product rows distinguish positive witnesses from unresolved pairs.
     Unknown pairs carry incomplete inventory, never fabricated source series.
     Sample timestamps never populate published record boundaries.
