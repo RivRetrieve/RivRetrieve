@@ -340,3 +340,51 @@ def test_retired_existenz_cache_cannot_satisfy_official_request(monkeypatch, tmp
     assert result.data["value"].to_list() == [0.0, 10.0, 20.0, 30.0]
     assert identity not in result.data["series_id"]
     assert result.provenance.endpoints == ("https://data.bafu.admin.ch/api",)
+
+
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+def test_adjacent_summer_calendar_requests_clip_cached_neighbor(monkeypatch):
+    calls = []
+
+    class Transport:
+        def send(self, request):
+            calls.append(request)
+            rows = [
+                {
+                    "station": {"no": "2018"},
+                    "parameterName": "Q",
+                    "tsName": "Synthetic",
+                    "unitSymbol": "m3/s",
+                    "timestamp": stamp,
+                    "value": value,
+                    "releaseState": "3",
+                }
+                for stamp, value in [("2025-06-30T23:00:00Z", 10.0), ("2025-07-31T23:00:00Z", 20.0)]
+            ]
+            return TransportResponse(
+                json.dumps({"data": {"water": {"observations": {"data_1month_mean": rows}}}}).encode(),
+                200,
+                datetime(2026, 1, 1, tzinfo=UTC),
+                "application/json",
+                request.url,
+                {},
+            )
+
+    monkeypatch.setattr(discovery, "HttpClient", Transport)
+    selection = rr.find(
+        provider="ch_foen",
+        station="2018",
+        quantity="discharge",
+        frequency="monthly",
+        statistic="mean",
+        variant="Synthetic",
+        on_issue="ignore",
+    )
+    whole = rr.fetch(selection, start="2025-07-01", end="2025-08-31", cache="refresh", on_issue="ignore")
+    assert whole.data["value"].to_list() == [10.0, 20.0]
+    july = rr.fetch(selection, start="2025-07-01", end="2025-07-31", cache="reuse", on_issue="ignore")
+    august = rr.fetch(selection, start="2025-08-01", end="2025-08-31", cache="reuse", on_issue="ignore")
+    assert len(calls) == 1
+    assert july.data.select("time", "value").rows() == [(datetime(2025, 6, 30, 23), 10.0)]
+    assert august.data.select("time", "value").rows() == [(datetime(2025, 7, 31, 23), 20.0)]
+    assert july.provenance.retrieved_at == august.provenance.retrieved_at == whole.provenance.retrieved_at
