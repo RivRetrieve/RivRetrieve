@@ -26,7 +26,7 @@ _SCOPE = "maintenance/observations/ch_foen/official-retrieval"
 
 
 @pytest.mark.recorded(_SCOPE)
-def test_original_boundaries_match_independently_read_native_rows(retained_evidence_root: Path):
+def test_original_responses_match_independent_rows_facts_and_outcomes(retained_evidence_root: Path):
     root = retained_evidence_root / _SCOPE
     expectations = json.loads((root / "expectations.json").read_text())
     for case in expectations["cases"]:
@@ -79,3 +79,29 @@ def test_original_boundaries_match_independently_read_native_rows(retained_evide
         )
         pt.assert_frame_equal(actual.sort(["name", "time"]), expected.sort(["name", "time"]))
         assert not any(outcome.status.value == "failed" for outcome in parsed.outcomes)
+        if "expected_facts" in case:
+            actual_facts = [
+                {
+                    "variant": definition.variant,
+                    "quantity": fact.quantity.value,
+                    "source_unit": fact.source_unit.value,
+                    "normalized_unit": fact.normalized_unit,
+                    "frequency": fact.frequency.value,
+                    "temporal_support": fact.temporal_support.value,
+                    "day_definition": fact.day_definition.value,
+                    "time_zone": fact.time_zone.value,
+                }
+                for definition in parsed.series
+                for fact in definition.facts
+            ]
+            assert sorted(actual_facts, key=lambda item: (item["variant"] or "", item["source_unit"] or "")) == sorted(
+                case["expected_facts"], key=lambda item: (item["variant"] or "", item["source_unit"] or "")
+            )
+        if "expected_outcomes" in case:
+            actual_outcomes = [
+                {"variant": names.get(outcome.series_id), "status": outcome.status.value, "coverage": outcome.coverage}
+                for outcome in parsed.outcomes
+            ]
+            assert sorted(actual_outcomes, key=lambda item: (item["variant"] or "", item["status"])) == sorted(
+                case["expected_outcomes"], key=lambda item: (item["variant"] or "", item["status"])
+            )
