@@ -385,6 +385,12 @@ def test_adjacent_summer_calendar_requests_clip_cached_neighbor(monkeypatch):
     july = rr.fetch(selection, start="2025-07-01", end="2025-07-31", cache="reuse", on_issue="ignore")
     august = rr.fetch(selection, start="2025-08-01", end="2025-08-31", cache="reuse", on_issue="ignore")
     assert len(calls) == 1
+    import re
+
+    # Acquisition padding must contain the fixed-UTC+1 calendar interval.
+    bounds = re.findall(r'_(?:gte|lt): "([^"]+)"', json.loads(calls[0].body)["query"])
+    assert datetime.fromisoformat(bounds[0]) <= datetime(2025, 6, 30, 23, tzinfo=UTC)
+    assert datetime.fromisoformat(bounds[1]) >= datetime(2025, 8, 31, 23, tzinfo=UTC)
     assert july.data.select("time", "value").rows() == [(datetime(2025, 6, 30, 23), 10.0)]
     assert august.data.select("time", "value").rows() == [(datetime(2025, 7, 31, 23), 20.0)]
     assert july.provenance.retrieved_at == august.provenance.retrieved_at == whole.provenance.retrieved_at
