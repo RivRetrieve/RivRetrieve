@@ -1,4 +1,4 @@
-"""Internal official API route coordinates; publication remains catalogue-only."""
+"""Official API route coordinates and request window declarations."""
 
 from dataclasses import dataclass
 from datetime import timedelta

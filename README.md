@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from twelve different providers in eleven countries.
+from thirteen different providers in twelve countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -47,11 +47,12 @@ for how to supply them.
 | Lithuania | Lithuanian Hydrometeorological Service (LHMT) | `lt_lhmt` | 97 | Open |
 | Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | Credentials required |
 | Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Bulk download |
+| Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 558 | Open |
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
 | United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,201 | Open |
 
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
-Switzerland's `ch_foen` provider supports offline discovery of 1,341 stations; observation retrieval is unavailable.
+Switzerland's `ch_foen` catalogue retains 1,341 stations; 558 have selectable official series in this snapshot.
 See the [Swiss provider guide](https://rivretrieve.github.io/providers/ch_foen/) for catalogue coverage and limitations.
 The USGS catalogue retains 26,258 station identities; 26,201 have selectable modern series in this snapshot.
 A station can appear under both French services; their series remain separate.

@@ -135,7 +135,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `ba_fhmzbih` | live | none | 60 | 132 | 48 | 0 |
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
-| `ch_foen` | catalogue-only | none | 1341 | 7008 | 41268 | 0 |
+| `ch_foen` | live | none | 1341 | 7008 | 41268 | 0 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |

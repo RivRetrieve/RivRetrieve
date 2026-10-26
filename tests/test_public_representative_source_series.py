@@ -15,35 +15,6 @@ from rivretrieve._internal.recordings import ReplayTransport, read_recording
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
-@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
-@pytest.mark.usefixtures("existenz_engine_replay")
-def test_public_swiss_litre_series_preserves_identity_unit_and_unknown_time(
-    retained_evidence_root: Path, monkeypatch, tmp_path
-):
-    recording = read_recording(
-        retained_evidence_root / "tests/test_data" / "ch_foen_2251_rest_engine_2026-09-19.recording.json"
-    )
-    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
-    selection = rr.find(provider="ch_foen", station="2251", quantity="discharge")
-    result = rr.fetch(
-        selection, start="2026-09-19T00:00:00", end="2026-09-19T03:00:00", receipts=True, on_issue="ignore"
-    )
-    assert result.data.height == 4
-    assert result.data["series_id"].n_unique() == 1
-    assert result.data["source_unit"].unique().to_list() == ["l/s"]
-    assert result.data["unit"].unique().to_list() == ["m3/s"]
-    pl_testing.assert_frame_equal(
-        result.data.select("value"), pl.DataFrame({"value": [0.00264, 0.00264, 0.00264, 0.00273]})
-    )
-    assert any(entry.content == recording.content for entry in result.receipts.entries)
-    assert (
-        rr.find(provider="ch_foen", station="2251", quantity="discharge", frequency="daily", statistic="mean").series
-        == ()
-    )
-
-
 @pytest.mark.recorded(
     "tests/test_data/no_nve_109.42.0_1001_1440_version-1_engine_2024-01-02.recording.json",
     "tests/test_data/no_nve_109.42.0_1001_1440_version-2_engine_2024-01-02.recording.json",
@@ -130,19 +101,16 @@ def test_public_ana_physical_daily_scope_returns_both_consistencies_and_narrows(
     assert narrowed.provenance.calls_made == result.provenance.calls_made
 
 
-@pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json")
-@pytest.mark.usefixtures("existenz_engine_replay")
-def test_public_explicit_swiss_field_does_not_diagnose_unrequested_sibling(
-    retained_evidence_root: Path, monkeypatch, tmp_path
-):
-    recording = read_recording(
-        retained_evidence_root / "tests/test_data" / "ch_foen_2251_rest_engine_2026-09-19.recording.json"
-    )
-    monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
+def test_public_explicit_swiss_variant_does_not_diagnose_unrequested_sibling(monkeypatch, tmp_path):
+    from tests.test_partial_explicit_scope import _official_replay
+
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
-    selection = rr.pick(rr.find(provider="ch_foen", station="2251", quantity="discharge"), variant="flow_ls")
-    result = rr.fetch(selection, start="2026-09-19T00:00:00", end="2026-09-19T03:00:00", on_issue="raise")
+    _official_replay(monkeypatch, variants=("10MinMittel", "Unrequested"))
+    selection = rr.pick(
+        rr.find(provider="ch_foen", station="2018", quantity="discharge", frequency="10min"),
+        variant="10MinMittel",
+    )
+    result = rr.fetch(selection, start="2025-01-01T00:00:00", end="2025-01-01T00:30:00", on_issue="raise")
     assert result.data.height == 4
     assert not any(issue.severity in ("warning", "error") for issue in result.issues)
 
@@ -188,10 +156,7 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
 @pytest.mark.parametrize(
     "provider",
     [
-        pytest.param(
-            "ch_foen",
-            marks=pytest.mark.recorded("tests/test_data/ch_foen_2251_rest_engine_2026-09-19.recording.json"),
-        ),
+        "ch_foen",
         pytest.param(
             "no_nve",
             marks=pytest.mark.recorded(
@@ -201,13 +166,13 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
         pytest.param("br_ana", marks=pytest.mark.recorded("tests/recordings/br_ana")),
     ],
 )
-def test_public_explicit_series_cache_and_bundle_preserve_identity(
-    retained_evidence_root: Path, provider, monkeypatch, tmp_path, request
-):
+def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, monkeypatch, tmp_path, request):
     from rivretrieve._internal.observations import ReceiptAuthorship
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    if provider != "ch_foen":
+        retained_evidence_root = request.getfixturevalue("retained_evidence_root")
     if provider == "br_ana":
         from tests.test_br_ana_public_daily import _authenticated_replay
 
@@ -218,14 +183,14 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(
         )
         start, end = "2020-01-10", "2020-01-20"
     elif provider == "ch_foen":
-        request.getfixturevalue("existenz_engine_replay")
-        recording = read_recording(
-            retained_evidence_root / "tests/test_data" / "ch_foen_2251_rest_engine_2026-09-19.recording.json"
+        from tests.test_partial_explicit_scope import _official_replay
+
+        _official_replay(monkeypatch)
+        selection = rr.pick(
+            rr.find(provider=provider, station="2018", quantity="discharge", frequency="10min"),
+            variant="10MinMittel",
         )
-        monkeypatch.setattr(discovery._SystemClock, "utcnow", lambda self: recording.retrieved_at)
-        monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
-        selection = rr.pick(rr.find(provider=provider, station="2251", quantity="discharge"), variant="flow_ls")
-        start, end = "2026-09-19T00:00:00", "2026-09-19T03:00:00"
+        start, end = "2025-01-01T00:00:00", "2025-01-01T00:30:00"
     else:
         recording = read_recording(
             retained_evidence_root

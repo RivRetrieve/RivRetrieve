@@ -45,17 +45,14 @@ def test_nve_catalogue_preserves_versions_and_per_resolution_statistic():
 
 
 def test_swiss_native_units_and_references_remain_independent():
-    from tests._existenz import catalogue_for_replay
-
-    artifact = catalogue_for_replay()
-    series, _ = catalogue_series(artifact, scope=SeriesScope(station_ids=("2251",)))
-    facts = {item.identity.published_id: item.facts[0] for item in series}
-    assert facts["flow"].source_unit.value == "m3/s"
-    assert facts["flow_ls"].source_unit.value == "l/s"
-    assert admission(facts["flow_ls"]).factor == 0.001
-    assert facts["height"].vertical_reference.value == "above_sea_level"
-    assert facts["height_abs"].vertical_reference.value is None
-    assert all(item.frequency.value is None for item in facts.values())
+    artifact = load_packaged_catalogue_artifact(BASE / "ch_foen/catalogue")
+    series, _ = catalogue_series(artifact, scope=SeriesScope(station_ids=("2018",)))
+    facts = {item.product_id: item.facts[0] for item in series}
+    assert facts["discharge_10min_mean"].source_unit.value == "m3/s"
+    assert facts["stage_10min_mean"].source_unit.value == "m ü.M."
+    assert facts["stage_10min_mean"].vertical_reference.value == "above_sea_level"
+    assert facts["stage_10min_mean"].vertical_datum.value is None
+    assert facts["discharge_recent"].frequency.value is None
 
 
 def test_ana_daily_alternatives_both_remain_quantity_matches():
@@ -69,9 +66,8 @@ def test_ana_daily_alternatives_both_remain_quantity_matches():
 
 def test_scoped_materialization_constructs_only_selected_coordinates(monkeypatch):
     import rivretrieve._internal.catalogues.source_series as materializer
-    from tests._existenz import catalogue_for_replay
 
-    artifact = catalogue_for_replay()
+    artifact = load_packaged_catalogue_artifact(BASE / "no_nve/catalogue")
     original = materializer.SourceSeries
     constructed = []
 
@@ -81,10 +77,10 @@ def test_scoped_materialization_constructs_only_selected_coordinates(monkeypatch
 
     monkeypatch.setattr(materializer, "SourceSeries", trace_construction)
     selected, _ = materializer.catalogue_series(
-        artifact, scope=SeriesScope(station_ids=("2251",), product_ids=("discharge_reported",))
+        artifact, scope=SeriesScope(station_ids=("1.46.0",), product_ids=("stage_daily_mean",))
     )
-    assert constructed == [("2251", "discharge_reported")] * 2
-    assert {series.identity.published_id for series in selected} == {"flow", "flow_ls"}
+    assert constructed == [("1.46.0", "stage_daily_mean")] * 2
+    assert {series.identity.published_id for series in selected} == {"1", "2"}
 
 
 @pytest.mark.parametrize("provider", ["no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis"])

@@ -3,9 +3,8 @@
 [Documentation index](../README.md) · [Usage](../usage.md)
 
 The Federal Office for the Environment (FOEN) publishes Switzerland's national
-hydrological observations. `ch_foen` provides offline station and product discovery.
-Observation retrieval is not available through this provider. Discovery needs no
-network access or credentials.
+hydrological observations. `ch_foen` provides offline station and product discovery
+and retrieves observations from the official BAFU API. Access needs no credentials.
 
 Inspect discharge candidates and station metadata:
 
@@ -20,8 +19,10 @@ metadata = rr.metadata(selection)
 `candidates` describes the published series known to the catalogue. `metadata`
 contains the available station names, water-body names, catchment areas and elevations.
 See [station metadata](../station-metadata.md) for field interpretation.
-Calling `rr.fetch` raises `ObservationsUnavailableError`; it does not contact
-Existenz.ch or another observation service.
+Use `rr.fetch` with a selected series and time bounds to retrieve observations.
+See [usage](../usage.md) for retrieval and cache policies. Archive variants and the
+recent raw feed remain separate series. Recent retention and exact averaging
+durations are unknown; caching cannot recover unseen expired observations.
 
 The official source provides discharge, water level and water temperature through
 historical products and a separate recent raw feed. Historical and recent station

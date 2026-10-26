@@ -3,7 +3,7 @@
 `ch_foen.official_series.source_series` resolves official API coordinates and
 already established unit bindings. Catalogue generation uses this entry point;
 observation parsing can use it without fetching data or loading configuration.
-The provider remains catalogue-only. Legacy Existenz definitions are separate.
+The provider uses these definitions for official discovery and retrieval.
 
 Identity uses the station string, route, parameter and raw `tsName`. Keep leading
 zeros, unsuffixed and `_01` names, and archive/recent publications separate. The
@@ -40,8 +40,8 @@ UTC label. Calendar periods are not fixed 30-day months or 365-day years:
 | Year 2024 | 2023-12-31 23:00 to 2024-12-31 23:00 |
 | 1 July 2025 | 2025-06-30 23:00 to 2025-07-01 23:00 |
 
-These are handoff examples, not implemented request arithmetic. Request subdivision
-and clipping integration remain with the later retrieval and integration work.
+Shared request planning, subdivision, clipping and cache handling preserve these
+calendar boundaries.
 Do not classify February's label as January from its UTC date or relabel its clock
 value as UTC+1.
 
