@@ -73,7 +73,10 @@ def test_recent_public_retrieval_preserves_original_response(monkeypatch, retain
 @pytest.mark.recorded(_SCOPE)
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_archive_public_original_response_composition(monkeypatch, retained_evidence_root: Path):
-    """Replay original archive bytes, not the differently shaped retained query."""
+    """Compose original archive bytes; retained fields and padded query bounds differ.
+
+    This checks public result composition, not acquisition completeness.
+    """
     root = retained_evidence_root / _SCOPE
     expected = json.loads((root / "expectations.json").read_text())["archive_public"]
     body = (root / f"{expected['name']}.body").read_bytes()
@@ -121,5 +124,9 @@ def test_archive_public_original_response_composition(monkeypatch, retained_evid
     pt.assert_frame_equal(result.data.select(expected_data.columns).sort("time"), expected_data.sort("time"))
     assert len(requests) == 1
     assert result.data["product_id"].unique().to_list() == [expected["product_id"]]
+    original_rows = json.loads(body)["data"]["water"]["observations"][expected["route"]]
+    original_variants = {row["tsName"] for row in original_rows}
+    returned_ids = set(result.data["series_id"])
+    assert {item.variant for item in result.source_series if item.series_id in returned_ids} == original_variants
     assert result.receipts.entries[0].content == body
     assert result.provenance.endpoints == (receipt["url"],)
