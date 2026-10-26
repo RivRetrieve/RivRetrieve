@@ -71,6 +71,19 @@ def test_original_responses_match_independent_rows_facts_and_outcomes(retained_e
             ],
             schema={"name": pl.String, "time": pl.Datetime, "unit": pl.String, "value": pl.Float64},
         )
+        if "expected_native_summary" in case:
+            summary = case["expected_native_summary"]
+            native = json.loads(payload.content)["data"]["water"]["observations"][case["route"]]
+            assert len(native) == summary["row_count"]
+            assert all(row["value"] is None for row in native) == summary["all_null"]
+            assert {row["station"]["no"] for row in native} == {summary["station"]}
+            assert {row["parameterName"] for row in native} == {summary["parameter"]}
+            assert {row["tsName"] for row in native} == {summary["variant"]}
+            labels = sorted(datetime.fromisoformat(row["timestamp"]) for row in native)
+            assert labels[0] == datetime.fromisoformat(summary["first_timestamp"])
+            assert labels[-1] == datetime.fromisoformat(summary["last_timestamp"])
+        else:
+            native = case["expected_rows"]
         expected = pl.DataFrame(
             [
                 {
@@ -79,7 +92,7 @@ def test_original_responses_match_independent_rows_facts_and_outcomes(retained_e
                     "unit": row["unitSymbol"],
                     "value": row["value"],
                 }
-                for row in case["expected_rows"]
+                for row in native
             ],
             schema=actual.schema,
         )
