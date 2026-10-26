@@ -158,13 +158,28 @@ class CalendarLabelConvention(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class WindowDeclaration:
+    """Source request rendering rules, independent of observation cadence.
+
+    ``timestamp_precision`` is an optional positive timedelta defining a tested
+    filter grid for exclusive ISO-instant windows. The engine rounds acquisition
+    bounds outward to this grid; final observation clipping remains unchanged.
+    Other renderings leave it unset.
+    """
+
     granularity: WindowGranularity
     rendering: WindowRenderingVocabulary
     stop_convention: StopConvention
     size: int | None = None
     calendar_labels: CalendarLabelConvention = field(default=CalendarLabelConvention.CALENDAR_DATES, kw_only=True)
+    timestamp_precision: timedelta | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
+        if self.timestamp_precision is not None and (
+            self.timestamp_precision <= timedelta(0)
+            or self.granularity != "iso-instant"
+            or self.stop_convention is not StopConvention.EXCLUSIVE
+        ):
+            raise ValueError("Timestamp precision requires positive exclusive ISO-instant bounds")
         if not isinstance(self.calendar_labels, CalendarLabelConvention):
             raise TypeError("calendar labels must be CalendarLabelConvention")
         if self.calendar_labels is CalendarLabelConvention.HOURS_1_TO_24 and (
@@ -293,6 +308,13 @@ class SourceCallOrigin:
     attempts : int or None
         Transport attempt count when retained. Payload attempt traces carry the
         individual outcomes when the transport exposes them.
+    attempt_traces : tuple of TransportAttempt
+        Actual attempts retained for auxiliary calls without observation payloads.
+    acquisition_id : str or None
+        Explicit identity when this call supports child acquisitions. Otherwise
+        the driver derives an identity from the retained call facts.
+    prerequisite_acquisition_ids : tuple of str
+        Earlier acquisitions required to attempt this call.
     """
 
     url: str | UnknownOriginFact
@@ -304,8 +326,16 @@ class SourceCallOrigin:
     query: SourceQuery | UnknownOriginFact
     # Transport may retain a retry count without retaining each intermediate response.
     attempts: int | None = field(default=None, kw_only=True)
+    attempt_traces: tuple[TransportAttempt, ...] = field(default=(), kw_only=True)
+    acquisition_id: str | None = field(default=None, kw_only=True)
+    prerequisite_acquisition_ids: tuple[str, ...] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.attempt_traces, tuple) or any(
+            not isinstance(attempt, TransportAttempt) for attempt in self.attempt_traces
+        ):
+            raise TypeError("source-call attempt traces must be TransportAttempt values")
+        validate_prerequisite_ids(self.prerequisite_acquisition_ids)
         if self.attempts is not None and (type(self.attempts) is not int or self.attempts < 1):
             raise TypeError("source-call attempts must be a positive integer when known")
         for name in ("url", "content_type", "source_path"):

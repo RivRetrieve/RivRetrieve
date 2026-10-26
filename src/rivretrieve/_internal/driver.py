@@ -188,6 +188,11 @@ def _origin_call(origin: SourceCallOrigin) -> dict[str, object]:
         "source_path": _origin_value(origin.source_path),
         "query": _query_value(origin.query),
         **({"attempts": origin.attempts} if origin.attempts is not None else {}),
+        **(
+            {"attempt_traces": tuple(_attempt_call(attempt) for attempt in origin.attempt_traces)}
+            if origin.attempt_traces
+            else {}
+        ),
     }
 
 
@@ -2199,6 +2204,12 @@ def drive(
                 previous = dependencies.setdefault(identity, event.prerequisite_acquisition_ids)
                 if previous != event.prerequisite_acquisition_ids:
                     raise FatalContractError("Prerequisite declarations conflict for one acquisition")
+        if isinstance(fetched, SourceAcquisition):
+            for origin in fetched.calls:
+                if origin.acquisition_id is not None:
+                    if origin.acquisition_id in dependencies:
+                        raise FatalContractError("Duplicate auxiliary acquisition identity")
+                    dependencies[origin.acquisition_id] = origin.prerequisite_acquisition_ids
         validate_acquisition_dependencies(dependencies)
         acquisition_outcome_start = len(fresh_outcomes)
         auxiliary_calls: tuple[dict[str, object], ...] = ()
@@ -2209,8 +2220,9 @@ def drive(
             auxiliary_calls = tuple(
                 {
                     **(record := _origin_call(origin)),
-                    "prerequisite_acquisition_ids": (),
-                    "call_id": stable_id(
+                    "prerequisite_acquisition_ids": origin.prerequisite_acquisition_ids,
+                    "call_id": origin.acquisition_id
+                    or stable_id(
                         "source-call-origin",
                         tuple(snapshot.snapshot_id for snapshot in fetched.inventories)
                         or tuple(outcome.outcome_id for outcome in fetched.outcomes)
@@ -2221,7 +2233,11 @@ def drive(
                 }
                 for origin in fetched.calls
             )
-            references = tuple(str(call["call_id"]) for call in auxiliary_calls)
+            references = tuple(
+                str(call["call_id"])
+                for call, origin in zip(auxiliary_calls, fetched.calls, strict=True)
+                if origin.acquisition_id is None
+            )
             bound_outcomes, bound_inventories, bound_issues = _bind_acquisition_evidence(
                 fetched.outcomes, fetched.inventories, fetched.issues, references
             )
