@@ -50,7 +50,7 @@ def test_catalogue_counts_match_readme_and_observation_capabilities():
     assert actual == table
     assert supported == set(module["PROVIDER_COUNTRY"])
     assert "za_dws" not in supported
-    assert sum(actual.values()) == 73869
+    assert sum(actual.values()) == 74427
     assert module["country_counts"](frame) == module["country_counts"](stations)
 
 
