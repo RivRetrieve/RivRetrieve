@@ -296,3 +296,85 @@ def test_recent_empty_does_not_claim_retention_or_erase_null_observation():
     assert empty.rows.is_empty()
     assert empty.outcomes[0].status.value == "unresolved"
     assert "retention" in empty.outcomes[0].reason
+
+
+def test_official_assembled_calendar_labels_survive_cache(tmp_path):
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.engine import ObservationRequest, RequestedWindow
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.providers.ch_foen.official_config import config, window_declarations
+    from rivretrieve._internal.providers.ch_foen.official_fetch import fetch
+    from rivretrieve._internal.providers.ch_foen.official_parse import parse
+    from rivretrieve._internal.providers.ch_foen.official_series import source_series
+    from rivretrieve._internal.source_series import RestrictionKind, SeriesScope
+    from rivretrieve._internal.store import StoreRoot
+    from rivretrieve._internal.transport import TransportResponse
+    from tests.test_internal_driver import _provenance
+
+    definition = source_series(
+        "station",
+        "data_1month_mean",
+        "Q",
+        "Variant",
+        units=("m3/s",),
+        evidence="synthetic:unit",
+        temporal_evidence="synthetic:calendar",
+        origin="catalogue",
+    )
+
+    class Provider:
+        pass
+
+    Provider.config = config()
+    Provider.window_declarations = window_declarations()
+    Provider.fetch = staticmethod(fetch)
+    Provider.parse = staticmethod(parse)
+
+    class Transport:
+        calls = 0
+
+        def send(self, request):
+            self.calls += 1
+            rows = [
+                {
+                    "station": {"no": "station"},
+                    "parameterName": "Q",
+                    "tsName": "Variant",
+                    "unitSymbol": "m3/s",
+                    "timestamp": stamp,
+                    "value": value,
+                    "releaseState": None,
+                }
+                for stamp, value in [("2025-01-31T23:00:00Z", 12.0), ("2025-02-28T23:00:00Z", 15.0)]
+            ]
+            return TransportResponse(
+                json.dumps({"data": {"water": {"observations": {"data_1month_mean": rows}}}}).encode(),
+                200,
+                datetime(2026, 1, 1, tzinfo=UTC),
+                "application/json",
+                request.url,
+                {},
+            )
+
+    request = ObservationRequest(
+        provider_id=ProviderId("ch_foen"),
+        stations=("station",),
+        products=(ProductId(definition.product_id),),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2025, 2, 1)),
+            WindowEndpoint.from_datetime(datetime(2025, 2, 28, 23, 59, 59, 999999)),
+        ),
+        known_series=(definition,),
+        scope=SeriesScope(restriction=RestrictionKind.EXPLICIT, series_ids=(definition.series_id,)),
+    )
+    store = StoreRoot(tmp_path / "store")
+    transport = Transport()
+    first = drive(
+        request, Provider(), provenance=_provenance(request), transport=transport, cache="refresh", store=store
+    )
+    cached = drive(
+        request, Provider(), provenance=_provenance(request), transport=transport, cache="reuse", store=store
+    )
+    assert transport.calls == 1
+    assert first.canonical_rows.select("time", "value").rows() == [(datetime(2025, 1, 31, 23), 12.0)]
+    assert cached.canonical_rows.select("time", "value").rows() == [(datetime(2025, 1, 31, 23), 12.0)]

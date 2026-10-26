@@ -29,6 +29,8 @@ def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
     if not isinstance(coordinates, OfficialRoute) or len(payload.station_products) != 1:
         raise FatalContractError("Official Swiss payload requires one station and route")
     station, product = payload.station_products[0]
+    if product not in config.products or config.products[product].coordinates.value != coordinates:
+        raise FatalContractError("Official Swiss payload contradicts configured route coordinates")
     try:
         document = json.loads(payload.content)
         records = document["data"]["water"]["observations"][coordinates.route]

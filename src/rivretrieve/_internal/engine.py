@@ -336,6 +336,12 @@ class SourceCallOrigin:
         ):
             raise TypeError("source-call attempt traces must be TransportAttempt values")
         validate_prerequisite_ids(self.prerequisite_acquisition_ids)
+        if self.acquisition_id is not None and (
+            not isinstance(self.acquisition_id, str) or not self.acquisition_id.strip()
+        ):
+            raise TypeError("source-call acquisition identity must be nonempty when supplied")
+        if self.prerequisite_acquisition_ids and self.acquisition_id is None:
+            raise TypeError("source-call prerequisites require an explicit acquisition identity")
         if self.attempts is not None and (type(self.attempts) is not int or self.attempts < 1):
             raise TypeError("source-call attempts must be a positive integer when known")
         for name in ("url", "content_type", "source_path"):
