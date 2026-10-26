@@ -378,3 +378,70 @@ def test_official_assembled_calendar_labels_survive_cache(tmp_path):
     assert transport.calls == 1
     assert first.canonical_rows.select("time", "value").rows() == [(datetime(2025, 1, 31, 23), 12.0)]
     assert cached.canonical_rows.select("time", "value").rows() == [(datetime(2025, 1, 31, 23), 12.0)]
+
+
+def test_malformed_archive_unit_keeps_valid_sibling_payload(tmp_path):
+
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.engine import ObservationRequest, RequestedWindow, SourceAcquisition
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.providers.ch_foen.official_config import config, window_declarations
+    from rivretrieve._internal.providers.ch_foen.official_parse import parse
+    from tests.test_internal_driver import _provenance
+
+    product = ProductId("discharge_10min_mean")
+    request = ObservationRequest(
+        provider_id=ProviderId("ch_foen"),
+        stations=("station",),
+        products=(product,),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2025, 1, 1)), WindowEndpoint.from_datetime(datetime(2025, 1, 2))
+        ),
+    )
+    from rivretrieve._internal.providers.ch_foen.official_config import OfficialRoute
+
+    coordinates = SourceCoordinates(OfficialRoute("data_10min_mean", "Q"))
+    origin = SourceCallOrigin(
+        "https://example.test",
+        {},
+        200,
+        datetime(2026, 1, 1, tzinfo=UTC),
+        "application/json",
+        UnknownOriginFact(),
+        UnknownOriginFact(),
+    )
+
+    def payload(start, stop, unit):
+        row = {
+            "station": {"no": "station"},
+            "parameterName": "Q",
+            "tsName": "Variant",
+            "unitSymbol": unit,
+            "timestamp": start.isoformat() + "Z",
+            "value": 12.0,
+        }
+        return Payload(
+            coordinates,
+            (("station", product),),
+            _make_fetch_window(WindowEndpoint.from_datetime(start), WindowEndpoint.from_datetime(stop)),
+            json.dumps({"data": {"water": {"observations": {"data_10min_mean": [row]}}}}).encode(),
+            origin,
+            (),
+        )
+
+    valid = payload(datetime(2025, 1, 1), datetime(2025, 1, 1, 11, 59, 59, 999999), "m3/s")
+    invalid = payload(datetime(2025, 1, 1, 12), datetime(2025, 1, 2), [])
+
+    class Provider:
+        pass
+
+    Provider.config = config()
+    Provider.window_declarations = window_declarations()
+    Provider.fetch = staticmethod(lambda *args, **kwargs: SourceAcquisition((valid, invalid)))
+    Provider.parse = staticmethod(parse)
+    result = drive(request, Provider(), provenance=_provenance(request), cache="bypass")
+    assert result.canonical_rows.select("time", "value").rows() == [(datetime(2025, 1, 1), 12.0)]
+    failures = [item for item in result.outcomes if item.status.value == "failed"]
+    assert len(failures) == 1
+    assert failures[0].window.start == datetime(2025, 1, 1, 12)
+    assert "unit" in failures[0].reason

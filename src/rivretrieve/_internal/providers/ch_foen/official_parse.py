@@ -73,7 +73,10 @@ def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             if len(units) != 1:
                 raise UnsupportedSourceStructureError("Recent source unit binding is ambiguous")
         else:
-            units = tuple(dict.fromkeys(entry.get("unitSymbol") for entry in entries))
+            raw_units = tuple(entry.get("unitSymbol") for entry in entries)
+            if any(not isinstance(unit, str) or not unit for unit in raw_units):
+                raise UnsupportedSourceStructureError("Official Swiss archive observation lacks a unit")
+            units = tuple(dict.fromkeys(raw_units))
             if not units and name in known:
                 units = tuple(fact.source_unit.value for fact in known[name].facts)
             if any(not isinstance(unit, str) or not unit for unit in units):
