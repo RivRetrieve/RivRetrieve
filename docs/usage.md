@@ -223,6 +223,14 @@ are included. Use ISO date strings, naive ISO datetime strings or naive Python
 `datetime` objects. A date-only end includes the date's final instant. Omitting
 `end` uses the caller machine's current local date. `start` is required.
 
+Daily calendar labels use whole-date clipping. For established start-labelled
+calendar periods with a fixed calendar zone, bounds use that calendar while
+returned timestamps remain unchanged. Monthly and yearly labels preserve explicit
+datetime clock bounds. For a UTC+1 calendar with UTC start labels, a February 2025
+date request includes `2025-01-31T23:00` and excludes `2025-02-28T23:00`, which
+labels March 1. Series with unknown calendar support retain source-timestamp
+clipping.
+
 Read `time` together with `time_zone`. An `unknown` zone supplies no basis for UTC
 conversion. The function `to_utc(result)` requires established zones for every row and
 raises an error otherwise, including for the USGS daily result above. Its returned `time` remains

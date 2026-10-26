@@ -19,8 +19,9 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.physical_window import native_window
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.source_series import ClippingAxis, SourceSeries, admission, validate_series_rows
+from rivretrieve._internal.source_series import SourceSeries, admission, validate_series_rows
 
 
 def convert(
@@ -33,11 +34,8 @@ def convert(
     for row in rows.iter_rows(named=True):
         fact = facts[row["facts_id"]]
         timestamp = row["time"]
-        keep = (
-            start.date() <= timestamp.date() <= end.date()
-            if fact.clipping_axis is ClippingAxis.CALENDAR_DATE
-            else start <= timestamp <= end
-        )
+        interval = native_window(start, end, fact)
+        keep = interval.start <= timestamp <= interval.end
         if not keep:
             continue
         decision = admission(fact)

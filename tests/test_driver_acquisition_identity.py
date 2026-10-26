@@ -156,3 +156,67 @@ def test_binding_accepts_identical_records_within_one_acquisition():
     )
     assert outcomes[0] == outcomes[1]
     assert inventories[0] == inventories[1]
+
+
+def test_auxiliary_overflow_call_retains_attempts_through_assembled_driver(tmp_path):
+    from rivretrieve._internal.engine import SourceAcquisition
+    from rivretrieve._internal.transport import TransportAttempt, TransportFailureCategory
+
+    requested, fetched = _windows()
+    request = _request(requested, ("station-1",))
+    coordinates = SourceCoordinates({"parameter": "height"})
+    config = _config(coordinates)
+    payload = _payload("station-1", coordinates, fetched)
+    attempts = (
+        TransportAttempt(
+            "retry",
+            "https://example.test/overflow",
+            {},
+            datetime(2026, 1, 1, tzinfo=UTC),
+            status_code=503,
+            failure_category=TransportFailureCategory.HTTP_STATUS,
+        ),
+        TransportAttempt(
+            "overflow", "https://example.test/overflow", {}, datetime(2026, 1, 1, tzinfo=UTC), status_code=200
+        ),
+    )
+    parent = replace(
+        payload.origin,
+        url="https://example.test/overflow",
+        attempts=2,
+        attempt_traces=attempts,
+        acquisition_id="parent-overflow",
+    )
+    payload = replace(payload, prerequisite_acquisition_ids=("parent-overflow",))
+    sibling = replace(
+        parent,
+        url="https://example.test/failed-sibling",
+        acquisition_id="failed-sibling",
+        prerequisite_acquisition_ids=("parent-overflow",),
+        attempt_traces=(),
+        attempts=1,
+    )
+
+    class Provider:
+        window_declarations = _LEVEL_WINDOW_DECLARATIONS
+
+        def fetch(self, *args, **kwargs):
+            return SourceAcquisition((payload,), calls=(parent, sibling))
+
+        def parse(self, payload, config):
+            return _parsed(_rows("station-1", 12, 10.0), payload, config)
+
+    provider = Provider()
+    provider.config = config
+    store = StoreRoot(tmp_path / "store")
+    result = drive(request, provider, provenance=_provenance(request), cache="refresh", store=store)
+    cached = drive(request, provider, provenance=_provenance(request), cache="reuse", store=store)
+    assert not any(call["url"] == "https://example.test/failed-sibling" for call in cached.provenance.calls_made)
+    assert any(call["url"] == "https://example.test/overflow" for call in cached.provenance.calls_made)
+    parent_calls = [call for call in result.provenance.calls_made if call["url"] == "https://example.test/overflow"]
+    assert len(parent_calls) == 1
+    assert [(item["call_id"], item["status_code"]) for item in parent_calls[0]["attempt_traces"]] == [
+        ("retry", 503),
+        ("overflow", 200),
+    ]
+    assert all(outcome.status is not OutcomeStatus.FAILED for outcome in result.outcomes)
