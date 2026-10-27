@@ -120,8 +120,8 @@ not assume archive and recent units are identical.
 Water-level references need care when comparing records. A label such as
 “above sea level” tells you what the height refers to, but it does not establish
 which named height reference system (vertical datum) applies to that series.
-Although station metadata
-can identify LN02 for the station altitude, that describes the station's
+Although station metadata can identify LN02 for the station altitude, that
+describes the station's
 elevation, not necessarily the reference used for its water-level observations.
 
 ## Series selection
