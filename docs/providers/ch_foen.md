@@ -130,9 +130,10 @@ A station can publish more than one series for the same quantity and product.
 The archive distinguishes them by a name in its `tsName` field, which RivRetrieve
 returns as `variant`. At station `2602`, for example, both `TagMittel` and
 `TagMittel_01` are daily-mean series covering overlapping periods. The suffix
-does not tell you which record is better. RivRetrieve keeps both series so
-that selecting one does not silently discard or replace values from the other.
-The recent feed is separate and has no archive `tsName`.
+does not tell you which record is better. RivRetrieve keeps the series separate
+rather than choosing one automatically or combining their values. Selecting a
+variant explicitly chooses that series. The recent feed is separate and has no
+archive `tsName`.
 
 Inspect the candidates and station metadata before choosing a series:
 
