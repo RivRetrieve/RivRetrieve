@@ -10,7 +10,7 @@ Replace obsolete Existenz details with current delivered behavior. Describe the 
 
 ## Established behavior and facts
 
-The completed port at `bb53c4dca79dfbc0e7e99a1a9d314ab5ff318241` supplies anonymous official GraphQL retrieval and offline discovery. The packaged catalogue has 1,341 stations; this is neither universal product availability nor continuous historical coverage. Source identities, units and parallel variants remain separate. Do not revive Existenz field aliases, credentials, retention, terms or cache identities.
+The verified provider implementation at `bb53c4dca79dfbc0e7e99a1a9d314ab5ff318241` supplies anonymous official GraphQL retrieval and offline discovery. The packaged catalogue has 1,341 stations; this is neither universal product availability nor continuous historical coverage. Source identities, units and parallel variants remain separate. Do not revive Existenz field aliases, credentials, retention, terms or cache identities.
 
 Document the delivered discharge (`discharge`), water level (`stage`) and water temperature (`temperature`) products: ten-minute/hourly means, daily/monthly/yearly mean/minimum/maximum products, and the separate recent raw feed. The public product page's abbreviated list omits some implemented monthly/yearly extrema; use accepted implementation and verification rather than narrowing scope to that list. Do not imply every station publishes every product or calculate unpublished products.
 
