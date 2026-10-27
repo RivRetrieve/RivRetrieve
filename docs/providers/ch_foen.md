@@ -53,7 +53,7 @@ first and last aggregate day. RivRetrieve preserves these UTC labels rather than
 moving them to midnight UTC or applying summer time.
 
 The informational issue `provenance.citation_not_established` means the packaged
-provider catalogue has no configured citation. It does not mean acquisition failed
+provider catalogue has no configured citation. It does not mean retrieval failed
 or that attribution is optional. Use the attribution in [Terms](#terms).
 `cache="bypass"` requests the source rather than a local cache. Values can change;
 a later retrieval need not reproduce this output exactly.
@@ -67,8 +67,9 @@ FOEN is its English abbreviation. The official data platform brings together BAF
 and partner measurement networks. Its publisher name does not mean that BAFU
 independently measured every observation.
 
-RivRetrieve reads the official API anonymously. Station and product discovery
-uses the packaged catalogue offline; fetching observations contacts the source.
+No API key or account is required to retrieve observations. RivRetrieve searches
+the station and product catalogue included with the package without contacting
+BAFU. Fetching observations then requests data from the official API.
 
 ## What you can retrieve
 
@@ -83,9 +84,12 @@ water level (`stage`) and water temperature (`temperature`), where available:
 | `monthly` | `mean`, `min`, `max` | Monthly mean, minimum or maximum |
 | `yearly` | `mean`, `min`, `max` | Yearly mean, minimum or maximum |
 
-A separate recent raw feed has unknown frequency and statistic. Its timestamps
-mark measurement end, but the exact averaging duration is unknown. It does not
-match filters requiring an established frequency or statistic.
+The API also supplies recent raw readings separately from the archive products
+above. RivRetrieve has not established the exact period represented by each
+recent reading or its statistic, such as a mean. Its timestamp marks measurement
+end, but the averaging duration remains unknown; do not treat the reading as an
+instantaneous measurement. A daily-mean selection therefore excludes these
+recent readings and selects only products known to represent daily means.
 
 Minimum and maximum products describe extrema of short-term measurements, not
 extrema of daily means. The underlying measurement duration and the occurrence
@@ -101,17 +105,19 @@ extrema. Availability still varies by station and quantity.
 | `temperature` | °C | °C (`degC`) |
 
 RivRetrieve converts litres per second to cubic metres per second and centimetres
-to metres. Archive units come from API responses; recent units are independently
-bound to official station-page parameter labels. Native-unit distinctions remain
-visible in `source_unit`; do not assume archive and recent units are identical.
+to metres. For archive data, RivRetrieve reads the unit supplied with the API
+response. For recent readings, it uses the unit shown for that parameter on the
+official station page. The original unit remains visible in `source_unit`; do
+not assume archive and recent units are identical.
 An above-sea-level label establishes that reference but not a named observation
 datum. The LN02 datum attached to station altitude does not establish the datum
 of water-level observations.
 
 ## Series selection
 
-Archive `tsName` values appear as `variant`. They identify separate source series,
-not quality selections. For example, station `2602` has concurrent `TagMittel` and
+The archive gives each series a name in its `tsName` field, which RivRetrieve
+returns as `variant`. These names distinguish source series; they do not select
+a quality level. For example, station `2602` has concurrent `TagMittel` and
 `TagMittel_01` series. RivRetrieve preserves both rather than choosing the
 better-looking record. The recent feed has no archive `tsName`.
 
@@ -122,22 +128,27 @@ candidates = rr.series(selection)
 metadata = rr.metadata(selection)
 ```
 
-`candidates` describes known series and physical facts; `metadata` describes the
-station. The first example explicitly selects `TagMittel`. Broad selections can
-reacquire data to discover variants, while explicit known variants can reuse
-covered cache intervals. See [Usage](../usage.md) for cache policies.
+`candidates` describes known series, including their units, frequency and
+statistic; `metadata` describes the station. The first example explicitly selects
+`TagMittel`. Without a specific variant, RivRetrieve may request data again to
+look for other source series. Selecting a known variant allows it to reuse
+cached observations for periods already fetched. See [Usage](../usage.md) for
+cache policies.
 
 ## Recent and older values
 
-The 1,341 catalogue stations are an incomplete inventory of station-product
-associations, not a promise that every station supplies every product or a
-continuous history. An absent catalogue association does not prove that the
-source has no series. Station operating dates and sampled timestamps do not
-establish the start or end of API coverage.
+The catalogue lists 1,341 stations, but it does not list every product available
+at every station. A station being listed does not guarantee data for every
+product or period. Conversely, a product missing from a station's catalogue
+entry may still exist at the source. Station operating dates and the timestamps
+of a few retrieved values do not establish how far the API record extends.
 
-Recent retention remains unknown: the API documentation gives conflicting
-seven-day and twelve-hour horizons. Neither is a reliable retrieval promise.
-A cache cannot recover observations that expired before they were retrieved.
+It remains unclear how far back recent readings can be requested. The API
+documentation says seven days in one place and twelve hours in another, so
+RivRetrieve cannot promise either period. A cache can preserve readings already
+fetched, but it cannot recover readings that disappeared from the source before
+they were fetched. We are in touch with BAFU and will update this information
+as soon as these limits are clarified.
 
 A returned row with a null value, an absent row and a failed request are different
 outcomes. RivRetrieve preserves null values and does not fill gaps; inspect
@@ -147,7 +158,8 @@ what was returned for that station, product and period, not continuous coverage.
 The separate official [Hydrological Data Service for watercourses and lakes](https://www.bafu.admin.ch/en/hydrological-data-service-for-watercourses-and-lakes)
 accepts historical data orders beyond this provider's demonstrated scope. It is
 an additional service, not a RivRetrieve provider or retrieval fallback. Its
-statement about 40 days online does not resolve GraphQL recent retention.
+statement about 40 days online does not establish how far back recent readings
+can be requested through the GraphQL API.
 
 ## Data status
 
@@ -161,28 +173,31 @@ The source uses `releaseState` for archive data and `releaseStatus` for recent d
 | `3` | Released / definitive |
 
 Published null remains null even though its documented meaning is raw. The source
-word `ersetzt` remains unresolved and establishes neither replacement lineage nor
-a quality ranking. RivRetrieve does not rank values or select variants by status.
+word `ersetzt` remains unresolved: it does not tell us which values replaced
+others or which record to prefer. RivRetrieve does not rank values or select
+variants by status.
 
-These fields remain in original response bodies, not canonical observation or
-cache columns. There is no returned quality column or status selector. See
+These status fields are available in the original API responses, but RivRetrieve
+does not include them in its returned observation table or cached rows. There is
+no quality column or filter for selecting observations by status. See
 [Receipts](../usage.md#receipts-optional) for retaining source material; cached
 excerpts do not reproduce the original status fields.
 
 ## Time
 
-Returned `time` values are UTC wall-clock labels with `time_zone="+00:00"`. Read
-those columns together: the datetime column itself is timezone-naive.
+Returned `time` values use UTC, as indicated by `time_zone="+00:00"`. Read those
+columns together: the datetime column itself does not carry a time zone.
 Ordinary aggregate timestamps mark interval starts. Daily, monthly and yearly
 periods begin at midnight in fixed UTC+1, including summer. For example, February
 2024 spans 31 January at 23:00 UTC through 29 February at 23:00 UTC, with the end
 excluded. Its label belongs to February despite its January UTC date.
 
 Recent timestamps mark measurement end; their spacing does not establish an
-averaging duration. Station `7008`'s anomalous `MonatsMittel_Orbe_flex` retains
-unknown frequency, statistic, temporal support and timestamp anchor. Its name
-and route do not establish daily or monthly support, so it cannot satisfy filters
-requiring those known facts.
+averaging duration. For station `7008`'s unusual `MonatsMittel_Orbe_flex` series,
+RivRetrieve has not established the period each value represents, its statistic,
+or whether its timestamp marks the beginning or end of that period. Neither the
+series name nor the API route establishes daily or monthly values. The series
+is therefore excluded by filters requiring those known properties.
 
 ## Terms
 
