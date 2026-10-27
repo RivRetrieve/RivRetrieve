@@ -237,9 +237,8 @@ The [API terms](https://data.bafu.admin.ch/en/lizenz-und-quelle) permit commerci
 and non-commercial use and require attribution containing the author, dataset
 title and dataset link. The linked [open-data terms](https://opendata.swiss/en/terms-of-use)
 describe this condition as “Open use. Must provide the source”. These are the
-platform's terms of use, rather than a CC-BY licence. For data retrieved through
-this API, attribution is required even though the general Hydrodaten FAQ only
-recommends citation.
+platform's terms of use, rather than a CC-BY licence. Attribution is required
+when using data retrieved through this API.
 
 Suggested attribution:
 
