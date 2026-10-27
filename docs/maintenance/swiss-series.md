@@ -30,8 +30,10 @@ No averaging algorithm or missing-input threshold is assumed.
 
 Timestamp serialization remains UTC. `day_definition="UTC+01:00"` describes the
 aggregation calendar, and `timestamp_anchor="start"` describes the aggregate label.
-The definitions keep source-timestamp clipping, not calendar-date clipping of a
-UTC label. Calendar periods are not fixed 30-day months or 365-day years:
+Request planning and clipping use the established aggregate calendar while
+preserving UTC labels. A bare-date request includes the first and last aggregate
+day, including their preceding-date 23:00 UTC labels. Calendar periods are not
+fixed 30-day months or 365-day years:
 
 | Aggregate | UTC interval (start included, end excluded) |
 | --- | --- |
