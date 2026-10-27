@@ -38,8 +38,9 @@ print(rr.series(chosen_gauges).select("variant", "description").rows())
 
 Quantity, frequency, statistic and other physical facts can be known independently.
 An explicit filter matches only established matching facts. For example, Swiss
-FOEN discharge has established units but no established frequency or statistic:
-a discharge search includes it, while a daily-mean search excludes it.
+FOEN archive discharge includes published daily means, which match a daily-mean
+search. The separate recent raw feed has unknown frequency and statistic, so a
+discharge search can include it while a daily-mean search excludes it.
 A service's update cadence does not establish the time span represented by a value.
 RivRetrieve uses published daily means rather than calculating them.
 

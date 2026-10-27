@@ -33,7 +33,8 @@ about what is known, with no assessment of the source's quality or its terms of 
 The JSON-LD context declares `rr:absence` as `{"@id": "rr:absence", "@type": "@json"}`.
 Its members form a JSON literal, rather than additional RDF vocabulary properties.
 
-For example, the Swiss FOEN station coordinate reference system is not published:
+For example, the Czech CHMI catalogue records the station coordinate reference
+system as not published:
 
 ```json
 {
@@ -41,7 +42,7 @@ For example, the Swiss FOEN station coordinate reference system is not published
   "source": {"fileObject": {"@id": "stations.parquet"}, "extract": {"column": "crs"}},
   "rr:absence": {
     "kind": "not_published",
-    "evidence": "https://api.existenz.ch/#hydro"
+    "evidence": "https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf"
   }
 }
 ```

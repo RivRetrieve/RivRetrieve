@@ -59,7 +59,7 @@ of the source view.
 | [`ba_fhmzbih`](providers/ba_fhmzbih.md) | — | — | `metadata_CATCHMENT_SIZE` (km²) | — |
 | [`br_ana`](providers/br_ana.md) | `Estacao_Nome` | `Rio_Nome` | `Area_Drenagem` | `Altitude` |
 | [`ca_eccc`](providers/ca_eccc.md) | `STATION_NAME` | — | `DRAINAGE_AREA_EFFECT`, `DRAINAGE_AREA_GROSS` (km2) | — |
-| [`ch_foen`](providers/ch_foen.md) | `data-name` | `data-hydro-body` | `Catchment size` (km2) | `Station altitude` (m) |
+| [`ch_foen`](providers/ch_foen.md) | `name`, `data-name` | `riverName`, `data-hydro-body` | `Catchment size` (km2) | `Station altitude` (m) |
 | [`cz_chmi`](providers/cz_chmi.md) | `STATION_NAME` | `STREAM_NAME` | `PLO_STA` (km²) | — |
 | [`fr_hubeau`](providers/fr_hubeau.md) | `libelle_station` | `libelle_cours_eau`, `libelle_masse_eau` | `superficie_reelle`, `superficie_topo`; `surface_bv` (km²) | `altitude`, `altitude_site`; `altitude_ref_alti_station` (m) |
 | [`fr_hydroportail`](providers/fr_hydroportail.md) | — | — | — | — |
@@ -283,7 +283,8 @@ print(json.loads(altitude["elevation_value"][0]))
 
 Decoding restores the string `"432"`, not the number `432`. The source view still
 returns `"432 m a.s.l."` when decoded. Separating this suffix does not change the
-published datum association.
+published datum association. LN02 describes this station altitude; it does not
+establish a named datum for water-level observations.
 
 Elevations can describe different physical reference points. Station altitude
 can locate the station, ground level can describe the ground surface, and gauge
