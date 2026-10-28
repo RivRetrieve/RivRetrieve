@@ -21,6 +21,81 @@ from rivretrieve._internal.catalogues.schemas import AvailabilityDtype
 from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _registry
 
 
+@pytest.fixture
+def registered_dws_catalogue():
+    """Opt in to the deferred DWS catalogue without offering it by default."""
+    from rivretrieve._internal.providers.registration import register_manifest
+
+    register_manifest(_registry, ("za_dws",))
+
+
+@pytest.fixture(autouse=True)
+def isolated_runtime_inputs(monkeypatch, tmp_path):
+    """Keep ambient configuration out without replacing test-selected stores or dotenv."""
+    from rivretrieve._internal import discovery
+    from rivretrieve._internal.providers import registration
+
+    for name in ("RIVRETRIEVE_CACHE_DIR", "NVE_API_KEY", "USGS_API_KEY", "ANA_IDENTIFICADOR", "ANA_SENHA"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("NETRC", str(tmp_path / "absent.netrc"))
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost,::1")
+    monkeypatch.setenv("no_proxy", "127.0.0.1,localhost,::1")
+    monkeypatch.setattr(discovery, "user_cache_dir", lambda *args, **kwargs: str(tmp_path / "cache"))
+    monkeypatch.setattr(registration, "user_cache_dir", lambda *args, **kwargs: str(tmp_path / "cache"))
+    original_dotenv = discovery.dotenv_values
+    ambient_dotenv = Path.cwd() / ".env"
+
+    def test_dotenv(path, *args, **kwargs):
+        if Path(path) == ambient_dotenv:
+            return {}
+        return original_dotenv(path, *args, **kwargs)
+
+    monkeypatch.setattr(discovery, "dotenv_values", test_dotenv)
+
+
+@pytest.fixture(autouse=True)
+def loopback_only_network(request, monkeypatch):
+    """Source-independent tests may use real loopback HTTP, never publisher traffic."""
+    if not request.config.getoption("--logic-only"):
+        return
+    import ipaddress
+    import socket
+
+    def check_host(host):
+        if isinstance(host, bytes):
+            host = host.decode("ascii")
+        if host == "localhost":
+            return
+        try:
+            allowed = ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            allowed = False
+        if not allowed:
+            pytest.fail("Source-independent tests permit only loopback network access", pytrace=False)
+
+    getaddrinfo = socket.getaddrinfo
+    connect = socket.socket.connect
+    connect_ex = socket.socket.connect_ex
+
+    def local_addresses(host, *args, **kwargs):
+        check_host(host)
+        return getaddrinfo(host, *args, **kwargs)
+
+    def local_connect(sock, address):
+        if sock.family in (socket.AF_INET, socket.AF_INET6):
+            check_host(address[0])
+        return connect(sock, address)
+
+    def local_connect_ex(sock, address):
+        if sock.family in (socket.AF_INET, socket.AF_INET6):
+            check_host(address[0])
+        return connect_ex(sock, address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", local_addresses)
+    monkeypatch.setattr(socket.socket, "connect", local_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", local_connect_ex)
+
+
 @pytest.fixture(scope="session")
 def retained_evidence_root() -> Path:
     """Locate explicitly supplied archive inputs in their repository-relative layout."""

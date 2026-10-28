@@ -87,8 +87,13 @@ def test_public_historical_archive_without_personal_credentials(
         routes.append("archive POST")
         return response(archive.content, archive.status_code, archive.content_type)
 
-    monkeypatch.setattr(requests, "get", get)
-    monkeypatch.setattr(requests, "post", post)
+    def send(session, method, url, **kwargs):
+        if method == "GET":
+            return get(url, **kwargs)
+        assert method == "POST"
+        return post(url, **kwargs)
+
+    monkeypatch.setattr(requests.Session, "request", send)
     selection = rr.find(provider="ch_foen", station="2018", quantity="discharge")
     result = rr.fetch(selection, start="2024-01-01", end="2024-01-31", receipts=True, on_issue="ignore")
     assert routes == ["archive POST"], f"Historical public retrieval selected {routes}"

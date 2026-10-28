@@ -168,8 +168,13 @@ def _plan_capped_span(fetch_window: FetchWindow, declaration: WindowDeclaration)
     _require(
         declaration,
         declaration.size is not None
-        and declaration.rendering in (WindowRenderingVocabulary.DATE, WindowRenderingVocabulary.ISO_INSTANT),
-        "a positive size and date or iso-instant rendering",
+        and declaration.rendering
+        in (
+            WindowRenderingVocabulary.DATE,
+            WindowRenderingVocabulary.DATE_DMY,
+            WindowRenderingVocabulary.ISO_INSTANT,
+        ),
+        "a positive size and date, date-dmy, or iso-instant rendering",
     )
     size = declaration.size
     assert size is not None
@@ -195,6 +200,8 @@ def _plan_capped_span(fetch_window: FetchWindow, declaration: WindowDeclaration)
         bounds = _closed_bounds(cursor, datetime.combine(stop.date(), time.max))
         if declaration.rendering is WindowRenderingVocabulary.ISO_INSTANT:
             windows.append(RenderedWindow(_iso_z(cursor), _iso_z(rendered_stop), bounds))
+        elif declaration.rendering is WindowRenderingVocabulary.DATE_DMY:
+            windows.append(RenderedWindow(cursor.strftime("%d/%m/%Y"), rendered_stop.strftime("%d/%m/%Y"), bounds))
         else:
             windows.append(RenderedWindow(cursor.date().isoformat(), rendered_stop.date().isoformat(), bounds))
         cursor = stop + timedelta(days=1)

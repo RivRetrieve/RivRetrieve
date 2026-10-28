@@ -111,7 +111,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     keys = ["provider_id", "station_id"]
     assert_frame_equal(result.select(keys).unique().sort(keys), before.select(keys).unique().sort(keys))
     assert result.select(*keys, "source_field").is_duplicated().sum() == 0
-    assert result["provider_id"].n_unique() == 14
+    assert result["provider_id"].n_unique() == 13
     assert_frame_equal(rr.as_frame(selection), before)
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
@@ -255,7 +255,7 @@ def test_nonbreaking_space_and_blank_are_values() -> None:
     assert set(blanks["state"]) == {"value"}
 
 
-def test_station_metadata_does_not_require_numeric_source_unit_admission() -> None:
+def test_station_metadata_does_not_require_numeric_source_unit_admission(registered_dws_catalogue) -> None:
     selection = rr.find(provider="za_dws")
     inspected = rr.as_frame(selection)
     assert inspected["station_id"].n_unique() == 2905

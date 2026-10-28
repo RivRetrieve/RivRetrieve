@@ -11,3 +11,17 @@
 #copy-page-btn.copied {
   color: #10b981;
 }
+
+/* The map alone uses a viewport workspace; other docs retain article layout. */
+body:has(#station-explorer) .md-main__inner { max-width: none; margin: 0; }
+body:has(#station-explorer) .md-sidebar,
+body:has(#station-explorer) .md-content__inner > h1,
+body:has(#station-explorer) .md-content__button,
+body:has(#station-explorer) .md-footer,
+body:has(#station-explorer) #copy-page-btn { display: none; }
+body:has(#station-explorer) .md-content { min-width: 0; margin: 0; }
+body:has(#station-explorer) .md-content__inner { margin: 0; padding: 0; }
+body:has(#station-explorer) .md-content__inner::before,
+body:has(#station-explorer) .md-content__inner::after { display: none; }
+#station-explorer { display: block; width: 100%; height: calc(100dvh - 4.8rem); border: 0; margin: 0; }
+@media(max-width: 1220px) { #station-explorer { height: calc(100dvh - 2.4rem); } }

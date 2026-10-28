@@ -1,0 +1,35 @@
+.python-preview {
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: min(60dvh, 620px);
+  background: #ffffff;
+  color: #000000;
+}
+
+.python-preview span {
+  color: var(--shiki-light);
+  font-style: var(--shiki-light-font-style, normal);
+  font-weight: var(--shiki-light-font-weight, normal);
+  text-decoration: var(--shiki-light-text-decoration, none);
+}
+
+[data-md-color-scheme="slate"] .python-preview {
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: min(60dvh, 620px);
+  background: #1e1e1e;
+  color: #d4d4d4;
+}
+
+[data-md-color-scheme="slate"] .python-preview span {
+  color: var(--shiki-dark);
+  font-style: var(--shiki-dark-font-style, normal);
+  font-weight: var(--shiki-dark-font-weight, normal);
+  text-decoration: var(--shiki-dark-text-decoration, none);
+}
+
+@media (max-width: 900px) {
+  .python-preview {
+    max-height: none;
+  }
+}

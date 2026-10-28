@@ -49,8 +49,10 @@ uv run mkdocs build --strict
 The first command reports `Reference is current.` when tables match the code and
 packaged catalogues. The tests report their results; a successful build writes
 `site/` and reports completion. Review the rendered navigation and links as well.
-A local build does not deploy the site. Documentation publication remains in
-`.github/workflows/deploy-docs.yml` and targets `RivRetrieve/RivRetrieve.github.io`.
+A local build does not deploy the site. `.github/workflows/check-docs.yml` builds
+and checks documentation on pushes to `main`. Documentation publication runs on release
+in `.github/workflows/publish-pypi.yml` after package publishing succeeds and targets
+`RivRetrieve/RivRetrieve.github.io`.
 
 ## Versions and publishing
 
@@ -71,7 +73,8 @@ The `publish-pypi.yml` workflow builds with `uv build` and uploads with
 short-lived GitHub OIDC credentials in its `pypi` or `testpypi` environment.
 TestPyPI uploads explicitly use `https://test.pypi.org/legacy/`.
 
-Publishing a GitHub release, including a prerelease, uploads to PyPI. Manual
+Publishing a GitHub release, including a prerelease, uploads to PyPI and deploys
+documentation. Manual
 dispatch also uploads packages: its target selector defaults to `pypi` and offers
 `testpypi`. The workflow does not bump versions, create tags or generate release
 notes. Run `uv build` locally to build without uploading. Release publication and

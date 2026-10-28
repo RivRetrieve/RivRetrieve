@@ -2,7 +2,6 @@
 
 import html
 import re
-import runpy
 import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -61,19 +60,22 @@ def documentation_site(tmp_path_factory, documentation_workspace):
             name
             for name in names
             if name == "__pycache__"
-            or Path(directory) / name in (ROOT / "docs/index.md", ROOT / "docs/assets/stations_map.html")
+            or Path(directory) / name in (ROOT / "docs/index.md", ROOT / "docs/assets/station-explorer")
         },
     )
-    outputs = [ROOT / "docs/index.md", ROOT / "docs/assets/stations_map.html"]
+    # Reference rendering needs prepared asset paths, not a real browser bundle.
+    app = docs / "assets/station-explorer"
+    app.mkdir(parents=True)
+    (app / "index.html").write_text("<html></html>")
+    (app / "catalogue.json").write_text("{}")
+    outputs = [ROOT / "docs/index.md"]
     before = {path: path.read_bytes() if path.exists() else None for path in outputs}
     config = load_config(str(ROOT / "mkdocs.yml"), strict=True, site_dir=str(site), docs_dir=str(docs))
     hook = config.hooks["docs/hooks.py"]
     with pytest.MonkeyPatch.context() as patch:
         patch.chdir(ROOT)
         patch.setattr(hook, "INDEX_MD_PATH", docs / "index.md")
-        patch.setattr(hook, "STATIONS_MAP_PATH", docs / "assets/stations_map.html")
-        generator = runpy.run_path(str(ROOT / "docs/scripts/generate_station_map.py"))
-        generator["build_map"](hook.STATIONS_MAP_PATH)
+        patch.setattr(hook, "DOCS_DIR", docs)
         try:
             build(config)
         finally:
@@ -116,10 +118,10 @@ def test_reference_observation_result_fields(reference):
 def test_reference_all_provider_access_kinds(reference):
     table = reference.split('id="shipped-software-capabilities"', 1)[1].split('id="packaged-access-coordinates"', 1)[0]
     rows = re.findall(r"<tr>(.*?)</tr>", table, re.DOTALL)[1:]
-    assert len(rows) == 14
+    assert len(rows) == 13
     assert sum("<td>live</td>" in row for row in rows) == 11
     assert sum("<td>bulk store</td>" in row for row in rows) == 2
-    assert sum("<td>catalogue-only</td>" in row for row in rows) == 1
+    assert sum("<td>catalogue-only</td>" in row for row in rows) == 0
 
 
 def test_reference_renders_methods_and_signature_only_properties(reference):

@@ -1,4 +1,4 @@
-name: Publish to PyPI
+name: Release
 
 on:
   release:
@@ -91,3 +91,59 @@ jobs:
 
       - name: Publish to TestPyPI
         run: uv publish --trusted-publishing always --publish-url https://test.pypi.org/legacy/
+
+  deploy-docs:
+    name: Deploy documentation
+    needs: [publish-pypi]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Install package and dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/station-explorer/package-lock.json
+
+      - name: Install station explorer dependencies
+        run: npm --prefix web/station-explorer ci
+
+      - name: Export public station catalogue offline
+        run: uv run python docs/scripts/generate_station_catalogue.py
+
+      - name: Build station explorer
+        env:
+          VITE_CARTO_BASEMAP_API_KEY: ${{ secrets.CARTO_BASEMAP_API_KEY }}
+        run: |
+          if [ -z "$VITE_CARTO_BASEMAP_API_KEY" ]; then
+            echo "::error::CARTO_BASEMAP_API_KEY is required to build the documentation basemap."
+            exit 1
+          fi
+          npm --prefix web/station-explorer run build
+
+      - name: Build documentation site
+        run: uv run mkdocs build --strict
+
+      - name: Deploy to RivRetrieve.github.io
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
+          external_repository: RivRetrieve/RivRetrieve.github.io
+          publish_branch: main
+          publish_dir: ./site

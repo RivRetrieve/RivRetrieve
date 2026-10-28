@@ -12,6 +12,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+import requests
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
@@ -703,7 +704,7 @@ def test_public_exchange_secret_echo_is_not_retained(
     def sender(request, timeout_seconds):
         if request.url.endswith("/token"):
             if unsafe_call == "exchange":
-                raise RuntimeError("protocol-identifier-sentinel protocol-password-sentinel")
+                raise requests.RequestException("protocol-identifier-sentinel protocol-password-sentinel")
             return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
         return b"protocol-bearer-sentinel protocol-password-sentinel", 200, "text/plain"
 
@@ -833,13 +834,48 @@ def test_public_exchange_issue_exception_is_sanitized(
     selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact)
 
     def sender(request, timeout_seconds):
-        raise RuntimeError("protocol-password-sentinel")
+        raise requests.RequestException("protocol-password-sentinel")
 
     monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender))
     with pytest.raises(IssuePolicyError) as raised:
         rr.fetch(selection, start="2024-01-02", end="2024-01-02", on_issue="raise")
-    rendered = "".join(traceback.format_exception(raised.value))
+    rendered = "".join(traceback.TracebackException.from_exception(raised.value, capture_locals=True).format())
     assert "protocol-password-sentinel" not in rendered + repr(raised.value) + caplog.text
+    assert raised.value.__cause__ is None
+    assert raised.value.__context__ is None
+
+
+@pytest.mark.parametrize("on_issue", ["ignore", "warn", "raise"])
+@pytest.mark.parametrize("stage", ["exchange", "data"])
+@pytest.mark.parametrize("fetch", [rr.fetch, rr.fetch_by_provider])
+def test_public_exchange_programming_error_is_fatal_and_sanitized(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+    caplog,
+    on_issue,
+    stage,
+    fetch,
+):
+    import traceback
+
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.transport import HttpClient
+
+    _exchange_environment(monkeypatch, tmp_path)
+    selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact)
+
+    def sender(request, timeout_seconds):
+        if stage == "data" and request.url.endswith("/token"):
+            return b'{"token":"protocol-bearer-sentinel"}', 200, "application/json"
+        raise RuntimeError("protocol-password-sentinel")
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender, sleeper=lambda _: None))
+    with pytest.raises(FatalContractError) as raised:
+        fetch(selection, start="2024-01-02", end="2024-01-02", on_issue=on_issue)
+    rendered = "".join(traceback.TracebackException.from_exception(raised.value, capture_locals=True).format())
+    for secret in ("protocol-identifier-sentinel", "protocol-password-sentinel", "protocol-bearer-sentinel"):
+        assert secret not in rendered + repr(raised.value) + caplog.text
     assert raised.value.__cause__ is None
     assert raised.value.__context__ is None
 

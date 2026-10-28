@@ -10,6 +10,7 @@ import pytest
 
 from tests._distribution import InstalledDistribution
 from tests._provenance import historical_recording_locations, historical_source_provenance
+from tests.test_discovery import EXPECTED_PRODUCTS_BY_PROVIDER
 
 _CANONICAL_CATALOGUE_FILES = {
     "format.json",
@@ -83,7 +84,16 @@ assert "mlcroissant" not in sys.modules
 provider_frame = rivretrieve.providers()
 assert provider_frame.columns == ["provider_id", "credentials", "access"]
 provider_ids = tuple(provider_frame["provider_id"])
-assert provider_ids == BUILTIN_PROVIDER_IDS
+assert provider_ids == BUILTIN_PROVIDER_IDS == {tuple(EXPECTED_PRODUCTS_BY_PROVIDER)!r}
+from rivretrieve._internal.registry import UnknownProviderError
+try:
+    rivretrieve.find(provider="za_dws", station="X3H001")
+except UnknownProviderError:
+    pass
+else:
+    raise AssertionError("South African stations must not be offered")
+stations = rivretrieve.as_frame(rivretrieve.find())
+assert set(stations["provider_id"]) == set(provider_ids)
 provider_root = files("rivretrieve._internal.providers")
 for provider_id in provider_ids:
     catalogue = provider_root.joinpath(provider_id, "catalogue")
