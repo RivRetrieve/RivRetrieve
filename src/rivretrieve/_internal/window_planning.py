@@ -64,7 +64,14 @@ def _plan_iso_instant(fetch_window: FetchWindow, declaration: WindowDeclaration)
     stop = _datetime_from_endpoint(fetch_window, "end")
     if declaration.stop_convention is StopConvention.EXCLUSIVE:
         stop += timedelta(microseconds=1)
-    return (RenderedWindow(_iso_z(start), _iso_z(stop)),)
+    if declaration.timestamp_precision is not None:
+        precision = declaration.timestamp_precision
+        epoch = datetime(1970, 1, 1)
+        start = epoch + ((start - epoch) // precision) * precision
+        steps, remainder = divmod(stop - epoch, precision)
+        stop = epoch + (steps + bool(remainder)) * precision
+        fetch_window = _closed_bounds(start, stop - timedelta(microseconds=1))
+    return (RenderedWindow(_iso_z(start), _iso_z(stop), fetch_window),)
 
 
 def _plan_date(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
@@ -280,3 +287,30 @@ def plan_windows(
             "src/rivretrieve/_internal/window_planning.py"
         ) from error
     return planner(fetch_window, declaration)
+
+
+def subdivide_window(window: RenderedWindow, *, precision: timedelta) -> tuple[RenderedWindow, ...]:
+    """Bisect exclusive UTC bounds on an established source timestamp grid.
+
+    ``precision`` is supplied from source evidence, not nominal observation
+    frequency. An empty tuple means no interior grid boundary remains. Closed
+    engine bounds use its microsecond resolution; source requests remain disjoint
+    half-open intervals.
+    """
+    if precision <= timedelta(0):
+        raise ValueError("Source timestamp precision must be positive")
+    if window.bounds is None or window.stop is None:
+        raise ValueError("Subdivision requires bounded exclusive UTC windows")
+    start = _datetime_from_endpoint(window.bounds, "start")
+    stop = _datetime_from_endpoint(window.bounds, "end") + timedelta(microseconds=1)
+    if window.start != _iso_z(start) or window.stop != _iso_z(stop):
+        raise ValueError("Subdivision requires rendered bounds to match exclusive UTC bounds")
+    steps = (stop - start) // precision
+    if steps < 2:
+        return ()
+    middle = start + (steps // 2) * precision
+    tick = timedelta(microseconds=1)
+    return (
+        RenderedWindow(_iso_z(start), _iso_z(middle), _closed_bounds(start, middle - tick)),
+        RenderedWindow(_iso_z(middle), _iso_z(stop), _closed_bounds(middle, stop - tick)),
+    )

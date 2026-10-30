@@ -382,3 +382,43 @@ def test_hourly_calendar_label_convention_requires_monthly_date_requests():
             engine.StopConvention.INCLUSIVE,
             calendar_labels=engine.CalendarLabelConvention.HOURS_1_TO_24,
         )
+
+
+def test_overflow_subdivision_partitions_source_precision_without_overlap() -> None:
+    from datetime import timedelta
+
+    parent = engine.RenderedWindow(
+        "2025-02-01T00:00:00Z",
+        "2025-02-01T00:00:04Z",
+        _fetch(datetime(2025, 2, 1), datetime(2025, 2, 1, 0, 0, 3, 999999)),
+    )
+    children = window_planning.subdivide_window(parent, precision=timedelta(seconds=1))
+    assert _pairs(children) == (
+        ("2025-02-01T00:00:00Z", "2025-02-01T00:00:02Z"),
+        ("2025-02-01T00:00:02Z", "2025-02-01T00:00:04Z"),
+    )
+    assert children[0].bounds == _fetch(datetime(2025, 2, 1), datetime(2025, 2, 1, 0, 0, 1, 999999))
+    assert children[1].bounds == _fetch(datetime(2025, 2, 1, 0, 0, 2), datetime(2025, 2, 1, 0, 0, 3, 999999))
+    leaf = engine.RenderedWindow(
+        "2025-02-01T00:00:00Z",
+        "2025-02-01T00:00:01Z",
+        _fetch(datetime(2025, 2, 1), datetime(2025, 2, 1, 0, 0, 0, 999999)),
+    )
+    assert window_planning.subdivide_window(leaf, precision=timedelta(seconds=1)) == ()
+
+
+def test_iso_filter_precision_rounds_outward_before_rendering():
+    from datetime import timedelta
+
+    declaration = engine.WindowDeclaration(
+        engine.WindowGranularity("iso-instant"),
+        engine.WindowRenderingVocabulary.ISO_INSTANT,
+        engine.StopConvention.EXCLUSIVE,
+        timestamp_precision=timedelta(milliseconds=1),
+    )
+    windows = window_planning.plan_windows(
+        _fetch(datetime(2025, 1, 1, 0, 0, 0, 100), datetime(2025, 1, 1, 0, 0, 0, 2100)),
+        declaration,
+    )
+    assert _pairs(windows) == (("2025-01-01T00:00:00Z", "2025-01-01T00:00:00.003000Z"),)
+    assert windows[0].bounds == _fetch(datetime(2025, 1, 1), datetime(2025, 1, 1, 0, 0, 0, 2999))

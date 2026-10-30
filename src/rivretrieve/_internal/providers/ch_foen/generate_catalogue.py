@@ -1,13 +1,8 @@
-"""Swiss catalogue maintenance : refresh(ExistenzHydroLocations, RetrievedAt) → WithIssues[NativeTable]; build(NativeTable, OriginDeclarations) → GeneratedChFoenCatalogue."""
+"""Offline catalogue transformations for the official Swiss hydrological API."""
 
-from __future__ import annotations
-
-import argparse
-import json
-import urllib.request
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import cast
 
@@ -16,298 +11,346 @@ import polars as pl
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
     CatalogueBuildInputs,
+    RecordingReference,
     RetainedInputReceipt,
-    verify_provenance_recordings,
 )
-from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
-from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
-from rivretrieve._internal.catalogues.native import (
-    NativeTable,
-    RetrievedAt,
-    read_native_table,
-    stamp_native_table,
-    write_native_table,
-)
-from rivretrieve._internal.catalogues.schemas import (
-    PRODUCT_CATALOG_SCHEMA,
-    PROVIDER_INFO_CATALOG_SCHEMA,
-    STATION_CATALOG_SCHEMA,
-    STATION_PRODUCT_CATALOG_SCHEMA,
-    AvailabilityDtype,
-    ProductCatalog,
-    StationCatalog,
-    StationProductCatalog,
-    validate_catalogue,
-)
-from rivretrieve._internal.engine import WithIssues
+from rivretrieve._internal.catalogue_origins import OriginDeclarations
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table
+from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.ch_foen.origins import (
-    NATIVE_TABLE_BYTE_SIZE,
-    NATIVE_TABLE_SHA256,
-    build_acquisition_provenance,
-)
-from rivretrieve._internal.providers.ch_foen.station_metadata import (
-    StationMetadataSources,
-    project_station_metadata,
-    read_station_metadata_sources,
-    verify_adopted_station_metadata,
+from rivretrieve._internal.providers.ch_foen.official_series import (
+    ARCHIVE_ROUTES,
+    PARAMETERS,
+    product_id,
+    source_series,
 )
 
-PROVIDER_ID = ProviderId("ch_foen")
-PROVIDER_NAME = "Swiss Federal Office for the Environment FOEN / BAFU"
-SOURCE_URL = "https://api.existenz.ch/apiv1/hydro/locations"
-AVAILABILITY_REASON = "Existenz.ch locations catalogue does not expose per-variable station availability"
-AVAILABILITY_SOURCE = "provider_station_catalogue_assumption"
-LIVE_MINIMUM_STATIONS = 200
-
-NATIVE_SOURCE_SCHEMA = pl.Schema(
+STATION_SOURCE_SCHEMA = pl.Schema(
     {
-        "payload_key": pl.String,
-        "id": pl.Int64,
-        "name": pl.String,
-        "details.id": pl.String,
-        "details.name": pl.String,
-        "details.water-body-name": pl.String,
-        "details.water-body-type": pl.String,
-        "details.chx": pl.Int64,
-        "details.chy": pl.Int64,
-        "details.lat": pl.Float64,
-        "details.lon": pl.Float64,
-        "source": pl.String,
-        "apiurl": pl.String,
-        "opendata": pl.String,
-        "license": pl.String,
+        **dict.fromkeys(
+            (
+                "no",
+                "name",
+                "siteName",
+                "riverName",
+                "catchmentName",
+                "status",
+                "adminName",
+                "adminLevel",
+                "coverageFrom",
+                "coverageTo",
+            ),
+            pl.String,
+        ),
+        **dict.fromkeys(("localX", "localY", "latitude", "longitude", "elevation"), pl.Float64),
     }
 )
+
+
+def _response_rows(payload: Mapping[str, object], route: str) -> list[dict[str, object]]:
+    if payload.get("errors"):
+        raise FatalContractError("Swiss API catalogue response contains GraphQL errors")
+    value: object = payload
+    for key in ("data", "water", "observations", route):
+        if not isinstance(value, dict) or key not in value:
+            raise FatalContractError("Swiss API catalogue response lacks the selected route")
+        value = cast("dict[str, object]", value)[key]
+    if not isinstance(value, list) or any(not isinstance(row, dict) for row in value):
+        raise FatalContractError("Swiss API catalogue route must contain source objects")
+    return cast("list[dict[str, object]]", value)
+
+
+def station_native_table(payload: Mapping[str, object], *, retrieved_at: RetrievedAt) -> NativeTable:
+    """Preserve station numbers, optional metadata and missing source coordinates.
+
+    Station status and station-level coverage dates do not filter the snapshot
+    or establish product availability. Numbers must already be source strings.
+    """
+    rows = _response_rows(payload, "stations")
+    numbers = [row.get("no") for row in rows]
+    if any(not isinstance(number, str) or not number.strip() for number in numbers) or len(set(numbers)) != len(
+        numbers
+    ):
+        raise FatalContractError("Swiss station number must be a distinct nonblank source string")
+    for row in rows:
+        for name, dtype in STATION_SOURCE_SCHEMA.items():
+            value = row.get(name)
+            if value is not None and (
+                (dtype == pl.String and not isinstance(value, str))
+                or (dtype == pl.Float64 and (isinstance(value, bool) or not isinstance(value, int | float)))
+            ):
+                raise FatalContractError("Swiss station metadata has invalid scalar types")
+    try:
+        frame = pl.DataFrame(rows, schema=STATION_SOURCE_SCHEMA, strict=True).sort("no")
+    except (TypeError, ValueError, pl.exceptions.PolarsError) as error:
+        raise FatalContractError("Swiss station metadata has invalid scalar types") from error
+    return stamp_native_table(frame, retrieved_at)
+
+
+ASSOCIATION_SCHEMA = pl.Schema(
+    dict.fromkeys(("station_no", "station_id", "route", "parameterName", "tsName", "unitName", "unitSymbol"), pl.String)
+)
+
+
+def archive_associations(payload: Mapping[str, object], *, route: str, station_numbers: set[str]) -> pl.DataFrame:
+    """Select witnessed archive identities, including observations with null values.
+
+    Embedded station IDs remain source facts distinct from station numbers.
+    Empty responses establish no negative availability claim. This operation does
+    not interpret raw series names, units or sampled timestamps as physical facts
+    or record boundaries. Acquisition completeness is checked separately.
+    """
+    associations = []
+    for row in _response_rows(payload, route):
+        station = row.get("station")
+        if not isinstance(station, dict):
+            raise FatalContractError("Archive association requires a source station object")
+        station = cast("dict[str, object]", station)
+        number = station.get("no")
+        if not isinstance(number, str):
+            raise FatalContractError("Archive association requires a source string station number")
+        if number not in station_numbers:
+            raise FatalContractError("Archive association station is absent from the station snapshot")
+        values = {name: row.get(name) for name in ("parameterName", "tsName", "unitName", "unitSymbol")}
+        if any(not isinstance(value, str) or not value for value in values.values()):
+            raise FatalContractError("Archive association requires source parameter, raw name and units")
+        embedded = station.get("id")
+        if embedded is not None and not isinstance(embedded, str):
+            raise FatalContractError("Archive embedded station identity must remain a source string")
+        associations.append({"station_no": number, "station_id": embedded, "route": route, **values})
+    return pl.DataFrame(associations, schema=ASSOCIATION_SCHEMA).unique().sort(ASSOCIATION_SCHEMA.names())
+
+
+def describe_associations(associations: pl.DataFrame, *, evidence: str) -> SourceDescriptions:
+    """Describe witnessed identities using the same definitions as response parsing.
+
+    Distinct native units remain fact segments. Sample times do not establish
+    record boundaries, and archive station IDs do not replace source coordinates.
+    """
+    from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
+
+    descriptions = []
+    groups = associations.sort(ASSOCIATION_SCHEMA.names()).partition_by(
+        ["station_no", "route", "parameterName", "tsName"], as_dict=True
+    )
+    for (station, route, parameter, name), rows in groups.items():
+        series = source_series(
+            station,
+            route,
+            parameter,
+            name,
+            units=tuple(rows["unitSymbol"].to_list()),
+            evidence=evidence,
+            temporal_evidence="catalogue:ch_foen:source.product.temporal_meaning",
+            origin="catalogue",
+        )
+        descriptions.append(
+            SourceDescription(
+                product_id=series.product_id,
+                station_id=station,
+                identity_key=(route, parameter, name),
+                native_coordinate=parameter,
+                identity=series.identity,
+                variant=series.variant,
+                facts=series.facts,
+            )
+        )
+    return SourceDescriptions(provider_id="ch_foen", descriptions=tuple(descriptions))
+
+
+def catalogue_tables(
+    native: NativeTable, associations: pl.DataFrame, *, checked_on: date
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    """Build offline tables without expanding station lists into known series.
+
+    Product rows describe access routes. Series descriptions carry physical intervals
+    because exceptions prevent a route-wide temporal classification.
+    Station-product rows distinguish positive witnesses from unresolved pairs.
+    Unknown pairs carry incomplete inventory, never fabricated source series.
+    Sample timestamps never populate published record boundaries.
+    """
+    from rivretrieve._internal.catalogues.schemas import (
+        PRODUCT_CATALOG_SCHEMA,
+        STATION_CATALOG_SCHEMA,
+        STATION_PRODUCT_CATALOG_SCHEMA,
+        validate_catalogue,
+    )
+
+    stations = native.data.select(
+        pl.lit("ch_foen").alias("provider_id"),
+        pl.col("no").alias("station_id"),
+        "latitude",
+        "longitude",
+        pl.lit("EPSG:4326").alias("crs"),
+    ).sort("station_id")
+    products = pl.DataFrame(
+        [
+            {
+                "provider_id": "ch_foen",
+                "product_id": product_id(route, parameter),
+                "observed_property": quantity,
+                "frequency": "unknown",
+                "statistic": "unknown",
+                "period_type": "unknown",
+                "period_anchor": "unknown",
+                "unit": {"Q": "m3/s", "W": "m", "WT": "degC"}[parameter],
+                "native_id": f"{route}:{parameter}",
+            }
+            for route in (*ARCHIVE_ROUTES, "data_live")
+            for parameter, (quantity, _) in PARAMETERS.items()
+        ],
+        schema=PRODUCT_CATALOG_SCHEMA.polars_schema,
+    ).sort("product_id")
+    if not set(associations["station_no"]) <= set(stations["station_id"]):
+        raise FatalContractError("Observed association is absent from the station snapshot")
+    observed = {
+        (station, product_id(route, parameter))
+        for station, route, parameter in associations.select("station_no", "route", "parameterName")
+        .unique()
+        .iter_rows()
+    }
+    pairs = pl.DataFrame(
+        [
+            {
+                "provider_id": "ch_foen",
+                "station_id": station,
+                "product_id": product,
+                "availability": "available" if (station, product) in observed else "unknown",
+                "availability_reason": (
+                    "Observed source association; sampled inventory is incomplete"
+                    if (station, product) in observed
+                    else "No association established in selected samples; availability remains unknown"
+                ),
+                "published_record_start_date": None,
+                "published_record_end_date": None,
+                "last_catalogue_check": checked_on,
+            }
+            for station in stations["station_id"]
+            for product in products["product_id"]
+        ],
+        schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema,
+    )
+    for frame, schema in (
+        (products, PRODUCT_CATALOG_SCHEMA),
+        (stations, STATION_CATALOG_SCHEMA),
+        (pairs, STATION_PRODUCT_CATALOG_SCHEMA),
+    ):
+        validate_catalogue(frame, schema, on_issue="raise")
+    return products, stations, pairs
+
+
+LIVE_PARAMETER_LABELS = {"Q": "Discharge", "W": "Water level", "WT": "Temperature"}
+
+
+def recent_associations(
+    payload: Mapping[str, object], *, station_numbers: set[str], station_units: Mapping[str, Mapping[str, str]]
+) -> pl.DataFrame:
+    """Bind recent witnesses to independently selected station-page unit labels.
+
+    Missing page labels remain unknown, never borrowed from archive observations.
+    The recent feed publishes no raw series name; its parameter is the identity.
+    """
+    rows = []
+    for row in _response_rows(payload, "data_live"):
+        station, parameter = row.get("stationNo"), row.get("parameterName")
+        if not isinstance(station, str) or station not in station_numbers:
+            raise FatalContractError("Recent association station is absent from the station snapshot")
+        if not isinstance(parameter, str) or parameter not in LIVE_PARAMETER_LABELS:
+            raise FatalContractError("Recent association has an unsupported source parameter")
+        label = LIVE_PARAMETER_LABELS[parameter]
+        unit = station_units.get(station, {}).get(label)
+        rows.append(
+            {
+                "station_no": station,
+                "station_id": None,
+                "route": "data_live",
+                "parameterName": parameter,
+                "tsName": None,
+                "unitName": None,
+                "unitSymbol": unit,
+            }
+        )
+    return pl.DataFrame(rows, schema=ASSOCIATION_SCHEMA).unique().sort(ASSOCIATION_SCHEMA.names())
+
+
+def read_original(evidence_root: Path, reference: RecordingReference, *, input_receipt: RetainedInputReceipt) -> bytes:
+    """Verify one explicitly selected publisher body before parsing it.
+
+    The private source verifier owns original receipt interpretation, including
+    final page URL checks. This boundary checks the selected member bytes and
+    declared recording identity; it does not discover files or make requests.
+    """
+    from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+
+    selected = {item.consumer_path: item for item in input_receipt.inputs}
+    member = selected.get(reference.repository_path)
+    if member is None:
+        raise FatalContractError("Swiss original is absent from selected retained inputs")
+    if member.sha256 != reference.sha256:
+        raise FatalContractError("Swiss original differs from its selected recording identity")
+    verify_retained_input_files(
+        input_receipt.model_copy(update={"inputs": (member,), "declaration_inputs": (), "support_inputs": ()}),
+        evidence_root,
+    )
+    return (evidence_root / reference.repository_path).read_bytes()
 
 
 @dataclass(frozen=True)
 class GeneratedChFoenCatalogue:
     provider_info: dict[str, object]
-    products: ProductCatalog
-    stations: StationCatalog
-    station_products: StationProductCatalog
+    products: pl.DataFrame
+    stations: pl.DataFrame
+    station_products: pl.DataFrame
     acquisition_provenance: AcquisitionProvenance
-    metadata_sources: StationMetadataSources | None = None
+    source_descriptions: SourceDescriptions
     station_metadata: pl.DataFrame | None = None
-
-
-@dataclass(frozen=True)
-class ProductDefinition:
-    product_id: str
-    observed_property: str
-    frequency: str
-    statistic: str
-    period_type: str
-    period_anchor: str
-    unit: str
-    parameters: tuple[str, ...]
-
-
-PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
-    ProductDefinition(
-        product_id="discharge_reported",
-        observed_property="discharge",
-        frequency="unknown",
-        statistic="unknown",
-        period_type="unknown",
-        period_anchor="unknown",
-        unit="m3/s",
-        parameters=("flow", "flow_ls"),
-    ),
-    ProductDefinition(
-        product_id="stage_reported",
-        observed_property="stage",
-        frequency="unknown",
-        statistic="unknown",
-        period_type="unknown",
-        period_anchor="unknown",
-        unit="m",
-        parameters=("height_abs", "height"),
-    ),
-    ProductDefinition(
-        product_id="water_temperature_reported",
-        observed_property="water_temperature",
-        frequency="unknown",
-        statistic="unknown",
-        period_type="unknown",
-        period_anchor="unknown",
-        unit="degC",
-        parameters=("temperature",),
-    ),
-)
-
-EXPECTED_PRODUCT_IDS = frozenset(definition.product_id for definition in PRODUCT_DEFINITIONS)
-
-
-def refresh_native_table(
-    raw_payload: Mapping[str, object],
-    *,
-    retrieved_at: RetrievedAt,
-) -> WithIssues[NativeTable]:
-    envelope = _envelope_strings(raw_payload)
-    payload = _station_payload(raw_payload)
-    rows = [_native_source_row(payload_key, station, envelope) for payload_key, station in payload.items()]
-    source_rows = pl.DataFrame(rows, schema=NATIVE_SOURCE_SCHEMA).sort("payload_key")
-    return WithIssues(value=stamp_native_table(source_rows, retrieved_at), issues=())
-
-
-def refresh_native_table_from_fixture(
-    fixture_path: Path | str,
-    *,
-    retrieved_at: RetrievedAt,
-) -> WithIssues[NativeTable]:
-    return refresh_native_table(
-        _read_fixture_json(Path(fixture_path)),
-        retrieved_at=retrieved_at,
-    )
-
-
-def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[NativeTable]:
-    raw_payload = _read_live_json(SOURCE_URL)
-    outcome = refresh_native_table(raw_payload, retrieved_at=retrieved_at)
-    if outcome.value.data.height < LIVE_MINIMUM_STATIONS:
-        raise FatalContractError(f"Swiss metadata live response returned fewer than {LIVE_MINIMUM_STATIONS} stations")
-    return outcome
 
 
 def build_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
     *,
-    metadata_sources: StationMetadataSources | None = None,
+    associations: pl.DataFrame,
+    checked_on: date,
+    provenance: AcquisitionProvenance,
+    station_metadata: pl.DataFrame | None = None,
 ) -> GeneratedChFoenCatalogue:
-    if native_table.data.is_empty():
-        raise FatalContractError("Swiss native table must not be empty")
-    envelope = _validate_native_build_rows(native_table)
-    products = build_products()
-    stations = build_stations(native_table)
-    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
-    station_dates = native_table.data.select(
-        pl.col("name").alias("station_id"),
-        pl.col("retrieved_at").dt.date().alias("retrieved_date"),
-    )
-    station_products = build_station_products(station_dates)
-    maximum_retrieved_at = native_table.data["retrieved_at"].max()
-    if not isinstance(maximum_retrieved_at, datetime):
-        raise FatalContractError("Swiss native table has no valid retrieved_at values")
-    provider_info = build_provider_info(maximum_retrieved_at.date(), envelope)
+    """Assemble an official catalogue from selected source-backed associations.
 
-    validate_generated_catalogue(provider_info, products, stations, station_products)
-    provenance = build_acquisition_provenance()
-    station_metadata = None
-    if metadata_sources is not None:
-        from rivretrieve._internal.providers.ch_foen.origins import (
-            STATION_DIRECTORY_REFERENCE,
-            STATION_METADATA_FIELDS,
-            with_station_metadata_sources,
-        )
+    No observation service is contacted. Source descriptions remain scoped to
+    witnessed station identities, while unknown station-product inventory stays
+    open. Metadata must be separately verified and approved before publication.
+    """
+    from rivretrieve._internal.catalogue_origins import enforce_catalogue_origins
+    from rivretrieve._internal.primitives import ProviderId
 
-        if metadata_sources.directory_reference != STATION_DIRECTORY_REFERENCE:
-            raise FatalContractError("FOEN directory source differs from the declared catalogue acquisition")
-        provenance = with_station_metadata_sources(provenance, metadata_sources.page_recordings)
-        station_metadata = project_station_metadata(
-            stations,
-            metadata_sources.directory_body,
-            metadata_sources.station_pages,
-            STATION_METADATA_FIELDS,
-        )
-    return GeneratedChFoenCatalogue(
-        provider_info=provider_info,
-        products=products,
-        stations=stations,
-        station_products=station_products,
-        acquisition_provenance=provenance,
-        metadata_sources=metadata_sources,
-        station_metadata=station_metadata,
-    )
-
-
-def build_products(product_definitions: Sequence[ProductDefinition] = PRODUCT_DEFINITIONS) -> ProductCatalog:
-    _validate_product_definitions(product_definitions)
-    rows = [
-        {
-            "provider_id": PROVIDER_ID,
-            "product_id": definition.product_id,
-            "observed_property": definition.observed_property,
-            "frequency": definition.frequency,
-            "statistic": definition.statistic,
-            "period_type": definition.period_type,
-            "period_anchor": definition.period_anchor,
-            "unit": definition.unit,
-            "native_id": ",".join(definition.parameters),
-        }
-        for definition in product_definitions
-    ]
-    return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
-
-
-def build_stations(native_table: NativeTable) -> StationCatalog:
-    return native_table.data.select(
-        pl.lit(PROVIDER_ID).cast(pl.String).alias("provider_id"),
-        pl.col("name").cast(pl.String).alias("station_id"),
-        pl.col("details.lat").cast(pl.Float64).alias("latitude"),
-        pl.col("details.lon").cast(pl.Float64).alias("longitude"),
-        pl.lit("unknown").cast(pl.String).alias("crs"),
-    ).sort("station_id")
-
-
-def build_station_products(station_dates: pl.DataFrame) -> StationProductCatalog:
-    rows = []
-    for station_id, retrieved_date in station_dates.iter_rows():
-        if not isinstance(station_id, str) or not isinstance(retrieved_date, date):
-            raise FatalContractError("station retrieval date must pair a string identifier with a date")
-        for definition in PRODUCT_DEFINITIONS:
-            rows.append(
-                {
-                    "provider_id": PROVIDER_ID,
-                    "station_id": station_id,
-                    "product_id": definition.product_id,
-                    "availability": "unknown",
-                    "availability_reason": AVAILABILITY_REASON,
-                    "published_record_start_date": None,
-                    "published_record_end_date": None,
-                    "last_catalogue_check": retrieved_date,
-                }
-            )
-    return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
-        pl.col("availability").cast(AvailabilityDtype)
-    )
-
-
-def build_provider_info(catalogue_version_date: date, envelope: Mapping[str, str]) -> dict[str, object]:
-    return {
-        "provider_id": PROVIDER_ID,
-        "name": PROVIDER_NAME,
+    products, stations, pairs = catalogue_tables(native_table, associations, checked_on=checked_on)
+    enforce_catalogue_origins(ProviderId("ch_foen"), origins, native_table, stations)
+    if provenance is None or provenance.provider_id != "ch_foen":
+        raise FatalContractError("Official catalogue requires its selected acquisition provenance")
+    statements = {
+        statement.kind: statement.exact_text for source in provenance.source_records for statement in source.statements
+    }
+    provider_info: dict[str, object] = {
+        "provider_id": "ch_foen",
+        "name": "Swiss Federal Office for the Environment FOEN / BAFU",
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": ("true: uncapped coalesced live requests; source and contract failures fail loud"),
-        "catalogue_version": catalogue_version_date.isoformat(),
-        "license": None,
-        "citation": None,
+        "bulk_observations": "none",
+        "catalogue_version": checked_on.isoformat(),
+        "license": statements.get("license"),
+        "citation": statements.get("citation"),
     }
-
-
-def validate_generated_catalogue(
-    provider_info: Mapping[str, object],
-    products: ProductCatalog,
-    stations: StationCatalog,
-    station_products: StationProductCatalog,
-) -> None:
-    provider_info_df = pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
-    validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
-    validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
-    validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    packaged_catalogue_artifact_from_components(
+    return GeneratedChFoenCatalogue(
         provider_info,
         products,
         stations,
-        station_products,
-        acquisition_provenance=build_acquisition_provenance(),
-        on_issue="raise",
+        pairs,
+        provenance,
+        describe_associations(associations, evidence="catalogue:ch_foen:source.station_product.source_associations"),
+        station_metadata,
     )
 
 
@@ -315,317 +358,247 @@ def write_catalogue(
     catalogue: GeneratedChFoenCatalogue,
     out_dir: Path | str,
     *,
-    build_inputs: CatalogueBuildInputs | None = None,
-    native_table: NativeTable | None = None,
+    build_inputs: CatalogueBuildInputs,
+    native_table: NativeTable,
+    metadata_fields: tuple[MetadataField, ...] = (),
 ) -> None:
-    """Write a catalogue using adopted build inputs and its verified native table."""
-    from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
+    """Publish candidate tables through the shared evidence-aware publication path.
+
+    Inputs must already be explicitly selected and verified. This writes public
+    candidate products, never source bodies or restricted acquisition receipts.
+    It does not authorize disclosure or replace genuine-input verification.
+    """
+    import json
+    from io import BytesIO
+
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.ch_foen.catalogue_series import describe_catalogue
-    from rivretrieve._internal.providers.ch_foen.config import config as source_config
     from rivretrieve._internal.providers.ch_foen.origins import (
         STATION_CATALOGUE_ORIGINS,
-        STATION_METADATA_FIELDS,
         STATION_METADATA_NOTICE,
-        TRANSFORMATION_IMPLEMENTATIONS,
     )
 
-    if build_inputs is None or native_table is None:
-        raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
-
-    if catalogue.metadata_sources is None or catalogue.station_metadata is None:
-        raise FatalContractError("Swiss metadata publication requires its selected direct FOEN sources")
-    verify_adopted_station_metadata(catalogue.metadata_sources, build_inputs.inputs)
-
-    output_path = Path(out_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-    with (output_path / "provider.json").open("w", encoding="utf-8") as file:
-        json.dump(catalogue.provider_info, file, sort_keys=True, separators=(",", ":"))
-        file.write("\n")
-    catalogue.products.write_parquet(output_path / "products.parquet")
-    catalogue.stations.write_parquet(output_path / "stations.parquet")
-    catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    files = {
+        "provider.json": (json.dumps(catalogue.provider_info, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    }
+    for name, frame in (
+        ("products", catalogue.products),
+        ("stations", catalogue.stations),
+        ("station_products", catalogue.station_products),
+    ):
+        buffer = BytesIO()
+        frame.write_parquet(buffer)
+        files[f"{name}.parquet"] = buffer.getvalue()
     metadata = build_catalogue_metadata(
         catalogue.acquisition_provenance,
         (STATION_CATALOGUE_ORIGINS,),
-        {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES},
-        source_config=source_config(),
-        source_describer=describe_catalogue,
+        files,
         build_inputs=build_inputs,
         native_table=native_table,
-        metadata_fields=STATION_METADATA_FIELDS,
+        metadata_fields=metadata_fields,
         station_metadata=catalogue.station_metadata,
         metadata_implementation=(
             "src/rivretrieve/_internal/providers/ch_foen/station_metadata.py",
-            "project_station_metadata",
-        ),
+            "project_official_station_metadata",
+        )
+        if catalogue.station_metadata is not None
+        else None,
         station_metadata_notice=STATION_METADATA_NOTICE,
-        transformation_implementations=TRANSFORMATION_IMPLEMENTATIONS,
+        source_descriptions=catalogue.source_descriptions,
     )
-    for name, content in metadata.items():
-        (output_path / name).write_bytes(content)
+    output = Path(out_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    for name, content in {**files, **metadata}.items():
+        (output / name).write_bytes(content)
 
 
-def _native_source_row(
-    payload_key: str,
-    station: object,
-    envelope: Mapping[str, str],
-) -> dict[str, object]:
-    return {**_validated_station_source(payload_key, station), **envelope}
+@dataclass(frozen=True)
+class CatalogueSources:
+    native_table: NativeTable
+    associations: pl.DataFrame
+    provenance: AcquisitionProvenance
+    station_metadata: pl.DataFrame
+    checked_on: date
 
 
-def _validated_station_source(station_key: str, station: object) -> dict[str, object]:
-    payload_key = _required_string(station_key, "Station payload key")
-    if not isinstance(station, dict):
-        raise FatalContractError(f"Station {payload_key} must be an object")
-    station_data = cast("dict[str, object]", station)
-    station_id = _required_integer(
-        _required_field(station_data, "id", f"Station {payload_key}"), f"Station {payload_key} id"
+def read_catalogue_sources(
+    evidence_root: Path, *, selection_path: str, input_receipt: RetainedInputReceipt
+) -> CatalogueSources:
+    """Read an explicitly selected offline build after exact member verification.
+
+    The reviewed declaration selects successful association samples and valid
+    station pages. Failed, overflowing and redirected captures stay retained
+    evidence, never negative availability or substitute station identities.
+    """
+    import json
+
+    from rivretrieve._internal.acquisition_provenance import (
+        AcquisitionRecord,
+        FactBinding,
+        NativeTableIdentity,
+        SourceStatement,
     )
-    station_name = _required_string(
-        _required_field(station_data, "name", f"Station {payload_key}"),
-        f"Station {payload_key} name",
-    )
-    details = _required_field(station_data, "details", f"Station {payload_key}")
-    if not isinstance(details, dict):
-        raise FatalContractError(f"Station {payload_key} details must be an object")
-    details_data = cast("dict[str, object]", details)
-
-    return {
-        "payload_key": payload_key,
-        "id": station_id,
-        "name": station_name,
-        "details.id": _required_station_identifier(
-            _required_field(details_data, "id", f"Station {payload_key} details"),
-            f"Station {payload_key} details.id",
-        ),
-        "details.name": _required_string(
-            _required_field(details_data, "name", f"Station {payload_key} details"),
-            f"Station {payload_key} details.name",
-        ),
-        "details.water-body-name": _required_string(
-            _required_field(details_data, "water-body-name", f"Station {payload_key} details"),
-            f"Station {payload_key} details.water-body-name",
-        ),
-        "details.water-body-type": _required_string(
-            _required_field(details_data, "water-body-type", f"Station {payload_key} details"),
-            f"Station {payload_key} details.water-body-type",
-        ),
-        "details.chx": _required_integer(
-            _required_field(details_data, "chx", f"Station {payload_key} details"),
-            f"Station {payload_key} details.chx",
-        ),
-        "details.chy": _required_integer(
-            _required_field(details_data, "chy", f"Station {payload_key} details"),
-            f"Station {payload_key} details.chy",
-        ),
-        "details.lat": _required_float(
-            _required_field(details_data, "lat", f"Station {payload_key} details"),
-            f"Station {payload_key} details.lat",
-        ),
-        "details.lon": _required_float(
-            _required_field(details_data, "lon", f"Station {payload_key} details"),
-            f"Station {payload_key} details.lon",
-        ),
-    }
-
-
-def _envelope_strings(raw_payload: Mapping[str, object]) -> dict[str, str]:
-    return {
-        field: _required_string(_required_field(raw_payload, field, "Swiss metadata response"), field)
-        for field in ("source", "apiurl", "opendata", "license")
-    }
-
-
-def _station_payload(raw_payload: Mapping[str, object]) -> Mapping[str, object]:
-    payload = raw_payload.get("payload")
-    if not isinstance(payload, dict) or not payload:
-        raise FatalContractError("Swiss metadata fixture must contain a non-empty object payload")
-    return cast("Mapping[str, object]", payload)
-
-
-def _read_fixture_json(path: Path) -> Mapping[str, object]:
-    try:
-        with path.open(encoding="utf-8") as file:
-            value = json.load(file)
-    except OSError as exc:
-        raise FatalContractError(f"Unable to read Swiss metadata fixture: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise FatalContractError(f"Swiss metadata fixture is not valid JSON: {path}") from exc
-    if not isinstance(value, dict):
-        raise FatalContractError("Swiss metadata fixture must contain a JSON object")
-    return cast("Mapping[str, object]", value)
-
-
-def _read_live_json(url: str) -> Mapping[str, object]:
-    try:
-        with urllib.request.urlopen(url, timeout=30) as response:
-            if response.status < 200 or response.status >= 300:
-                raise FatalContractError(f"Swiss metadata live request failed with HTTP {response.status}")
-            value = json.load(response)
-    except OSError as exc:
-        raise FatalContractError("Swiss metadata live request failed") from exc
-    except json.JSONDecodeError as exc:
-        raise FatalContractError("Swiss metadata live response is not valid JSON") from exc
-    if not isinstance(value, dict):
-        raise FatalContractError("Swiss metadata live response must contain a JSON object")
-    return cast("Mapping[str, object]", value)
-
-
-def _validate_product_definitions(product_definitions: Sequence[ProductDefinition]) -> None:
-    observed = frozenset(definition.product_id for definition in product_definitions)
-    if observed != EXPECTED_PRODUCT_IDS:
-        missing = sorted(EXPECTED_PRODUCT_IDS - observed)
-        unknown = sorted(observed - EXPECTED_PRODUCT_IDS)
-        parts = []
-        if missing:
-            parts.append(f"missing: {', '.join(missing)}")
-        if unknown:
-            parts.append(f"unknown: {', '.join(unknown)}")
-        raise FatalContractError(f"Swiss product definition drift ({'; '.join(parts)})")
-    for definition in product_definitions:
-        if not definition.parameters or len(set(definition.parameters)) != len(definition.parameters):
-            raise FatalContractError(f"{definition.product_id} requires distinct source parameters")
-
-
-def _validate_native_build_rows(native_table: NativeTable) -> dict[str, str]:
-    expected_envelope: dict[str, str] | None = None
-    station_ids: set[str] = set()
-    for row in native_table.data.iter_rows(named=True):
-        payload_key = row.get("payload_key")
-        if not isinstance(payload_key, str) or not payload_key.strip():
-            raise FatalContractError("Swiss native table row has invalid payload_key")
-        station_id = row.get("name")
-        if not isinstance(station_id, str) or not station_id.strip():
-            raise FatalContractError(f"payload_key {payload_key} has invalid name")
-        if station_id in station_ids:
-            raise FatalContractError(f"payload_key {payload_key} has duplicate station identity '{station_id}'")
-        station_ids.add(station_id)
-        for field in ("details.lat", "details.lon"):
-            value = row.get(field)
-            if isinstance(value, bool) or not isinstance(value, int | float):
-                raise FatalContractError(f"payload_key {payload_key} has invalid {field}")
-        if not isinstance(row.get("retrieved_at"), datetime):
-            raise FatalContractError(f"payload_key {payload_key} has invalid retrieved_at")
-        envelope: dict[str, str] = {}
-        for field in ("source", "apiurl", "opendata", "license"):
-            value = row.get(field)
-            if not isinstance(value, str) or not value.strip():
-                raise FatalContractError(f"payload_key {payload_key} has invalid {field}")
-            envelope[field] = value
-            if expected_envelope is not None and value != expected_envelope[field]:
-                raise FatalContractError(f"payload_key {payload_key} has inconsistent {field}")
-        if expected_envelope is None:
-            expected_envelope = envelope
-    if expected_envelope is None:
-        raise FatalContractError("Swiss native table must not be empty")
-    return expected_envelope
-
-
-def _required_string(value: object, name: str) -> str:
-    if not isinstance(value, str):
-        raise FatalContractError(f"{name} is required")
-    stripped = value.strip()
-    if not stripped:
-        raise FatalContractError(f"{name} is required")
-    return stripped
-
-
-def _required_field(mapping: Mapping[str, object], field: str, context: str) -> object:
-    try:
-        return mapping[field]
-    except KeyError as exc:
-        raise FatalContractError(f"{context} is missing required field '{field}'") from exc
-
-
-def _required_station_identifier(value: object, name: str) -> str:
-    if type(value) is int:
-        return str(value)
-    return _required_string(value, name)
-
-
-def _required_integer(value: object, name: str) -> int:
-    if type(value) is int:
-        return value
-    raise FatalContractError(f"{name} is required and must be an integer")
-
-
-def _required_float(value: object, name: str) -> float:
-    if isinstance(value, bool):
-        raise FatalContractError(f"{name} is required and must be numeric")
-    if isinstance(value, int | float):
-        return float(value)
-    raise FatalContractError(f"{name} is required and must be numeric")
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate the packaged ch_foen catalogue artifacts.")
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--fixture", type=Path, help="Path to an Existenz.ch hydro locations JSON fixture.")
-    source.add_argument("--live", action="store_true", help="Fetch the live Existenz.ch hydro locations endpoint.")
-    source.add_argument("--native", type=Path, help="Path to the retained native Parquet table.")
-    destination = parser.add_mutually_exclusive_group(required=True)
-    destination.add_argument("--out", type=Path, help="Output directory for provider.json and parquet files.")
-    destination.add_argument("--native-out", type=Path, help="Output path for the native Parquet table.")
-    parser.add_argument("--retrieved-at", type=lambda value: RetrievedAt(datetime.fromisoformat(value)))
-    parser.add_argument(
-        "--evidence-root", type=Path, help="External root containing repository-relative retained inputs."
-    )
-    parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
-    parser.add_argument(
-        "--input-receipt", type=Path, help="Resolved archive member identities for the retained source files."
-    )
-    args = parser.parse_args(argv)
-
-    if args.native_out is not None:
-        if args.native is not None:
-            parser.error("--native cannot be used with --native-out")
-        if args.retrieved_at is None:
-            parser.error("--retrieved-at is required with --native-out")
-        if args.live:
-            native_outcome = refresh_native_table_from_live(retrieved_at=args.retrieved_at)
-        else:
-            native_outcome = refresh_native_table_from_fixture(args.fixture, retrieved_at=args.retrieved_at)
-        write_native_table(native_outcome.value, args.native_out)
-        return 0
-
-    if args.native is None:
-        parser.error("--out requires --native")
-    if args.retrieved_at is not None:
-        parser.error("--retrieved-at is only valid with refresh mode")
-    if args.evidence_root is None:
-        parser.error("--evidence-root is required with --out")
-    if args.build_inputs is None:
-        parser.error("--out requires --build-inputs")
-    if args.input_receipt is None:
-        parser.error("--out requires --input-receipt")
-    build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
-    input_receipt = RetainedInputReceipt.model_validate_json(args.input_receipt.read_bytes())
-    from rivretrieve._internal.providers.ch_foen.origins import (
-        STATION_CATALOGUE_ORIGINS,
-        STATION_DIRECTORY_REFERENCE,
-        STATION_PAGE_MANIFEST_SHA256,
-        STATION_PAGE_ROOT,
+    from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+    from rivretrieve._internal.catalogues.native import read_native_table
+    from rivretrieve._internal.providers.ch_foen import origins
+    from rivretrieve._internal.providers.ch_foen.station_metadata import (
+        parse_live_sensor_units,
+        project_official_station_metadata,
+        project_station_metadata,
+        read_station_metadata_sources,
     )
 
-    metadata_sources = read_station_metadata_sources(
-        args.evidence_root,
-        directory_reference=STATION_DIRECTORY_REFERENCE,
+    if selection_path not in {item.consumer_path for item in input_receipt.declaration_inputs}:
+        raise FatalContractError("Swiss selection requires a selected authored declaration")
+    verify_retained_input_files(input_receipt, evidence_root)
+    selection = json.loads((evidence_root / selection_path).read_bytes())
+    selected = {item.consumer_path: item for item in input_receipt.inputs}
+    native_path = selection["native_table"]
+    if native_path not in selected:
+        raise FatalContractError("Swiss native table is absent from selected inputs")
+    member = selected[native_path]
+    native = read_native_table(
+        evidence_root / native_path, expected_sha256=member.sha256, expected_byte_size=member.byte_size
+    )
+    station_captures = [item for item in selection["captures"] if item["kind"] == "stations"]
+    if len(station_captures) != 1:
+        raise FatalContractError("Swiss selection requires one station snapshot")
+    recordings = []
+
+    def body(capture):
+        reference = RecordingReference.model_validate(capture["recording"])
+        if reference.repository_path != capture["body"]:
+            raise FatalContractError("Swiss selected body disagrees with recording identity")
+        recordings.append(reference)
+        return read_original(evidence_root, reference, input_receipt=input_receipt)
+
+    station_capture = station_captures[0]
+    snapshot = station_native_table(
+        json.loads(body(station_capture)), retrieved_at=RetrievedAt(recordings[-1].retrieved_at)
+    )
+    if not native.data.equals(snapshot.data):
+        raise FatalContractError("Swiss selected native table differs from original station snapshot")
+    numbers = set(native.data["no"])
+    units = {}
+    for capture in selection["captures"]:
+        if capture["kind"] == "page" and capture["outcome"] == "station_page":
+            content = body(capture)
+            url = recordings[-1].source_url
+            prefix = "https://www.hydrodaten.admin.ch/en/seen-und-fluesse/stations/"
+            if not url.startswith(prefix) or url.removeprefix(prefix) not in numbers:
+                raise FatalContractError("Swiss selected page URL has no matching station identity")
+            station = url.removeprefix(prefix)
+            units[station] = parse_live_sensor_units(content, station)
+    associations = []
+    for capture in selection["captures"]:
+        if capture["kind"] == "archive" and capture["outcome"] in {"rows", "empty"}:
+            payload = json.loads(body(capture))
+            for route in capture["routes"]:
+                associations.append(archive_associations(payload, route=route, station_numbers=numbers))
+    associations.append(
+        recent_associations(json.loads(body(selection["prior_live"])), station_numbers=numbers, station_units=units)
+    )
+    for capture in selection["prior_support"]:
+        body(capture)
+    observed = pl.concat(associations).unique().sort(ASSOCIATION_SCHEMA.names())
+    provenance = origins.build_acquisition_provenance(
+        NativeTableIdentity(
+            location_kind="retained",
+            repository_path=native_path,
+            revision=selection["native_revision"],
+            sha256=member.sha256,
+            byte_size=member.byte_size,
+        ),
+        tuple(recordings),
+        acquisitions=tuple(AcquisitionRecord.model_validate(item) for item in selection["publication_acquisitions"]),
+        source_bindings=tuple(FactBinding.model_validate(item) for item in selection["source_bindings"]),
+        statements=tuple(SourceStatement.model_validate(item) for item in selection["statements"]),
+    )
+    baseline = read_station_metadata_sources(
+        evidence_root,
+        directory_reference=origins.STATION_DIRECTORY_REFERENCE,
         input_receipt=input_receipt,
-        page_root=STATION_PAGE_ROOT,
-        manifest_sha256=STATION_PAGE_MANIFEST_SHA256,
+        page_root=origins.STATION_PAGE_ROOT,
+        manifest_sha256=origins.STATION_PAGE_MANIFEST_SHA256,
     )
+    provenance = origins.with_station_metadata_sources(provenance, baseline.page_recordings)
+    checked_on = date.fromisoformat(selection["checked_on"])
+    _, stations, _ = catalogue_tables(native, observed, checked_on=checked_on)
+    supplementary = project_station_metadata(
+        stations,
+        baseline.directory_body,
+        {station: content for station, content in baseline.station_pages.items() if station in numbers},
+        origins.STATION_REFERENCE_METADATA_FIELDS,
+    )
+    metadata = project_official_station_metadata(native, stations, supplementary)
+    return CatalogueSources(native, observed, provenance, metadata, checked_on)
 
-    native_table = read_native_table(
-        args.native, expected_sha256=NATIVE_TABLE_SHA256, expected_byte_size=NATIVE_TABLE_BYTE_SIZE
-    )
+
+def selected_supporting_inputs(provenance: AcquisitionProvenance, selection: dict) -> dict[str, tuple[str, ...]]:
+    """Associate selected acquisition receipts with the facts of their original bodies.
+
+    ``selection`` must be the digest-verified authored declaration used for the
+    build. Only receipts of recordings adopted in provenance enter build support.
+    """
+    captures = [*selection["captures"], selection["prior_live"], *selection["prior_support"]]
+    receipt_by_body = {capture["body"]: capture["receipt"] for capture in captures}
+    facts_by_acquisition = {
+        (source.source_id, acquisition.acquisition_id): tuple(
+            fact
+            for binding in provenance.fact_bindings
+            if binding.source_id == source.source_id and binding.acquisition_id == acquisition.acquisition_id
+            for fact in binding.facts
+        )
+        for source in provenance.source_records
+        for acquisition in source.acquisitions
+    }
+    result = {}
+    for source in provenance.source_records:
+        paths = {item.recording.recording_id: item.recording.repository_path for item in source.evidence}
+        for acquisition in source.acquisitions:
+            facts = facts_by_acquisition[(source.source_id, acquisition.acquisition_id)]
+            for recording_id in acquisition.recording_ids:
+                path = paths[recording_id]
+                if path in receipt_by_body and facts:
+                    result[receipt_by_body[path]] = facts
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Compose a selected, offline official catalogue candidate outside source checkouts."""
+    import argparse
+
+    from rivretrieve._internal.providers.ch_foen.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument("--selection", default="maintenance/catalogue/ch_foen/official/selection.json")
+    parser.add_argument("--input-receipt", type=Path, required=True)
+    parser.add_argument("--build-inputs", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args(argv)
+    output = args.out.resolve()
+    evidence_root = args.evidence_root.resolve(strict=True)
+    if output.exists() or output.is_relative_to(evidence_root) or evidence_root.is_relative_to(output):
+        raise FatalContractError("Swiss catalogue output must be a new path separate from retained inputs")
+    if any((parent / ".git").exists() for parent in (output, *output.parents)):
+        raise FatalContractError("Swiss catalogue output must stay outside source checkouts")
+    receipt = RetainedInputReceipt.model_validate_json(args.input_receipt.read_bytes())
+    sources = read_catalogue_sources(evidence_root, selection_path=args.selection, input_receipt=receipt)
     catalogue = build_catalogue(
-        native_table,
+        sources.native_table,
         STATION_CATALOGUE_ORIGINS,
-        metadata_sources=metadata_sources,
+        associations=sources.associations,
+        checked_on=sources.checked_on,
+        provenance=sources.provenance,
+        station_metadata=sources.station_metadata,
     )
-    verify_provenance_recordings(catalogue.acquisition_provenance, args.evidence_root)
-    write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)
+    write_catalogue(
+        catalogue,
+        output,
+        build_inputs=CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes()),
+        native_table=sources.native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
+    )
     return 0
 
 

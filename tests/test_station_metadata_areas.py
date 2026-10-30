@@ -91,13 +91,21 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     before = rr.as_frame(selection)
     source = rr.metadata(selection, view="source")
     result = _area_columns(source)
-    # Current approved metadata exposes at most one name per gauge. Derive the
-    # expected scalar directly from those source rows, without the summary rule.
     names = source.filter((pl.col("attribute_role") == "station_name") & (pl.col("state") != "no_metadata"))
-    assert not names.select("provider_id", "station_id").is_duplicated().any()
-    decoded = [None if value is None else json.loads(value) for value in names["source_value"]]
-    expected_names = names.select("provider_id", "station_id").with_columns(
-        pl.Series("station_name", [name if name and name.strip() else None for name in decoded], dtype=pl.String)
+    source_keys = ["provider_id", "station_id", "attribute_role", "source_field", "source_scope"]
+    assert not names.select(source_keys).is_duplicated().any()
+    spellings: dict[tuple[str, str], set[str]] = {}
+    for provider, station, raw in names.select("provider_id", "station_id", "source_value").iter_rows():
+        value = None if raw is None else json.loads(raw)
+        if isinstance(value, str) and value.strip():
+            spellings.setdefault((provider, station), set()).add(value)
+    expected_names = pl.DataFrame(
+        [
+            (provider, station, next(iter(values)) if len(values) == 1 else None)
+            for (provider, station), values in spellings.items()
+        ],
+        schema={"provider_id": pl.String, "station_id": pl.String, "station_name": pl.String},
+        orient="row",
     )
     expected_names = (
         before.select("provider_id", "station_id")

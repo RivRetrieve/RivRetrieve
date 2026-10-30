@@ -1,37 +1,46 @@
-"""Keep the Swiss page examples aligned with an exact recorded source response.
+"""Swiss example selection and discovery run offline with packaged catalogues.
 
-This is offline regression evidence. Live page execution is recorded in the PR.
+The retrieval block is checked separately against the live source. This test
+stops before fetch, then runs the guide's offline inspection block.
 """
 
-import io
+import ast
 import re
-from contextlib import redirect_stdout
+import socket
 from pathlib import Path
 
 import pytest
-
-import rivretrieve._internal.discovery as discovery
-from rivretrieve._internal.recordings import ReplayTransport
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.recorded("tests/test_data/ch_foen_2018_flux_january2024_full.recording.json")
-def test_swiss_page_examples_and_displayed_outputs(retained_evidence_root: Path, monkeypatch, tmp_path):
-    page = (ROOT / "docs/providers/ch_foen.md").read_text()
-    blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.DOTALL)
-    assert len(blocks) == page.count("```python") == 3
-    replay = ReplayTransport(
-        [retained_evidence_root / "tests/test_data/ch_foen_2018_flux_january2024_full.recording.json"]
-    )
-    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+def test_swiss_page_selection_and_discovery_are_offline(monkeypatch, tmp_path):
+    def denied(*args, **kwargs):
+        pytest.fail("Swiss discovery attempted network access")
+
+    monkeypatch.setattr(socket.socket, "connect", denied)
+    monkeypatch.setattr(socket.socket, "connect_ex", denied)
     monkeypatch.chdir(tmp_path)
+    page = (ROOT / "docs/providers/ch_foen.md").read_text()
+    blocks = re.findall(r"```python\n(.*?)```", page, re.DOTALL)
+    tree = ast.parse(blocks[0])
+    fetch_index = next(
+        index
+        for index, statement in enumerate(tree.body)
+        if isinstance(statement, ast.Assign)
+        and isinstance(statement.value, ast.Call)
+        and isinstance(statement.value.func, ast.Attribute)
+        and statement.value.func.attr == "fetch"
+    )
     namespace = {}
-    for index, (code, expected) in enumerate(blocks, 1):
-        output = io.StringIO()
-        with redirect_stdout(output):
-            exec(compile(code, f"ch_foen.md:block-{index}", "exec"), namespace)
-        assert output.getvalue() == expected, index
-    assert not namespace["result"].issues
+    exec(compile(ast.Module(body=tree.body[:fetch_index], type_ignores=[]), "ch_foen.md:selection", "exec"), namespace)
+    for index, code in enumerate(blocks[1:], 2):
+        exec(compile(code, f"ch_foen.md:block-{index}", "exec"), namespace)
+    series = namespace["rr"].series(namespace["daily"])
+    assert series.select("station_id", "variant", "quantity", "frequency", "statistic").rows() == [
+        ("2018", "TagMittel", "discharge", "daily", "mean")
+    ]
+    assert not namespace["candidates"].is_empty()
+    assert not namespace["metadata"].is_empty()

@@ -72,6 +72,9 @@ for provider_id in provider_ids:
     assert catalogue.joinpath("station_metadata.parquet").is_file()
     stations = pl.read_parquet(catalogue.joinpath("stations.parquet"))
     station_id = "02GA010" if provider_id == "ca_eccc" else stations["station_id"][0]
+    if provider_id == "ch_foen":
+        pairs = pl.read_parquet(catalogue.joinpath("station_products.parquet"))
+        station_id = pairs.filter(pl.col("availability") == "available")["station_id"][0]
     selection = rr.find(provider=provider_id, station=station_id)
     selections.append(rr.from_bundle(rr.to_bundle(selection)))
     frames.append(rr.metadata(selections[-1], view="source"))

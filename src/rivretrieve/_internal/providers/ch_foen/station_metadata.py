@@ -17,6 +17,7 @@ import polars as pl
 
 from rivretrieve._internal.acquisition_provenance import RecordingReference, RetainedInputReceipt, RetainedInputUse
 from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+from rivretrieve._internal.catalogues.native import NativeTable
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.station_metadata import (
@@ -176,6 +177,109 @@ def parse_station_page(body: bytes, station_id: str) -> dict[str, str]:
     return parser.fields
 
 
+class _LiveSensorUnitsParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.stack: list[str] = []
+        self.station_ids: list[str] = []
+        self.identity: list[str] | None = None
+        self.table_depth: int | None = None
+        self.header: list[str] | None = None
+        self.scalar: list[str] | None = None
+        self.units: dict[str, str] = {}
+        self.header_count = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        parent = self.stack[-1] if self.stack else None
+        if self.identity is not None:
+            raise FatalContractError("FOEN live station identity contains nested markup")
+        if tag == "small" and parent == "h1":
+            self.identity = []
+        if tag == "table" and "sensors-table" in (attributes.get("class") or "").split():
+            if self.table_depth is not None:
+                raise FatalContractError("FOEN live sensors contain nested tables")
+            self.table_depth = len(self.stack)
+        elif self.table_depth is not None and tag == "table":
+            raise FatalContractError("FOEN live sensors contain nested tables")
+        if self.table_depth is not None:
+            relative = self.stack[self.table_depth :]
+            if tag == "tr" and relative == ["table", "thead"]:
+                self.header_count = 0
+            if self.scalar is not None:
+                raise FatalContractError("FOEN live sensor header contains nested scalar markup")
+            if self.header is not None:
+                if tag != "div" or parent != "th" or len(self.header) >= 2:
+                    raise FatalContractError("FOEN live sensor header requires two direct divs")
+                if len(self.header) == 1 and "opacity-75" not in (attributes.get("class") or "").split():
+                    raise FatalContractError("FOEN live sensor header lacks its unit label")
+                self.scalar = []
+            elif tag == "th" and "thead" in relative:
+                if relative != ["table", "thead", "tr"]:
+                    raise FatalContractError("FOEN live sensor header has ambiguous ancestry")
+                self.header = []
+        if tag not in _VOID_TAGS:
+            self.stack.append(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        if (self.table_depth is not None or self.identity is not None) and (not self.stack or self.stack[-1] != tag):
+            raise FatalContractError("FOEN live sensor page contains unbalanced markup")
+        if tag == "small" and self.identity is not None:
+            self.station_ids.append("".join(self.identity))
+            self.identity = None
+        if tag == "div" and self.scalar is not None:
+            assert self.header is not None
+            self.header.append("".join(self.scalar))
+            self.scalar = None
+        if tag == "th" and self.header is not None:
+            self.header_count += 1
+            if not self.header and self.header_count == 1:
+                self.header = None
+        if tag == "th" and self.header is not None:
+            if len(self.header) != 2:
+                raise FatalContractError("FOEN live sensor header requires two direct divs")
+            parameter, unit = self.header
+            if parameter in self.units and self.units[parameter] != unit:
+                raise FatalContractError("FOEN live sensor headers have conflicting units")
+            self.units[parameter] = unit
+            self.header = None
+        if tag == "table" and self.table_depth is not None:
+            self.table_depth = None
+        if tag in self.stack:
+            self.stack = self.stack[: len(self.stack) - 1 - self.stack[::-1].index(tag)]
+
+    def handle_data(self, data: str) -> None:
+        if self.identity is not None:
+            self.identity.append(data)
+        if self.scalar is not None:
+            self.scalar.append(data)
+        elif self.header is not None and data.strip():
+            raise FatalContractError("FOEN live sensor header contains text outside its labels")
+
+
+def parse_live_sensor_units(body: bytes, station_id: str) -> dict[str, str]:
+    """Read exact parameter and unit labels from a gauge's live sensor headers.
+
+    Only headers in ``sensors-table`` tables are adopted. An empty leading corner
+    header is ignored. Empty labels remain
+    empty strings; an absent header has no entry. Labels are HTML-decoded but
+    are not trimmed or mapped to physical quantities. Station information is
+    not required. Invalid UTF-8, an identity mismatch, ambiguous header markup
+    or conflicting repeated labels raise ``FatalContractError``.
+    """
+    parser = _LiveSensorUnitsParser()
+    try:
+        parser.feed(body.decode("utf-8", errors="strict"))
+        parser.close()
+    except UnicodeDecodeError as error:
+        raise FatalContractError("FOEN live sensor page is not UTF-8") from error
+    if parser.station_ids != [station_id]:
+        raise FatalContractError("FOEN live sensor page lacks the selected station identity")
+    if any(item is not None for item in (parser.table_depth, parser.header, parser.scalar, parser.identity)):
+        raise FatalContractError("FOEN live sensor page contains incomplete source markup")
+    return parser.units
+
+
 def project_station_metadata(
     stations: pl.DataFrame,
     directory_body: bytes,
@@ -184,9 +288,9 @@ def project_station_metadata(
 ) -> pl.DataFrame:
     """Project approved source fields without parsing quantities or filling absences.
 
-    Station pages must cover exactly the canonical gauges linked by the supplied
-    directory. A missing required page raises FatalContractError. A field absent
-    from an adopted page remains unexposed. HTML scalars, including empty strings
+    Selected station pages must belong to canonical gauges linked by the supplied
+    directory. Gauges without a selected page retain directory metadata. A field
+    absent from an adopted page remains unexposed. HTML scalars, including empty strings
     and inline units, remain String values. Canonical geometry is not changed.
     """
     directory = parse_station_directory(directory_body)
@@ -197,8 +301,8 @@ def project_station_metadata(
         or len(set(identities)) != len(identities)
     ):
         raise FatalContractError("FOEN metadata requires distinct canonical string station identities")
-    if set(station_pages) != set(identities).intersection(directory):
-        raise FatalContractError("FOEN station pages do not cover the directory-linked canonical gauge scope")
+    if not set(station_pages) <= set(identities).intersection(directory):
+        raise FatalContractError("FOEN station pages are outside the directory-linked canonical gauge scope")
     pages = {station: parse_station_page(body, station) for station, body in station_pages.items()}
     sources = {"station_directory": directory, "station_page": pages}
     if any(field.source_scope not in sources or field.datum_field is not None for field in fields):
@@ -459,3 +563,28 @@ def verify_adopted_station_metadata(sources: StationMetadataSources, inputs: Seq
         adopted = {item.reference.sha256 for item in inputs if fact in item.facts and item.usage != "native_table"}
         if not digests <= adopted:
             raise FatalContractError("FOEN metadata originals and receipts must match adopted archive members")
+
+
+def project_official_station_metadata(
+    native: NativeTable, stations: pl.DataFrame, supplementary: pl.DataFrame
+) -> pl.DataFrame:
+    """Keep API name fields alongside separately scoped approved page metadata.
+
+    Different source spellings remain separate facts. Empty strings and source
+    nulls are preserved, including at historical stations absent from the current
+    station directory. This candidate mapping requires disclosure approval before
+    its output is packaged.
+    """
+    from rivretrieve._internal.catalogue_origins import Field, NativeColumn
+    from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
+    from rivretrieve._internal.providers.ch_foen.origins import API_STATION_METADATA_FIELDS
+
+    api = build_station_metadata("ch_foen", native, stations, Field(NativeColumn("no")), API_STATION_METADATA_FIELDS)
+    values = pl.concat(
+        (supplementary.filter(pl.col("state") != "no_metadata"), api.filter(pl.col("state") != "no_metadata"))
+    )
+    exposed = values.select("provider_id", "station_id", "attribute_role").unique()
+    missing = api.filter(pl.col("state") == "no_metadata").join(
+        exposed, on=["provider_id", "station_id", "attribute_role"], how="anti"
+    )
+    return source_metadata_frame(stations.select("provider_id", "station_id"), pl.concat((values, missing)))

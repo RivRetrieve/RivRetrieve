@@ -118,8 +118,8 @@ def draw(world, stations: pl.DataFrame, out: Path) -> None:
     ax.margins(0.01)
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0.08)
     handles = [
-        Patch(facecolor=IMPLEMENTED, edgecolor="none", label="Implemented"),
-        Patch(facecolor="none", edgecolor=PLANNED, hatch="////", label="Coming soon"),
+        Patch(facecolor=IMPLEMENTED, edgecolor="none", label="Observation retrieval"),
+        Patch(facecolor="none", edgecolor=PLANNED, hatch="////", label="Observation retrieval planned"),
     ]
     fig.legend(
         handles=handles,

@@ -225,6 +225,7 @@ def test_source_identity_requires_stripped_nonblank_names(field: str, value: str
         "http://-",
         "private://:",
         "private://grdc-bfg/other",
+        "private://ch-foen/other",
         "https://example..com/path",
         "https://example.com/path\nheader",
         "https://example.com:bad/path",
@@ -253,6 +254,21 @@ def test_acquisition_accepts_runtime_templates_and_narrow_private_location() -> 
     AcquisitionProvenance.model_validate(bosnia)
     poland = _document("pl_imgw")
     AcquisitionProvenance.model_validate(poland)
+
+
+def test_swiss_private_correspondence_retains_only_redacted_acquisition():
+    from rivretrieve._internal.acquisition_provenance import AcquisitionRecord
+
+    acquisition = AcquisitionRecord(
+        acquisition_id="swiss-series-meaning",
+        method="corroborating_receipt",
+        instant_type="private_redacted_corroborating_receipt",
+        description="Publisher correspondence establishing observation product meanings",
+        requested_from=("private://ch-foen/correspondence",),
+    )
+    assert acquisition.requested_from == ("private://ch-foen/correspondence",)
+    assert acquisition.retrieved_at_start is None
+    assert acquisition.material is None and acquisition.recording_ids == ()
 
 
 def test_every_public_statement_is_bound_to_its_recording_acquisition() -> None:

@@ -530,10 +530,29 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
             if fact in provenance.fact_universe:
                 for path in paths:
                     supporting_inputs.setdefault(path, []).append(fact)
+        native_acquisitions = (
+            tuple(
+                binding.acquisition_id
+                for binding in provenance.fact_bindings
+                if "source.station.native_identity" in binding.facts and binding.transformation is None
+            )
+            if provenance.provider_id == "ch_foen"
+            else origins.NATIVE_TABLE_ACQUISITION_IDS
+        )
+        if provenance.provider_id == "ch_foen":
+            import json
+
+            from rivretrieve._internal.providers.ch_foen.generate_catalogue import selected_supporting_inputs
+
+            selection_path = "maintenance/catalogue/ch_foen/official/selection.json"
+            if selection_path not in {item.consumer_path for item in receipt.declaration_inputs}:
+                raise ValueError("Swiss build support requires the selected authored declaration")
+            selection = json.loads((retained_evidence_root / selection_path).read_bytes())
+            supporting_inputs.update(selected_supporting_inputs(provenance, selection))
         result = select_catalogue_build_inputs(
             provenance,
             receipt,
-            origins.NATIVE_TABLE_ACQUISITION_IDS,
+            native_acquisitions,
             origins.CATALOGUE_BUILD_DECLARATIONS,
             recording_artifact_sha256=verify_recording_envelopes(provenance, receipt, retained_evidence_root),
             supporting_inputs=supporting_inputs,

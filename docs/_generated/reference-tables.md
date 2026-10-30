@@ -135,7 +135,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `ba_fhmzbih` | live | none | 60 | 132 | 48 | 0 |
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
-| `ch_foen` | live | none | 246 | 0 | 738 | 0 |
+| `ch_foen` | live | none | 1341 | 7008 | 41268 | 0 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
@@ -163,9 +163,42 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `br_ana` | `stage_instantaneous` | `m` |
 | `ca_eccc` | `discharge_daily_mean` | `m3/s` |
 | `ca_eccc` | `stage_daily_mean` | `m` |
-| `ch_foen` | `discharge_reported` | `m3/s` |
-| `ch_foen` | `stage_reported` | `m` |
-| `ch_foen` | `water_temperature_reported` | `degC` |
+| `ch_foen` | `discharge_10min_mean` | `m3/s` |
+| `ch_foen` | `discharge_1day_max` | `m3/s` |
+| `ch_foen` | `discharge_1day_mean` | `m3/s` |
+| `ch_foen` | `discharge_1day_min` | `m3/s` |
+| `ch_foen` | `discharge_1hour_mean` | `m3/s` |
+| `ch_foen` | `discharge_1month_max` | `m3/s` |
+| `ch_foen` | `discharge_1month_mean` | `m3/s` |
+| `ch_foen` | `discharge_1month_min` | `m3/s` |
+| `ch_foen` | `discharge_1year_max` | `m3/s` |
+| `ch_foen` | `discharge_1year_mean` | `m3/s` |
+| `ch_foen` | `discharge_1year_min` | `m3/s` |
+| `ch_foen` | `discharge_recent` | `m3/s` |
+| `ch_foen` | `stage_10min_mean` | `m` |
+| `ch_foen` | `stage_1day_max` | `m` |
+| `ch_foen` | `stage_1day_mean` | `m` |
+| `ch_foen` | `stage_1day_min` | `m` |
+| `ch_foen` | `stage_1hour_mean` | `m` |
+| `ch_foen` | `stage_1month_max` | `m` |
+| `ch_foen` | `stage_1month_mean` | `m` |
+| `ch_foen` | `stage_1month_min` | `m` |
+| `ch_foen` | `stage_1year_max` | `m` |
+| `ch_foen` | `stage_1year_mean` | `m` |
+| `ch_foen` | `stage_1year_min` | `m` |
+| `ch_foen` | `stage_recent` | `m` |
+| `ch_foen` | `water_temperature_10min_mean` | `degC` |
+| `ch_foen` | `water_temperature_1day_max` | `degC` |
+| `ch_foen` | `water_temperature_1day_mean` | `degC` |
+| `ch_foen` | `water_temperature_1day_min` | `degC` |
+| `ch_foen` | `water_temperature_1hour_mean` | `degC` |
+| `ch_foen` | `water_temperature_1month_max` | `degC` |
+| `ch_foen` | `water_temperature_1month_mean` | `degC` |
+| `ch_foen` | `water_temperature_1month_min` | `degC` |
+| `ch_foen` | `water_temperature_1year_max` | `degC` |
+| `ch_foen` | `water_temperature_1year_mean` | `degC` |
+| `ch_foen` | `water_temperature_1year_min` | `degC` |
+| `ch_foen` | `water_temperature_recent` | `degC` |
 | `cz_chmi` | `discharge_daily_mean` | `m3/s` |
 | `cz_chmi` | `discharge_hourly_mean` | `m3/s` |
 | `cz_chmi` | `stage_daily_mean` | `m` |

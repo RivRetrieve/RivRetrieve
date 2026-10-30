@@ -926,7 +926,6 @@ def test_republication_replaces_only_metadata_leaf_projection():
             "canonical_observation_shape",
             ("src/rivretrieve/_internal/providers/ca_eccc/bulk.py", "_unpivot_month"),
         ),
-        ("ch_foen", "canonical_observation_shape", ("src/rivretrieve/_internal/providers/ch_foen/parse.py", "parse")),
         ("cz_chmi", "canonical_observation", ("src/rivretrieve/_internal/conversion.py", "convert")),
         ("lt_lhmt", "canonical_observation", ("src/rivretrieve/_internal/conversion.py", "convert")),
     ],

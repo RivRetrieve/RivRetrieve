@@ -71,7 +71,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "ba_fhmzbih": (180, 0, 0),
         "br_ana": (107_484, 0, 0),
         "ca_eccc": (16_114, 0, 0),
-        "ch_foen": (738, 0, 0),
+        "ch_foen": (48_276, 0, 0),
         "cz_chmi": (4_155, 0, 0),
         # Native inventories acquired 2026-09-21; these are snapshot checks.
         "fr_hubeau": (20_297, 0, 0),
@@ -112,6 +112,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "za_dws",
     )
     expected_provider_terms: dict[str, tuple[str | None, str | None]] = dict.fromkeys(provider_ids, (None, None))
+    expected_provider_terms["ch_foen"] = ("Freie Nutzung. Quellenangabe ist Pflicht.", None)
     expected_provider_terms["no_nve"] = (
         "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) "
         "which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",

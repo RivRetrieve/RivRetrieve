@@ -149,7 +149,9 @@ def test_window_declarations_and_renderings_are_immutable_and_non_arithmetic() -
         "stop_convention",
         "size",
         "calendar_labels",
+        "timestamp_precision",
     )
+    assert declaration.timestamp_precision is None
     assert dict(declarations.products) == {ProductId("flow"): declaration}
     assert isinstance(rendered.start, str)
     assert isinstance(rendered.stop, str)
@@ -212,7 +214,13 @@ def test_payload_accepts_bytes_and_preserves_complete_source_call() -> None:
         "source_path",
         "query",
         "attempts",
+        "attempt_traces",
+        "acquisition_id",
+        "prerequisite_acquisition_ids",
     )
+    assert origin.attempt_traces == ()
+    assert origin.acquisition_id is None
+    assert origin.prerequisite_acquisition_ids == ()
     assert "headers" not in {field.name for field in fields(SourceCallOrigin)}
     assert origin.request_parameters == {"station": "station-1"}
     parameters["station"] = "mutated"
