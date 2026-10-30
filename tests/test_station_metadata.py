@@ -224,7 +224,7 @@ def test_offline_public_api_mixed_scope(tmp_path, monkeypatch):
     for provider in keys["provider_id"]:
         (tmp_path / provider / "catalogue" / "stations.parquet").unlink()
     assert_frame_equal(rr.metadata(selected, view="source"), expected)
-    empty = rr.pick(selected, quantity="not-a-quantity")
+    empty = rr.pick(rr.pick(selected, quantity="discharge"), quantity="stage")
     assert "station_name_alternatives" not in rr.metadata(empty).columns
     assert_frame_equal(rr.metadata(empty), pl.DataFrame(schema=STATION_METADATA_SCHEMA))
     assert_frame_equal(rr.metadata(empty, view="source"), pl.DataFrame(schema=SOURCE_METADATA_SCHEMA))
