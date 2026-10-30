@@ -36,6 +36,21 @@ print(rr.series(chosen_gauges).select("variant", "description").rows())
 # [('c9d823a2491f4b639656a11b35a7625d', None)]
 ```
 
+`find` and `pick` accept the library-wide
+[supported physical query values](reference.md#supported-physical-query-values)
+for quantity, frequency and statistic, including when filtering a fetched result.
+Matching is exact and case-sensitive. For example, use `quantity="temperature"`,
+not `"water temperature"`, and `statistic="mean"`, not `"average"`.
+Unsupported values raise `ValueError` with the field, supplied value and supported
+choices, even with `on_issue="ignore"`. No alias or spelling correction is applied.
+
+A supported request can still have no known matches at the selected provider or
+station. Conflicting valid filters also leave an empty selection. If `fetch`
+refuses an empty selection, its `EmptySelectionError` includes the combined physical
+filters. Its reason is `no_match` when absence is established, or
+`unresolved_inventory` when the catalogue cannot settle the request. The combined
+request does not establish that one filter alone caused the empty selection.
+
 Quantity, frequency, statistic and other physical facts can be known independently.
 An explicit filter matches only established matching facts. For example, Swiss
 FOEN archive discharge includes published daily means, which match a daily-mean

@@ -51,6 +51,7 @@ class _EmptyReason:
     station_ids: tuple[str, ...]
     product_ids: tuple[str, ...]
     published_products: tuple[str, ...] = ()
+    physical_filters: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +126,14 @@ class _Selection:
         )
 
 
+# Supported query meanings, separate from open-ended publisher evidence.
+QUERY_VOCABULARIES = {
+    "quantity": ("discharge", "stage", "temperature"),
+    "frequency": ("10min", "hourly", "daily", "monthly", "yearly"),
+    "statistic": ("mean", "min", "max", "instantaneous"),
+}
+
+
 _PHYSICAL_FIELDS = (
     "quantity",
     "frequency",
@@ -148,11 +157,19 @@ def _normalize(value: str | Sequence[str] | None) -> tuple[str, ...]:
 
 
 def _predicates(values: dict[str, str | None]) -> tuple[PhysicalPredicate, ...]:
-    return tuple(
+    predicates = tuple(
         PhysicalPredicate.model_validate({"field": field, "value": value})
         for field, value in values.items()
         if value is not None
     )
+    for predicate in predicates:
+        supported = QUERY_VOCABULARIES.get(predicate.field)
+        if supported is not None and predicate.value not in supported:
+            raise ValueError(
+                f"Unsupported {predicate.field} filter {predicate.value!r}. Supported values: "
+                + ", ".join(repr(value) for value in supported)
+            )
+    return predicates
 
 
 def _intersect_scope(scope: SeriesScope, requested: SeriesScope) -> SeriesScope:
@@ -381,6 +398,7 @@ def _with_selection_diagnostics(selection: _Selection, on_issue: OnIssue) -> _Se
             selection.scope.provider_ids,
             selection.scope.station_ids,
             selection.scope.product_ids,
+            physical_filters=tuple(f"{item.field}={item.value!r}" for item in selection.scope.predicates),
         )
     if selection.scope.restriction is RestrictionKind.EXPLICIT:
         members: list[tuple[str | None, str | None, SeriesScope]] = [

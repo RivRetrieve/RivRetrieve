@@ -1,3 +1,13 @@
+## Supported physical query values
+
+These library-wide values apply to `find` and `pick`, including result views. Matching is exact and case-sensitive. A supported value need not be available at every provider or station.
+
+| Filter | Supported values |
+| --- | --- |
+| `quantity` | `discharge`, `stage`, `temperature` |
+| `frequency` | `10min`, `hourly`, `daily`, `monthly`, `yearly` |
+| `statistic` | `mean`, `min`, `max`, `instantaneous` |
+
 ## Frame schemas
 
 ### Series inspection frame

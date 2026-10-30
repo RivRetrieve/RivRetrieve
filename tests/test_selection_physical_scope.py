@@ -294,3 +294,124 @@ def test_inspection_orders_descriptors_without_sorting_a_wide_materialized_frame
         inspected = rr.series(selected)
     keys = ["provider_id", "station_id", "product_id", "series_id", "facts_id"]
     pl_testing.assert_frame_equal(inspected, inspected.sort(keys))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "choices"),
+    [
+        ("quantity", "water temperature", ("discharge", "stage", "temperature")),
+        ("frequency", "dayly", ("10min", "hourly", "daily", "monthly", "yearly")),
+        ("statistic", "average", ("mean", "min", "max", "instantaneous")),
+        ("quantity", "Discharge", ("discharge", "stage", "temperature")),
+        ("frequency", "annual", ("10min", "hourly", "daily", "monthly", "yearly")),
+        ("statistic", "unknown", ("mean", "min", "max", "instantaneous")),
+    ],
+)
+def test_unsupported_physical_filters_fail_at_selection(field, value, choices) -> None:
+    selected = rr.find(provider="ch_foen", quantity="temperature")
+    for call in (
+        lambda: rr.find(provider="ch_foen", **{field: value}, on_issue="ignore"),
+        lambda: rr.pick(selected, **{field: value}, on_issue="ignore"),
+    ):
+        with pytest.raises(ValueError) as error:
+            call()
+        assert field in str(error.value)
+        assert repr(value) in str(error.value)
+        assert all(repr(choice) in str(error.value) for choice in choices)
+
+
+@pytest.mark.parametrize("kind", ["unresolved", "complete", "contradictory"])
+def test_valid_empty_fetch_reports_combined_physical_request(kind, monkeypatch, tmp_path) -> None:
+    from dataclasses import replace
+
+    from rivretrieve._internal.source_series import InventoryCompleteness, InventorySnapshot
+
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    selected = rr.find(provider="usgs_nwis", station="01646500", quantity="stage")
+    if kind == "complete":
+        selected = replace(
+            selected,
+            inventories=(
+                InventorySnapshot(
+                    snapshot_id="authored-complete",
+                    scope=selected.scope,
+                    members=tuple(item.series_id for item in selected.known_series),
+                    completeness=InventoryCompleteness.COMPLETE,
+                    access="authored contract",
+                    origin="response",
+                    evidence=("authored contract",),
+                ),
+            ),
+        )
+    selected = rr.pick(selected, frequency="daily", statistic="mean")
+    if kind == "contradictory":
+        selected = rr.pick(selected, quantity="discharge")
+    expected = "unresolved_inventory" if kind == "unresolved" else "no_match"
+    assert selected.empty_reason.code == expected
+    assert selected.series == ()
+    with pytest.raises(discovery.EmptySelectionError) as error:
+        rr.fetch(selected, start="2023-01-01", end="2023-01-01", on_issue="ignore")
+    assert error.value.reason.code == expected
+    for predicate in selected.scope.predicates:
+        assert f"{predicate.field}={predicate.value!r}" in str(error.value)
+
+
+def test_result_pick_rejects_unsupported_physical_filters(monkeypatch, tmp_path) -> None:
+    from tests.test_partial_explicit_scope import _official_replay
+
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    _official_replay(monkeypatch)
+    selected = rr.find(provider="ch_foen", station="2018", quantity="discharge", frequency="10min")
+    result = rr.fetch(selected, start="2025-01-01", end="2025-01-01", on_issue="ignore")
+    for field, value, supported in (
+        ("quantity", "water temperature", "temperature"),
+        ("frequency", "dayly", "daily"),
+        ("statistic", "average", "mean"),
+    ):
+        with pytest.raises(ValueError) as error:
+            rr.pick(result, **{field: value}, on_issue="ignore")
+        assert field in str(error.value)
+        assert repr(value) in str(error.value)
+        assert repr(supported) in str(error.value)
+    assert not rr.pick(result, frequency="10min", statistic="mean").data.is_empty()
+
+
+@pytest.mark.parametrize(
+    "field, values",
+    [
+        ("quantity", ("discharge", "stage", "temperature")),
+        ("frequency", ("10min", "hourly", "daily", "monthly", "yearly")),
+        ("statistic", ("mean", "min", "max", "instantaneous")),
+    ],
+)
+def test_supported_queries_are_library_wide(field, values) -> None:
+    broad = rr.find(provider="br_ana", station="15400000")
+    for value in values:
+        direct = rr.find(provider="br_ana", station="15400000", **{field: value})
+        picked = rr.pick(broad, **{field: value})
+        assert direct.scope == picked.scope
+        assert direct.series == picked.series
+
+
+def test_query_validation_does_not_narrow_preserved_source_facts() -> None:
+    from dataclasses import replace
+
+    from rivretrieve._internal.source_series import ClippingAxis, EvidenceFact, known
+
+    selected = rr.find(provider="br_ana", station="15400000", quantity="discharge")
+    definition = selected.known_series[0]
+    facts = definition.facts[0].model_copy(
+        update={
+            "frequency": known("publisher-specific-cadence", "authored evidence"),
+            "clipping_axis": ClippingAxis.SOURCE_TIMESTAMP,
+            "label_time": None,
+            "statistic": EvidenceFact(),
+        }
+    )
+    definition = definition.model_copy(update={"facts": (facts,)})
+    selected = replace(selected, known_series=(definition,), inventories=())
+    restored = rr.from_bundle(rr.to_bundle(selected))
+    assert restored.known_series[0].facts[0].frequency.value == "publisher-specific-cadence"
+    assert rr.pick(restored, frequency="daily").series == ()
+    assert rr.pick(restored, statistic="mean").series == ()
+    assert rr.pick(restored, quantity="discharge").series == (definition,)
