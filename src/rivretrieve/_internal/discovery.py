@@ -158,14 +158,12 @@ def find(
         strings so leading zeros survive. Without ``provider``, the station is
         searched in every provider that lists it.
     quantity, frequency, statistic, temporal_support, day_definition, timestamp_anchor, time_zone, vertical_reference, vertical_datum : str or None, default None
-        Exact filters on established physical facts. Quantities are
-        ``"discharge"``, ``"stage"`` and ``"temperature"``. Packaged catalogues
-        currently use frequencies such as ``"daily"`` and ``"hourly"`` and
-        statistics such as ``"mean"``, ``"min"``, ``"max"`` and
-        ``"instantaneous"``. A fact that is unknown for a series never matches
-        a filter on that fact. Values are compared as exact strings and are not
-        checked against a vocabulary, so a misspelled value returns an empty
-        selection without an issue.
+        Exact, case-sensitive filters on established physical facts. Quantity,
+        frequency and statistic must use the supported query values listed in
+        the API reference's "Supported physical query values" table. Unsupported
+        values raise ValueError; aliases and spelling corrections are not applied.
+        A fact that is unknown never matches an explicit filter. Supported values
+        with no known matches return an empty selection.
     variant, series_id : str or None, default None
         Explicit source restriction. ``variant`` matches the source's variant
         name or its published identifier. ``series_id`` matches RivRetrieve's
@@ -190,8 +188,9 @@ def find(
     UnknownStationError
         If ``station`` is not listed by the selected providers.
     ValueError
-        If ``on_issue`` is not one of the accepted values, or ``provider``,
-        ``station``, ``variant`` or ``series_id`` is an empty string.
+        If quantity, frequency or statistic is unsupported, ``on_issue`` is invalid,
+        or ``provider``, ``station``, ``variant`` or ``series_id`` is an empty string.
+        Unsupported physical filters raise regardless of ``on_issue``.
     IssuePolicyError
         If ``on_issue="raise"`` and selection produced a warning issue.
 
@@ -202,9 +201,10 @@ def find(
     ``selection.no_match`` means the packaged evidence establishes that nothing
     matches. ``selection.unresolved_inventory`` means the catalogue cannot tell
     whether the source publishes that series. RivRetrieve still requests an
-    unresolved restriction during ``fetch``. Physical filters that match nothing
-    produce an empty selection without an issue. ``fetch`` refuses such a
-    selection with ``EmptySelectionError``.
+    unresolved restriction during ``fetch``. Supported physical filters that match
+    nothing produce an empty selection without an issue. ``fetch`` refuses such a
+    selection with ``EmptySelectionError``, including the combined physical filters
+    and whether the inventory establishes absence or leaves availability unresolved.
 
     The packaged catalogue is a snapshot. It does not establish that every
     listed series has observations for a particular period.
@@ -264,7 +264,9 @@ def pick(
         any of its values. ``variant`` and ``series_id`` have the same meaning
         as in ``find``.
     quantity, frequency, statistic, temporal_support, day_definition, timestamp_anchor, time_zone, vertical_reference, vertical_datum : str or None, default None
-        Exact filters on established physical facts, as in ``find``.
+        Exact, case-sensitive filters on established physical facts, as in ``find``.
+        Quantity, frequency and statistic use the same library-wide supported
+        values, including when filtering a fetched result.
     on_issue : {"warn", "raise", "ignore"}, default "warn"
         Handling of warning and error issues relevant to the narrowed selection
         or view. See ``fetch`` for the meaning of each policy.
@@ -298,7 +300,9 @@ def pick(
         for its providers. Unknown identifiers applied to a result leave an
         empty view instead.
     ValueError
-        If ``on_issue`` is invalid, or an identifier filter is an empty string.
+        If quantity, frequency or statistic is unsupported, ``on_issue`` is invalid,
+        or an identifier filter is an empty string. Unsupported physical filters
+        raise regardless of ``on_issue``.
     IssuePolicyError
         If ``on_issue="raise"`` and a relevant warning or error issue exists.
     """
@@ -799,7 +803,8 @@ class EmptySelectionError(FatalContractError):
     ``reason.code`` is ``no_match`` when the packaged evidence establishes that
     nothing matches, or ``unresolved_inventory`` when it cannot settle the
     request. ``reason`` also names the requested providers, stations and
-    access routes. No source request is made.
+    access routes. ``reason.physical_filters`` records all combined physical
+    filters, without attributing absence to one filter. No source request is made.
     """
 
     def __init__(self, reason: _EmptyReason) -> None:
@@ -808,7 +813,8 @@ class EmptySelectionError(FatalContractError):
             "fetch() cannot retrieve an empty selection: "
             f"code={reason.code!r}, provider_ids={reason.provider_ids!r}, "
             f"station_ids={reason.station_ids!r}, product_ids={reason.product_ids!r}, "
-            f"published_products={reason.published_products!r}"
+            f"published_products={reason.published_products!r}, "
+            f"physical_filters=[{', '.join(reason.physical_filters)}]"
         )
 
 

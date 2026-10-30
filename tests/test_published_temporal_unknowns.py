@@ -15,8 +15,15 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 @pytest.mark.parametrize("provider,station", [("no_nve", "1.200.0"), ("br_ana", "15400000")])
 def test_raw_measurement_access_does_not_match_irregular_frequency(provider, station):
-    selected = rr.find(provider=provider, station=station, quantity="discharge", frequency="irregular")
-    assert not selected.series
+    from rivretrieve._internal.source_series import PhysicalPredicate, SeriesScope
+
+    selected = rr.find(provider=provider, station=station, quantity="discharge")
+    # Inspect source facts independently of the supported public query vocabulary.
+    irregular = SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="irregular"),))
+    assert selected.series
+    assert not any(irregular.matches(item) for item in selected.series)
+    with pytest.raises(ValueError, match="Unsupported frequency filter 'irregular'"):
+        rr.pick(selected, frequency="irregular")
 
 
 def test_ana_adopted_measurement_time_does_not_establish_instantaneous_statistic():

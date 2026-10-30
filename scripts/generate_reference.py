@@ -10,7 +10,7 @@ import polars as pl
 from rivretrieve._internal.observations import ObservationDataSchema
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.providers.registration import BulkStore, CatalogueOnly, LiveStages, load_manifest
-from rivretrieve._internal.selection import _series_frame
+from rivretrieve._internal.selection import QUERY_VOCABULARIES, _series_frame
 from rivretrieve._internal.source_series import SeriesScope
 from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA, STATION_METADATA_SCHEMA
 
@@ -27,7 +27,18 @@ def render_tables() -> str:
     This is the offline composition root. It does not call providers(), whose
     credential-readiness check reads the working directory's .env file.
     """
-    parts = []
+    parts = [
+        "## Supported physical query values\n",
+        "These library-wide values apply to `find` and `pick`, including result views. "
+        "Matching is exact and case-sensitive. A supported value need not be available "
+        "at every provider or station.\n",
+        "| Filter | Supported values |\n| --- | --- |",
+        *(
+            f"| `{field}` | {', '.join(f'`{value}`' for value in values)} |"
+            for field, values in QUERY_VOCABULARIES.items()
+        ),
+        "",
+    ]
     parts.extend(
         (
             "## Frame schemas\n",
