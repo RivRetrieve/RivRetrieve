@@ -473,6 +473,78 @@ def build_modern_acquisition_provenance(receipts, metadata_directory):
     )
 
 
+def with_modern_geometry_provenance(
+    provenance: AcquisitionProvenance,
+    acquisitions: tuple[AcquisitionRecord, ...],
+    recordings: tuple[RecordingReference, ...],
+    *,
+    geometry_acquisition_id: str,
+    crs_acquisition_id: str,
+) -> AcquisitionProvenance:
+    """Bind selected modern geometry and its publisher CRS contract separately.
+
+    Inputs must describe retained original responses with their actual
+    acquisition identities. This does not select or acquire archive members.
+    """
+    geometry_fact = "source.station.modern_location_geometry"
+    crs_fact = "source.station.modern_location_crs"
+    source = next(item for item in provenance.source_records if item.source_id == "usgs_nwis")
+    source = source.model_copy(
+        update={
+            "acquisitions": source.acquisitions + acquisitions,
+            "evidence": source.evidence
+            + tuple(
+                EvidenceReference(
+                    evidence_id=item.recording_id,
+                    description="Selected modern monitoring-location geometry or CRS contract",
+                    recording=item,
+                )
+                for item in recordings
+            ),
+        }
+    )
+    additions = (
+        FactBinding(
+            fact_group="modern_station_geometry",
+            facts=(geometry_fact,),
+            source_id="usgs_nwis",
+            acquisition_id=geometry_acquisition_id,
+        ),
+        FactBinding(
+            fact_group="modern_station_crs", facts=(crs_fact,), source_id="usgs_nwis", acquisition_id=crs_acquisition_id
+        ),
+    )
+    bindings = []
+    for binding in provenance.fact_bindings:
+        if binding.transformation is not None and any(
+            fact in binding.facts for fact in ("station.latitude", "station.longitude", "station.crs")
+        ):
+            binding = binding.model_copy(
+                update={
+                    "transformation": binding.transformation.model_copy(
+                        update={
+                            "external_inputs": binding.transformation.external_inputs
+                            + tuple(
+                                ExternalFactReference(source_id="usgs_nwis", fact=fact)
+                                for fact in (geometry_fact, crs_fact)
+                            )
+                        }
+                    )
+                }
+            )
+        bindings.append(binding)
+    return AcquisitionProvenance.model_validate(
+        {
+            **provenance.model_dump(),
+            "source_records": tuple(
+                source if item.source_id == "usgs_nwis" else item for item in provenance.source_records
+            ),
+            "fact_universe": provenance.fact_universe + (geometry_fact, crs_fact),
+            "fact_bindings": tuple(bindings) + additions,
+        }
+    )
+
+
 # Existing acquisition facts materialised in the retained native table.
 # This declares derived-input support, not preservation of original responses.
 NATIVE_TABLE_ACQUISITION_IDS = ("national_site_campaign_2026_08_02",)
