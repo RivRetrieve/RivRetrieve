@@ -16,11 +16,7 @@ from typing import cast
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import (
-    AcquisitionProvenance,
-    CatalogueBuildInputs,
-    verify_provenance_recordings,
-)
+from rivretrieve._internal.acquisition_provenance import CatalogueBuildInputs, verify_provenance_recordings
 from rivretrieve._internal.catalogue_origins import Field, OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -303,7 +299,6 @@ class GeneratedUsgsNwisCatalogue:
     station_products: StationProductCatalog
     source_native: pl.DataFrame
     modern_metadata: Path | None = None
-    geometry_station_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -741,9 +736,6 @@ _LIVE_MIN_STATIONS = 10_000
 def build_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
-    *,
-    location_features: Sequence[dict[str, object]] = (),
-    location_retrieved_at: RetrievedAt | None = None,
 ) -> GeneratedUsgsNwisCatalogue:
     if native_table.data.schema != NATIVE_SCHEMA:
         raise FatalContractError("USGS native table does not have the exact required schema")
@@ -753,24 +745,8 @@ def build_catalogue(
     series_records = _series_records_by_station(native_table)
     _validate_national_products(series_records)
     products = build_products()
-    if location_features:
-        if location_retrieved_at is None:
-            raise FatalContractError("Modern geometry requires its explicit retrieval instant")
-        locations = [feature.get("id") for feature in location_features]
-        selected = native_table.data.with_columns(
-            (pl.col("agency_cd") + pl.lit("-") + pl.col("site_no")).alias("_location")
-        )
-        ordinary = NativeTable(selected.filter(~pl.col("_location").is_in(locations)).drop("_location"))
-        geometry_native = NativeTable(selected.filter(pl.col("_location").is_in(locations)).drop("_location"))
-        geometry = build_modern_geometry_stations(
-            geometry_native, location_features, retrieved_at=location_retrieved_at
-        )
-        stations = build_stations(ordinary)
-        enforce_catalogue_origins(PROVIDER_ID, origins, ordinary, stations)
-        stations = pl.concat([stations, geometry]).sort("station_id")
-    else:
-        stations = build_stations(native_table)
-        enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
+    stations = build_stations(native_table)
+    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
     station_products = build_station_products(native_table, series_records)
     maximum_retrieved_at = native_table.data["retrieved_at"].max()
     if not isinstance(maximum_retrieved_at, datetime):
@@ -783,7 +759,6 @@ def build_catalogue(
         stations=stations,
         station_products=station_products,
         source_native=native_table.data,
-        geometry_station_ids=tuple(geometry["station_id"].to_list()) if location_features else (),
     )
 
 
@@ -836,16 +811,11 @@ def build_modern_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
     metadata_directory: Path,
-    *,
-    location_features: Sequence[dict[str, object]] = (),
-    location_retrieved_at: RetrievedAt | None = None,
 ) -> GeneratedUsgsNwisCatalogue:
-    """Build current availability from modern metadata within the selected station scope."""
+    """Build current availability from modern metadata within the legacy station scope."""
     from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
 
-    legacy = build_catalogue(
-        native_table, origins, location_features=location_features, location_retrieved_at=location_retrieved_at
-    )
+    legacy = build_catalogue(native_table, origins)
     features, receipts = read_modern_metadata(metadata_directory)
     descriptions = modern_source_descriptions(features, monitoring_locations(native_table))
     available = {(item.station_id, item.product_id) for item in descriptions.descriptions}
@@ -872,13 +842,7 @@ def build_modern_catalogue(
         "bulk_observations": "true: modern daily or continuous requests per station-product; partial failures retained",
     }
     return GeneratedUsgsNwisCatalogue(
-        provider_info,
-        legacy.products,
-        legacy.stations,
-        station_products,
-        native_table.data,
-        metadata_directory,
-        legacy.geometry_station_ids,
+        provider_info, legacy.products, legacy.stations, station_products, native_table.data, metadata_directory
     )
 
 
@@ -1151,7 +1115,6 @@ def write_catalogue(
     *,
     build_inputs: CatalogueBuildInputs | None = None,
     native_table: NativeTable | None = None,
-    acquisition_provenance: AcquisitionProvenance | None = None,
 ) -> None:
     """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
@@ -1169,13 +1132,6 @@ def write_catalogue(
 
     if build_inputs is None or native_table is None:
         raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
-    if catalogue.geometry_station_ids and (
-        acquisition_provenance is None
-        or not {"source.station.modern_location_geometry", "source.station.modern_location_crs"}.issubset(
-            acquisition_provenance.fact_universe
-        )
-    ):
-        raise FatalContractError("Modern geometry publication requires selected acquisition provenance")
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -1194,7 +1150,7 @@ def write_catalogue(
     features, receipts = read_modern_metadata(catalogue.modern_metadata)
     locations = monitoring_locations(NativeTable(catalogue.source_native))
     descriptions = modern_source_descriptions(features, locations)
-    provenance = acquisition_provenance or build_modern_acquisition_provenance(receipts, catalogue.modern_metadata)
+    provenance = build_modern_acquisition_provenance(receipts, catalogue.modern_metadata)
     from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
 
     station_origin = STATION_CATALOGUE_ORIGINS["station_id"]
@@ -1203,16 +1159,9 @@ def write_catalogue(
     station_metadata = project_station_metadata(
         native_table, catalogue.stations, station_origin, STATION_METADATA_FIELDS
     )
-    from rivretrieve._internal.providers.usgs_nwis.origins import MODERN_GEOMETRY_ORIGINS
-
-    station_origins = (
-        (STATION_CATALOGUE_ORIGINS, MODERN_GEOMETRY_ORIGINS)
-        if catalogue.geometry_station_ids
-        else (STATION_CATALOGUE_ORIGINS,)
-    )
     metadata = build_catalogue_metadata(
         provenance,
-        station_origins,
+        (STATION_CATALOGUE_ORIGINS,),
         files,
         source_descriptions=descriptions,
         build_inputs=build_inputs,
@@ -1246,7 +1195,7 @@ def write_catalogue(
         json.dumps(
             build_catalogue_descriptor(
                 evidence,
-                station_origins,
+                (STATION_CATALOGUE_ORIGINS,),
                 {**files, **metadata},
                 station_metadata_notice=STATION_METADATA_NOTICE,
             ),
