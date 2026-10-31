@@ -50,8 +50,7 @@ SERIES_CATALOGUE_URL = (
     + "?format=rdb&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&seriesCatalogOutput=true"
 )
 EXPANDED_SITE_URL = (
-    METADATA_BASE_URL
-    + "?format=rdb&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&siteOutput=expanded"
+    METADATA_BASE_URL + "?format=rdb&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&siteOutput=expanded"
 )
 # USGS site service requires a geographic filter; nationwide queries return HTTP 400.
 # We iterate over the 50 state USPS codes plus DC.
@@ -563,6 +562,66 @@ def refresh_native_table(
     if native.data.schema != NATIVE_SCHEMA:
         raise FatalContractError("USGS native table does not have the exact required schema")
     return WithIssues(value=native, issues=())
+
+
+def supplement_native_stations(
+    native_table: NativeTable,
+    expanded_rows: Iterable[object],
+    *,
+    modern_features: Iterable[dict[str, object]],
+    retrieved_at: RetrievedAt,
+) -> NativeTable:
+    """Add selected expanded station records with modern daily discharge.
+
+    Parameters
+    ----------
+    native_table
+        Independently validated national two-pass input.
+    expanded_rows
+        Genuine expanded source rows selected within the provider geography.
+        Their acquisition and geographic selection must be verified separately.
+    modern_features
+        Published series properties used to match agency-qualified identities.
+    retrieved_at
+        Retrieval instant of the supplemental station responses.
+
+    Notes
+    -----
+    Empty series arrays mean no legacy series records were selected for these
+    stations. They do not assert a successful empty legacy series request.
+    Supplemental acquisition lineage must accompany publication of this table.
+
+    Raises
+    ------
+    FatalContractError
+        A row has no matching daily discharge identity, collides with an existing
+        station, or lacks required source identity or geometry.
+    """
+    if native_table.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("USGS native table does not have the exact required schema")
+    locations = {
+        item.get("monitoring_location_id")
+        for item in modern_features
+        if (item.get("parameter_code"), item.get("computation_period_identifier"), item.get("statistic_id"))
+        == ("00060", "Daily", "00003")
+    }
+    station_ids = set(native_table.data["site_no"].to_list())
+    additions = []
+    for item in expanded_rows:
+        row = _validated_source_row(item, EXPANDED_HEADER, row_kind="supplemental expanded")
+        station_id = _required_site_no(row, row_kind="supplemental expanded")
+        agency = _required_native_string(row["agency_cd"], "agency_cd")
+        if f"{agency}-{station_id}" not in locations:
+            raise FatalContractError("Supplemental station has no matching modern daily discharge identity")
+        if station_id in station_ids:
+            raise FatalContractError("Supplemental station collides with an existing station identity")
+        station_ids.add(station_id)
+        additions.append({**row, **dict.fromkeys(SERIES_ONLY_FIELDS, []), "retrieved_at": retrieved_at.value})
+    if not additions:
+        return native_table
+    supplemental = NativeTable(pl.DataFrame(additions, schema=NATIVE_SCHEMA))
+    build_stations(supplemental)
+    return NativeTable(pl.concat([native_table.data, supplemental.data]).sort("site_no"))
 
 
 def refresh_native_table_from_fixtures(

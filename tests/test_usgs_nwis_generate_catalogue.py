@@ -1248,3 +1248,76 @@ def test_missing_publication_inputs_leave_destination_untouched(tmp_path: Path) 
     with pytest.raises(FatalContractError, match="requires explicit build_inputs and native_table"):
         generator.write_catalogue(catalogue, output)
     assert not output.exists()
+
+
+def test_supplemental_station_preserves_source_fields_and_modern_siblings():
+    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
+
+    original = _native_table()
+    expanded = dict.fromkeys(EXPANDED_HEADER, "")
+    expanded.update(
+        agency_cd="USGS",
+        site_no="field-site",
+        station_nm="Published field name",
+        site_tp_cd="FA-FON",
+        dec_lat_va="43.5",
+        dec_long_va="-87.5",
+        dec_coord_datum_cd="NAD83",
+    )
+    features = [
+        {
+            "id": name,
+            "monitoring_location_id": "USGS-field-site",
+            "parameter_code": "00060",
+            "statistic_id": "00003",
+            "computation_period_identifier": "Daily",
+            "computation_identifier": "Mean",
+            "unit_of_measure": "ft^3/s",
+            "web_description": None,
+            "sublocation_identifier": None,
+        }
+        for name in ("published-first", "published-second")
+    ]
+    supplemented = generator.supplement_native_stations(
+        original, [expanded], modern_features=features, retrieved_at=ATTESTED_RETRIEVED_AT
+    )
+    pl_testing.assert_frame_equal(supplemented.data.filter(pl.col("site_no") == "station-a"), original.data)
+    row = supplemented.data.filter(pl.col("site_no") == "field-site").row(0, named=True)
+    assert {name: row[name] for name in EXPANDED_HEADER} == expanded
+    assert all(row[name] == [] for name in SERIES_ONLY_FIELDS)
+    stations = generator.build_stations(supplemented)
+    assert stations.filter(pl.col("station_id") == "field-site").select("latitude", "longitude", "crs").row(0) == (
+        43.5,
+        -87.5,
+        "EPSG:4269",
+    )
+    descriptions = modern_source_descriptions(features, generator.monitoring_locations(supplemented))
+    assert {item.variant for item in descriptions.descriptions} == {"published-first", "published-second"}
+    assert all(item.facts[0].time_zone.value is None for item in descriptions.descriptions)
+
+
+@pytest.mark.parametrize("mutation", ["agency", "collision", "geometry"])
+def test_supplemental_station_rejects_unmatched_identity_collision_and_missing_geometry(mutation):
+    original = _native_table()
+    expanded = dict.fromkeys(EXPANDED_HEADER, "")
+    expanded.update(
+        agency_cd="USGS", site_no="field-site", dec_lat_va="43.5", dec_long_va="-87.5", dec_coord_datum_cd="NAD83"
+    )
+    if mutation == "agency":
+        expanded["agency_cd"] = "OTHER"
+    elif mutation == "collision":
+        expanded["site_no"] = "station-a"
+    else:
+        expanded["dec_lat_va"] = ""
+    features = [
+        {
+            "monitoring_location_id": "USGS-" + expanded["site_no"],
+            "parameter_code": "00060",
+            "computation_period_identifier": "Daily",
+            "statistic_id": "00003",
+        }
+    ]
+    with pytest.raises(FatalContractError):
+        generator.supplement_native_stations(
+            original, [expanded], modern_features=features, retrieved_at=ATTESTED_RETRIEVED_AT
+        )
