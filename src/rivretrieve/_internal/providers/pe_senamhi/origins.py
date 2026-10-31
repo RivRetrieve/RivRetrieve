@@ -1,6 +1,7 @@
 """SENAMHI source declarations for offline station discovery."""
 
 from rivretrieve._internal.acquisition_provenance import (
+    AbsenceMarkerValue,
     AcquisitionProvenance,
     AcquisitionRecord,
     EvidenceReference,
@@ -109,14 +110,26 @@ def build_acquisition_provenance(
             ),
         ),
         fact_bindings=source_bindings,
-        fact_universe=(*facts, "station.crs"),
+        fact_universe=(*facts, "source.station.crs"),
         withheld_facts=(
             WithheldFact(
                 fact_group="unestablished_station_crs",
-                facts=("station.crs",),
+                source_id="pe_senamhi",
+                facts=("source.station.crs",),
                 reason="no_acquisition_record_established",
             ),
         ),
+    )
+    provenance = complete_transformed_fact_universe(
+        provenance,
+        ("station.crs",),
+        transformation=Transformation(
+            name="Unestablished source CRS remains unknown",
+            kind="absence_marker",
+            marker_value=AbsenceMarkerValue.UNKNOWN,
+            external_inputs=(ExternalFactReference(source_id="pe_senamhi", fact="source.station.crs"),),
+        ),
+        fact_group="canonical_senamhi_crs",
     )
     for carrier, source_facts in _CATALOGUE_SOURCE_FACTS.items():
         provenance = complete_transformed_fact_universe(

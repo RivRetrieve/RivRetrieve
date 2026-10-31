@@ -486,6 +486,12 @@ def test_provenance_requires_direct_sources_and_retains_derived_native_identity(
         metadata_fields=STATION_METADATA_FIELDS,
     )
     assert pl.read_parquet(tmp_path / "catalogue" / "stations.parquet")["station_id"].to_list() == ["A"]
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+
+    loaded = load_packaged_catalogue_artifact(tmp_path / "catalogue", on_issue="raise")
+    assert loaded.stations["station_id"].to_list() == ["A"]
+    assert loaded.stations["crs"].to_list() == ["unknown"]
+    assert len(loaded.source_descriptions.descriptions) == 1
 
     attribution_recording = recording.model_copy(
         update={"recording_id": "attribution", "repository_path": "frontend.body"}
