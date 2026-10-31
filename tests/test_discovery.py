@@ -111,6 +111,23 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "water_temperature_hourly_mean",
         "water_temperature_instantaneous",
     ],
+    "pe_senamhi": [
+        "monthly_archive_n_niv_inst_00",
+        "monthly_archive_n_niv_inst_10",
+        "monthly_archive_n_nivelagua",
+        "monthly_archive_n_nivelmedio",
+        "monthly_archive_nivel_del_rio_06h",
+        "monthly_archive_nivel_del_rio_10h",
+        "monthly_archive_nivel_del_rio_14h",
+        "monthly_archive_nivel_del_rio_18h",
+        "monthly_archive_nivel_del_rio_promedio",
+        "phisis_daily_flow",
+        "phisis_daily_level",
+        "phisis_daily_level_above_sea_level",
+        "phisis_hourly_flow",
+        "phisis_hourly_level",
+        "phisis_hourly_level_above_sea_level",
+    ],
     "pl_imgw": [
         "discharge_daily",
         "stage_daily",
@@ -131,7 +148,11 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
 }
 
 
-EXPECTED_PRODUCT_IDS = sorted(set(EXPECTED_PRODUCT_IDS) | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"]))
+EXPECTED_PRODUCT_IDS = sorted(
+    set(EXPECTED_PRODUCT_IDS)
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["pe_senamhi"])
+)
 
 
 def _issue_policy_error_chain(exc: BaseException) -> list[IssuePolicyError]:
@@ -170,6 +191,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "jp_mlit",
         "lt_lhmt",
         "no_nve",
+        "pe_senamhi",
         "pl_imgw",
         "th_thaiwater",
         "usgs_nwis",

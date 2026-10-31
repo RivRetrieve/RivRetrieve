@@ -725,7 +725,7 @@ def _assert_reviewed_crs(
         assert stations["crs"].unique().to_list() == [origin.value]
         assert "unknown" not in stations["crs"].unique().to_list()
     elif isinstance(origin, Withheld):
-        assert adapter.provider_id in {ProviderId("pl_imgw"), ProviderId("br_ana")}
+        assert adapter.provider_id in {ProviderId("pl_imgw"), ProviderId("br_ana"), ProviderId("pe_senamhi")}
         assert origin.reason == "acquisition_not_established"
         assert stations["crs"].unique().to_list() == ["unknown"]
     else:
