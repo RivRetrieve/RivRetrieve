@@ -712,8 +712,6 @@ def test_usgs_build_is_gated_on_origins() -> None:
     ("column", "value", "message"),
     [
         ("site_no", " ", "blank required site_no"),
-        ("dec_lat_va", "", "blank required dec_lat_va"),
-        ("dec_long_va", " ", "blank required dec_long_va"),
         ("dec_lat_va", "north", "nonnumeric required dec_lat_va"),
         ("dec_long_va", "west", "nonnumeric required dec_long_va"),
     ],
@@ -1297,7 +1295,7 @@ def test_supplemental_station_preserves_source_fields_and_modern_siblings():
 
 
 @pytest.mark.parametrize("mutation", ["agency", "collision", "geometry"])
-def test_supplemental_station_rejects_unmatched_identity_collision_and_missing_geometry(mutation):
+def test_supplemental_station_rejects_unmatched_identity_collision_and_invalid_geometry(mutation):
     original = _native_table()
     expanded = dict.fromkeys(EXPANDED_HEADER, "")
     expanded.update(
@@ -1308,7 +1306,7 @@ def test_supplemental_station_rejects_unmatched_identity_collision_and_missing_g
     elif mutation == "collision":
         expanded["site_no"] = "station-a"
     else:
-        expanded["dec_lat_va"] = ""
+        expanded["dec_lat_va"] = "north"
     features = [
         {
             "monitoring_location_id": "USGS-" + expanded["site_no"],
@@ -1321,3 +1319,19 @@ def test_supplemental_station_rejects_unmatched_identity_collision_and_missing_g
         generator.supplement_native_stations(
             original, [expanded], modern_features=features, retrieved_at=ATTESTED_RETRIEVED_AT
         )
+
+
+def test_source_absent_coordinates_remain_selectable_catalogue_stations():
+    native = _native_table(
+        [
+            {"site_no": "unlocated-one", "dec_lat_va": "", "dec_long_va": "", "datum": ""},
+            {"site_no": "unlocated-two", "dec_lat_va": " ", "dec_long_va": " ", "datum": ""},
+        ]
+    )
+    built = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
+    assert built.stations.select("station_id", "latitude", "longitude", "crs").rows() == [
+        ("unlocated-one", None, None, "unknown"),
+        ("unlocated-two", None, None, "unknown"),
+    ]
+    pl_testing.assert_frame_equal(built.source_native, native.data)
+    assert built.station_products.height == 12

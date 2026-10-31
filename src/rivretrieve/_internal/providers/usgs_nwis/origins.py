@@ -88,15 +88,25 @@ class DatumToCrsConversion(catalogue_origins.FieldConversion):
         return crs_from_datum(native_row[str(native_column)])
 
 
+class OptionalCoordinateConversion(catalogue_origins.FloatConversion):
+    """Preserve blank publisher coordinates as unknown, without inventing a location."""
+
+    @property
+    def name(self) -> catalogue_origins.ConversionName:
+        return catalogue_origins.ConversionName("usgs_nwis.optional_coordinate")
+
+    def apply(self, canonical_column, native_column, native_row):
+        value = native_row[str(native_column)]
+        if isinstance(value, str) and not value.strip():
+            return None
+        return super().apply(canonical_column, native_column, native_row)
+
+
 STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
     "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("usgs_nwis")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("site_no")),
-    "latitude": catalogue_origins.Field(
-        catalogue_origins.NativeColumn("dec_lat_va"), catalogue_origins.FloatConversion()
-    ),
-    "longitude": catalogue_origins.Field(
-        catalogue_origins.NativeColumn("dec_long_va"), catalogue_origins.FloatConversion()
-    ),
+    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_lat_va"), OptionalCoordinateConversion()),
+    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_long_va"), OptionalCoordinateConversion()),
     "crs": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_coord_datum_cd"), DatumToCrsConversion()),
 }
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"

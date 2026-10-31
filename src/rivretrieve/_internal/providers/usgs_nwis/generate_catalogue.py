@@ -595,7 +595,7 @@ def supplement_native_stations(
     ------
     FatalContractError
         A row has no matching daily discharge identity, collides with an existing
-        station, or lacks required source identity or geometry.
+        station, lacks required identity, or has malformed nonblank coordinates.
     """
     if native_table.data.schema != NATIVE_SCHEMA:
         raise FatalContractError("USGS native table does not have the exact required schema")
@@ -868,8 +868,8 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
     rows = []
     for native_row in native_table.data.iter_rows(named=True):
         station_id = _required_native_string(native_row["site_no"], "site_no")
-        latitude = _required_native_float(native_row["dec_lat_va"], station_id, "dec_lat_va")
-        longitude = _required_native_float(native_row["dec_long_va"], station_id, "dec_long_va")
+        latitude = _native_coordinate(native_row["dec_lat_va"], station_id, "dec_lat_va")
+        longitude = _native_coordinate(native_row["dec_long_va"], station_id, "dec_long_va")
         try:
             crs = crs_from_datum(native_row["dec_coord_datum_cd"])
         except ValueError as exc:
@@ -1142,9 +1142,11 @@ def _required_native_string(value: object, column: str) -> str:
     return value
 
 
-def _required_native_float(value: object, station_id: str, column: str) -> float:
-    if not isinstance(value, str) or not value or value.isspace():
-        raise FatalContractError(f"USGS station {station_id!r} has blank required {column}")
+def _native_coordinate(value: object, station_id: str, column: str) -> float | None:
+    if isinstance(value, str) and not value.strip():
+        return None
+    if not isinstance(value, str):
+        raise FatalContractError(f"USGS station {station_id!r} has invalid source {column}")
     try:
         return float(value)
     except ValueError as exc:
