@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
 
 from rivretrieve._internal.catalogues.native import RetrievedAt
@@ -545,3 +546,75 @@ def test_station_origins_preserve_source_null_coordinates():
     _, stations, _ = catalogue_tables(native, pl.DataFrame(schema=ASSOCIATION_SCHEMA), checked_on=date(2026, 1, 1))
     enforce_catalogue_origins(ProviderId("pe_senamhi"), STATION_CATALOGUE_ORIGINS, native, stations)
     assert stations.select("latitude", "longitude").rows() == [(None, None), (-12.5, -75.25)]
+
+
+@pytest.mark.governing(
+    "maintenance/catalogue/pe_senamhi/official",
+    "maintenance/catalogue/pe_senamhi/official/selection.json",
+)
+def test_selected_inputs_publish_deterministic_catalogue(
+    retained_evidence_root, catalogue_input_receipt, catalogue_build_inputs, tmp_path
+):
+    import os
+    from pathlib import Path
+
+    import polars.testing as pl_testing
+
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.pe_senamhi.generate_catalogue import main, read_catalogue_sources
+    from rivretrieve._internal.providers.pe_senamhi.origins import STATION_METADATA_NOTICE
+
+    configured = os.environ.get("RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT")
+    if not configured:
+        pytest.fail("Reviewed catalogue generation requires restricted product output.", pytrace=False)
+    product_root = Path(configured).resolve()
+    selection = "maintenance/catalogue/pe_senamhi/official/selection.json"
+    sources = read_catalogue_sources(
+        retained_evidence_root, selection_path=selection, input_receipt=catalogue_input_receipt
+    )
+    build_inputs = catalogue_build_inputs(sources.provenance)
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(catalogue_input_receipt.model_dump_json())
+    build_path = tmp_path / "build-inputs.json"
+    build_path.write_text(build_inputs.model_dump_json())
+    outputs = [product_root / "pe_senamhi", product_root / "pe_senamhi-repeat"]
+    for output in outputs:
+        assert (
+            main(
+                [
+                    "--evidence-root",
+                    str(retained_evidence_root),
+                    "--selection",
+                    selection,
+                    "--input-receipt",
+                    str(receipt_path),
+                    "--build-inputs",
+                    str(build_path),
+                    "--out",
+                    str(output),
+                ]
+            )
+            == 0
+        )
+        load_packaged_catalogue_artifact(output, on_issue="raise")
+        stations = pl.read_parquet(output / "stations.parquet")
+        assert stations["crs"].unique().to_list() == ["unknown"]
+        pairs = pl.read_parquet(output / "station_products.parquet")
+        assert pairs["published_record_start_date"].null_count() == pairs.height
+        assert pairs["published_record_end_date"].null_count() == pairs.height
+        assert "unavailable" not in pairs["availability"].to_list()
+        import json
+
+        provider = json.loads((output / "provider.json").read_bytes())
+        assert provider["license"] is None
+        assert "SENAMHI" in provider["citation"]
+        assert STATION_METADATA_NOTICE in json.dumps(
+            json.loads((output / "croissant.json").read_bytes()), ensure_ascii=False
+        )
+        assert not (output / "native.parquet").exists()
+    assert {p.name for p in outputs[0].iterdir()} == {p.name for p in outputs[1].iterdir()}
+    for path in outputs[0].iterdir():
+        repeated = outputs[1] / path.name
+        if path.suffix == ".parquet":
+            pl_testing.assert_frame_equal(pl.read_parquet(path), pl.read_parquet(repeated))
+        assert path.read_bytes() == repeated.read_bytes()
