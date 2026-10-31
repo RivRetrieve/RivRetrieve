@@ -87,7 +87,7 @@ def build_acquisition_provenance(
         raise ValueError("SENAMHI source bindings must directly identify selected acquisitions")
     facts = tuple(fact for binding in source_bindings for fact in binding.facts)
     required = {fact for group in _CATALOGUE_SOURCE_FACTS.values() for fact in group}
-    required.update(("source.station.altitude_unit", "source.provider.terms"))
+    required.update(("source.station.altitude_unit", "source.provider.terms", "source.provider.attribution"))
     if missing := required - set(facts):
         raise ValueError(f"Missing SENAMHI source facts: {sorted(missing)!r}")
     provenance = AcquisitionProvenance(
@@ -135,7 +135,10 @@ def build_acquisition_provenance(
         ("provider.license", "provider.citation"),
         transformation=Transformation(
             name="Selected SENAMHI attribution; no inferred license",
-            external_inputs=(ExternalFactReference(source_id="pe_senamhi", fact="source.provider.terms"),),
+            external_inputs=(
+                ExternalFactReference(source_id="pe_senamhi", fact="source.provider.terms"),
+                ExternalFactReference(source_id="pe_senamhi", fact="source.provider.attribution"),
+            ),
         ),
         fact_group="canonical_senamhi_terms",
     )

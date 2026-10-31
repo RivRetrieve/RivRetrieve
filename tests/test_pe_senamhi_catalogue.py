@@ -409,6 +409,7 @@ def test_provenance_requires_direct_sources_and_retains_derived_native_identity(
         "source.station_product.associations",
         "source.station_product.inventory_support",
         "source.provider.terms",
+        "source.provider.attribution",
     )
     binding = FactBinding(fact_group="synthetic", facts=facts, source_id="pe_senamhi", acquisition_id="synthetic")
     provenance = build_acquisition_provenance(
@@ -485,6 +486,34 @@ def test_provenance_requires_direct_sources_and_retains_derived_native_identity(
         metadata_fields=STATION_METADATA_FIELDS,
     )
     assert pl.read_parquet(tmp_path / "catalogue" / "stations.parquet")["station_id"].to_list() == ["A"]
+
+    attribution_recording = recording.model_copy(
+        update={"recording_id": "attribution", "repository_path": "frontend.body"}
+    )
+    attribution_acquisition = acquisition.model_copy(
+        update={"acquisition_id": "attribution", "recording_ids": ("attribution",)}
+    )
+    distinct_binding = binding.model_copy(
+        update={"facts": tuple(fact for fact in facts if fact != "source.provider.attribution")}
+    )
+    attribution_binding = FactBinding(
+        fact_group="attribution",
+        facts=("source.provider.attribution",),
+        source_id="pe_senamhi",
+        acquisition_id="attribution",
+    )
+    supported = build_acquisition_provenance(
+        native,
+        (recording, attribution_recording),
+        acquisitions=(acquisition, attribution_acquisition),
+        source_bindings=(distinct_binding, attribution_binding),
+    )
+    terms_binding = next(item for item in supported.fact_bindings if "provider.citation" in item.facts)
+    assert {item.fact for item in terms_binding.transformation.external_inputs} == {
+        "source.provider.terms",
+        "source.provider.attribution",
+    }
+    assert len(supported.source_records[0].acquisitions) == 2
 
     assert provenance.native_table == native
     station_binding = next(binding for binding in provenance.fact_bindings if "station.latitude" in binding.facts)
