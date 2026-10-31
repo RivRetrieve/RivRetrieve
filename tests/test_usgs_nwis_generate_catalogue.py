@@ -788,39 +788,94 @@ class _FixtureResponse(io.BytesIO):
     status = 200
 
 
-@pytest.mark.derived(
-    "tests/test_data/usgs_nwis_metadata_expanded.json",
-    "tests/test_data/usgs_nwis_metadata_series.json",
-)
-def test_live_transport_uses_exact_102_in_scope_urls(retained_evidence_root, monkeypatch: pytest.MonkeyPatch) -> None:
-    series_bytes = _rdb_text(
-        SERIES_HEADER, SERIES_FORMAT, _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
-    ).encode()
-    expanded_bytes = _rdb_text(
-        EXPANDED_HEADER, EXPANDED_FORMAT, _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
-    ).encode()
-    calls: list[tuple[str, int]] = []
+def test_live_transport_includes_all_site_types_across_50_states_and_dc(monkeypatch: pytest.MonkeyPatch) -> None:
+    from urllib.parse import parse_qs, urlsplit
+
+    # Authored source rows: site classification must not exclude daily discharge.
+    expanded_row = dict.fromkeys(EXPANDED_HEADER, "")
+    expanded_row.update(agency_cd="USGS", site_no="synthetic-field", site_tp_cd="FA-FON")
+    series_row = {name: expanded_row.get(name, "") for name in SERIES_HEADER}
+    series_row.update(data_type_cd="dv", parm_cd="00060", stat_cd="00003")
+    series_bytes = _rdb_text(SERIES_HEADER, SERIES_FORMAT, [series_row]).encode()
+    expanded_bytes = _rdb_text(EXPANDED_HEADER, EXPANDED_FORMAT, [expanded_row]).encode()
+    calls: list[str] = []
 
     def fake_urlopen(url: str, *, timeout: int) -> _FixtureResponse:
-        calls.append((url, timeout))
+        calls.append(url)
         return _FixtureResponse(series_bytes if "seriesCatalogOutput=true" in url else expanded_bytes)
 
     monkeypatch.setattr(generator.urllib.request, "urlopen", fake_urlopen)
-
     series, expanded = generator.read_live_native_rows()
 
-    expected_urls = [
-        url
-        for state_cd in generator._US_STATE_CODES
-        for url in (
-            generator.SERIES_CATALOGUE_URL.format(state_cd=state_cd),
-            generator.EXPANDED_SITE_URL.format(state_cd=state_cd),
-        )
+    states = [
+        "AL",
+        "AK",
+        "AZ",
+        "AR",
+        "CA",
+        "CO",
+        "CT",
+        "DE",
+        "FL",
+        "GA",
+        "HI",
+        "ID",
+        "IL",
+        "IN",
+        "IA",
+        "KS",
+        "KY",
+        "LA",
+        "ME",
+        "MD",
+        "MA",
+        "MI",
+        "MN",
+        "MS",
+        "MO",
+        "MT",
+        "NE",
+        "NV",
+        "NH",
+        "NJ",
+        "NM",
+        "NY",
+        "NC",
+        "ND",
+        "OH",
+        "OK",
+        "OR",
+        "PA",
+        "RI",
+        "SC",
+        "SD",
+        "TN",
+        "TX",
+        "UT",
+        "VT",
+        "VA",
+        "WA",
+        "WV",
+        "WI",
+        "WY",
+        "DC",
     ]
-    assert calls == [(url, 60) for url in expected_urls]
-    assert len(series) == len(generator._US_STATE_CODES) * 4
-    assert len(expanded) == len(generator._US_STATE_CODES)
-    assert not any(f"stateCd={territory}" in url for url in expected_urls for territory in ("GU", "MP", "PR", "VI"))
+    expected = [
+        {
+            "format": ["rdb"],
+            "hasDataTypeCd": ["dv"],
+            "parameterCd": ["00060,00065"],
+            "stateCd": [state],
+            **output,
+        }
+        for state in states
+        for output in ({"seriesCatalogOutput": ["true"]}, {"siteOutput": ["expanded"]})
+    ]
+    actual = [parse_qs(urlsplit(url).query) for url in calls]
+    assert len(actual) == 102
+    assert all(query in actual for query in expected)
+    assert series == [series_row] * 51
+    assert expanded == [expanded_row] * 51
 
 
 def test_native_cli_requires_strict_z_retrieval_instant(tmp_path: Path) -> None:

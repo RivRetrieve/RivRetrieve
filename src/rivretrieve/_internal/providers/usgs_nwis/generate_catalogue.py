@@ -47,11 +47,11 @@ PROVIDER_NAME = "U.S. Geological Survey National Water Information System (USGS 
 METADATA_BASE_URL = "https://waterservices.usgs.gov/nwis/site/"
 SERIES_CATALOGUE_URL = (
     METADATA_BASE_URL
-    + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&seriesCatalogOutput=true"
+    + "?format=rdb&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&seriesCatalogOutput=true"
 )
 EXPANDED_SITE_URL = (
     METADATA_BASE_URL
-    + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&siteOutput=expanded"
+    + "?format=rdb&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&siteOutput=expanded"
 )
 # USGS site service requires a geographic filter; nationwide queries return HTTP 400.
 # We iterate over the 50 state USPS codes plus DC.
