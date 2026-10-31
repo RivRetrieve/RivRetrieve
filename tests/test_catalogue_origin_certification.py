@@ -474,7 +474,7 @@ def test_provider_declarations_preserve_reviewed_identity_and_coordinate_fields(
     registered = frozenset(ProviderId(value) for value in discovery._registry.list_provider_ids())
 
     assert frozenset(DECLARATIONS) == ORIGIN_GATE_ENROLLED_PROVIDERS
-    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws"), ProviderId("pe_senamhi")}
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
     assert {(provider, case.identity): case.declarations for provider, case in CASES} == _expected_declarations()
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
