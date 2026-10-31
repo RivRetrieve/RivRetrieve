@@ -152,6 +152,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `jp_mlit` | live | none | 1023 | 0 | 4092 | 0 |
 | `lt_lhmt` | live | none | 97 | 0 | 194 | 0 |
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
+| `pe_senamhi` | catalogue-only | none | 771 | 1170 | 10395 | 0 |
 | `pl_imgw` | bulk store | none | 1301 | 0 | 3903 | 0 |
 | `th_thaiwater` | live | none | 825 | 1096 | 554 | 0 |
 | `usgs_nwis` | live | none | 26258 | 58421 | 0 | 99127 |
@@ -235,6 +236,21 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `no_nve` | `water_temperature_daily_mean` | `degC` |
 | `no_nve` | `water_temperature_hourly_mean` | `degC` |
 | `no_nve` | `water_temperature_instantaneous` | `degC` |
+| `pe_senamhi` | `monthly_archive_n_niv_inst_00` | `m` |
+| `pe_senamhi` | `monthly_archive_n_niv_inst_10` | `m` |
+| `pe_senamhi` | `monthly_archive_n_nivelagua` | `m` |
+| `pe_senamhi` | `monthly_archive_n_nivelmedio` | `m` |
+| `pe_senamhi` | `monthly_archive_nivel_del_rio_06h` | `m` |
+| `pe_senamhi` | `monthly_archive_nivel_del_rio_10h` | `m` |
+| `pe_senamhi` | `monthly_archive_nivel_del_rio_14h` | `m` |
+| `pe_senamhi` | `monthly_archive_nivel_del_rio_18h` | `m` |
+| `pe_senamhi` | `monthly_archive_nivel_del_rio_promedio` | `m` |
+| `pe_senamhi` | `phisis_daily_flow` | `m3/s` |
+| `pe_senamhi` | `phisis_daily_level` | `m` |
+| `pe_senamhi` | `phisis_daily_level_above_sea_level` | `m` |
+| `pe_senamhi` | `phisis_hourly_flow` | `m3/s` |
+| `pe_senamhi` | `phisis_hourly_level` | `m` |
+| `pe_senamhi` | `phisis_hourly_level_above_sea_level` | `m` |
 | `pl_imgw` | `discharge_daily` | `m3/s` |
 | `pl_imgw` | `stage_daily` | `m` |
 | `pl_imgw` | `water_temperature_daily` | `degC` |
