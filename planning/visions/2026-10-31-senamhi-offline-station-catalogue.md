@@ -30,8 +30,10 @@ outside this Effort.
 The 2026-10-31 investigation identified 771 hydrological registry identities and
 142 PHISIS monitoring stations. These are snapshot expectations to verify against
 the selected inputs, not permanent constants. Include hydrological categories
-found under the source's meteorological type label where evidenced. Do not drop
-closed or paused stations merely because of their operational condition.
+found under the source's meteorological type label where evidenced. This refines
+the step-1 exclusion of `typeId=M`: retain hydrological-category exceptions,
+while meteorological observations remain excluded. Do not drop closed or paused
+stations merely because of their operational condition.
 
 ## Identity and metadata
 
