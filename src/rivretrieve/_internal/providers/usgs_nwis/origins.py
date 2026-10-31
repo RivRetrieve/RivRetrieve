@@ -99,39 +99,6 @@ STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
     ),
     "crs": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_coord_datum_cd"), DatumToCrsConversion()),
 }
-
-
-class GeoJsonCoordinateConversion(catalogue_origins.FieldConversion):
-    """Project the publisher's WGS84 GeoJSON longitude/latitude coordinate order."""
-
-    __slots__ = ()
-
-    @property
-    def name(self) -> catalogue_origins.ConversionName:
-        return catalogue_origins.ConversionName("usgs_nwis.geojson_coordinate")
-
-    def apply(self, canonical_column, native_column, native_row):
-        if canonical_column not in {"latitude", "longitude"}:
-            raise ValueError("GeoJSON conversion requires a coordinate field")
-        return native_row[str(native_column)][1 if canonical_column == "latitude" else 0]
-
-
-MODERN_GEOMETRY_ORIGINS = {
-    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("usgs_nwis")),
-    "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("site_no")),
-    "latitude": catalogue_origins.Field(
-        catalogue_origins.NativeColumn("geometry_coordinates"), GeoJsonCoordinateConversion()
-    ),
-    "longitude": catalogue_origins.Field(
-        catalogue_origins.NativeColumn("geometry_coordinates"), GeoJsonCoordinateConversion()
-    ),
-    "crs": catalogue_origins.Documented(
-        catalogue_origins.DocumentedValue("EPSG:4326"),
-        catalogue_origins.Evidence("https://api.waterdata.usgs.gov/ogcapi/v1/openapi?f=json"),
-    ),
-}
-
-
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"
 NATIVE_TABLE_REVISION = "bfeb825a6f3b3aad4982649625d570c070b4ee32"
 NATIVE_TABLE_SHA256 = "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701"
