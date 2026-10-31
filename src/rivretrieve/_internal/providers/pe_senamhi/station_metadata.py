@@ -7,24 +7,11 @@ import polars as pl
 
 from rivretrieve._internal.catalogue_origins import Field, NativeColumn
 from rivretrieve._internal.catalogues.native import NativeTable
-from rivretrieve._internal.catalogues.station_metadata import MetadataField, build_station_metadata
+from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.providers.pe_senamhi.origins import STATION_METADATA_FIELDS
 
 DETAIL_FIELDS = ("waterBody", "waterBodyType", "automaticCode", "conventionalCode", "levelType")
-STATION_METADATA_FIELDS = (
-    MetadataField("station_name", "name", source_scope="station_registry", source_facts=("source.station.registry",)),
-    MetadataField(
-        "water_body_name", "waterBody", source_scope="phisis_detail", source_facts=("source.station.phisis_detail",)
-    ),
-    MetadataField(
-        "elevation",
-        "altitude",
-        "m",
-        source_scope="station_registry",
-        source_facts=("source.station.registry",),
-        support_facts=("source.station.altitude_unit",),
-    ),
-)
 
 
 def enrich_station_metadata(native: NativeTable, details: Sequence[Mapping[str, object]]) -> NativeTable:

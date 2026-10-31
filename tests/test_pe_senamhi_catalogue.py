@@ -329,6 +329,201 @@ def test_selected_native_requires_verified_declaration_and_originals(tmp_path):
             selection_path="selection.json",
             input_receipt=receipt.model_copy(update={"declaration_inputs": ()}),
         )
+    from rivretrieve._internal.providers.pe_senamhi.generate_catalogue import read_catalogue_sources
+
+    changed_selection = json.loads(declaration)
+    changed_selection["native_table"] = "absent.parquet"
+    changed_bytes = json.dumps(changed_selection).encode()
+    (tmp_path / "selection.json").write_bytes(changed_bytes)
+    changed_receipt = receipt.model_copy(
+        update={
+            "declaration_inputs": (
+                receipt.declaration_inputs[0].model_copy(
+                    update={"sha256": hashlib.sha256(changed_bytes).hexdigest(), "byte_size": len(changed_bytes)}
+                ),
+            )
+        }
+    )
+    with pytest.raises(FatalContractError, match="native table is absent"):
+        read_catalogue_sources(tmp_path, selection_path="selection.json", input_receipt=changed_receipt)
+    (tmp_path / "selection.json").write_bytes(declaration)
     (tmp_path / "registry_h.body").write_bytes(b"not JSON")
     with pytest.raises(FatalContractError, match="archive identity"):
         read_native_sources(tmp_path, selection_path="selection.json", input_receipt=receipt)
+
+
+def test_provenance_requires_direct_sources_and_retains_derived_native_identity(tmp_path):
+    import pytest
+
+    from rivretrieve._internal.acquisition_provenance import (
+        AcquisitionRecord,
+        FactBinding,
+        NativeTableIdentity,
+        RecordingReference,
+    )
+    from rivretrieve._internal.providers.pe_senamhi.origins import build_acquisition_provenance
+
+    native = NativeTableIdentity(
+        location_kind="retained", repository_path="native.parquet", revision="a" * 40, sha256="b" * 64, byte_size=1
+    )
+    recording = RecordingReference(
+        recording_id="synthetic",
+        repository_path="source.body",
+        source_url="https://example.test/synthetic",
+        retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        media_type="application/json",
+        sha256="c" * 64,
+    )
+    acquisition = AcquisitionRecord(
+        acquisition_id="synthetic",
+        method="http_request",
+        instant_type="retrieval",
+        description="Synthetic source",
+        requested_from=(recording.source_url,),
+        retrieved_at_start=recording.retrieved_at,
+        recording_ids=(recording.recording_id,),
+    )
+    facts = (
+        "source.station.registry",
+        "source.station.phisis_detail",
+        "source.station.altitude_unit",
+        "source.station_product.associations",
+        "source.station_product.inventory_support",
+        "source.provider.terms",
+    )
+    binding = FactBinding(fact_group="synthetic", facts=facts, source_id="pe_senamhi", acquisition_id="synthetic")
+    provenance = build_acquisition_provenance(
+        native, (recording,), acquisitions=(acquisition,), source_bindings=(binding,)
+    )
+    from datetime import date
+
+    from rivretrieve._internal.acquisition_provenance import (
+        ArchiveMemberReference,
+        CatalogueBuildInputs,
+        CodeReference,
+        RetainedInputUse,
+    )
+    from rivretrieve._internal.providers.pe_senamhi.generate_catalogue import (
+        ASSOCIATION_SCHEMA,
+        build_catalogue,
+        write_catalogue,
+    )
+    from rivretrieve._internal.providers.pe_senamhi.origins import STATION_CATALOGUE_ORIGINS
+    from rivretrieve._internal.providers.pe_senamhi.station_metadata import (
+        STATION_METADATA_FIELDS,
+        enrich_station_metadata,
+        project_station_metadata,
+    )
+
+    rows = station_native_table(
+        envelope([station("A")]), envelope([]), envelope([]), retrieved_at=RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC))
+    )
+    rows = enrich_station_metadata(rows, [])
+    associations = pl.DataFrame([("A", "phisis", "DAILY", "FLOW", "m3/s")], schema=ASSOCIATION_SCHEMA, orient="row")
+    catalogue = build_catalogue(
+        rows, STATION_CATALOGUE_ORIGINS, associations=associations, checked_on=date(2026, 1, 1), provenance=provenance
+    )
+    from dataclasses import replace
+
+    catalogue = replace(catalogue, station_metadata=project_station_metadata(rows, catalogue.stations))
+    assert catalogue.provider_info["license"] is None
+    assert "SENAMHI" in catalogue.provider_info["citation"]
+
+    def code(path, symbol):
+        return CodeReference(
+            repository="https://github.com/RivRetrieve/RivRetrieve",
+            repository_path=path,
+            symbol=symbol,
+            revision="a" * 40,
+        )
+
+    prefix = "src/rivretrieve/_internal/providers/pe_senamhi/"
+    member = ArchiveMemberReference(
+        archive_repository="https://github.com/RivRetrieve/verification-evidence",
+        archive_revision="a" * 40,
+        collection_id="synthetic",
+        manifest_sha256="d" * 64,
+        artifact_id="native",
+        sha256="b" * 64,
+        byte_size=1,
+        role="derived_input",
+    )
+    build_inputs = CatalogueBuildInputs(
+        build=code(prefix + "generate_catalogue.py", "main"),
+        declarations=(
+            code(prefix + "origins.py", "build_acquisition_provenance"),
+            code(prefix + "generate_catalogue.py", "build_catalogue"),
+            code(prefix + "origins.py", "STATION_METADATA_FIELDS"),
+            code(prefix + "station_metadata.py", "project_station_metadata"),
+        ),
+        inputs=(RetainedInputUse(reference=member, usage="native_table", facts=facts),),
+    )
+    write_catalogue(
+        catalogue,
+        tmp_path / "catalogue",
+        build_inputs=build_inputs,
+        native_table=rows,
+        metadata_fields=STATION_METADATA_FIELDS,
+    )
+    assert pl.read_parquet(tmp_path / "catalogue" / "stations.parquet")["station_id"].to_list() == ["A"]
+
+    assert provenance.native_table == native
+    station_binding = next(binding for binding in provenance.fact_bindings if "station.latitude" in binding.facts)
+    assert {item.fact for item in station_binding.transformation.external_inputs} == {
+        "source.station.registry",
+        "source.station.phisis_detail",
+    }
+    with pytest.raises(ValueError, match="Missing"):
+        build_acquisition_provenance(native, (recording,), acquisitions=(acquisition,), source_bindings=())
+
+
+def test_catalogue_builder_checks_declared_station_identity():
+    from datetime import date
+
+    import pytest
+
+    from rivretrieve._internal.catalogue_origins import Field, NativeColumn
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.providers.pe_senamhi.generate_catalogue import ASSOCIATION_SCHEMA, build_catalogue
+    from rivretrieve._internal.providers.pe_senamhi.origins import STATION_CATALOGUE_ORIGINS
+
+    native = station_native_table(
+        envelope([station("A")]), envelope([]), envelope([]), retrieved_at=RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC))
+    )
+    wrong = {**STATION_CATALOGUE_ORIGINS, "station_id": Field(NativeColumn("name"))}
+    with pytest.raises(FatalContractError, match="station_id"):
+        build_catalogue(
+            native,
+            wrong,
+            associations=pl.DataFrame(schema=ASSOCIATION_SCHEMA),
+            checked_on=date(2026, 1, 1),
+            provenance=None,
+        )
+
+
+def test_repeated_association_witnesses_describe_one_source_series():
+    from rivretrieve._internal.providers.pe_senamhi.generate_catalogue import ASSOCIATION_SCHEMA, describe_associations
+
+    associations = pl.DataFrame(
+        [("A", "monthly_archive", None, "N_NIVELMEDIO", "m")] * 2, schema=ASSOCIATION_SCHEMA, orient="row"
+    )
+    assert len(describe_associations(associations).descriptions) == 1
+
+
+def test_station_origins_preserve_source_null_coordinates():
+    from datetime import date
+
+    from rivretrieve._internal.catalogue_origins import enforce_catalogue_origins
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.providers.pe_senamhi.generate_catalogue import ASSOCIATION_SCHEMA, catalogue_tables
+    from rivretrieve._internal.providers.pe_senamhi.origins import STATION_CATALOGUE_ORIGINS
+
+    native = station_native_table(
+        envelope([station("A", latitude=None, longitude=None), station("B", latitude="-12.5", longitude="-75.25")]),
+        envelope([]),
+        envelope([]),
+        retrieved_at=RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
+    )
+    _, stations, _ = catalogue_tables(native, pl.DataFrame(schema=ASSOCIATION_SCHEMA), checked_on=date(2026, 1, 1))
+    enforce_catalogue_origins(ProviderId("pe_senamhi"), STATION_CATALOGUE_ORIGINS, native, stations)
+    assert stations.select("latitude", "longitude").rows() == [(None, None), (-12.5, -75.25)]

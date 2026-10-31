@@ -1,14 +1,23 @@
 """Offline transformations of SENAMHI station registries and product witnesses."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import cast
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import RecordingReference, RetainedInputReceipt
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    CatalogueBuildInputs,
+    RecordingReference,
+    RetainedInputReceipt,
+)
+from rivretrieve._internal.catalogue_origins import OriginDeclarations
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table
+from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
 
 HYDROLOGICAL_CATEGORIES = frozenset({"05", "06", "18", "22"})
@@ -261,7 +270,9 @@ def describe_associations(associations: pl.DataFrame):
 
     evidence = "catalogue:pe_senamhi:source.station_product.associations"
     descriptions = []
-    for station, subsystem, resolution, variable, unit in associations.sort(ASSOCIATION_SCHEMA.names()).iter_rows():
+    for station, subsystem, resolution, variable, unit in (
+        associations.unique().sort(ASSOCIATION_SCHEMA.names()).iter_rows()
+    ):
         facts = PhysicalFacts(
             facts_id="pending",
             quantity=known("discharge" if variable == "FLOW" else "stage", evidence),
@@ -369,6 +380,238 @@ def read_native_sources(
     return _selected_native(evidence_root, selection, input_receipt)
 
 
+@dataclass(frozen=True)
+class GeneratedSenamhiCatalogue:
+    provider_info: dict[str, object]
+    products: pl.DataFrame
+    stations: pl.DataFrame
+    station_products: pl.DataFrame
+    acquisition_provenance: AcquisitionProvenance
+    source_descriptions: SourceDescriptions
+    station_metadata: pl.DataFrame | None = None
+
+
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
+    *,
+    associations: pl.DataFrame,
+    checked_on: date,
+    provenance: AcquisitionProvenance,
+    station_metadata: pl.DataFrame | None = None,
+) -> GeneratedSenamhiCatalogue:
+    """Assemble an official catalogue from selected source-backed associations.
+
+    No observation service is contacted. Source descriptions remain scoped to
+    witnessed station identities, while unknown station-product inventory stays
+    open. Metadata must be separately verified and approved before publication.
+    """
+    from rivretrieve._internal.catalogue_origins import enforce_catalogue_origins
+    from rivretrieve._internal.primitives import ProviderId
+
+    products, stations, pairs = catalogue_tables(native_table, associations, checked_on=checked_on)
+    enforce_catalogue_origins(ProviderId("pe_senamhi"), origins, native_table, stations)
+    if provenance is None or provenance.provider_id != "pe_senamhi":
+        raise FatalContractError("Official catalogue requires its selected acquisition provenance")
+    statements = {
+        statement.kind: statement.exact_text for source in provenance.source_records for statement in source.statements
+    }
+    provider_info: dict[str, object] = {
+        "provider_id": "pe_senamhi",
+        "name": "Servicio Nacional de Meteorología e Hidrología del Perú (SENAMHI)",
+        "live_stations": False,
+        "live_products": False,
+        "live_station_products": False,
+        "bulk_observations": "none",
+        "catalogue_version": checked_on.isoformat(),
+        "license": statements.get("license"),
+        "citation": "Servicio Nacional de Meteorología e Hidrología del Perú (SENAMHI)",
+    }
+    return GeneratedSenamhiCatalogue(
+        provider_info,
+        products,
+        stations,
+        pairs,
+        provenance,
+        describe_associations(associations),
+        station_metadata,
+    )
+
+
+def write_catalogue(
+    catalogue: GeneratedSenamhiCatalogue,
+    out_dir: Path | str,
+    *,
+    build_inputs: CatalogueBuildInputs,
+    native_table: NativeTable,
+    metadata_fields: tuple[MetadataField, ...] = (),
+) -> None:
+    """Publish candidate tables through the shared evidence-aware publication path.
+
+    Inputs must already be explicitly selected and verified. This writes public
+    candidate products, never source bodies or restricted acquisition receipts.
+    It does not authorize disclosure or replace genuine-input verification.
+    """
+    import json
+    from io import BytesIO
+
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.pe_senamhi.origins import (
+        STATION_CATALOGUE_ORIGINS,
+        STATION_METADATA_NOTICE,
+    )
+
+    files = {
+        "provider.json": (json.dumps(catalogue.provider_info, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    }
+    for name, frame in (
+        ("products", catalogue.products),
+        ("stations", catalogue.stations),
+        ("station_products", catalogue.station_products),
+    ):
+        buffer = BytesIO()
+        frame.write_parquet(buffer)
+        files[f"{name}.parquet"] = buffer.getvalue()
+    metadata = build_catalogue_metadata(
+        catalogue.acquisition_provenance,
+        (STATION_CATALOGUE_ORIGINS,),
+        files,
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=metadata_fields,
+        station_metadata=catalogue.station_metadata,
+        metadata_implementation=(
+            "src/rivretrieve/_internal/providers/pe_senamhi/station_metadata.py",
+            "project_station_metadata",
+        )
+        if catalogue.station_metadata is not None
+        else None,
+        station_metadata_notice=STATION_METADATA_NOTICE,
+        source_descriptions=catalogue.source_descriptions,
+    )
+    output = Path(out_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    for name, content in {**files, **metadata}.items():
+        (output / name).write_bytes(content)
+
+
+@dataclass(frozen=True)
+class CatalogueSources:
+    native_table: NativeTable
+    associations: pl.DataFrame
+    provenance: AcquisitionProvenance
+    station_metadata: pl.DataFrame
+    checked_on: date
+
+
+def read_catalogue_sources(
+    evidence_root: Path, *, selection_path: str, input_receipt: RetainedInputReceipt
+) -> CatalogueSources:
+    """Recompute native rows and product witnesses from verified selected originals.
+
+    The retained derivative must equal the recomputed station table. Failed period
+    probes remain evidence, not absent rows or unavailable station-product pairs.
+    """
+    import json
+
+    from rivretrieve._internal.acquisition_provenance import (
+        AcquisitionRecord,
+        FactBinding,
+        NativeTableIdentity,
+        SourceStatement,
+    )
+    from rivretrieve._internal.catalogues.native import read_native_table
+    from rivretrieve._internal.providers.pe_senamhi.origins import build_acquisition_provenance
+    from rivretrieve._internal.providers.pe_senamhi.station_metadata import project_station_metadata
+
+    selection = _read_selection(evidence_root, selection_path, input_receipt)
+    selected = {item.consumer_path: item for item in input_receipt.inputs}
+    native_path = selection["native_table"]
+    if native_path not in selected:
+        raise FatalContractError("SENAMHI native table is absent from selected inputs")
+    member = selected[native_path]
+    native = read_native_table(
+        evidence_root / native_path, expected_sha256=member.sha256, expected_byte_size=member.byte_size
+    )
+    reconstructed = _selected_native(evidence_root, selection, input_receipt)
+    if not native.data.equals(reconstructed.data):
+        raise FatalContractError("SENAMHI retained native differs from selected original reconstruction")
+    identities = set(native.data["stationId"])
+    recordings = []
+    associations = []
+    for capture in selection["captures"]:
+        reference = RecordingReference.model_validate(capture["recording"])
+        if reference.repository_path != capture["body"]:
+            raise FatalContractError("SENAMHI selected body disagrees with recording identity")
+        content = read_original(evidence_root, reference, input_receipt=input_receipt)
+        recordings.append(reference)
+        if capture["kind"] == "hydrogram":
+            associations.append(
+                phisis_associations(
+                    json.loads(content),
+                    station=capture["station"],
+                    resolution=capture["resolution"],
+                    variable=capture["variable"],
+                    station_ids=identities,
+                )
+            )
+        elif capture["kind"] == "monthly":
+            associations.append(
+                monthly_associations(json.loads(content), station=capture["station"], station_ids=identities)
+            )
+    observed = (
+        pl.concat(associations).unique().sort(ASSOCIATION_SCHEMA.names())
+        if associations
+        else pl.DataFrame(schema=ASSOCIATION_SCHEMA)
+    )
+    provenance = build_acquisition_provenance(
+        NativeTableIdentity(
+            location_kind="retained",
+            repository_path=native_path,
+            revision=selection["native_revision"],
+            sha256=member.sha256,
+            byte_size=member.byte_size,
+        ),
+        tuple(recordings),
+        acquisitions=tuple(AcquisitionRecord.model_validate(item) for item in selection["publication_acquisitions"]),
+        source_bindings=tuple(FactBinding.model_validate(item) for item in selection["source_bindings"]),
+        statements=tuple(SourceStatement.model_validate(item) for item in selection["statements"]),
+    )
+    checked_on = date.fromisoformat(selection["checked_on"])
+    _, stations, _ = catalogue_tables(native, observed, checked_on=checked_on)
+    return CatalogueSources(native, observed, provenance, project_station_metadata(native, stations), checked_on)
+
+
+def selected_supporting_inputs(provenance: AcquisitionProvenance, selection: dict) -> dict[str, tuple[str, ...]]:
+    """Associate selected acquisition receipts with the facts of their original bodies.
+
+    ``selection`` must be the digest-verified authored declaration used for the
+    build. Only receipts of recordings adopted in provenance enter build support.
+    """
+    captures = selection["captures"]
+    receipt_by_body = {capture["body"]: capture["receipt"] for capture in captures}
+    facts_by_acquisition = {
+        (source.source_id, acquisition.acquisition_id): tuple(
+            fact
+            for binding in provenance.fact_bindings
+            if binding.source_id == source.source_id and binding.acquisition_id == acquisition.acquisition_id
+            for fact in binding.facts
+        )
+        for source in provenance.source_records
+        for acquisition in source.acquisitions
+    }
+    result = {}
+    for source in provenance.source_records:
+        paths = {item.recording.recording_id: item.recording.repository_path for item in source.evidence}
+        for acquisition in source.acquisitions:
+            facts = facts_by_acquisition[(source.source_id, acquisition.acquisition_id)]
+            for recording_id in acquisition.recording_ids:
+                path = paths[recording_id]
+                if path in receipt_by_body and facts:
+                    result[receipt_by_body[path]] = facts
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     """Compose a derived native candidate outside source and retained-input roots."""
     import argparse
@@ -379,7 +622,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--selection", required=True)
     parser.add_argument("--input-receipt", type=Path, required=True)
-    parser.add_argument("--native-only", action="store_true", required=True)
+    parser.add_argument("--native-only", action="store_true")
+    parser.add_argument("--build-inputs", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     output = args.out.resolve()
@@ -389,8 +633,31 @@ def main(argv: list[str] | None = None) -> int:
     if any((parent / ".git").exists() for parent in (output, *output.parents)):
         raise FatalContractError("SENAMHI native output must stay outside source checkouts")
     receipt = RetainedInputReceipt.model_validate_json(args.input_receipt.read_bytes())
-    native = read_native_sources(evidence_root, selection_path=args.selection, input_receipt=receipt)
-    write_native_table(native, output / "native.parquet")
+    if args.native_only:
+        native = read_native_sources(evidence_root, selection_path=args.selection, input_receipt=receipt)
+        write_native_table(native, output / "native.parquet")
+    else:
+        if args.build_inputs is None:
+            raise FatalContractError("Catalogue publication requires explicit build inputs")
+        from rivretrieve._internal.providers.pe_senamhi.origins import STATION_CATALOGUE_ORIGINS
+        from rivretrieve._internal.providers.pe_senamhi.station_metadata import STATION_METADATA_FIELDS
+
+        sources = read_catalogue_sources(evidence_root, selection_path=args.selection, input_receipt=receipt)
+        catalogue = build_catalogue(
+            sources.native_table,
+            STATION_CATALOGUE_ORIGINS,
+            associations=sources.associations,
+            checked_on=sources.checked_on,
+            provenance=sources.provenance,
+            station_metadata=sources.station_metadata,
+        )
+        write_catalogue(
+            catalogue,
+            output,
+            build_inputs=CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes()),
+            native_table=sources.native_table,
+            metadata_fields=STATION_METADATA_FIELDS,
+        )
     return 0
 
 
