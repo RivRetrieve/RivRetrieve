@@ -287,6 +287,7 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
             ProviderId("jp_mlit"),
             ProviderId("lt_lhmt"),
             ProviderId("no_nve"),
+            ProviderId("pe_senamhi"),
             ProviderId("pl_imgw"),
             ProviderId("th_thaiwater"),
             ProviderId("usgs_nwis"),
