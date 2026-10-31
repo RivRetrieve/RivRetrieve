@@ -149,3 +149,15 @@ def build_acquisition_provenance(
         ),
         fact_group="canonical_senamhi_provider",
     )
+
+
+CATALOGUE_SUPPORTING_INPUTS = {}
+CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/pe_senamhi/official/selection.json", None),
+    ("src/rivretrieve/_internal/providers/pe_senamhi/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/pe_senamhi/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/pe_senamhi/origins.py", "STATION_METADATA_NOTICE"),
+    ("src/rivretrieve/_internal/providers/pe_senamhi/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/pe_senamhi/generate_catalogue.py", "read_catalogue_sources"),
+    ("src/rivretrieve/_internal/providers/pe_senamhi/station_metadata.py", "project_station_metadata"),
+)

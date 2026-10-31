@@ -346,6 +346,24 @@ def test_selected_native_requires_verified_declaration_and_originals(tmp_path):
     )
     with pytest.raises(FatalContractError, match="native table is absent"):
         read_catalogue_sources(tmp_path, selection_path="selection.json", input_receipt=changed_receipt)
+    changed_native = native.data.with_columns(pl.lit("Changed source name").alias("name"))
+    changed_native.write_parquet(tmp_path / "absent.parquet")
+    native_bytes = (tmp_path / "absent.parquet").read_bytes()
+    from rivretrieve._internal.acquisition_provenance import RetainedInputReference
+
+    native_member = RetainedInputReference.model_validate(
+        {
+            **inputs[0],
+            "consumer_path": "absent.parquet",
+            "artifact_id": "derived",
+            "role": "derived_input",
+            "sha256": hashlib.sha256(native_bytes).hexdigest(),
+            "byte_size": len(native_bytes),
+        }
+    )
+    changed_receipt = changed_receipt.model_copy(update={"inputs": (*changed_receipt.inputs, native_member)})
+    with pytest.raises(FatalContractError, match="differs from selected original reconstruction"):
+        read_catalogue_sources(tmp_path, selection_path="selection.json", input_receipt=changed_receipt)
     (tmp_path / "selection.json").write_bytes(declaration)
     (tmp_path / "registry_h.body").write_bytes(b"not JSON")
     with pytest.raises(FatalContractError, match="archive identity"):
