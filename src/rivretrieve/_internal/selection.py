@@ -128,9 +128,9 @@ class _Selection:
 
 # Supported query meanings, separate from open-ended publisher evidence.
 QUERY_VOCABULARIES = {
-    "quantity": ("discharge", "stage", "temperature"),
+    "quantity": ("discharge", "stage", "temperature", "suspended_sediment_mass", "bedload_mass"),
     "frequency": ("10min", "hourly", "daily", "monthly", "yearly"),
-    "statistic": ("mean", "min", "max", "instantaneous"),
+    "statistic": ("mean", "min", "max", "instantaneous", "sum"),
 }
 
 

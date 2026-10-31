@@ -467,6 +467,8 @@ class Unit(StrEnum):
     L_S = "l/s"
     MM = "mm"
     DEG_C = "degC"
+    T = "t"
+    KG = "kg"
 
 
 @dataclass(frozen=True, slots=True)

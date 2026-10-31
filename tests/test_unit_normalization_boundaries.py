@@ -32,6 +32,15 @@ from tests.usgs_modern_recordings import ModernReplay
         ("m", "m3/s"),
         ("K", "degC"),
         ("°C", "K"),
+        ("kg", "t"),
+        ("t", "kg"),
+        ("t", "m3/s"),
+        ("ton", "t"),
+        ("tons", "t"),
+        ("T", "t"),
+        ("g", "kg"),
+        ("t/d", "t"),
+        ("mg/l", "t"),
     ],
 )
 def test_external_fact_model_rejects_scale_offset_and_dimension_normalization_changes(source_unit, normalized_unit):
@@ -183,17 +192,23 @@ def test_public_recorded_conversion_rejects_internal_scale_change_under_every_po
         ("ft³/s", "ft3/s", "discharge", 0.028316846592),
         ("°C", "degC", "temperature", 1.0),
         ("publisher-Q-code", "l/s", "discharge", 0.001),
+        ("t", "t", "suspended_sediment_mass", 1.0),
+        ("kg", "kg", "suspended_sediment_mass", 0.001),
+        ("t", "t", "bedload_mass", 1.0),
+        ("kg", "kg", "bedload_mass", 0.001),
     ],
 )
 def test_established_spelling_aliases_and_documented_codes_roundtrip_native_store_and_convert_once(
     tmp_path, source_unit, normalized, quantity, factor
 ):
     base = _definition("known-unit")
+    expected_statistic = "sum" if quantity.endswith("_mass") else "mean"
     fact = PhysicalFacts(
         facts_id="facts",
         quantity=known(quantity, "source definition"),
         source_unit=known(source_unit, "publisher unit-code definition: explicit normalized meaning"),
         normalized_unit=normalized,
+        statistic=known(expected_statistic, "source definition"),
     )
     definition = base.model_copy(update={"facts": (fact,)})
     outcome, replacement = _success(definition.series_id, "source-answer", [12.0])
@@ -212,6 +227,24 @@ def test_established_spelling_aliases_and_documented_codes_roundtrip_native_stor
     )
     assert result.value["value"].item() == pytest.approx(12.0 * factor)
     assert result.value["source_unit"].item() == source_unit
+
+    from rivretrieve._internal.observations import ObservationProvenance, ObservationResult, Receipts
+
+    obs_result = ObservationResult(
+        data=result.value,
+        provenance=ObservationProvenance(source="synthetic", provider_id=ProviderId("fixture_live")),
+        receipts=Receipts(provider_id=ProviderId("fixture_live")),
+        source_series=read.manifest.series,
+        outcomes=read.manifest.outcomes,
+    )
+    restored = rr.from_bundle(rr.to_bundle(obs_result))
+    assert restored.data["value"].item() == pytest.approx(12.0 * factor)
+    assert restored.data["source_unit"].item() == source_unit
+    assert restored.data["quantity"].item() == quantity
+    assert restored.data["unit"].item() == result.value["unit"].item()
+    assert restored.source_series[0].facts[0].source_unit.value == source_unit
+    assert restored.source_series[0].facts[0].statistic.value == expected_statistic
+    assert rr.pick(restored, quantity=quantity, statistic=expected_statistic).data.height == 1
 
 
 def test_unknown_source_unit_and_absent_source_unit_remain_distinct_unsupported_facts():
@@ -258,3 +291,46 @@ def test_known_source_code_normalization_requires_nonempty_source_evidence_even_
     stripped = fact.model_copy(update={"source_unit": fact.source_unit.model_copy(update={"evidence": ()})})
     assert admission(stripped).status == "unsupported"
     assert "evidence" in admission(stripped).reason
+
+
+def test_mass_quantities_enforce_dimensional_compatibility_and_reject_unqualified_tons():
+    for quantity in ("suspended_sediment_mass", "bedload_mass"):
+        for wrong_unit in ("m3/s", "m"):
+            wrong_dim = PhysicalFacts(
+                facts_id=f"{quantity}-wrong-dim-{wrong_unit}",
+                quantity=known(quantity, "source definition"),
+                source_unit=known(wrong_unit, "publisher unit"),
+                normalized_unit=wrong_unit,
+            )
+            decision = admission(wrong_dim)
+            assert decision.status == "unsupported"
+            assert decision.reason is not None and "dimensionally incompatible" in decision.reason
+
+        for ambiguous in ("ton", "T"):
+            unnormalized = PhysicalFacts(
+                facts_id=f"{quantity}-ambiguous-{ambiguous}",
+                quantity=known(quantity, "source definition"),
+                source_unit=known(ambiguous, "publisher unit without metric-tonne qualification"),
+            )
+            assert admission(unnormalized).status == "unsupported"
+            copied = unnormalized.model_copy(update={"normalized_unit": "t"})
+            assert admission(copied).status == "unsupported"
+            assert "normaliz" in (admission(copied).reason or "")
+
+    discharge_in_tonnes = PhysicalFacts(
+        facts_id="discharge-tonnes",
+        quantity=known("discharge", "source definition"),
+        source_unit=known("t", "publisher unit"),
+        normalized_unit="t",
+    )
+    assert admission(discharge_in_tonnes).status == "unsupported"
+    assert "dimensionally incompatible" in (admission(discharge_in_tonnes).reason or "")
+
+    unestablished_quantity = PhysicalFacts(
+        facts_id="conductivity-known-unit",
+        quantity=known("electrical_conductivity", "source definition"),
+        source_unit=known("m", "publisher unit"),
+        normalized_unit="m",
+    )
+    assert admission(unestablished_quantity).status == "unsupported"
+    assert "target unit is not established" in (admission(unestablished_quantity).reason or "")

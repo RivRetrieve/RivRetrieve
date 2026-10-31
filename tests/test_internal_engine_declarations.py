@@ -37,10 +37,15 @@ def test_unit_enum_is_exactly_the_current_native_unit_vocabulary() -> None:
         ("L_S", "l/s"),
         ("MM", "mm"),
         ("DEG_C", "degC"),
+        ("T", "t"),
+        ("KG", "kg"),
     ]
     assert Unit("m3/s") is Unit.M3_S
-    with pytest.raises(ValueError):
-        Unit("kg/s")
+    assert Unit("t") is Unit.T
+    assert Unit("kg") is Unit.KG
+    for unsupported in ("kg/s", "ton", "T"):
+        with pytest.raises(ValueError):
+            Unit(unsupported)
 
 
 @pytest.mark.parametrize("raw", ["Europe/Oslo", "+05:30", "-06:00", "-00:00", "unknown"])

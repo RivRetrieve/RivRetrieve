@@ -57,7 +57,15 @@ def _series(rows: pl.DataFrame, config: ProviderConfig) -> tuple[SourceSeries, .
     for row in rows.unique(subset=["station_id", "product_id"]).iter_rows(named=True):
         product = config.products.get(ProductId(row["product_id"]), _product())
         unit = row["source_unit"]
-        quantity = "discharge" if unit in ("m3/s", "ft3/s", "l/s") else "temperature" if unit == "degC" else "stage"
+        quantity = (
+            "discharge"
+            if unit in ("m3/s", "ft3/s", "l/s")
+            else "temperature"
+            if unit == "degC"
+            else "suspended_sediment_mass"
+            if unit in ("t", "kg")
+            else "stage"
+        )
         daily = isinstance(product.semantics, Daily)
         facts = PhysicalFacts(
             facts_id=row["facts_id"],
@@ -223,9 +231,11 @@ def test_convert_rejects_invalid_zone_values_without_translation(zone: str) -> N
         (Unit.FT3_S, 2.0, 0.056633693184),
         (Unit.L_S, 2000.0, 2.0),
         (Unit.DEG_C, 2.0, 2.0),
+        (Unit.T, 2.0, 2.0),
+        (Unit.KG, 2500.0, 2.5),
     ],
 )
-def test_convert_converts_all_eight_units(unit: Unit, input_value: float, expected: float) -> None:
+def test_convert_converts_all_declared_units(unit: Unit, input_value: float, expected: float) -> None:
     from rivretrieve._internal.conversion import convert
 
     provider_config = _config({"product": _product(unit)})
@@ -254,6 +264,72 @@ def test_convert_converts_all_eight_units(unit: Unit, input_value: float, expect
     assert result.value["value"].item() == pytest.approx(expected)
 
 
+def test_convert_preserves_distinct_sediment_mass_quantities_under_shared_target_unit() -> None:
+    from rivretrieve._internal.catalogues.products import product_row
+    from rivretrieve._internal.conversion import convert
+
+    provider_config = _config({"suspended": _product(Unit.T), "bedload": _product(Unit.KG)})
+    native_rows = _rows(
+        [
+            {
+                "station_id": "201350",
+                "product_id": "suspended",
+                "time": datetime(2023, 10, 31, 0),
+                "value": 14.5,
+                "time_zone": "+01:00",
+            },
+            {
+                "station_id": "201350",
+                "product_id": "bedload",
+                "time": datetime(2023, 10, 31, 0),
+                "value": 3250.0,
+                "time_zone": "+01:00",
+            },
+        ],
+        units={"suspended": Unit.T, "bedload": Unit.KG},
+    )
+    series = tuple(
+        SourceSeries(
+            series_id=f"201350:{product_id}",
+            provider_id="test",
+            station_id="201350",
+            product_id=product_id,
+            identity=SourceIdentity(namespace=f"test/{product_id}", origin="response", evidence=("test payload",)),
+            facts=(
+                PhysicalFacts(
+                    facts_id=f"201350:{product_id}:facts",
+                    quantity=known(quantity, "test source definition"),
+                    source_unit=known(unit, "test response unit"),
+                    normalized_unit=unit,
+                    frequency=known("daily", "test source definition"),
+                    statistic=known("sum", "test source definition"),
+                    clipping_axis=ClippingAxis.CALENDAR_DATE,
+                    label_time="00:00",
+                ),
+            ),
+        )
+        for product_id, quantity, unit in (
+            ("suspended", "suspended_sediment_mass", "t"),
+            ("bedload", "bedload_mass", "kg"),
+        )
+    )
+    result = convert(
+        native_rows,
+        provider_config,
+        _window(datetime(2023, 10, 31), datetime(2023, 10, 31)),
+        series=series,
+    )
+    assert result.value.select("product_id", "quantity", "source_unit", "unit", "value").rows() == [
+        ("suspended", "suspended_sediment_mass", "t", "t", 14.5),
+        ("bedload", "bedload_mass", "kg", "t", 3.25),
+    ]
+    catalogue_rows = [product_row("test", item.product_id, None, item.facts[0]) for item in series]
+    assert [(row["observed_property"], row["statistic"], row["unit"]) for row in catalogue_rows] == [
+        ("suspended_sediment_mass", "sum", "t"),
+        ("bedload_mass", "sum", "t"),
+    ]
+
+
 def test_convert_preserves_null_measurements_for_every_unit() -> None:
     from rivretrieve._internal.conversion import convert
 
@@ -266,6 +342,8 @@ def test_convert_preserves_null_measurements_for_every_unit() -> None:
         "ft3-s": Unit.FT3_S,
         "l-s": Unit.L_S,
         "deg-c": Unit.DEG_C,
+        "t": Unit.T,
+        "kg": Unit.KG,
     }
     records = [
         {
@@ -290,8 +368,8 @@ def test_convert_preserves_null_measurements_for_every_unit() -> None:
         series=_series(native_rows, provider_config),
     )
 
-    assert result.value.height == 8
-    assert result.value["value"].null_count() == 8
+    assert result.value.height == len(product_units)
+    assert result.value["value"].null_count() == len(product_units)
 
 
 def test_convert_instant_window_is_closed_at_both_endpoints() -> None:

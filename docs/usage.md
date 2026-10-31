@@ -128,8 +128,8 @@ print(result.issues)
 
 ### Series inspection and result views
 
-`result.data` is a Polars table. Discharge uses cubic meters per second, stage metres and water
-temperature degrees Celsius. The original unit remains in `source_unit`.
+`result.data` is a Polars table. Discharge uses cubic metres per second, stage metres, water
+temperature degrees Celsius and sediment mass metric tonnes (`t`). The original unit remains in `source_unit`.
 Inspect the source facts and outcomes as well as the numeric values:
 
 ```python

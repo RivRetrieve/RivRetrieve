@@ -4,9 +4,9 @@ These library-wide values apply to `find` and `pick`, including result views. Ma
 
 | Filter | Supported values |
 | --- | --- |
-| `quantity` | `discharge`, `stage`, `temperature` |
+| `quantity` | `discharge`, `stage`, `temperature`, `suspended_sediment_mass`, `bedload_mass` |
 | `frequency` | `10min`, `hourly`, `daily`, `monthly`, `yearly` |
-| `statistic` | `mean`, `min`, `max`, `instantaneous` |
+| `statistic` | `mean`, `min`, `max`, `instantaneous`, `sum` |
 
 ## Frame schemas
 

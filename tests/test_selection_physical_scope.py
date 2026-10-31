@@ -299,12 +299,36 @@ def test_inspection_orders_descriptors_without_sorting_a_wide_materialized_frame
 @pytest.mark.parametrize(
     ("field", "value", "choices"),
     [
-        ("quantity", "water temperature", ("discharge", "stage", "temperature")),
+        (
+            "quantity",
+            "water temperature",
+            ("discharge", "stage", "temperature", "suspended_sediment_mass", "bedload_mass"),
+        ),
         ("frequency", "dayly", ("10min", "hourly", "daily", "monthly", "yearly")),
-        ("statistic", "average", ("mean", "min", "max", "instantaneous")),
-        ("quantity", "Discharge", ("discharge", "stage", "temperature")),
+        ("statistic", "average", ("mean", "min", "max", "instantaneous", "sum")),
+        (
+            "quantity",
+            "Discharge",
+            ("discharge", "stage", "temperature", "suspended_sediment_mass", "bedload_mass"),
+        ),
+        (
+            "quantity",
+            "suspended sediment",
+            ("discharge", "stage", "temperature", "suspended_sediment_mass", "bedload_mass"),
+        ),
+        (
+            "quantity",
+            "sediment",
+            ("discharge", "stage", "temperature", "suspended_sediment_mass", "bedload_mass"),
+        ),
+        (
+            "quantity",
+            "bedload",
+            ("discharge", "stage", "temperature", "suspended_sediment_mass", "bedload_mass"),
+        ),
         ("frequency", "annual", ("10min", "hourly", "daily", "monthly", "yearly")),
-        ("statistic", "unknown", ("mean", "min", "max", "instantaneous")),
+        ("statistic", "unknown", ("mean", "min", "max", "instantaneous", "sum")),
+        ("statistic", "total", ("mean", "min", "max", "instantaneous", "sum")),
     ],
 )
 def test_unsupported_physical_filters_fail_at_selection(field, value, choices) -> None:
@@ -374,14 +398,17 @@ def test_result_pick_rejects_unsupported_physical_filters(monkeypatch, tmp_path)
         assert repr(value) in str(error.value)
         assert repr(supported) in str(error.value)
     assert not rr.pick(result, frequency="10min", statistic="mean").data.is_empty()
+    assert rr.pick(result, quantity="suspended_sediment_mass").data.is_empty()
+    assert rr.pick(result, quantity="bedload_mass").data.is_empty()
+    assert rr.pick(result, statistic="sum").data.is_empty()
 
 
 @pytest.mark.parametrize(
     "field, values",
     [
-        ("quantity", ("discharge", "stage", "temperature")),
+        ("quantity", ("discharge", "stage", "temperature", "suspended_sediment_mass", "bedload_mass")),
         ("frequency", ("10min", "hourly", "daily", "monthly", "yearly")),
-        ("statistic", ("mean", "min", "max", "instantaneous")),
+        ("statistic", ("mean", "min", "max", "instantaneous", "sum")),
     ],
 )
 def test_supported_queries_are_library_wide(field, values) -> None:

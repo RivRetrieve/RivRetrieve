@@ -508,7 +508,7 @@ def series(value: _Selection | ObservationResult) -> pl.DataFrame:
           otherwise ``unsupported`` with ``admission_reason``.
         - Units: ``source_unit`` with ``source_unit_state`` and
           ``source_unit_evidence``, ``normalized_unit``, and ``unit``, the
-          harmonised unit of returned values (m3/s, m or degC). ``unit`` is null
+          harmonised unit of returned values (m3/s, m, degC or t). ``unit`` is null
           for unsupported series.
         - Physical facts: ``quantity``, ``frequency``, ``statistic``,
           ``temporal_support``, ``day_definition``, ``timestamp_anchor``,
@@ -900,12 +900,13 @@ def fetch(
     ObservationResult
         Observation rows in ``data`` together with ``source_series``,
         ``inventories``, ``outcomes``, ``provenance``, ``receipts`` and
-        ``issues``. Values are converted to m3/s for discharge, m for stage
-        and degC for water temperature, and ``source_unit`` keeps the published
-        unit. Timestamps stay on the source's wall clock with a per-row
-        ``time_zone``, which can be ``unknown``. Rows are clipped to the
-        requested window by calendar date or by source timestamp, as recorded
-        in each fact segment's ``clipping_axis``.
+        ``issues``. Values are converted to m3/s for discharge, m for stage,
+        degC for water temperature and t for river sediment mass
+        (``suspended_sediment_mass`` and ``bedload_mass``), and ``source_unit``
+        keeps the published unit. Timestamps stay on the source's wall clock
+        with a per-row ``time_zone``, which can be ``unknown``. Rows are clipped
+        to the requested window by calendar date or by source timestamp, as
+        recorded in each fact segment's ``clipping_axis``.
 
         A source failure for one station or access route becomes an issue and a
         ``failed`` outcome, and independent series still return their rows. Some

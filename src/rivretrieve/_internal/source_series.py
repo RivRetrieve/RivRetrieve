@@ -139,19 +139,28 @@ class PhysicalFacts(BaseModel):
 
 # Conversion factors are dimensional mappings, not source-series classifications.
 _UNIT_DIMENSIONS = {
-    "m3/s": ("discharge", 1.0),
-    "ft3/s": ("discharge", 0.028316846592),
-    "l/s": ("discharge", 0.001),
-    "m": ("stage", 1.0),
-    "cm": ("stage", 0.01),
-    "mm": ("stage", 0.001),
-    "ft": ("stage", 0.3048),
+    "m3/s": ("volume_flow", 1.0),
+    "ft3/s": ("volume_flow", 0.028316846592),
+    "l/s": ("volume_flow", 0.001),
+    "m": ("length", 1.0),
+    "cm": ("length", 0.01),
+    "mm": ("length", 0.001),
+    "ft": ("length", 0.3048),
     "degC": ("temperature", 1.0),
+    "t": ("mass", 1.0),
+    "kg": ("mass", 0.001),
 }
-_TARGET_UNITS = {"discharge": "m3/s", "stage": "m", "temperature": "degC"}
+_TARGET_UNITS = {
+    "discharge": ("volume_flow", "m3/s"),
+    "stage": ("length", "m"),
+    "temperature": ("temperature", "degC"),
+    "suspended_sediment_mass": ("mass", "t"),
+    "bedload_mass": ("mass", "t"),
+}
 
 # These are spelling equivalences, never physical conversions. Kelvin is named
 # only to distinguish its zero from Celsius; this does not add Kelvin retrieval.
+# Non-admitted mass, rate and concentration symbols remain distinct from t and kg.
 _UNIT_SPELLINGS = {unit: unit for unit in _UNIT_DIMENSIONS} | {
     "m³/s": "m3/s",
     "m^3/s": "m3/s",
@@ -166,6 +175,15 @@ _UNIT_SPELLINGS = {unit: unit for unit in _UNIT_DIMENSIONS} | {
     # Litres are a volume here, never an unqualified rate alias.
     "l": "l",
     "L": "l",
+    "ton": "ton",
+    "tons": "ton",
+    "T": "T",
+    "g": "g",
+    "mg": "mg",
+    "kg/s": "kg/s",
+    "t/d": "t/d",
+    "mg/l": "mg/l",
+    "mg/L": "mg/l",
 }
 
 
@@ -219,15 +237,21 @@ def admission(facts: PhysicalFacts) -> Admission:
     )
     if defect is not None:
         return Admission(status="unsupported", reason=defect)
+    target = _TARGET_UNITS.get(facts.quantity.value or "")
+    if target is None:
+        return Admission(
+            status="unsupported", reason=f"target unit is not established for quantity {facts.quantity.value!r}"
+        )
     conversion = _UNIT_DIMENSIONS.get(_UNIT_SPELLINGS.get(facts.normalized_unit or "", ""))
     if conversion is None:
         return Admission(status="unsupported", reason=f"conversion is not established for {facts.source_unit.value!r}")
-    quantity, factor = conversion
-    if quantity != facts.quantity.value:
+    dimension, factor = conversion
+    expected_dimension, target_unit = target
+    if dimension != expected_dimension:
         return Admission(
             status="unsupported", reason="source unit is dimensionally incompatible with physical quantity"
         )
-    return Admission(status="supported", target_unit=_TARGET_UNITS[quantity], factor=factor)
+    return Admission(status="supported", target_unit=target_unit, factor=factor)
 
 
 class SourceIdentity(BaseModel):

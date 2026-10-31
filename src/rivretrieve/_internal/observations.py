@@ -286,7 +286,7 @@ class ObservationResult(BaseModel):
         Observation rows with exactly the ten columns of the observation frame
         schema, even when empty. ``time`` is a naive source wall-clock label and
         ``time_zone`` is an IANA zone, a fixed offset such as ``+00:00``, or
-        ``unknown``. ``value`` is a float in ``unit`` (m3/s, m or degC) or null
+        ``unknown``. ``value`` is a float in ``unit`` (m3/s, m, degC or t) or null
         when the source gives no value for that time. A null value is still a
         row, unlike an absent row or a failed request. ``source_unit`` keeps the
         published unit. ``series_id`` and ``facts_id`` join each row to
