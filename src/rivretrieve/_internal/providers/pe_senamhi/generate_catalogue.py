@@ -2,10 +2,12 @@
 
 from collections.abc import Mapping
 from datetime import date
+from pathlib import Path
 from typing import cast
 
 import polars as pl
 
+from rivretrieve._internal.acquisition_provenance import RecordingReference, RetainedInputReceipt
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table
 from rivretrieve._internal.issues import FatalContractError
 
@@ -281,3 +283,116 @@ def describe_associations(associations: pl.DataFrame):
             )
         )
     return SourceDescriptions(provider_id="pe_senamhi", descriptions=tuple(descriptions))
+
+
+def read_original(evidence_root: Path, reference: RecordingReference, *, input_receipt: RetainedInputReceipt) -> bytes:
+    """Verify one explicitly selected publisher body before parsing it.
+
+    The private source verifier owns original receipt interpretation, including
+    final page URL checks. This boundary checks the selected member bytes and
+    declared recording identity; it does not discover files or make requests.
+    """
+    from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+
+    selected = {item.consumer_path: item for item in input_receipt.inputs}
+    member = selected.get(reference.repository_path)
+    if member is None:
+        raise FatalContractError("SENAMHI original is absent from selected retained inputs")
+    if member.sha256 != reference.sha256:
+        raise FatalContractError("SENAMHI original differs from its selected recording identity")
+    verify_retained_input_files(
+        input_receipt.model_copy(update={"inputs": (member,), "declaration_inputs": (), "support_inputs": ()}),
+        evidence_root,
+    )
+    return (evidence_root / reference.repository_path).read_bytes()
+
+
+def _read_selection(evidence_root: Path, selection_path: str, input_receipt: RetainedInputReceipt) -> dict:
+    import json
+
+    from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+
+    if selection_path not in {item.consumer_path for item in input_receipt.declaration_inputs}:
+        raise FatalContractError("SENAMHI selection requires a selected authored declaration")
+    verify_retained_input_files(input_receipt, evidence_root)
+    selection = json.loads((evidence_root / selection_path).read_bytes())
+    if not isinstance(selection, dict) or not isinstance(selection.get("captures"), list):
+        raise FatalContractError("SENAMHI selection requires explicit captures")
+    return selection
+
+
+def _selected_native(evidence_root: Path, selection: dict, input_receipt: RetainedInputReceipt) -> NativeTable:
+    import json
+
+    from rivretrieve._internal.providers.pe_senamhi.station_metadata import enrich_station_metadata
+
+    payloads = {}
+    registry_times = []
+    details = []
+    for capture in selection["captures"]:
+        kind = capture["kind"]
+        if kind not in {"registry_h", "registry_m", "registry_actives", "phisis_detail"}:
+            continue
+        reference = RecordingReference.model_validate(capture["recording"])
+        if reference.repository_path != capture["body"]:
+            raise FatalContractError("SENAMHI selected body disagrees with recording identity")
+        payload = json.loads(read_original(evidence_root, reference, input_receipt=input_receipt))
+        if not isinstance(payload, dict):
+            raise FatalContractError("SENAMHI source envelope requires an object")
+        if kind == "phisis_detail":
+            details.append(payload)
+        else:
+            if kind in payloads:
+                raise FatalContractError("SENAMHI selection requires exactly one snapshot per registry")
+            payloads[kind] = payload
+            registry_times.append(reference.retrieved_at)
+    if set(payloads) != {"registry_h", "registry_m", "registry_actives"}:
+        raise FatalContractError("SENAMHI selection requires all three registry snapshots")
+    native = station_native_table(
+        payloads["registry_h"],
+        payloads["registry_m"],
+        payloads["registry_actives"],
+        retrieved_at=RetrievedAt(max(registry_times)),
+    )
+    return enrich_station_metadata(native, details)
+
+
+def read_native_sources(
+    evidence_root: Path, *, selection_path: str, input_receipt: RetainedInputReceipt
+) -> NativeTable:
+    """Derive native station rows from verified selected originals, without a native input.
+
+    The UTC stamp records completion of the selected registry captures, not a
+    source update date. Only exact primary-code PHISIS detail joins enrich rows.
+    """
+    selection = _read_selection(evidence_root, selection_path, input_receipt)
+    return _selected_native(evidence_root, selection, input_receipt)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Compose a derived native candidate outside source and retained-input roots."""
+    import argparse
+
+    from rivretrieve._internal.catalogues.native import write_native_table
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument("--selection", required=True)
+    parser.add_argument("--input-receipt", type=Path, required=True)
+    parser.add_argument("--native-only", action="store_true", required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args(argv)
+    output = args.out.resolve()
+    evidence_root = args.evidence_root.resolve(strict=True)
+    if output.exists() or output.is_relative_to(evidence_root) or evidence_root.is_relative_to(output):
+        raise FatalContractError("SENAMHI native output must be a new path separate from retained inputs")
+    if any((parent / ".git").exists() for parent in (output, *output.parents)):
+        raise FatalContractError("SENAMHI native output must stay outside source checkouts")
+    receipt = RetainedInputReceipt.model_validate_json(args.input_receipt.read_bytes())
+    native = read_native_sources(evidence_root, selection_path=args.selection, input_receipt=receipt)
+    write_native_table(native, output / "native.parquet")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

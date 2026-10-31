@@ -175,3 +175,160 @@ def test_conflicting_registry_identity_and_mismatched_response_are_fatal():
             variable="LEVEL",
             station_ids={"A", "B"},
         )
+
+
+def test_original_reader_requires_selected_bytes_before_json_parsing(tmp_path):
+    import hashlib
+
+    import pytest
+
+    from rivretrieve._internal.acquisition_provenance import (
+        RecordingReference,
+        RetainedInputReceipt,
+        RetainedInputReference,
+    )
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.providers.pe_senamhi.generate_catalogue import read_original
+
+    body = b'{"data": {}}'
+    path = tmp_path / "stations.body"
+    path.write_bytes(body)
+    digest = hashlib.sha256(body).hexdigest()
+    reference = RecordingReference(
+        recording_id="station-snapshot",
+        repository_path="stations.body",
+        source_url="https://example.test/synthetic",
+        retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+        media_type="application/json",
+        sha256=digest,
+    )
+    receipt = RetainedInputReceipt(
+        schema_version=3,
+        code_revision="a" * 40,
+        declaration_revision="a" * 40,
+        archive_code_revision="b" * 40,
+        inputs=(
+            RetainedInputReference(
+                consumer_path="stations.body",
+                archive_repository="https://github.com/RivRetrieve/verification-evidence",
+                archive_revision="b" * 40,
+                collection_id="synthetic",
+                manifest_sha256="c" * 64,
+                artifact_id="stations",
+                sha256=digest,
+                byte_size=len(body),
+                role="publisher_original",
+            ),
+        ),
+    )
+    assert read_original(tmp_path, reference, input_receipt=receipt) == body
+    path.write_bytes(b"changed")
+    with pytest.raises(FatalContractError, match="archive identity"):
+        read_original(tmp_path, reference, input_receipt=receipt)
+    with pytest.raises(FatalContractError, match="selected"):
+        read_original(tmp_path, reference, input_receipt=receipt.model_copy(update={"inputs": ()}))
+
+
+def test_selected_native_requires_verified_declaration_and_originals(tmp_path):
+    import hashlib
+    import json
+
+    import pytest
+
+    from rivretrieve._internal.acquisition_provenance import RetainedInputReceipt
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.providers.pe_senamhi.generate_catalogue import read_native_sources
+
+    captures = []
+    inputs = []
+    for kind, payload in (
+        ("registry_h", envelope([station("A")])),
+        ("registry_m", envelope([])),
+        ("registry_actives", envelope([])),
+        ("phisis_detail", envelope({"code": "A", "waterBody": "Synthetic river"})),
+    ):
+        name = kind + ".body"
+        content = json.dumps(payload).encode()
+        (tmp_path / name).write_bytes(content)
+        digest = hashlib.sha256(content).hexdigest()
+        inputs.append(
+            {
+                "consumer_path": name,
+                "archive_repository": "https://github.com/RivRetrieve/verification-evidence",
+                "archive_revision": "b" * 40,
+                "collection_id": "synthetic",
+                "manifest_sha256": "c" * 64,
+                "artifact_id": kind,
+                "sha256": digest,
+                "byte_size": len(content),
+                "role": "publisher_original",
+            }
+        )
+        captures.append(
+            {
+                "kind": kind,
+                "body": name,
+                "recording": {
+                    "recording_id": kind,
+                    "repository_path": name,
+                    "source_url": "https://example.test/synthetic",
+                    "retrieved_at": "2026-01-01T00:00:00Z",
+                    "media_type": "application/json",
+                    "sha256": digest,
+                },
+            }
+        )
+    declaration = json.dumps({"captures": captures}).encode()
+    (tmp_path / "selection.json").write_bytes(declaration)
+    receipt = RetainedInputReceipt.model_validate(
+        {
+            "schema_version": 3,
+            "code_revision": "a" * 40,
+            "declaration_revision": "a" * 40,
+            "archive_code_revision": "b" * 40,
+            "inputs": inputs,
+            "declaration_inputs": [
+                {
+                    "consumer_path": "selection.json",
+                    "declaration": {
+                        "repository": "https://github.com/RivRetrieve/verification-evidence",
+                        "revision": "b" * 40,
+                        "repository_path": "declarations/pe_senamhi/catalogue.json",
+                    },
+                    "sha256": hashlib.sha256(declaration).hexdigest(),
+                    "byte_size": len(declaration),
+                }
+            ],
+        }
+    )
+    native = read_native_sources(tmp_path, selection_path="selection.json", input_receipt=receipt)
+    assert native.data.select("stationId", "waterBody").rows() == [("A", "Synthetic river")]
+    from rivretrieve._internal.providers.pe_senamhi.generate_catalogue import main
+
+    receipt_path = tmp_path / "input-receipt.json"
+    receipt_path.write_text(receipt.model_dump_json())
+    output = tmp_path.parent / (tmp_path.name + "-native")
+    args = [
+        "--evidence-root",
+        str(tmp_path),
+        "--selection",
+        "selection.json",
+        "--input-receipt",
+        str(receipt_path),
+        "--native-only",
+        "--out",
+        str(output),
+    ]
+    assert main(args) == 0
+    assert pl.read_parquet(output / "native.parquet").equals(native.data)
+    with pytest.raises(FatalContractError, match="new path"):
+        main(args)
+    with pytest.raises(FatalContractError, match="authored declaration"):
+        read_native_sources(
+            tmp_path,
+            selection_path="selection.json",
+            input_receipt=receipt.model_copy(update={"declaration_inputs": ()}),
+        )
+    (tmp_path / "registry_h.body").write_bytes(b"not JSON")
+    with pytest.raises(FatalContractError, match="archive identity"):
+        read_native_sources(tmp_path, selection_path="selection.json", input_receipt=receipt)
