@@ -1321,3 +1321,45 @@ def test_supplemental_station_rejects_unmatched_identity_collision_and_missing_g
         generator.supplement_native_stations(
             original, [expanded], modern_features=features, retrieved_at=ATTESTED_RETRIEVED_AT
         )
+
+
+def test_modern_geometry_projection_uses_published_axis_order_without_changing_legacy_fields():
+    native = _native_table([{"site_no": "missing", "dec_lat_va": "", "dec_long_va": "", "datum": ""}])
+    before = native.data.clone()
+    feature = {
+        "type": "Feature",
+        "id": "USGS-missing",
+        "properties": {"agency_code": "USGS"},
+        "geometry": {"type": "Point", "coordinates": [-87.25, 43.75]},
+    }
+    stations = generator.build_modern_geometry_stations(native, [feature], retrieved_at=ATTESTED_RETRIEVED_AT)
+    assert stations.select("station_id", "latitude", "longitude", "crs").row(0) == (
+        "missing",
+        43.75,
+        -87.25,
+        "EPSG:4326",
+    )
+    pl_testing.assert_frame_equal(native.data, before)
+
+
+@pytest.mark.parametrize("mutation", ["identity", "agency", "absent", "nonfinite", "existing"])
+def test_modern_geometry_projection_refuses_unproven_or_replacement_coordinates(mutation):
+    native = _native_table([{"site_no": "missing", "dec_lat_va": "", "dec_long_va": "", "datum": ""}])
+    feature = {
+        "type": "Feature",
+        "id": "USGS-missing",
+        "properties": {"agency_code": "USGS"},
+        "geometry": {"type": "Point", "coordinates": [-87.25, 43.75]},
+    }
+    if mutation == "identity":
+        feature["id"] = "USGS-other"
+    elif mutation == "agency":
+        feature["properties"]["agency_code"] = "OTHER"
+    elif mutation == "absent":
+        feature["geometry"] = None
+    elif mutation == "nonfinite":
+        feature["geometry"]["coordinates"][0] = float("nan")
+    else:
+        native = _native_table([{"site_no": "missing"}])
+    with pytest.raises(FatalContractError):
+        generator.build_modern_geometry_stations(native, [feature], retrieved_at=ATTESTED_RETRIEVED_AT)
