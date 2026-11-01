@@ -1335,3 +1335,89 @@ def test_source_absent_coordinates_remain_selectable_catalogue_stations():
     ]
     pl_testing.assert_frame_equal(built.source_native, native.data)
     assert built.station_products.height == 12
+
+
+@pytest.mark.parametrize("missing_timestamp", [False, True])
+def test_native_refresh_cli_composes_only_explicitly_selected_supplemental_locations(
+    tmp_path, monkeypatch, missing_timestamp
+):
+    original = _native_table()
+    monkeypatch.setattr(generator, "_US_STATE_CODES", ["WI"])
+    national = {name: original.data.row(0, named=True)[name] for name in EXPANDED_HEADER}
+    (tmp_path / "WI_expanded.rdb").write_text(_rdb_text(EXPANDED_HEADER, EXPANDED_FORMAT, [national]))
+    retrievals = tmp_path / "retrievals.json"
+    retrievals.write_text(
+        json.dumps({"WI_expanded.rdb": "2026-08-02T01:14:11Z", "supplement.rdb": "2026-10-31T12:00:00Z"})
+    )
+    monkeypatch.setattr(
+        generator,
+        "refresh_native_table_from_rdb_directory",
+        lambda *args, **kwargs: generator.WithIssues(value=original, issues=()),
+    )
+    expanded = dict.fromkeys(EXPANDED_HEADER, "")
+    expanded.update(agency_cd="USGS", site_no="new", dec_lat_va="43", dec_long_va="-87", dec_coord_datum_cd="NAD83")
+    outside = {**expanded, "site_no": "outside"}
+    source = tmp_path / "supplement.rdb"
+    source.write_text(_rdb_text(EXPANDED_HEADER, EXPANDED_FORMAT, [expanded, outside]))
+    selection = tmp_path / "selection.json"
+    selection.write_text(json.dumps(["USGS-new"]))
+    monkeypatch.setattr(
+        generator,
+        "read_modern_metadata",
+        lambda path: (
+            [
+                {
+                    "monitoring_location_id": "USGS-new",
+                    "parameter_code": "00060",
+                    "computation_period_identifier": "Daily",
+                    "statistic_id": "00003",
+                }
+            ],
+            [],
+        ),
+    )
+    output = tmp_path / "native.parquet"
+    args = [
+        "--rdb-dir",
+        str(tmp_path),
+        "--native-out",
+        str(output),
+        "--retrieved-at",
+        "2026-08-02T01:14:11Z",
+        "--supplemental-expanded",
+        str(source),
+        "--selected-locations",
+        str(selection),
+        "--input-retrievals",
+        str(retrievals),
+        "--modern-metadata",
+        str(tmp_path),
+    ]
+    if missing_timestamp:
+        retrievals.write_text(json.dumps({"supplement.rdb": "2026-10-31T12:00:00Z"}))
+        with pytest.raises(FatalContractError, match="every supplied expanded input"):
+            generator.main(args)
+        assert not output.exists()
+        return
+    assert generator.main(args) == 0
+    result = read_native_table(output).data
+    assert result["site_no"].to_list() == ["new", "station-a"]
+    assert result.filter(pl.col("site_no") == "new")["retrieved_at"].item() == datetime(2026, 10, 31, 12, tzinfo=UTC)
+    pl_testing.assert_frame_equal(result.filter(pl.col("site_no") == "station-a"), original.data)
+
+
+def test_native_refresh_cli_refuses_incomplete_supplemental_inputs(tmp_path):
+    with pytest.raises(SystemExit):
+        generator.main(
+            [
+                "--rdb-dir",
+                str(tmp_path),
+                "--native-out",
+                str(tmp_path / "native.parquet"),
+                "--retrieved-at",
+                "2026-10-31T12:00:00Z",
+                "--selected-locations",
+                str(tmp_path / "selection.json"),
+            ]
+        )
+    assert not (tmp_path / "native.parquet").exists()

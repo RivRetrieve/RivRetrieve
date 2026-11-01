@@ -1178,7 +1178,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--native-out", type=Path, help="Output path for an attested native Parquet table.")
     parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
     parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
+    parser.add_argument(
+        "--supplemental-expanded", type=Path, nargs="+", help="Verified supplemental expanded RDB files."
+    )
+    parser.add_argument(
+        "--selected-locations", type=Path, help="Explicit agency-qualified supplemental location selection JSON."
+    )
+    parser.add_argument(
+        "--input-retrievals", type=Path, help="Expanded input filename to actual source retrieval UTC instant JSON."
+    )
+
     args = parser.parse_args(argv)
+
+    supplemental_options = (args.supplemental_expanded, args.selected_locations, args.input_retrievals)
+    if any(value is not None for value in supplemental_options) and (
+        any(value is None for value in supplemental_options) or args.rdb_dir is None or args.modern_metadata is None
+    ):
+        parser.error("supplemental inputs require --rdb-dir, --modern-metadata and all supplemental options")
 
     if args.native is not None:
         if args.out is None:
@@ -1220,8 +1236,55 @@ def main(argv: Sequence[str] | None = None) -> int:
         outcome = refresh_native_table_from_rdb_directory(args.rdb_dir, retrieved_at=args.retrieved_at)
     else:
         outcome = refresh_native_table_from_live(retrieved_at=args.retrieved_at)
-    write_native_table(outcome.value, args.native_out)
-    print(f"USGS native table canonical SHA-256: {native_table_content_sha256(outcome.value)}")
+    native = outcome.value
+    if args.supplemental_expanded is not None:
+        input_retrievals = json.loads(args.input_retrievals.read_text())
+        expected_files = {f"{state}_expanded.rdb" for state in _US_STATE_CODES} | {
+            path.name for path in args.supplemental_expanded
+        }
+        if not isinstance(input_retrievals, dict) or set(input_retrievals) != expected_files:
+            raise FatalContractError("Retrieval mapping must identify every supplied expanded input exactly")
+        input_retrievals = {name: _parse_retrieved_at(value) for name, value in input_retrievals.items()}
+        station_retrievals = {}
+        for state in _US_STATE_CODES:
+            name = f"{state}_expanded.rdb"
+            for row in parse_expanded_rdb((args.rdb_dir / name).read_text()):
+                station_retrievals[row["site_no"]] = input_retrievals[name].value
+        if set(station_retrievals) != set(native.data["site_no"].to_list()):
+            raise FatalContractError("National station retrieval mapping does not match native identities")
+        native = NativeTable(
+            native.data.with_columns(pl.col("site_no").replace_strict(station_retrievals).alias("retrieved_at"))
+        )
+        selection = json.loads(args.selected_locations.read_text())
+        if (
+            not isinstance(selection, list)
+            or any(not isinstance(item, str) or not item for item in selection)
+            or len(selection) != len(set(selection))
+        ):
+            raise FatalContractError("Supplemental selection must contain distinct agency-qualified location IDs")
+        selected = set(selection)
+        rows = []
+        found = set()
+        for path in args.supplemental_expanded:
+            for row in parse_expanded_rdb(path.read_text()):
+                location = f"{row['agency_cd']}-{row['site_no']}"
+                if location in selected:
+                    if location in found:
+                        raise FatalContractError("Duplicate selected supplemental location")
+                    rows.append((row, input_retrievals[path.name]))
+                    found.add(location)
+        if found != selected:
+            raise FatalContractError("Selected supplemental locations are missing from supplied inputs")
+        features, _ = read_modern_metadata(args.modern_metadata)
+        for retrieved_at in set(instant for _, instant in rows):
+            native = supplement_native_stations(
+                native,
+                [row for row, instant in rows if instant == retrieved_at],
+                modern_features=features,
+                retrieved_at=retrieved_at,
+            )
+    write_native_table(native, args.native_out)
+    print(f"USGS native table canonical SHA-256: {native_table_content_sha256(native)}")
     return 0
 
 
