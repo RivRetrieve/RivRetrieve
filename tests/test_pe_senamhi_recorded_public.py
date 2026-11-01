@@ -227,7 +227,7 @@ class PartitionReplay:
             "phisis_hourly_level_above_sea_level",
             "m.s.n.m",
             datetime(2024, 8, 31, 6),
-            marks=pytest.mark.recorded("maintenance/observations/pe_senamhi/integration-supplement"),
+            marks=pytest.mark.recorded(_SCOPE, "maintenance/observations/pe_senamhi/integration-supplement"),
         ),
     ],
 )
