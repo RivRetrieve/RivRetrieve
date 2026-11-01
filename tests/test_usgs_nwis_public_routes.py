@@ -171,19 +171,19 @@ def test_authored_non_date_daily_series_is_unsupported_with_peer_preserved(monke
 
 
 @pytest.mark.parametrize(
-    "station,variant,event,start,end",
+    "station,variant,filename,start,end",
     [
         (
             "435444087462300",
             "03384f9dd532449689539f674a9174a7",
-            "observation-witnesses-2026-10-31-01",
+            "witness-0000",
             "2006-10-31",
             "2006-11-02",
         ),
         (
             "0167889257",
             "5c93439c924e408d9ca06c2100bc67f3",
-            "observation-followup-2026-10-31-01",
+            "witness-0001",
             "2015-07-16",
             "2015-07-18",
         ),
@@ -191,7 +191,7 @@ def test_authored_non_date_daily_series_is_unsupported_with_peer_preserved(monke
 )
 @pytest.mark.recorded("tests/test_data/usgs_daily_station_access")
 def test_new_daily_stations_preserve_original_values_receipts_and_reuse(
-    monkeypatch, tmp_path, retained_evidence_root, station, variant, event, start, end
+    monkeypatch, tmp_path, retained_evidence_root, station, variant, filename, start, end
 ):
     import gzip
     import hashlib
@@ -199,9 +199,9 @@ def test_new_daily_stations_preserve_original_values_receipts_and_reuse(
 
     from rivretrieve._internal.transport import TransportResponse
 
-    root = retained_evidence_root / "tests/test_data/usgs_daily_station_access" / event
-    content = gzip.decompress((root / "witness-0000.json.gz").read_bytes())
-    receipt = json.loads((root / "witness-0000.receipt.json").read_text())
+    root = retained_evidence_root / "tests/test_data/usgs_daily_station_access/public-route-witnesses-2026-11-01-01"
+    content = gzip.decompress((root / f"{filename}.json.gz").read_bytes())
+    receipt = json.loads((root / f"{filename}.receipt.json").read_text())
     assert hashlib.sha256(content).hexdigest() == receipt["sha256"]
     assert len(content) == receipt["bytes"]
     calls = []
