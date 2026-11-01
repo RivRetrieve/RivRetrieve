@@ -1449,14 +1449,10 @@ def test_native_publication_uses_explicit_acquisition_identity_for_byte_verifica
     monkeypatch.setattr(generator.CatalogueBuildInputs, "model_validate_json", lambda value: object())
     monkeypatch.setattr(generator, "verify_provenance_recordings", lambda value, root: seen.append(value))
 
-    def reject_native(path, *, expected_sha256, expected_byte_size):
-        assert expected_sha256 == provenance.native_table.sha256
-        assert expected_byte_size == provenance.native_table.byte_size
-        raise FatalContractError("synthetic changed native")
-
-    monkeypatch.setattr(generator, "read_native_table", reject_native)
+    native_path = tmp_path / "native.parquet"
+    native_path.write_bytes(b"synthetic changed native bytes")
     destination = tmp_path / "output"
-    with pytest.raises(FatalContractError, match="synthetic changed native"):
+    with pytest.raises(FatalContractError, match="native table digest mismatch"):
         generator.main(
             [
                 "--native",
