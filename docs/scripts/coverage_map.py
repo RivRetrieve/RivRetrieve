@@ -38,6 +38,7 @@ PROVIDER_COUNTRY = {
     "jp_mlit": "JPN",
     "lt_lhmt": "LTU",
     "no_nve": "NOR",
+    "pe_senamhi": "PER",
     "pl_imgw": "POL",
     "th_thaiwater": "THA",
     "usgs_nwis": "USA",
@@ -73,7 +74,6 @@ RESEARCHED_COUNTRY = {
     "ISR": "Israel",
     "MEX": "Mexico",
     "NZL": "New Zealand",
-    "PER": "Peru",
 }
 PLANNED_COUNTRY |= RESEARCHED_COUNTRY
 ROBINSON = "ESRI:54030"

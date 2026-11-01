@@ -152,7 +152,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `jp_mlit` | live | none | 1023 | 0 | 4092 | 0 |
 | `lt_lhmt` | live | none | 97 | 0 | 194 | 0 |
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
-| `pe_senamhi` | catalogue-only | none | 771 | 1170 | 10395 | 0 |
+| `pe_senamhi` | live | none | 771 | 1170 | 10395 | 0 |
 | `pl_imgw` | bulk store | none | 1301 | 0 | 3903 | 0 |
 | `th_thaiwater` | live | none | 825 | 1096 | 554 | 0 |
 | `usgs_nwis` | live | none | 26258 | 58421 | 0 | 99127 |
