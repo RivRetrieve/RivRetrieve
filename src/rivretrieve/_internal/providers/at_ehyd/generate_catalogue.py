@@ -159,7 +159,7 @@ def station_native_table(
     Authoritative CRS84 coordinates from ``i000501:messstellen_owf`` take precedence
     for ``owf`` gauges; ``i000501:pegel_aktuell`` supplies coordinates for telemetry-only
     river gauges absent from ``owf``. Both source coordinate pairs are retained
-    separately, with nulls where a station is absent from an endpoint. Station names
+    separately, with nulls where a station is absent from an endpoint. Telemetry station names
     and water-body names remain sourced from eHYD. Standing-water lakes (gauges
     without discharge carrying ``Seefläche``, ``(Seepegel)``, or impounded lake bodies) are excluded.
     Decommissioned ``owf`` river gauges remain in scope.
