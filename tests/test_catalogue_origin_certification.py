@@ -977,6 +977,8 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
                 "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
                 "research/usgs-station-inventory/capture-2026-10-31-02",
                 "maintenance/catalogue/usgs_nwis/selected-acquisitions.json",
+                "maintenance/catalogue/usgs_nwis/retained-series.json",
+                "research/usgs-modern-coverage",
                 "tests/test_data/usgs_nwis_historical/native.parquet",
                 "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
                 "tests/test_data/usgs_nwis_terms_citation-1.html",
@@ -1142,13 +1144,22 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         arguments.extend(("--workbook-access-ledger", str(ledger), "--series-recording", str(series_recording)))
     elif adapter.provider_id == "usgs_nwis":
         metadata = retained_evidence_root / "research/usgs-station-inventory/capture-2026-10-31-02"
-        source_inputs_before = {path: path.read_bytes() for path in metadata.glob("metadata-*") if path.is_file()}
+        source_inputs_before = {
+            path: path.read_bytes()
+            for directory in (metadata, retained_evidence_root / "research/usgs-modern-coverage")
+            for path in directory.glob("metadata-*")
+            if path.is_file()
+        }
         selected_provenance = product_root / "usgs_nwis.acquisition-provenance.json"
         selected_provenance.write_text(provenance.model_dump_json())
         arguments.extend(
             (
                 "--modern-metadata",
                 str(metadata),
+                "--retained-metadata",
+                str(retained_evidence_root / "research/usgs-modern-coverage"),
+                "--retained-series",
+                str(retained_evidence_root / "maintenance/catalogue/usgs_nwis/retained-series.json"),
                 "--evidence-root",
                 str(retained_evidence_root),
                 "--acquisition-provenance",

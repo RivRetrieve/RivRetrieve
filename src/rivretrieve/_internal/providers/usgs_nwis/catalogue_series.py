@@ -149,3 +149,37 @@ def modern_source_descriptions(
         provider_id="usgs_nwis",
         descriptions=tuple(sorted(result.values(), key=lambda item: (item.station_id, item.product_id, item.variant))),
     )
+
+
+def retain_source_descriptions(
+    current: SourceDescriptions,
+    historical: SourceDescriptions,
+    published_ids: tuple[str, ...],
+    monitoring_locations: Mapping[str, str],
+) -> SourceDescriptions:
+    """Retain only explicitly selected historical series absent from current metadata.
+
+    The complete historical descriptors stay unchanged, including physical facts
+    and identity evidence. Publication records the selected historical acquisition
+    separately in the catalogue provenance.
+    """
+    if len(set(published_ids)) != len(published_ids):
+        raise ValueError("Historical series selection contains duplicate published IDs")
+    current_ids = {item.identity.published_id for item in current.descriptions}
+    if current_ids.intersection(published_ids):
+        raise ValueError("Historical series selection overlaps current metadata")
+    selected = [item for item in historical.descriptions if item.identity.published_id in published_ids]
+    if len(selected) != len(published_ids) or {item.identity.published_id for item in selected} != set(published_ids):
+        raise ValueError("Historical series selection does not resolve exactly")
+    if any(item.station_id not in monitoring_locations for item in selected):
+        raise ValueError("Historical series station is absent from selected native inventory")
+    return current.model_copy(
+        update={
+            "descriptions": tuple(
+                sorted(
+                    (*current.descriptions, *selected),
+                    key=lambda item: (item.station_id, item.product_id, item.variant),
+                )
+            )
+        }
+    )

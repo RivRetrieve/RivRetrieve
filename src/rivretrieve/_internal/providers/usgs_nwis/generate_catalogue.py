@@ -304,6 +304,8 @@ class GeneratedUsgsNwisCatalogue:
     station_products: StationProductCatalog
     source_native: pl.DataFrame
     modern_metadata: Path | None = None
+    retained_metadata: Path | None = None
+    retained_series_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -834,17 +836,44 @@ def monitoring_locations(native_table: NativeTable) -> dict[str, str]:
     }
 
 
+def selected_source_descriptions(
+    native_table: NativeTable,
+    metadata_directory: Path,
+    retained_metadata: Path | None = None,
+    retained_series_ids: tuple[str, ...] = (),
+):
+    """Read current metadata and any explicitly selected historical series."""
+    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import (
+        modern_source_descriptions,
+        retain_source_descriptions,
+    )
+
+    features, receipts = read_modern_metadata(metadata_directory)
+    locations = monitoring_locations(native_table)
+    descriptions = modern_source_descriptions(features, locations)
+    if (retained_metadata is None) != (not retained_series_ids):
+        raise ValueError("Historical series require both metadata and explicit published IDs")
+    if retained_metadata is not None:
+        historical, _ = read_modern_metadata(retained_metadata)
+        descriptions = retain_source_descriptions(
+            descriptions, modern_source_descriptions(historical, locations), retained_series_ids, locations
+        )
+    return descriptions, receipts
+
+
 def build_modern_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
     metadata_directory: Path,
+    *,
+    retained_metadata: Path | None = None,
+    retained_series_ids: tuple[str, ...] = (),
 ) -> GeneratedUsgsNwisCatalogue:
-    """Build current availability from modern metadata within the legacy station scope."""
-    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
-
+    """Build availability from current and explicitly retained historical metadata."""
     legacy = build_catalogue(native_table, origins)
-    features, receipts = read_modern_metadata(metadata_directory)
-    descriptions = modern_source_descriptions(features, monitoring_locations(native_table))
+    descriptions, receipts = selected_source_descriptions(
+        native_table, metadata_directory, retained_metadata, retained_series_ids
+    )
     available = {(item.station_id, item.product_id) for item in descriptions.descriptions}
     vintage = max(datetime.fromisoformat(item["retrieved_at"]) for item in receipts).date()
     rows = []
@@ -869,7 +898,14 @@ def build_modern_catalogue(
         "bulk_observations": "true: modern daily or continuous requests per station-product; partial failures retained",
     }
     return GeneratedUsgsNwisCatalogue(
-        provider_info, legacy.products, legacy.stations, station_products, native_table.data, metadata_directory
+        provider_info,
+        legacy.products,
+        legacy.stations,
+        station_products,
+        native_table.data,
+        metadata_directory,
+        retained_metadata,
+        retained_series_ids,
     )
 
 
@@ -1078,6 +1114,13 @@ def write_catalogue(
     if acquisition_provenance is None:
         raise FatalContractError("Catalogue publication requires explicit acquisition_provenance")
 
+    if catalogue.retained_series_ids and not any(
+        "source.series.retained_historical_metadata" in binding.facts
+        and binding.acquisition_id is not None
+        and binding.transformation is None
+        for binding in acquisition_provenance.fact_bindings
+    ):
+        raise FatalContractError("Historical series require explicit historical acquisition support")
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     with (output_path / "provider.json").open("w", encoding="utf-8") as file:
@@ -1086,12 +1129,14 @@ def write_catalogue(
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
-    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
-
     files = {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES}
-    features, receipts = read_modern_metadata(catalogue.modern_metadata)
     locations = monitoring_locations(NativeTable(catalogue.source_native))
-    descriptions = modern_source_descriptions(features, locations)
+    descriptions, _ = selected_source_descriptions(
+        NativeTable(catalogue.source_native),
+        catalogue.modern_metadata,
+        catalogue.retained_metadata,
+        catalogue.retained_series_ids,
+    )
     provenance = acquisition_provenance
     from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
 
@@ -1226,7 +1271,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--retained-locations", type=Path, help="Exact missing agency-qualified historical station IDs JSON."
     )
 
+    parser.add_argument("--retained-metadata", type=Path, help="Verified historical complete metadata directory.")
+    parser.add_argument("--retained-series", type=Path, help="Explicit historical published series IDs JSON.")
     args = parser.parse_args(argv)
+    if (args.retained_metadata is None) != (args.retained_series is None) or (
+        args.retained_metadata is not None and args.native is None
+    ):
+        parser.error("historical series require --native, --retained-metadata and --retained-series")
 
     retained_options = (args.retained_native, args.retained_native_identity, args.retained_locations)
     if any(value is not None for value in retained_options) and (
@@ -1267,7 +1318,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_sha256=provenance.native_table.sha256,
             expected_byte_size=provenance.native_table.byte_size,
         )
-        catalogue = build_modern_catalogue(native_table, STATION_CATALOGUE_ORIGINS, args.modern_metadata)
+        retained_ids = ()
+        if args.retained_series is not None:
+            selection = json.loads(args.retained_series.read_text())
+            if (
+                not isinstance(selection, list)
+                or not selection
+                or any(not isinstance(item, str) or not item for item in selection)
+            ):
+                raise FatalContractError("Historical series selection requires nonempty published IDs")
+            retained_ids = tuple(selection)
+        catalogue = build_modern_catalogue(
+            native_table,
+            STATION_CATALOGUE_ORIGINS,
+            args.modern_metadata,
+            retained_metadata=args.retained_metadata,
+            retained_series_ids=retained_ids,
+        )
         write_catalogue(
             catalogue,
             args.out,

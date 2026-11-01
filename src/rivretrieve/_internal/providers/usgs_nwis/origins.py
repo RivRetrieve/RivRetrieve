@@ -574,6 +574,8 @@ NATIVE_TABLE_ACQUISITION_IDS = (
 CATALOGUE_BUILD_DECLARATIONS = (
     ("maintenance/catalogue/station_metadata/review.json", None),
     ("maintenance/catalogue/usgs_nwis/selected-acquisitions.json", None),
+    ("maintenance/catalogue/usgs_nwis/retained-series.json", None),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "retain_source_descriptions"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "selected_native_provenance"),

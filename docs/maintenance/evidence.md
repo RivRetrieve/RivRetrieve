@@ -204,3 +204,12 @@ callers of `write_catalogue` pass the same graph as `acquisition_provenance`.
 The publisher verifies its recording references and native byte identity before
 building. Historical native inputs retain their original acquisitions; they do
 not become evidence of a later source request.
+
+To preserve selected series missing from the current metadata snapshot, also pass
+`--retained-metadata` and `--retained-series`. These name a verified historical
+metadata directory and an explicit JSON list of published series IDs. The
+selection must resolve exactly and must not overlap the current snapshot.
+The complete historical descriptors stay unchanged. The selected acquisition
+graph records their historical source, and the retained-series declaration
+records which IDs it supports. This does not assert current publication or
+observation availability for those series.
