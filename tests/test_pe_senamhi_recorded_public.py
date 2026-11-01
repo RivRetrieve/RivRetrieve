@@ -18,6 +18,14 @@ class Replay:
     def __init__(self, root, member):
         self.content = (root / (member + ".body")).read_bytes()
         self.receipt = json.loads((root / (member + ".receipt.json")).read_bytes())
+        if member.startswith("access/"):
+            self.status = self.receipt["status"]
+            self.retrieved_at = datetime.fromisoformat(self.receipt["acquired_at"])
+            self.headers = self.receipt["response_headers"].items()
+        else:
+            self.status = self.receipt["http_status"]
+            self.retrieved_at = datetime.fromisoformat(self.receipt["finished_at"])
+            self.headers = self.receipt["headers"]
         self.calls = 0
 
     def send(self, request):
@@ -32,11 +40,9 @@ class Replay:
         self.calls += 1
         return TransportResponse(
             content=self.content,
-            status_code=self.receipt["http_status"],
-            retrieved_at=datetime.fromisoformat(self.receipt["finished_at"]),
-            content_type=next(
-                (value for name, value in self.receipt["headers"] if name.lower() == "content-type"), None
-            ),
+            status_code=self.status,
+            retrieved_at=self.retrieved_at,
+            content_type=next((value for name, value in self.headers if name.lower() == "content-type"), None),
             url=self.receipt["url"],
             request_parameters=dict(parse_qsl(source.query)),
         )
@@ -78,11 +84,11 @@ def select_product(station, product):
             ("N_NIVELAGUA",),
         ),
         (
-            "anchors/readings-200322-202610",
+            "anchors/readings-200322-202609",
             "200322",
             "monthly_archive_nivel_del_rio_promedio",
-            "2026-10-03",
-            "2026-10-29T23:59:59",
+            "2026-09-03",
+            "2026-09-28T23:59:59",
             ("NIVEL_DEL_RIO_PROMEDIO",),
         ),
     ],
