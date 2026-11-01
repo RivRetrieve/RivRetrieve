@@ -204,20 +204,40 @@ class PartitionReplay:
         return next(self.pending).send(request)
 
 
-@pytest.mark.recorded(_SCOPE)
-def test_public_retained_hourly_point_uses_owned_partition(retained_evidence_root, monkeypatch):
-    replay = PartitionReplay(
-        retained_evidence_root / _SCOPE,
-        (
-            "integration/hourly-ramis-20240829-end-second",
-            "boundaries/hourly-end-second-0",
-            "boundaries/hourly-end-second-1",
+@pytest.mark.parametrize(
+    "scope,members,station,product,source_unit,timestamp",
+    [
+        pytest.param(
+            _SCOPE,
+            (
+                "integration/hourly-ramis-20240829-end-second",
+                "boundaries/hourly-end-second-0",
+                "boundaries/hourly-end-second-1",
+            ),
+            "47251282",
+            "phisis_hourly_flow",
+            "m3/s",
+            datetime(2024, 8, 31),
+            marks=pytest.mark.recorded(_SCOPE),
         ),
-    )
+        pytest.param(
+            "maintenance/observations/pe_senamhi/integration-supplement",
+            tuple(f"hourly-level-240103-{day}-end-second" for day in ("20240829", "20240831", "20240902")),
+            "240103",
+            "phisis_hourly_level_above_sea_level",
+            "m.s.n.m",
+            datetime(2024, 8, 31, 6),
+            marks=pytest.mark.recorded(_SCOPE, "maintenance/observations/pe_senamhi/integration-supplement"),
+        ),
+    ],
+)
+def test_public_retained_hourly_point_uses_owned_partition(
+    retained_evidence_root, monkeypatch, scope, members, station, product, source_unit, timestamp
+):
+    replay = PartitionReplay(retained_evidence_root / scope, members)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    timestamp = datetime(2024, 8, 31)
     result = rr.fetch(
-        select_product("47251282", "phisis_hourly_flow"),
+        select_product(station, product),
         start=timestamp,
         end=timestamp,
         cache="bypass",
@@ -237,7 +257,18 @@ def test_public_retained_hourly_point_uses_owned_partition(retained_evidence_roo
     assert matching, "Public hourly point differs from its owning source partition"
     assert len(result.source_series) == 1
     assert result.source_series[0].identity.published_id == "value"
+    level = source_unit != "m3/s"
+    assert result.data["quantity"].unique().to_list() == ["stage" if level else "discharge"]
+    assert result.data["source_unit"].unique().to_list() == [source_unit]
+    assert result.data["unit"].unique().to_list() == ["m" if level else "m3/s"]
     assert result.data["time_zone"].unique().to_list() == ["unknown"]
+    for facts in result.source_series[0].facts:
+        assert facts.vertical_reference.value == ("above_sea_level" if source_unit == "m.s.n.m" else None)
+        assert facts.vertical_datum.value is None
+        assert facts.frequency.value is None
+        assert facts.statistic.value is None
+        assert facts.temporal_support.value is None
+    assert not any(issue.severity == "error" for issue in result.issues)
     assert all(partition.calls == 1 for partition in replay.partitions)
     preserved = [entry.content for entry in result.receipts.entries] == [
         partition.content for partition in replay.partitions
