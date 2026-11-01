@@ -3,7 +3,6 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
-import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { stationKey, type Station } from "./domain";
 import { basemapTiles } from "./basemap";
 import { GaugeIcon, gaugePinSvg, gaugeSprites } from "./GaugeIcon";
@@ -95,7 +94,14 @@ export function StationMap({
     });
 
     // Same default grouping, zoom-to-bounds and spiderfy behavior as eStreams.
-    const clusters = L.markerClusterGroup().addTo(map);
+    const clusters = L.markerClusterGroup({
+      iconCreateFunction: (cluster) =>
+        L.divIcon({
+          html: `<div><span>${cluster.getChildCount()}</span></div>`,
+          className: "marker-cluster",
+          iconSize: [40, 40],
+        }),
+    }).addTo(map);
     const markerCache = new Map<string, L.Marker>();
     const pointIcon = L.divIcon({
       className: "gauge-point",

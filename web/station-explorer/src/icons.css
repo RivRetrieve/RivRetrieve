@@ -2,12 +2,16 @@
   --gauge-match: #147da3;
   --gauge-selected: #087c70;
   --gauge-conflict: #ad4f0e;
+  --gauge-cluster: #2b424f;
+  --gauge-cluster-halo: rgb(43 66 79 / 0.28);
   --gauge-ink: #fff;
 }
 :root[data-md-color-scheme="slate"] {
   --gauge-match: #4bc3e7;
   --gauge-selected: #50d6bb;
   --gauge-conflict: #ffbb69;
+  --gauge-cluster: #c8d6de;
+  --gauge-cluster-halo: rgb(200 214 222 / 0.28);
   --gauge-ink: #102b34;
 }
 .gauge-icon {
@@ -58,6 +62,27 @@
 .gauge-point {
   background: none;
   border: 0;
+}
+.marker-cluster {
+  background-color: var(--gauge-cluster-halo);
+  background-clip: padding-box;
+  border-radius: 20px;
+}
+.marker-cluster div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 4px;
+  margin-top: 4px;
+  border: 1.5px solid var(--gauge-ink);
+  border-radius: 16px;
+  background-color: var(--gauge-cluster);
+  color: var(--gauge-ink);
+  font:
+    700 11px/1 system-ui,
+    sans-serif;
 }
 .legend span {
   display: flex;
