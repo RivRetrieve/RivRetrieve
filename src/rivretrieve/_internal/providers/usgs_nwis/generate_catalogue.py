@@ -1059,7 +1059,7 @@ def write_catalogue(
     native_table: NativeTable | None = None,
     acquisition_provenance: AcquisitionProvenance | None = None,
 ) -> None:
-    """Write a catalogue using adopted build inputs and its verified native table."""
+    """Write a catalogue from explicit adopted inputs, native table and acquisition provenance."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.usgs_nwis.origins import (
@@ -1075,6 +1075,8 @@ def write_catalogue(
 
     if build_inputs is None or native_table is None:
         raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
+    if acquisition_provenance is None:
+        raise FatalContractError("Catalogue publication requires explicit acquisition_provenance")
 
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -1085,15 +1087,12 @@ def write_catalogue(
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
     from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
-    from rivretrieve._internal.providers.usgs_nwis.origins import (
-        build_modern_acquisition_provenance,
-    )
 
     files = {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES}
     features, receipts = read_modern_metadata(catalogue.modern_metadata)
     locations = monitoring_locations(NativeTable(catalogue.source_native))
     descriptions = modern_source_descriptions(features, locations)
-    provenance = acquisition_provenance or build_modern_acquisition_provenance(receipts, catalogue.modern_metadata)
+    provenance = acquisition_provenance
     from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
 
     station_origin = STATION_CATALOGUE_ORIGINS["station_id"]
@@ -1250,7 +1249,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--native publication requires --modern-metadata")
         from rivretrieve._internal.providers.usgs_nwis.origins import (
             STATION_CATALOGUE_ORIGINS,
-            build_acquisition_provenance,
         )
 
         if args.evidence_root is None:
@@ -1258,11 +1256,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.build_inputs is None:
             parser.error("--out requires --build-inputs")
         build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
-        provenance = (
-            AcquisitionProvenance.model_validate_json(args.acquisition_provenance.read_bytes())
-            if args.acquisition_provenance is not None
-            else build_acquisition_provenance()
-        )
+        if args.acquisition_provenance is None:
+            parser.error("--native publication requires --acquisition-provenance")
+        provenance = AcquisitionProvenance.model_validate_json(args.acquisition_provenance.read_bytes())
         if provenance.provider_id != PROVIDER_ID or provenance.native_table is None:
             raise FatalContractError("USGS publication requires matching provider and explicit native identity")
         verify_provenance_recordings(provenance, args.evidence_root)
@@ -1277,7 +1273,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.out,
             build_inputs=build_inputs,
             native_table=native_table,
-            acquisition_provenance=provenance if args.acquisition_provenance is not None else None,
+            acquisition_provenance=provenance,
         )
         return 0
 

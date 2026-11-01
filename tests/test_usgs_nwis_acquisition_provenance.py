@@ -68,6 +68,8 @@ def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_p
     # Synthetic selection reaches only the intended failing verification boundary.
     build_inputs_path = tmp_path / "synthetic-build-inputs.json"
     build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
+    selected_provenance = tmp_path / "historical-provenance.json"
+    selected_provenance.write_text(build_acquisition_provenance().model_dump_json())
     native = tmp_path / "native.parquet"
     native.write_bytes(
         (retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet").read_bytes()
@@ -78,6 +80,8 @@ def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_p
             [
                 "--build-inputs",
                 str(build_inputs_path),
+                "--acquisition-provenance",
+                str(selected_provenance),
                 "--native",
                 str(native),
                 "--evidence-root",
@@ -119,6 +123,8 @@ def test_usgs_cli_invokes_recording_verification(
     # Synthetic selection reaches only the intended failing verification boundary.
     build_inputs_path = tmp_path / "synthetic-build-inputs.json"
     build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
+    selected_provenance = tmp_path / "historical-provenance.json"
+    selected_provenance.write_text(build_acquisition_provenance().model_dump_json())
 
     def reject(*_args: object) -> None:
         raise FatalContractError("recording verification invoked")
@@ -129,6 +135,8 @@ def test_usgs_cli_invokes_recording_verification(
             [
                 "--build-inputs",
                 str(build_inputs_path),
+                "--acquisition-provenance",
+                str(selected_provenance),
                 "--native",
                 str(retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"),
                 "--evidence-root",

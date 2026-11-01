@@ -1531,3 +1531,14 @@ def test_native_refresh_cli_retains_only_exact_historical_selection(tmp_path, mo
     pl_testing.assert_frame_equal(
         result.filter(pl.col("site_no") == "old-one"), historical.data.filter(pl.col("site_no") == "old-one")
     )
+
+
+def test_current_publication_requires_selected_provenance_before_writing(tmp_path):
+    from dataclasses import replace
+
+    native = _native_table()
+    catalogue = replace(generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS), modern_metadata=tmp_path)
+    output = tmp_path / "output"
+    with pytest.raises(FatalContractError, match="explicit acquisition_provenance"):
+        generator.write_catalogue(catalogue, output, build_inputs=object(), native_table=native)
+    assert not output.exists()

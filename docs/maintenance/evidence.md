@@ -194,3 +194,13 @@ after proving archive preservation and obtaining required owner approval. New
 provider code PRs carry code and exact archive references, not source corpora or
 private attachments. See the [architecture](../architecture.md#evidence-and-verification)
 for the runtime and catalogue boundaries.
+
+## Publish a USGS catalogue
+
+USGS native publication requires `--acquisition-provenance` alongside
+`--native`, `--modern-metadata`, `--evidence-root`, `--build-inputs` and `--out`.
+Supply the reviewed acquisition graph selected by the archive handoff. Library
+callers of `write_catalogue` pass the same graph as `acquisition_provenance`.
+The publisher verifies its recording references and native byte identity before
+building. Historical native inputs retain their original acquisitions; they do
+not become evidence of a later source request.
