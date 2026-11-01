@@ -408,6 +408,7 @@ def test_provenance_requires_direct_sources_and_retains_derived_native_identity(
         "source.station.altitude_unit",
         "source.station_product.associations",
         "source.station_product.inventory_support",
+        "source.series.fields",
         "source.provider.terms",
         "source.provider.attribution",
     )

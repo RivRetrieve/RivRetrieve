@@ -48,6 +48,7 @@ def series_mappings(subsystem: str, resolution: str | None, variable: str, unit:
             normalized_unit="m3/s" if variable == "FLOW" else "m",
             vertical_reference="above_sea_level" if unit == "m.s.n.m" else None,
             evidence=evidence,
+            identity_evidence=("catalogue:pe_senamhi:source.series.fields",),
         )
         for field in fields
     }

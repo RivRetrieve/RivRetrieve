@@ -88,7 +88,9 @@ def build_acquisition_provenance(
         raise ValueError("SENAMHI source bindings must directly identify selected acquisitions")
     facts = tuple(fact for binding in source_bindings for fact in binding.facts)
     required = {fact for group in _CATALOGUE_SOURCE_FACTS.values() for fact in group}
-    required.update(("source.station.altitude_unit", "source.provider.terms", "source.provider.attribution"))
+    required.update(
+        ("source.station.altitude_unit", "source.provider.terms", "source.provider.attribution", "source.series.fields")
+    )
     if missing := required - set(facts):
         raise ValueError(f"Missing SENAMHI source facts: {sorted(missing)!r}")
     provenance = AcquisitionProvenance(

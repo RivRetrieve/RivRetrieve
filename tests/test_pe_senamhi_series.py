@@ -18,6 +18,7 @@ def test_phisis_daily_fields_and_hourly_value_have_distinct_identities():
     descriptions = describe_associations(associations).descriptions
     assert len(descriptions) == 12
     assert len({(item.identity.namespace, item.identity.published_id) for item in descriptions}) == 12
+    assert all(item.identity.evidence == ("catalogue:pe_senamhi:source.series.fields",) for item in descriptions)
     daily = [item for item in descriptions if item.product_id == "phisis_daily_flow"]
     assert {item.identity.published_id for item in daily} == {"current", "minimum", "maximum"}
     hourly = [item for item in descriptions if item.product_id == "phisis_hourly_flow"]
