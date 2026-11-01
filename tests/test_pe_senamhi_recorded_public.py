@@ -205,7 +205,7 @@ class PartitionReplay:
 
 
 @pytest.mark.parametrize(
-    "scope,members,station,product,source_unit",
+    "scope,members,station,product,source_unit,timestamp",
     [
         pytest.param(
             _SCOPE,
@@ -217,6 +217,7 @@ class PartitionReplay:
             "47251282",
             "phisis_hourly_flow",
             "m3/s",
+            datetime(2024, 8, 31),
             marks=pytest.mark.recorded(_SCOPE),
         ),
         pytest.param(
@@ -225,16 +226,16 @@ class PartitionReplay:
             "240103",
             "phisis_hourly_level_above_sea_level",
             "m.s.n.m",
+            datetime(2024, 8, 31, 6),
             marks=pytest.mark.recorded("maintenance/observations/pe_senamhi/integration-supplement"),
         ),
     ],
 )
 def test_public_retained_hourly_point_uses_owned_partition(
-    retained_evidence_root, monkeypatch, scope, members, station, product, source_unit
+    retained_evidence_root, monkeypatch, scope, members, station, product, source_unit, timestamp
 ):
     replay = PartitionReplay(retained_evidence_root / scope, members)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    timestamp = datetime(2024, 8, 31)
     result = rr.fetch(
         select_product(station, product),
         start=timestamp,
