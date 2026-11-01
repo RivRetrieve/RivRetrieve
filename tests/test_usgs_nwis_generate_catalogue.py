@@ -26,7 +26,7 @@ from rivretrieve._internal.recordings import read_recording
 # Exact equality with the retained snapshot is tested below.
 SERIES_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_series.json")
 EXPANDED_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_expanded.json")
-NATIVE_PATH = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+NATIVE_PATH = Path("tests/test_data/usgs_nwis_historical/native.parquet")
 CATALOGUE_PATH = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue")
 ATTESTED_DATETIME = datetime(2026, 8, 2, 1, 14, 11, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
@@ -262,7 +262,7 @@ def _frame_content_sha256(frame: pl.DataFrame) -> str:
     return hashlib.sha256(json.dumps(rows, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
 def test_existing_generation_path_does_not_fabricate_all_unknown_station_products(
     retained_evidence_root,
 ) -> None:
@@ -1059,8 +1059,8 @@ def test_cli_rejects_relative_rdb_directory(
     assert "--rdb-dir must be an absolute path" in capsys.readouterr().err
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
-def test_committed_native_table_exact_schema_counts_and_provenance(
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
+def test_historical_native_table_exact_schema_counts_and_provenance(
     retained_evidence_root,
 ) -> None:
     native_table = read_native_table(retained_evidence_root / NATIVE_PATH)
@@ -1085,8 +1085,8 @@ def test_committed_native_table_exact_schema_counts_and_provenance(
     assert total_records == 2_036_546
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
-def test_committed_native_table_representative_station(
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
+def test_historical_native_table_representative_station(
     retained_evidence_root,
 ) -> None:
     row = (
@@ -1118,11 +1118,11 @@ def test_committed_native_table_representative_station(
 
 
 @pytest.mark.derived(
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "tests/test_data/usgs_nwis_historical/native.parquet",
     "tests/test_data/usgs_nwis_metadata_expanded.json",
     "tests/test_data/usgs_nwis_metadata_series.json",
 )
-def test_fixture_refresh_frame_equals_matching_committed_subset(
+def test_fixture_refresh_frame_equals_matching_historical_subset(
     retained_evidence_root,
 ) -> None:
     committed_row = (
@@ -1226,7 +1226,7 @@ def test_live_rdb_recordings_preserve_source_strings_and_native_alignment(
     assert refreshed.issues == ()
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
 def test_legacy_native_build_cannot_publish_under_modern_identity(retained_evidence_root, tmp_path: Path) -> None:
     catalogue = generator.build_catalogue(
         read_native_table(retained_evidence_root / NATIVE_PATH), STATION_CATALOGUE_ORIGINS

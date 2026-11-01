@@ -57,7 +57,7 @@ def test_usgs_build_rejects_changed_terms_recording(retained_evidence_root, tmp_
     "research/usgs-modern-coverage/metadata-00065-0003.json.gz",
     "research/usgs-modern-coverage/metadata-00065-0004.json.gz",
     "research/usgs-modern-coverage/metadata-00065-0005.json.gz",
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "tests/test_data/usgs_nwis_historical/native.parquet",
     "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
     "tests/test_data/usgs_nwis_terms_citation-1.html",
     "tests/test_data/usgs_nwis_terms_licence-1.html",
@@ -72,8 +72,7 @@ def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_p
     selected_provenance.write_text(build_acquisition_provenance().model_dump_json())
     native = tmp_path / "native.parquet"
     native.write_bytes(
-        (retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet").read_bytes()
-        + b"changed"
+        (retained_evidence_root / "tests/test_data/usgs_nwis_historical/native.parquet").read_bytes() + b"changed"
     )
     with pytest.raises(FatalContractError, match="native table digest mismatch: expected .* observed"):
         generate_catalogue.main(
@@ -110,7 +109,7 @@ def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_p
     "research/usgs-modern-coverage/metadata-00065-0003.json.gz",
     "research/usgs-modern-coverage/metadata-00065-0004.json.gz",
     "research/usgs-modern-coverage/metadata-00065-0005.json.gz",
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "tests/test_data/usgs_nwis_historical/native.parquet",
     "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
     "tests/test_data/usgs_nwis_terms_citation-1.html",
     "tests/test_data/usgs_nwis_terms_licence-1.html",
@@ -138,7 +137,7 @@ def test_usgs_cli_invokes_recording_verification(
                 "--acquisition-provenance",
                 str(selected_provenance),
                 "--native",
-                str(retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"),
+                str(retained_evidence_root / "tests/test_data/usgs_nwis_historical/native.parquet"),
                 "--evidence-root",
                 str(retained_evidence_root),
                 "--modern-metadata",

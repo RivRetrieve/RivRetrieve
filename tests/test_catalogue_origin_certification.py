@@ -737,10 +737,10 @@ def test_japan_coordinate_representation_does_not_establish_crs(retained_evidenc
     assert _build(japan).stations["crs"].unique().to_list() == ["unknown"]
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
 def test_usgs_committed_datum_carrier_maps_exactly_to_reviewed_crs(retained_evidence_root: Path) -> None:
     adapter = _adapter(retained_evidence_root, "usgs_nwis", DECLARATIONS[ProviderId("usgs_nwis")])
-    native = read_native_table(adapter.native_path)
+    native = read_native_table(retained_evidence_root / "tests/test_data/usgs_nwis_historical/native.parquet")
     stations = _build(adapter, native).stations
     datum = native.data.select("site_no", "dec_coord_datum_cd")
     joined = stations.join(datum, left_on="station_id", right_on="site_no", how="left", validate="1:1")
@@ -754,12 +754,12 @@ def test_usgs_committed_datum_carrier_maps_exactly_to_reviewed_crs(retained_evid
 
 
 @pytest.mark.parametrize(("datum", "expected"), [("", "unknown"), ("ZZZ99", "unknown")])
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
 def test_usgs_full_native_string_datum_variants_use_explicit_unknown(
     retained_evidence_root: Path, datum: str, expected: str
 ) -> None:
     adapter = _adapter(retained_evidence_root, "usgs_nwis", DECLARATIONS[ProviderId("usgs_nwis")])
-    native = read_native_table(adapter.native_path)
+    native = read_native_table(retained_evidence_root / "tests/test_data/usgs_nwis_historical/native.parquet")
     changed = NativeTable(
         native.data.with_columns(
             pl.when(pl.col("site_no") == "01010000")
@@ -773,10 +773,10 @@ def test_usgs_full_native_string_datum_variants_use_explicit_unknown(
     assert catalogue.stations.filter(pl.col("station_id") == "01010000").select("crs").item() == expected
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
 def test_usgs_full_native_null_datum_variant_fails_closed_with_station_message(retained_evidence_root: Path) -> None:
     adapter = _adapter(retained_evidence_root, "usgs_nwis", DECLARATIONS[ProviderId("usgs_nwis")])
-    native = read_native_table(adapter.native_path)
+    native = read_native_table(retained_evidence_root / "tests/test_data/usgs_nwis_historical/native.parquet")
     changed = NativeTable(
         native.data.with_columns(
             pl.when(pl.col("site_no") == "01010000")
