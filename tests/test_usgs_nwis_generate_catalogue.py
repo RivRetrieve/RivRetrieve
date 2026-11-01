@@ -1337,7 +1337,7 @@ def test_source_absent_coordinates_remain_selectable_catalogue_stations():
     assert built.station_products.height == 12
 
 
-@pytest.mark.parametrize("missing_timestamp", [False, True])
+@pytest.mark.parametrize("missing_timestamp", [False, True, "duplicate_filename"])
 def test_native_refresh_cli_composes_only_explicitly_selected_supplemental_locations(
     tmp_path, monkeypatch, missing_timestamp
 ):
@@ -1393,6 +1393,15 @@ def test_native_refresh_cli_composes_only_explicitly_selected_supplemental_locat
         "--modern-metadata",
         str(tmp_path),
     ]
+    if missing_timestamp == "duplicate_filename":
+        duplicate = tmp_path / "other" / source.name
+        duplicate.parent.mkdir()
+        duplicate.write_bytes(source.read_bytes())
+        args[args.index("--selected-locations") : args.index("--selected-locations")] = [str(duplicate)]
+        with pytest.raises(FatalContractError, match="distinct filenames"):
+            generator.main(args)
+        assert not output.exists()
+        return
     if missing_timestamp:
         retrievals.write_text(json.dumps({"supplement.rdb": "2026-10-31T12:00:00Z"}))
         with pytest.raises(FatalContractError, match="every supplied expanded input"):

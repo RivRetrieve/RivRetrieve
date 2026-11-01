@@ -1239,9 +1239,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     native = outcome.value
     if args.supplemental_expanded is not None:
         input_retrievals = json.loads(args.input_retrievals.read_text())
-        expected_files = {f"{state}_expanded.rdb" for state in _US_STATE_CODES} | {
+        input_names = [f"{state}_expanded.rdb" for state in _US_STATE_CODES] + [
             path.name for path in args.supplemental_expanded
-        }
+        ]
+        if len(input_names) != len(set(input_names)):
+            raise FatalContractError("Expanded source inputs require distinct filenames for retrieval identity")
+        expected_files = set(input_names)
         if not isinstance(input_retrievals, dict) or set(input_retrievals) != expected_files:
             raise FatalContractError("Retrieval mapping must identify every supplied expanded input exactly")
         input_retrievals = {name: _parse_retrieved_at(value) for name, value in input_retrievals.items()}
