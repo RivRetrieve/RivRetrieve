@@ -422,3 +422,50 @@ def test_iso_filter_precision_rounds_outward_before_rendering():
     )
     assert _pairs(windows) == (("2025-01-01T00:00:00Z", "2025-01-01T00:00:00.003000Z"),)
     assert windows[0].bounds == _fetch(datetime(2025, 1, 1), datetime(2025, 1, 1, 0, 0, 0, 2999))
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "years"),
+    [
+        (datetime(2024, 2, 29, 12), datetime(2024, 2, 29, 13), (2023,)),
+        (datetime(2024, 8, 31, 23), datetime(2024, 9, 1), (2023, 2024)),
+        (datetime(2024, 9, 1), datetime(2025, 8, 31, 23, 59), (2024,)),
+    ],
+)
+def test_hydrological_years_cover_september_boundaries_and_leap_day(start, end, years):
+    declaration = engine.WindowDeclaration(
+        engine.WindowGranularity("year"),
+        engine.WindowRenderingVocabulary.DATE,
+        engine.StopConvention.INCLUSIVE,
+        year_start_month=9,
+    )
+    windows = window_planning.plan_windows(_fetch(start, end), declaration)
+    assert _pairs(windows) == tuple((f"{year}-09-01", f"{year + 1}-08-31") for year in years)
+    assert [window.bounds for window in windows] == [
+        _fetch(datetime(year, 9, 1), datetime(year + 1, 8, 31, 23, 59, 59, 999999)) for year in years
+    ]
+
+
+@pytest.mark.parametrize("month", [0, 13, True])
+def test_year_start_month_rejects_invalid_month(month):
+    with pytest.raises(ValueError, match="year start month"):
+        engine.WindowDeclaration(
+            engine.WindowGranularity("year"),
+            engine.WindowRenderingVocabulary.DATE,
+            engine.StopConvention.INCLUSIVE,
+            year_start_month=month,
+        )
+
+
+def test_noncalendar_year_requires_annual_date_rendering():
+    for granularity, rendering in (
+        ("year-month", engine.WindowRenderingVocabulary.DATE),
+        ("year", engine.WindowRenderingVocabulary.YEAR),
+    ):
+        with pytest.raises(ValueError, match="year start month"):
+            engine.WindowDeclaration(
+                engine.WindowGranularity(granularity),
+                rendering,
+                engine.StopConvention.INCLUSIVE,
+                year_start_month=9,
+            )
