@@ -50,8 +50,8 @@ The request returned seven daily discharge values in m³/s for 1 to 7 January 20
 Both endpoint dates are included. The preview shows the first three values.
 The series requested is SENAMHI's published `current` field. RivRetrieve reads
 the daily values SENAMHI publishes; it does not calculate them from more frequent
-observations. SENAMHI does not establish whether `current` represents a daily mean,
-nor when its observation day begins and ends. RivRetrieve preserves these physical
+observations. RivRetrieve has not established whether `current` represents a daily
+mean, nor when its observation day begins and ends. RivRetrieve preserves these physical
 unknowns and returns `time_zone="unknown"`. Do not assume the daily values
 represent midnight to midnight UTC or local time.
 
@@ -93,23 +93,31 @@ PHISIS publishes discharge and water level under the `/api/hydrology/*` routes:
 
 | Quantity filter | Product | Published field | Frequency | Statistic | Source unit | Returned unit | Vertical reference |
 |---|---|---|---|---|---|---|---|
-| `discharge` | `phisis_daily_flow` | `current` | Unknown | Unknown | m³/s | m³/s | None |
-| `discharge` | `phisis_daily_flow` | `minimum` | Unknown | Unknown | m³/s | m³/s | None |
-| `discharge` | `phisis_daily_flow` | `maximum` | Unknown | Unknown | m³/s | m³/s | None |
-| `discharge` | `phisis_hourly_flow` | `value` | Unknown | Unknown | m³/s | m³/s | None |
-| `stage` | `phisis_daily_level` | `current` | Unknown | Unknown | m | m | None |
-| `stage` | `phisis_daily_level` | `minimum` | Unknown | Unknown | m | m | None |
-| `stage` | `phisis_daily_level` | `maximum` | Unknown | Unknown | m | m | None |
-| `stage` | `phisis_daily_level_above_sea_level` | `current` | Unknown | Unknown | m.s.n.m | m | `above_sea_level` |
-| `stage` | `phisis_daily_level_above_sea_level` | `minimum` | Unknown | Unknown | m.s.n.m | m | `above_sea_level` |
-| `stage` | `phisis_daily_level_above_sea_level` | `maximum` | Unknown | Unknown | m.s.n.m | m | `above_sea_level` |
-| `stage` | `phisis_hourly_level` | `value` | Unknown | Unknown | m | m | None |
-| `stage` | `phisis_hourly_level_above_sea_level` | `value` | Unknown | Unknown | m.s.n.m | m | `above_sea_level` |
+| `discharge` | `phisis_daily_flow` | `current` | Daily | Unknown | m³/s | m³/s | None |
+| `discharge` | `phisis_daily_flow` | `minimum` | Daily | Unknown | m³/s | m³/s | None |
+| `discharge` | `phisis_daily_flow` | `maximum` | Daily | Unknown | m³/s | m³/s | None |
+| `discharge` | `phisis_hourly_flow` | `value` | Hourly | Unknown | m³/s | m³/s | None |
+| `stage` | `phisis_daily_level` | `current` | Daily | Unknown | m | m | None |
+| `stage` | `phisis_daily_level` | `minimum` | Daily | Unknown | m | m | None |
+| `stage` | `phisis_daily_level` | `maximum` | Daily | Unknown | m | m | None |
+| `stage` | `phisis_daily_level_above_sea_level` | `current` | Daily | Unknown | m.s.n.m | m | `above_sea_level` |
+| `stage` | `phisis_daily_level_above_sea_level` | `minimum` | Daily | Unknown | m.s.n.m | m | `above_sea_level` |
+| `stage` | `phisis_daily_level_above_sea_level` | `maximum` | Daily | Unknown | m.s.n.m | m | `above_sea_level` |
+| `stage` | `phisis_hourly_level` | `value` | Hourly | Unknown | m | m | None |
+| `stage` | `phisis_hourly_level_above_sea_level` | `value` | Hourly | Unknown | m.s.n.m | m | `above_sea_level` |
 
 Each daily PHISIS response contains three separate published fields: `current`,
 `minimum`, and `maximum`. RivRetrieve preserves each field as a distinct series.
-Because SENAMHI does not state whether `current` is a daily mean or an instantaneous
-reading, frequency and statistic remain unknown.
+PHISIS distinguishes daily date coordinates from hourly timestamp coordinates.
+These establish `frequency="daily"` and `frequency="hourly"`, independently of
+statistic. RivRetrieve has not established whether `current` or hourly `value`
+is a mean or an instantaneous reading, or which period and population the daily
+`minimum` and `maximum` summarize. Their statistics remain unknown.
+
+Daily queries select whole published dates, including when the request bounds
+contain clock times. This treats dates as source coordinates; it does not establish
+the observation day's boundaries, temporal support or time zone. A daily frequency
+filter matches the daily series, but a mean statistic filter does not.
 
 Selecting `quantity="discharge"` or `quantity="stage"` without specifying a `series_id`
 selects every supported series for that quantity at the station. Use `rr.series(selection)`
@@ -132,11 +140,16 @@ The station archive publishes water levels in metres (`m`) under `/api/station/s
 | `stage` | `monthly_archive_n_niv_inst_00` | Unknown | Unknown | m | m |
 | `stage` | `monthly_archive_n_niv_inst_10` | Unknown | Unknown | m | m |
 
-These nine fields remain distinct products in RivRetrieve. The synoptic fields
-(`06H`, `10H`, `14H`, `18H`) and daily `PROMEDIO` come from conventional stations.
-`N_NIVELAGUA` provides hourly readings from automatic telemetry stations.
-Monthly request partitions are an API transport structure; they do not establish
-observation frequency.
+These nine fields remain distinct products in RivRetrieve. Frequency and statistic
+remain unestablished because the available evidence does not define their meanings
+across the supported fields and historical records. This is a gap in the evidence,
+not an explicit statement by SENAMHI that the meanings are unspecified.
+
+The `06H`, `10H`, `14H` and `18H` labels name clock hours, not sampling intervals.
+The hydrometry manual describes scheduled readings and an arithmetic average, but
+their applicability to `NIVEL_DEL_RIO_PROMEDIO` and individual archive records is
+not established. The `N_NIV*` suffixes do not establish clock times or averaging
+methods. Monthly request partitions do not establish observation frequency.
 
 ### Units and vertical reference
 

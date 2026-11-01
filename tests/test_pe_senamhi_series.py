@@ -46,6 +46,13 @@ def test_monthly_fields_stay_distinct_from_each_other_and_monitoring():
     assert len(descriptions) == 12
     monthly = [item for item in descriptions if item.product_id.startswith("monthly_archive_")]
     assert {item.identity.published_id for item in monthly} == set(fields)
+    from rivretrieve._internal.source_series import EvidenceState, PhysicalPredicate, SeriesScope
+
+    for item in monthly:
+        facts = item.facts[0]
+        for field, candidate in (("frequency", "daily"), ("frequency", "hourly"), ("statistic", "mean")):
+            assert getattr(facts, field).state is EvidenceState.NOT_ESTABLISHED
+            assert not SeriesScope(predicates=(PhysicalPredicate(field=field, value=candidate),)).matches_facts(facts)
     assert len({(item.identity.namespace, item.identity.published_id) for item in descriptions}) == 12
 
 
@@ -73,7 +80,6 @@ def test_mapped_facts_admit_numeric_values_without_inventing_time_or_datum():
                 1.0,
             )
             for field, unsupported in (
-                ("frequency", "daily"),
                 ("statistic", "mean"),
                 ("temporal_support", "day"),
                 ("day_definition", "calendar_day"),
@@ -88,7 +94,12 @@ def test_mapped_facts_admit_numeric_values_without_inventing_time_or_datum():
                     facts
                 )
             assert facts.label_time is None
-            assert facts.clipping_axis.value == "source_timestamp"
+            if subsystem == "monthly_archive":
+                assert facts.frequency.state is EvidenceState.NOT_ESTABLISHED
+                assert not SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="daily"),)).matches_facts(
+                    facts
+                )
+            assert facts.clipping_axis.value == ("calendar_date" if resolution == "DAILY" else "source_timestamp")
             assert not SeriesScope(
                 predicates=(PhysicalPredicate(field="vertical_reference", value="relative"),)
             ).matches_facts(facts)
@@ -126,3 +137,44 @@ def test_catalogue_and_future_parser_use_the_same_series_identity():
     )
     assert discovered == mapped
     assert len(set(inventories[0].members)) == 3
+
+
+def test_phisis_frequency_matches_without_establishing_statistics_or_support():
+    from rivretrieve._internal.providers.pe_senamhi.series import series_mappings
+    from rivretrieve._internal.source_series import EvidenceState, PhysicalPredicate, SeriesScope
+
+    for resolution, frequency in (("DAILY", "daily"), ("HOURLY", "hourly")):
+        for variable, unit in (("FLOW", "m3/s"), ("LEVEL", "m"), ("LEVEL", "m.s.n.m")):
+            for mapping in series_mappings("phisis", resolution, variable, unit).values():
+                facts = mapping.physical_facts()
+                assert facts.frequency.value == frequency
+                assert facts.frequency.state is EvidenceState.KNOWN
+                assert SeriesScope(predicates=(PhysicalPredicate(field="frequency", value=frequency),)).matches_facts(
+                    facts
+                )
+                for field, value in (
+                    ("statistic", "mean"),
+                    ("statistic", "min"),
+                    ("statistic", "max"),
+                    ("temporal_support", "calendar_day"),
+                ):
+                    assert getattr(facts, field).state is EvidenceState.NOT_ESTABLISHED
+                    assert not SeriesScope(predicates=(PhysicalPredicate(field=field, value=value),)).matches_facts(
+                        facts
+                    )
+
+
+def test_phisis_daily_query_clips_date_labels_without_defining_observation_day():
+    from datetime import datetime
+
+    from rivretrieve._internal.physical_window import native_window
+    from rivretrieve._internal.providers.pe_senamhi.series import series_mappings
+    from rivretrieve._internal.source_series import EvidenceState
+
+    facts = series_mappings("phisis", "DAILY", "FLOW", "m3/s")["current"].physical_facts()
+    # Whole-date selection concerns published date coordinates, not physical support.
+    window = native_window(datetime(2024, 1, 1, 12), datetime(2024, 1, 2, 12), facts)
+    assert window.start == datetime(2024, 1, 1)
+    assert window.end == datetime(2024, 1, 2, 23, 59, 59, 999999)
+    for field in ("temporal_support", "day_definition", "timestamp_anchor", "time_zone"):
+        assert getattr(facts, field).state is EvidenceState.NOT_ESTABLISHED
