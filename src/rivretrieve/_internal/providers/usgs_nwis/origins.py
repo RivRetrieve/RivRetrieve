@@ -110,10 +110,15 @@ STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
     "crs": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_coord_datum_cd"), DatumToCrsConversion()),
 }
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"
-NATIVE_TABLE_REVISION = "bfeb825a6f3b3aad4982649625d570c070b4ee32"
-NATIVE_TABLE_SHA256 = "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701"
-NATIVE_TABLE_BYTE_SIZE = 14_093_302
-NATIVE_TABLE_SEMANTIC_SHA256 = "e4384cea2ff00e5a120d244977d2dd75bc00ec4c8ba941e3e83f06239cd5777f"
+HISTORICAL_NATIVE_TABLE_REVISION = "bfeb825a6f3b3aad4982649625d570c070b4ee32"
+HISTORICAL_NATIVE_TABLE_SHA256 = "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701"
+HISTORICAL_NATIVE_TABLE_BYTE_SIZE = 14_093_302
+HISTORICAL_NATIVE_TABLE_SEMANTIC_SHA256 = "e4384cea2ff00e5a120d244977d2dd75bc00ec4c8ba941e3e83f06239cd5777f"
+NATIVE_TABLE_REVISION = "9bd8aa03bbc13db240be556a958a237f603acbe9"
+NATIVE_TABLE_SHA256 = "caaf72c18a6a499b04fe886d8b4b871c066bed0870a7049ff6d6c48c26e966f8"
+NATIVE_TABLE_BYTE_SIZE = 14_520_274
+NATIVE_TABLE_SEMANTIC_SHA256 = "1af2fdcffdfdf5689cb371dc0d1d41b4aded07e69a878187b1696f6b6bea8fb7"
+
 _LICENSE_TEXT = "USGS-authored or produced data and information are considered to be in the U.S. Public Domain."
 _CITATION_TEXT = "Example of how to cite USGS Water Data for the Nation in general: U.S. Geological Survey, [2024], USGS Water Data for the Nation: U.S. Geological Survey National Water Information System database, accessed [April 8, 2024], at https://doi.org/10.5066/F7P55KJN."
 
@@ -321,11 +326,11 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         provider_id="usgs_nwis",
         native_table=NativeTableIdentity(
             repository_path=NATIVE_TABLE_REPOSITORY_PATH,
-            revision=NATIVE_TABLE_REVISION,
-            sha256=NATIVE_TABLE_SHA256,
-            byte_size=NATIVE_TABLE_BYTE_SIZE,
+            revision=HISTORICAL_NATIVE_TABLE_REVISION,
+            sha256=HISTORICAL_NATIVE_TABLE_SHA256,
+            byte_size=HISTORICAL_NATIVE_TABLE_BYTE_SIZE,
             semantic_digest=SemanticDigest(
-                name="usgs_nwis.native_table_content_sha256", sha256=NATIVE_TABLE_SEMANTIC_SHA256
+                name="usgs_nwis.native_table_content_sha256", sha256=HISTORICAL_NATIVE_TABLE_SEMANTIC_SHA256
             ),
         ),
         source_records=(source,),
@@ -557,15 +562,23 @@ def build_modern_acquisition_provenance(
 
 # Existing acquisition facts materialised in the retained native table.
 # This declares derived-input support, not preservation of original responses.
-NATIVE_TABLE_ACQUISITION_IDS = ("national_site_campaign_2026_08_02",)
+NATIVE_TABLE_ACQUISITION_IDS = (
+    "usgs-station-inventory-2026-10-31-01",
+    "usgs-station-inventory-2026-10-31-02",
+    "usgs-station-supplement-2026-10-31-01",
+    "national_site_campaign_2026_08_02",
+)
 
 
 # Authored catalogue, physical-fact and support declarations selected at build time.
 CATALOGUE_BUILD_DECLARATIONS = (
     ("maintenance/catalogue/station_metadata/review.json", None),
+    ("maintenance/catalogue/usgs_nwis/selected-acquisitions.json", None),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "selected_native_provenance"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "station_metadata_supporting_inputs"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
@@ -591,3 +604,14 @@ CATALOGUE_SUPPORTING_INPUTS = {
         "maintenance/catalogue/station_metadata/sources/usgs_nwis/nwis-sitefile-manual/receipt.json",
     ),
 }
+
+
+def station_metadata_supporting_inputs(provenance: AcquisitionProvenance) -> dict[str, tuple[str, ...]]:
+    """Select the historical native member only for explicitly retained station facts."""
+    supporting: dict[str, tuple[str, ...]] = dict(CATALOGUE_SUPPORTING_INPUTS)
+    for binding in provenance.fact_bindings:
+        if binding.acquisition_id == "national_site_campaign_2026_08_02":
+            for fact in binding.facts:
+                if fact.startswith("source.station.selected_input_"):
+                    supporting[fact] = ("tests/test_data/usgs_nwis_historical/native.parquet",)
+    return supporting

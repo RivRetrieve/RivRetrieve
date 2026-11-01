@@ -977,6 +977,7 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
                 "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
                 "research/usgs-station-inventory/capture-2026-10-31-02",
                 "maintenance/catalogue/usgs_nwis/selected-acquisitions.json",
+                "tests/test_data/usgs_nwis_historical/native.parquet",
                 "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
                 "tests/test_data/usgs_nwis_terms_citation-1.html",
                 "tests/test_data/usgs_nwis_terms_licence-1.html",

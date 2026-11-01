@@ -257,3 +257,18 @@ def test_selected_native_can_credit_explicit_retained_historical_event_once():
     }
     with pytest.raises(ValueError, match="Unknown retained acquisition"):
         selected_native_provenance(original.native_table, (), (), retained_acquisition_ids=("invented",))
+
+
+def test_selected_historical_support_is_bound_to_actual_acquisition_not_fact_position():
+    from rivretrieve._internal.providers.usgs_nwis.origins import (
+        selected_native_provenance,
+        station_metadata_supporting_inputs,
+    )
+
+    original = build_acquisition_provenance()
+    selected = selected_native_provenance(
+        original.native_table, (), (), retained_acquisition_ids=("national_site_campaign_2026_08_02",)
+    )
+    support = station_metadata_supporting_inputs(selected)
+    assert support["source.station.selected_input_0"] == ("tests/test_data/usgs_nwis_historical/native.parquet",)
+    assert "source.station.selected_input_0" not in station_metadata_supporting_inputs(original)
