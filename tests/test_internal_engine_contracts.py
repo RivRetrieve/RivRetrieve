@@ -150,6 +150,7 @@ def test_window_declarations_and_renderings_are_immutable_and_non_arithmetic() -
         "size",
         "calendar_labels",
         "timestamp_precision",
+        "year_start_month",
     )
     assert declaration.timestamp_precision is None
     assert dict(declarations.products) == {ProductId("flow"): declaration}

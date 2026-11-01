@@ -97,12 +97,15 @@ def _plan_year(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tup
         and declaration.rendering in (WindowRenderingVocabulary.YEAR, WindowRenderingVocabulary.DATE),
         "size None and year or date rendering",
     )
-    start_year = _datetime_from_endpoint(fetch_window, "start").year
-    end_year = _datetime_from_endpoint(fetch_window, "end").year
+    first = _datetime_from_endpoint(fetch_window, "start")
+    final = _datetime_from_endpoint(fetch_window, "end")
+    month = declaration.year_start_month
+    start_year = first.year - (first.month < month)
+    end_year = final.year - (final.month < month)
     windows = []
     for year in range(start_year, end_year + 1):
-        start = datetime(year, 1, 1)
-        stop = datetime(year, 12, 31)
+        start = datetime(year, month, 1)
+        stop = datetime(year + 1, month, 1) - timedelta(days=1)
         bounds = _closed_bounds(start, datetime.combine(stop.date(), time.max))
         if declaration.rendering is WindowRenderingVocabulary.YEAR:
             windows.append(RenderedWindow(str(year), None, bounds))
