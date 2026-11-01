@@ -52,8 +52,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "65b4564974162102e8772d19a0df5936f6eb03b70b3b45c9b2c46bebb08691c5",
-      "contentSize": "4091 B"
+      "sha256": "288180daba356e822bc8581954b7ce335484d2c547696e0fc142e37bd37d4555",
+      "contentSize": "4106 B"
     },
     {
       "@id": "stations.parquet",
@@ -76,16 +76,16 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "cfd389818ae80c885a5219625477f38633539a8146889ae09f3fe75b3bf9a5c5",
-      "contentSize": "2420523 B"
+      "sha256": "2af1b14bbaa4204380de80ed1b647750b39c4bb52f6ce5e721f0c509799f0b5d",
+      "contentSize": "2451099 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "91c906caca56026be3c570dbda010e41c360e34207b9d154013137ebcf63d969",
-      "contentSize": "2728 B"
+      "sha256": "c6d055b9b27599a4ce6ae5750018fe5808c2d47f71f14c8aff479e09678ce0f7",
+      "contentSize": "2736 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
@@ -108,16 +108,16 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "d8b1a21bea6bbbdf0cf881a4e6c583c17e1bac53d449d52d9241b0bf48f013dc",
-      "contentSize": "1358 B"
+      "sha256": "f082d3b6f1eac9b40568ac8926411b099646ccf0fc8a973f7d1893d7de1dba88",
+      "contentSize": "1359 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "f45d82790acad497b17fbc4084a8845e23a9bfa91d5d34822c86a023d674bed8",
-      "contentSize": "1563 B"
+      "sha256": "9229877c1c9414152ed3c00b5f2a005a54d1fcec8ae91b431ff77c109e27954f",
+      "contentSize": "1569 B"
     },
     {
       "@id": "format.json",
@@ -132,8 +132,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "43509e24df9a4a0f79c91857d6e2d4d170a0ccdee8f247633fba4f13721a7045",
-      "contentSize": "1983802 B"
+      "sha256": "e2b15f8c1920b23b006269a1f5e6b63b03225368dff82078ea7ee8bab97d7492",
+      "contentSize": "2111638 B"
     },
     {
       "@id": "series_claims.parquet",
