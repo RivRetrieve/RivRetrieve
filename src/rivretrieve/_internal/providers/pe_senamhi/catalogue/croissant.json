@@ -76,16 +76,16 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "b075374842d19105ef493545b746485112471d3c97addeb32ecf61358e7656a6",
-      "contentSize": "2393257 B"
+      "sha256": "cfd389818ae80c885a5219625477f38633539a8146889ae09f3fe75b3bf9a5c5",
+      "contentSize": "2420523 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "00d81dd269161bc7ac71f2dcd891a29d033442b78db13529ac5a7b284682eaeb",
-      "contentSize": "2718 B"
+      "sha256": "91c906caca56026be3c570dbda010e41c360e34207b9d154013137ebcf63d969",
+      "contentSize": "2728 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
@@ -108,15 +108,15 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "526ae33cdd97328ba7293a4e6a719fc4611d18a9c39dd450cc945bc5faf9db37",
-      "contentSize": "1350 B"
+      "sha256": "d8b1a21bea6bbbdf0cf881a4e6c583c17e1bac53d449d52d9241b0bf48f013dc",
+      "contentSize": "1358 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "8903488a0302a2fc7ace896fab211f48abb1f53e9b95f822474d5c1f603e658c",
+      "sha256": "f45d82790acad497b17fbc4084a8845e23a9bfa91d5d34822c86a023d674bed8",
       "contentSize": "1563 B"
     },
     {
@@ -132,8 +132,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "2697dcd80273d8671ef51aad98cf7409b473252141f68cfe100a58a72419d31a",
-      "contentSize": "1611785 B"
+      "sha256": "43509e24df9a4a0f79c91857d6e2d4d170a0ccdee8f247633fba4f13721a7045",
+      "contentSize": "1983802 B"
     },
     {
       "@id": "series_claims.parquet",
