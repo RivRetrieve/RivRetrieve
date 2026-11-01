@@ -355,7 +355,16 @@ def test_metadata_declarations_cover_providers_without_unreviewed_names():
     for provider in BUILTIN_PROVIDER_IDS:
         origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
         fields = origins.STATION_METADATA_FIELDS
-        assert ("maintenance/catalogue/station_metadata/review.json", None) in origins.CATALOGUE_BUILD_DECLARATIONS
+        review = (
+            "maintenance/catalogue/at_ehyd/official/selection.json"
+            if provider == "at_ehyd"
+            else "maintenance/catalogue/station_metadata/review.json"
+        )
+        assert (review, None) in origins.CATALOGUE_BUILD_DECLARATIONS
+        assert (
+            f"src/rivretrieve/_internal/providers/{provider}/origins.py",
+            "STATION_METADATA_FIELDS",
+        ) in origins.CATALOGUE_BUILD_DECLARATIONS
         assert isinstance(fields, tuple)
         assert all(isinstance(field, MetadataField) for field in fields)
         if provider in ("ba_fhmzbih", "fr_hydroportail", "th_thaiwater", "za_dws"):
