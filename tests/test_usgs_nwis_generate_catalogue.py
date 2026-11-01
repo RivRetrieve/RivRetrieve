@@ -1452,7 +1452,7 @@ def test_native_publication_uses_explicit_acquisition_identity_for_byte_verifica
     native_path = tmp_path / "native.parquet"
     native_path.write_bytes(b"synthetic changed native bytes")
     destination = tmp_path / "output"
-    with pytest.raises(FatalContractError, match="native table digest mismatch"):
+    with pytest.raises(FatalContractError, match="native table digest mismatch: expected " + "a" * 64):
         generator.main(
             [
                 "--native",
