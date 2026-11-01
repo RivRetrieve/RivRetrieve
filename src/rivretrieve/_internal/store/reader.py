@@ -316,7 +316,10 @@ class StoreReader:
         )
 
     def query(self, query: StoreQuery) -> StoreReadResult:
+        from tempfile import TemporaryDirectory
+
         from rivretrieve._internal.store.integrity import verify_inspected_files
+        from rivretrieve._internal.store.remote import RemoteStoreRoot, materialize_verified_remote_partitions
 
         require_readable_store(query.store)
         sealed = self._prepare(query.store, query.provider_id)
@@ -328,14 +331,23 @@ class StoreReader:
             if str(key).split("/")[0].removeprefix("product=") in executed.products
             and int(str(key).split("/")[1].removeprefix("year=")) in executed.years
         }
-        verified = self._verified[(query.store, query.provider_id)]
-        verify_inspected_files(sealed, candidates.keys() - verified)
-        verified.update(candidates)
-        if candidates:
-            physical_rows, optimized_plan = _scan(tuple(candidates.values()), executed)
+        if isinstance(query.store, RemoteStoreRoot):
+            if candidates:
+                with TemporaryDirectory() as tmp_dir:
+                    local_candidates = materialize_verified_remote_partitions(sealed, candidates.keys(), Path(tmp_dir))
+                    physical_rows, optimized_plan = _scan(tuple(local_candidates.values()), executed)
+            else:
+                physical_rows = _empty_physical_rows(query.store, validated.manifest)
+                optimized_plan = "EMPTY SCAN: no candidate partitions"
         else:
-            physical_rows = _empty_physical_rows(query.store, validated.manifest)
-            optimized_plan = "EMPTY SCAN: no candidate partitions"
+            verified = self._verified[(query.store, query.provider_id)]
+            verify_inspected_files(sealed, candidates.keys() - verified)
+            verified.update(candidates)
+            if candidates:
+                physical_rows, optimized_plan = _scan(tuple(candidates.values()), executed)
+            else:
+                physical_rows = _empty_physical_rows(query.store, validated.manifest)
+                optimized_plan = "EMPTY SCAN: no candidate partitions"
         rows = _engine_rows(physical_rows)
         return StoreReadResult(
             store=query.store,
@@ -352,7 +364,7 @@ class StoreReader:
         return self.query(query)
 
     def status(self, store: StoreRoot, provider_id: ProviderId) -> StoreStatus:
-        state = inspect_lifecycle(Path(store))
+        state = inspect_lifecycle(store)
         if state.committed_path is None:
             return StoreStatus(
                 store=store,
@@ -375,8 +387,7 @@ class StoreReader:
             provider_id=provider_id,
             presence=StorePresence.PRESENT,
             manifest=sealed.store.manifest,
-            bytes_on_disk=sum(item.size for item in sealed.files.values())
-            + (state.committed_path / "integrity.json").stat().st_size,
+            bytes_on_disk=sealed.bytes_on_disk,
             generation_id=sealed.generation_id,
             committed_path=state.committed_path,
             interrupted_paths=state.interrupted_paths,
@@ -431,6 +442,10 @@ def _empty_physical_rows(store: StoreRoot, manifest: StoreManifest | Accumulated
 def _inventory_witness(store: StoreRoot) -> tuple[tuple[object, ...], ...]:
     # Include directories to detect added/deleted entries, and ctime to detect
     # edits whose mtime was restored. Never follow a newly introduced symlink.
+    from rivretrieve._internal.store.remote import RemoteStoreRoot, remote_inventory_witness
+
+    if isinstance(store, RemoteStoreRoot):
+        return remote_inventory_witness(store)
     try:
         paths = (Path(store), *sorted(Path(store).rglob("*")))
         return tuple(
@@ -445,7 +460,7 @@ def _inventory_witness(store: StoreRoot) -> tuple[tuple[object, ...], ...]:
 
 def require_readable_store(store: StoreRoot) -> None:
     """Refuse an unresolved transaction before a read or source acquisition."""
-    state = inspect_lifecycle(Path(store))
+    state = inspect_lifecycle(store)
     if state.interrupted_paths or state.ownership in (Ownership.ACTIVE, Ownership.AMBIGUOUS):
         raise StoreLifecycleError(
             f'Observation store "{store}" has interrupted or active work; inspect cache_status and use recover_cache'

@@ -292,6 +292,10 @@ def _residue(root: Path) -> tuple[Path, ...]:
 
 def inspect_lifecycle(root: Path) -> LifecycleState:
     """Inspect names and ownership without validating observation bytes."""
+    from rivretrieve._internal.store.remote import RemoteStoreRoot, inspect_remote_lifecycle
+
+    if isinstance(root, RemoteStoreRoot):
+        return inspect_remote_lifecycle(root)
     root = _root(root)
     _no_link(root)
     record = _journal(root)
@@ -480,6 +484,10 @@ def recover_store(root: Path, validate: Callable[[Path], object]) -> tuple[str, 
     Unjournaled generations and conflicting paths refuse without deleting data.
     First-install staging is discarded, never promoted to committed data.
     """
+    from rivretrieve._internal.store.remote import RemoteStoreRoot, recover_remote_store
+
+    if isinstance(root, RemoteStoreRoot):
+        return recover_remote_store(root, validate)
     root = _root(root)
     abandoned = _ownership(root) == Ownership.ABANDONED
     with store_lease(root, recovery=True):

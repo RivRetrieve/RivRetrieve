@@ -83,6 +83,22 @@ def compilation_transaction(
     destination: StoreRoot, transaction: StoreTransaction | None = None
 ) -> Iterator[StoreTransaction]:
     """Reuse explicit ownership or open one publication transaction."""
+    from rivretrieve._internal.store.lifecycle import StoreLifecycleError
+    from rivretrieve._internal.store.remote import RemoteStoreRoot, RemoteStoreTransaction, remote_store_transaction
+
+    if isinstance(destination, RemoteStoreRoot):
+        if transaction is not None:
+            if not isinstance(transaction, RemoteStoreTransaction) or transaction.root != destination:
+                raise StoreLifecycleError(f"Transaction does not own store root: {destination}")
+            if transaction.committed:
+                raise ValueError("Cannot compile into an already committed transaction")
+            transaction.workspace.mkdir(exist_ok=True)
+            yield cast(StoreTransaction, transaction)
+        else:
+            with remote_store_transaction(destination) as acquired:
+                acquired.workspace.mkdir(exist_ok=True)
+                yield cast(StoreTransaction, acquired)
+        return
     if transaction is not None:
         transaction.lease.check(Path(destination))
         if transaction.committed:
@@ -146,12 +162,15 @@ def certify_store(
 
 
 def _check_artifact(artifact: Path, destination: Path, expected_artifact: object) -> None:
+    from rivretrieve._internal.store.remote import RemoteStoreRoot
+
     if not artifact.is_file():
         raise FileNotFoundError(f'publisher artifact does not exist: "{artifact}"')
     resolved_artifact = artifact.resolve()
-    resolved_destination = destination.resolve()
-    if resolved_artifact == resolved_destination or resolved_destination in resolved_artifact.parents:
-        raise ValueError("publisher artifact must be outside the observation store")
+    if not isinstance(destination, RemoteStoreRoot):
+        resolved_destination = destination.resolve()
+        if resolved_artifact == resolved_destination or resolved_destination in resolved_artifact.parents:
+            raise ValueError("publisher artifact must be outside the observation store")
     digest = hashlib.sha256()
     with artifact.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):

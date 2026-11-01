@@ -67,13 +67,17 @@ class SealedStore:
     generation_id: str
     files: Mapping[str, FileIdentity]
     supporting_outcomes: tuple[RetrievalOutcome, ...] = ()
+    seal_size: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "files", MappingProxyType(dict(self.files)))
 
     @property
     def bytes_on_disk(self) -> int:
-        return sum(item.size for item in self.files.values()) + (Path(self.store.root) / SEAL_NAME).stat().st_size
+        seal_bytes = (
+            self.seal_size if self.seal_size is not None else (Path(self.store.root) / SEAL_NAME).stat().st_size
+        )
+        return sum(item.size for item in self.files.values()) + seal_bytes
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +180,10 @@ def inspect_integrity(root: StoreRoot, provider_id: ProviderId, *, allow_pending
     ``allow_pending`` is only for lifecycle inspection after it has identified
     the exact regular pending-seal entry. It never accepts links or pending data.
     """
+    from rivretrieve._internal.store.remote import RemoteStoreRoot, inspect_remote_integrity
+
+    if isinstance(root, RemoteStoreRoot):
+        return inspect_remote_integrity(root, provider_id, allow_pending=allow_pending)
     return _inspect_integrity(root, provider_id, allow_ctime_drift=True, allow_pending=allow_pending)
 
 
@@ -259,6 +267,11 @@ def verify_files(sealed: SealedStore, identifiers: Iterable[PartitionIdentifier]
     This is the request-bounded verification contract. It does not check unselected
     observation bytes. A cached SealedStore is not permanent trust in its paths.
     """
+    from rivretrieve._internal.store.remote import RemoteStoreRoot, verify_remote_files
+
+    if isinstance(sealed.store.root, RemoteStoreRoot):
+        verify_remote_files(sealed, identifiers)
+        return
     current = inspect_integrity(sealed.store.root, sealed.store.manifest.provider_id)
     if current.generation_id != sealed.generation_id:
         _fail(sealed.store.root, sealed.store.manifest.provider_id, "generation_changed")
@@ -525,6 +538,10 @@ def audit_store(root: StoreRoot, provider_id: ProviderId, *, allow_pending: bool
     the committed seal before removing an identified incomplete seal replacement.
     This operation never removes or adopts the pending file.
     """
+    from rivretrieve._internal.store.remote import RemoteStoreRoot, audit_remote_store
+
+    if isinstance(root, RemoteStoreRoot):
+        return audit_remote_store(root, provider_id, allow_pending=allow_pending)
     sealed = _inspect_integrity(root, provider_id, allow_ctime_drift=True, allow_pending=allow_pending)
     observed = {name: _witness(Path(root) / name) for name in sealed.files}
     for name, identity in sealed.files.items():

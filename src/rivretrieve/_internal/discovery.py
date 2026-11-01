@@ -945,7 +945,7 @@ def fetch(
         If ``selection`` is not a selection.
     ValueError
         If ``cache`` or ``on_issue`` is invalid, or ``RIVRETRIEVE_CACHE_DIR``
-        is set to a blank value.
+        or S3 cache configuration is invalid.
     EmptySelectionError
         If the selection routes to no provider, station and access route.
     MultiProviderSelectionError
@@ -975,8 +975,9 @@ def fetch(
 
     Credentials are read from the process environment, then from a ``.env``
     file in the working directory. They are required even when the answer
-    comes from the cache. The cache location is ``RIVRETRIEVE_CACHE_DIR``,
-    read the same way, or the platform's user cache directory.
+    comes from the cache. The cache location is ``RIVRETRIEVE_CACHE_DIR``
+    (a local directory path or an ``s3://bucket[/prefix]`` URI), read the
+    same way, or the platform's user cache directory.
 
     A bulk provider without a compiled store returns an empty result with a
     ``bulk.store_missing`` warning and an ``unresolved`` outcome. ``fetch``
@@ -1281,15 +1282,22 @@ def _require_cache_mode_available(provider_ids: tuple[str, ...], cache: CacheMod
 
 def _resolve_store_root(provider_id: str, registered: StoreRoot | None) -> StoreRoot:
     """store location : ProviderId × RegisteredStore × Environment × WorkingDotenv → StoreRoot."""
+    from rivretrieve._internal.store.remote import RemoteStoreRoot, resolve_remote_store_root
+
     name = "RIVRETRIEVE_CACHE_DIR"
     dotenv = dotenv_values(Path.cwd() / ".env")
     value = os.environ[name] if name in os.environ else dotenv.get(name)
     if value is not None:
-        if not value.strip():
+        stripped = value.strip()
+        if not stripped:
             raise ValueError("RIVRETRIEVE_CACHE_DIR must name a non-empty cache directory")
+        if stripped.startswith("s3://") or stripped == "s3:":
+            return StoreRoot(resolve_remote_store_root(stripped, provider_id, dotenv=dotenv))
         root = Path(value).expanduser().resolve()
         store = root / provider_id / "store"
     elif registered is not None:
+        if isinstance(registered, RemoteStoreRoot):
+            return registered
         store = Path(registered)
     else:
         store = Path(user_cache_dir("rivretrieve")).resolve() / provider_id / "store"
@@ -1865,5 +1873,5 @@ def recover_cache(provider: str):
     from rivretrieve._internal.store.reader import CacheRecoveryResult, StoreReader
 
     provider_id, root = _cache_registration(provider)
-    actions = recover_store(Path(root), lambda path: audit_store(StoreRoot(path), provider_id, allow_pending=True))
-    return CacheRecoveryResult(provider_id, Path(root), StoreReader().status(root, provider_id), actions)
+    actions = recover_store(root, lambda path: audit_store(StoreRoot(path), provider_id, allow_pending=True))
+    return CacheRecoveryResult(provider_id, root, StoreReader().status(root, provider_id), actions)
