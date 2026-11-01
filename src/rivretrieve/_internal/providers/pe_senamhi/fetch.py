@@ -2,7 +2,7 @@
 
 Hourly responses may extend before their planned ownership interval. Integration
 must enforce that interval before combining responses, including revised values.
-This module neither parses observations nor enables public retrieval.
+This module leaves parsing and public registration to their respective stages.
 """
 
 import json

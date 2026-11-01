@@ -406,6 +406,75 @@ def _payload(
     )
 
 
+@pytest.mark.parametrize("acquisition_axis", ["native", "utc"])
+def test_drive_enforces_payload_interval_ownership_without_deduplicating_rows(acquisition_axis):
+    from dataclasses import replace
+
+    from rivretrieve._internal.time_axis import TimeAxis
+
+    coordinates = SourceCoordinates({"parameter": "height"})
+    config = _config(coordinates)
+    request = _request(_windows()[0], ("station-1",))
+    axis = TimeAxis(acquisition_axis)
+    # UTC ownership must compare instants, not the source's +02:00 labels.
+    offset = 2 if axis is TimeAxis.UTC else 0
+    zone = "+02:00" if offset else "+00:00"
+    boundary = datetime(2026, 1, 2, 12 - offset)
+    windows = (
+        _make_fetch_window(
+            WindowEndpoint.from_datetime(datetime(2026, 1, 2)),
+            WindowEndpoint.from_datetime(boundary - timedelta(microseconds=1)),
+        ),
+        _make_fetch_window(
+            WindowEndpoint.from_datetime(boundary),
+            WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23)),
+        ),
+    )
+    payloads = tuple(
+        replace(
+            _payload("station-1", coordinates, window),
+            content=f"original response {index}".encode(),
+            acquisition_axis=axis,
+        )
+        for index, window in enumerate(windows)
+    )
+    snapshots = (
+        pl.concat(
+            [_rows("station-1", 11, 100.0, time_zone=zone)] * 2 + [_rows("station-1", 12, 999.0, time_zone=zone)]
+        ),
+        pl.concat([_rows("station-1", 11, 888.0, time_zone=zone), _rows("station-1", 12, 200.0, time_zone=zone)]),
+    )
+
+    class PartitionedProvider:
+        window_declarations = _LEVEL_WINDOW_DECLARATIONS
+
+        def __init__(self):
+            self.config = config
+
+        def fetch(self, *args, **kwargs):
+            return WithIssues(payloads)
+
+        def parse(self, payload, supplied_config):
+            index = next(i for i, original in enumerate(payloads) if original.content == payload.content)
+            assert payload.content is payloads[index].content
+            return _parsed(snapshots[index], payload, supplied_config)
+
+    result = driver_module.drive(
+        request,
+        PartitionedProvider(),
+        provenance=_provenance(request),
+        receipts=ReceiptMode.INCLUDE,
+    )
+    expected = pl.DataFrame(
+        {
+            "time": [datetime(2026, 1, 2, 11), datetime(2026, 1, 2, 11), datetime(2026, 1, 2, 12)],
+            "value": [1.0, 1.0, 2.0],
+        }
+    )
+    pl_testing.assert_frame_equal(result.canonical_rows.select("time", "value"), expected)
+    assert tuple(entry.content for entry in result.receipts.entries) == tuple(payload.content for payload in payloads)
+
+
 def _origin() -> SourceCallOrigin:
     unknown = UnknownOriginFact()
     return SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown)

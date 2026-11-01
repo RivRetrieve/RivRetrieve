@@ -2563,6 +2563,17 @@ def drive(
             )
             parsed = replace(parsed, outcomes=bound_outcomes, inventories=bound_inventories, issues=bound_issues)
             validate_native_rows(parsed.rows, config.products, series=parsed.series)
+            # A source response may include revised rows owned by another partition.
+            # Apply acquisition bounds before combining snapshots; retain duplicates
+            # inside the owned interval and leave receipt bytes unchanged.
+            owned_rows = parsed.rows.filter(
+                axis_time_expression(payload.acquisition_axis).is_between(
+                    datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+                    datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+                    closed="both",
+                )
+            )
+            parsed = replace(parsed, rows=owned_rows)
             transaction_parsed.append(parsed)
             parsed_payloads.append((payload_index, parsed))
         # Resolve held fallback for the entire acquisition before admitting fresh
