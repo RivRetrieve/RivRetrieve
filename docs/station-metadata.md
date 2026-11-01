@@ -66,6 +66,7 @@ of the source view.
 | [`jp_mlit`](providers/jp_mlit.md) | `観測所名` | `河川名` | `流域面積` (km2) | `零点高` (m) |
 | [`lt_lhmt`](providers/lt_lhmt.md) | `name` | `waterBody` | — | — |
 | [`no_nve`](providers/no_nve.md) | `stationName` | `lakeName`, `reservoirName`, `riverName` | `drainageBasinArea`, `drainageBasinAreaNorway`, `transferAreaIn`, `transferAreaOut` (km2) | `masl` (m) |
+| [`pe_senamhi`](providers/pe_senamhi.md) | `name` | `waterBody` | — | `altitude` (m) |
 | [`pl_imgw`](providers/pl_imgw.md) | — | — | `area` (square kilometre) | `gauge_altitude` (m) |
 | [`th_thaiwater`](providers/th_thaiwater.md) | — | — | — | — |
 | [`usgs_nwis`](providers/usgs_nwis.md) | `station_nm` | — | `contrib_drain_area_va`, `drain_area_va` (sq mi) | `alt_va` (feet) |

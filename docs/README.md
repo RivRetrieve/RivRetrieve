@@ -22,6 +22,7 @@ Provider pages explain their agencies and source-specific conditions:
 - [Japan: MLIT](providers/jp_mlit.md)
 - [Lithuania: LHMT](providers/lt_lhmt.md)
 - [Norway: NVE](providers/no_nve.md)
+- [Peru: SENAMHI](providers/pe_senamhi.md)
 - [Poland: IMGW-PIB](providers/pl_imgw.md)
 - [Switzerland: FOEN](providers/ch_foen.md)
 - [Thailand: ThaiWater](providers/th_thaiwater.md)
