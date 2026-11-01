@@ -19,6 +19,7 @@ import polars as pl
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
     CatalogueBuildInputs,
+    NativeTableIdentity,
     verify_provenance_recordings,
 )
 from rivretrieve._internal.catalogue_origins import Field, OriginDeclarations, enforce_catalogue_origins
@@ -628,6 +629,28 @@ def supplement_native_stations(
     return NativeTable(pl.concat([native_table.data, supplemental.data]).sort("site_no"))
 
 
+def retain_native_stations(
+    current: NativeTable, retained: NativeTable, monitoring_location_ids: Sequence[str]
+) -> NativeTable:
+    """Keep explicitly selected historical station rows with their original facts and times.
+
+    Both inputs must have verified acquisition identities at the composition
+    boundary. This never replaces current rows or invents current availability.
+    """
+    if current.data.schema != NATIVE_SCHEMA or retained.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("USGS retained station inputs require the exact native schema")
+    selected = set(monitoring_location_ids)
+    if len(selected) != len(monitoring_location_ids):
+        raise FatalContractError("Retained station selection contains duplicate identities")
+    rows = retained.data.with_columns((pl.col("agency_cd") + pl.lit("-") + pl.col("site_no")).alias("_location"))
+    rows = rows.filter(pl.col("_location").is_in(selected))
+    if set(rows["_location"].to_list()) != selected:
+        raise FatalContractError("Selected retained station identity is missing")
+    if set(rows["site_no"].to_list()) & set(current.data["site_no"].to_list()):
+        raise FatalContractError("Retained station identity collides with current inventory")
+    return NativeTable(pl.concat([current.data, rows.drop("_location")]).sort("site_no"))
+
+
 def refresh_native_table_from_fixtures(
     series_fixture_path: Path | str,
     expanded_fixture_path: Path | str,
@@ -1196,7 +1219,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--input-retrievals", type=Path, help="Expanded input filename to actual source retrieval UTC instant JSON."
     )
 
+    parser.add_argument(
+        "--retained-native", type=Path, help="Verified historical native table for explicitly preserved stations."
+    )
+    parser.add_argument("--retained-native-identity", type=Path, help="Reviewed historical NativeTableIdentity JSON.")
+    parser.add_argument(
+        "--retained-locations", type=Path, help="Exact missing agency-qualified historical station IDs JSON."
+    )
+
     args = parser.parse_args(argv)
+
+    retained_options = (args.retained_native, args.retained_native_identity, args.retained_locations)
+    if any(value is not None for value in retained_options) and (
+        any(value is None for value in retained_options) or args.rdb_dir is None
+    ):
+        parser.error("retained station inputs require --rdb-dir and all retained options")
 
     supplemental_options = (args.supplemental_expanded, args.selected_locations, args.input_retrievals)
     if any(value is not None for value in supplemental_options) and (
@@ -1305,6 +1342,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 modern_features=features,
                 retrieved_at=retrieved_at,
             )
+    if args.retained_native is not None:
+        identity = NativeTableIdentity.model_validate_json(args.retained_native_identity.read_bytes())
+        retained = read_native_table(
+            args.retained_native, expected_sha256=identity.sha256, expected_byte_size=identity.byte_size
+        )
+        locations = json.loads(args.retained_locations.read_text())
+        if not isinstance(locations, list) or any(not isinstance(item, str) or not item for item in locations):
+            raise FatalContractError("Retained station selection requires agency-qualified IDs")
+        native = retain_native_stations(native, retained, locations)
     write_native_table(native, args.native_out)
     print(f"USGS native table canonical SHA-256: {native_table_content_sha256(native)}")
     return 0

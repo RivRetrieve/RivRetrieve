@@ -1471,3 +1471,63 @@ def test_native_publication_uses_explicit_acquisition_identity_for_byte_verifica
         )
     assert seen == [provenance]
     assert not destination.exists()
+
+
+def test_explicit_retained_stations_preserve_historical_rows_without_replacing_current():
+    current = _native_table([{"site_no": "current"}])
+    historical = _native_table([{"site_no": "old-one"}, {"site_no": "old-two"}, {"site_no": "not-selected"}])
+    result = generator.retain_native_stations(current, historical, ("USGS-old-one", "USGS-old-two"))
+    expected = pl.concat([current.data, historical.data.filter(pl.col("site_no").is_in(["old-one", "old-two"]))]).sort(
+        "site_no"
+    )
+    pl_testing.assert_frame_equal(result.data, expected)
+    with pytest.raises(FatalContractError, match="collides"):
+        generator.retain_native_stations(current, current, ("USGS-current",))
+    with pytest.raises(FatalContractError, match="missing"):
+        generator.retain_native_stations(current, historical, ("OTHER-old-one",))
+
+
+def test_native_refresh_cli_retains_only_exact_historical_selection(tmp_path, monkeypatch):
+    from rivretrieve._internal.acquisition_provenance import NativeTableIdentity
+
+    current = _native_table([{"site_no": "current"}])
+    historical = _native_table([{"site_no": "old-one"}, {"site_no": "old-two"}])
+    monkeypatch.setattr(
+        generator,
+        "refresh_native_table_from_rdb_directory",
+        lambda *args, **kwargs: generator.WithIssues(value=current, issues=()),
+    )
+    history = tmp_path / "historical.parquet"
+    historical.data.write_parquet(history)
+    identity = NativeTableIdentity(
+        repository_path="historical/native.parquet",
+        revision="a" * 40,
+        sha256=hashlib.sha256(history.read_bytes()).hexdigest(),
+        byte_size=history.stat().st_size,
+    )
+    identity_path = tmp_path / "identity.json"
+    identity_path.write_text(identity.model_dump_json())
+    selection = tmp_path / "selection.json"
+    selection.write_text(json.dumps(["USGS-old-one"]))
+    output = tmp_path / "native.parquet"
+    generator.main(
+        [
+            "--rdb-dir",
+            str(tmp_path),
+            "--native-out",
+            str(output),
+            "--retrieved-at",
+            "2026-10-31T12:00:00Z",
+            "--retained-native",
+            str(history),
+            "--retained-native-identity",
+            str(identity_path),
+            "--retained-locations",
+            str(selection),
+        ]
+    )
+    result = read_native_table(output).data
+    assert result["site_no"].to_list() == ["current", "old-one"]
+    pl_testing.assert_frame_equal(
+        result.filter(pl.col("site_no") == "old-one"), historical.data.filter(pl.col("site_no") == "old-one")
+    )
