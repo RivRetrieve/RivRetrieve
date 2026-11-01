@@ -106,7 +106,8 @@ def test_public_retained_rows_clipping_and_cache(
                 expected.extend(
                     (cell["column"], timestamp, cell["value"]) for cell in row["values"] if cell["column"] in fields
                 )
-    assert expected, "Selected retained interval must exercise observation parsing"
+    present = bool(expected)
+    assert present, "Selected retained interval must exercise observation parsing"
     identities = {series.series_id: series.identity.published_id for series in result.source_series}
     actual = [
         (identities[identity], timestamp, value)
@@ -126,3 +127,95 @@ def test_public_retained_rows_clipping_and_cache(
     unchanged = result.data.equals(bypassed.data)
     assert unchanged, "Bypass changed source observations"
     assert replay.calls == 2
+
+
+class PartitionReplay:
+    def __init__(self, root, members):
+        self.partitions = tuple(Replay(root, member) for member in members)
+        self.pending = iter(self.partitions)
+
+    def send(self, request):
+        return next(self.pending).send(request)
+
+
+@pytest.mark.recorded(_SCOPE)
+def test_public_retained_hourly_point_uses_owned_partition(retained_evidence_root, monkeypatch):
+    replay = PartitionReplay(
+        retained_evidence_root / _SCOPE,
+        (
+            "integration/hourly-ramis-20240829-end-second",
+            "boundaries/hourly-end-second-0",
+            "boundaries/hourly-end-second-1",
+        ),
+    )
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+    timestamp = datetime(2024, 8, 31)
+    result = rr.fetch(
+        select_product("47251282", "phisis_hourly_flow"),
+        start=timestamp,
+        end=timestamp,
+        cache="bypass",
+        receipts=True,
+        on_issue="ignore",
+    )
+    # The Aug31 acquisition owns Aug30–31; Sep2's genuine prefix is not its observation.
+    source = json.loads(replay.partitions[1].content)["data"]["hourly"]
+    expected = [
+        (datetime.fromisoformat(row["time"]), row["value"])
+        for row in source
+        if datetime.fromisoformat(row["time"]) == timestamp
+    ]
+    present = bool(expected)
+    assert present, "Retained hourly point must contain a source observation"
+    matching = result.data.select("time", "value").rows() == expected
+    assert matching, "Public hourly point differs from its owning source partition"
+    assert len(result.source_series) == 1
+    assert result.source_series[0].identity.published_id == "value"
+    assert result.data["time_zone"].unique().to_list() == ["unknown"]
+    assert all(partition.calls == 1 for partition in replay.partitions)
+    preserved = [entry.content for entry in result.receipts.entries] == [
+        partition.content for partition in replay.partitions
+    ]
+    assert preserved, "Hourly receipts changed original partition bytes"
+
+
+@pytest.mark.recorded(_SCOPE)
+def test_public_retained_future_month_values_survive_clipping(retained_evidence_root, monkeypatch):
+    replay = PartitionReplay(
+        retained_evidence_root / _SCOPE,
+        ("integration/readings-213600-202611", "anchors/readings-213600-202612"),
+    )
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+    first, last = datetime(2026, 12, 1), datetime(2026, 12, 2, 23, 59, 59)
+    result = rr.fetch(
+        select_product("213600", "monthly_archive_nivel_del_rio_promedio"),
+        start=first,
+        end=last,
+        cache="bypass",
+        receipts=True,
+        on_issue="ignore",
+    )
+    december = replay.partitions[1]
+    captured = datetime.fromisoformat(december.receipt["finished_at"])
+    assert captured.date() < first.date(), "The original must witness values dated after acquisition"
+    expected = [
+        (datetime.strptime(row["date"], "%Y-%m-%d"), cell["value"])
+        for row in json.loads(december.content)["data"]["readings"]
+        if first <= datetime.strptime(row["date"], "%Y-%m-%d") <= last
+        for cell in row["values"]
+        if cell["column"] == "NIVEL_DEL_RIO_PROMEDIO"
+    ]
+    nonnull = any(value is not None for _, value in expected)
+    assert nonnull, "Retained future field must contain published values"
+    matching = sorted(result.data.select("time", "value").rows(), key=lambda row: row[0]) == sorted(
+        expected, key=lambda row: row[0]
+    )
+    assert matching, "Public future observations differ from original source values"
+    assert len(result.source_series) == 1
+    assert result.source_series[0].identity.published_id == "NIVEL_DEL_RIO_PROMEDIO"
+    assert result.data["time_zone"].unique().to_list() == ["unknown"]
+    assert all(partition.calls == 1 for partition in replay.partitions)
+    preserved = [entry.content for entry in result.receipts.entries] == [
+        partition.content for partition in replay.partitions
+    ]
+    assert preserved, "Monthly receipts changed original partition bytes"
