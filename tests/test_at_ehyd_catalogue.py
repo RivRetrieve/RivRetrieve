@@ -98,8 +98,23 @@ def _stammdaten_bytes(hzbnr: str, ezg: str = "55,3", *, seeflaeche: str | None =
     return ("\r\n".join(lines) + "\r\n").encode("cp1252")
 
 
-def _series_bytes(unit_field: str) -> bytes:
-    return f"Messstelle:;Synthetic\r\nEinheit:;{unit_field}\r\nWerte:\r\n".encode("cp1252")
+def _series_bytes(
+    unit_field: str,
+    *,
+    ezr: str = "(1,Abfluss,I,Mit,T,1)",
+    interval_rule: bool = True,
+) -> bytes:
+    from rivretrieve._internal.providers.at_ehyd.series import OWF_INTERVAL_RULE_TEXT
+
+    lines = [
+        "Messstelle:;Synthetic",
+        f"Einheit:;{unit_field}",
+        f"Exportzeitreihe:;{ezr}",
+    ]
+    if interval_rule:
+        lines.append(f";;{OWF_INTERVAL_RULE_TEXT}")
+    lines.append("Werte:")
+    return ("\r\n".join(lines) + "\r\n").encode("cp1252")
 
 
 def _zip_archive(members: dict[str, bytes]) -> bytes:
@@ -254,22 +269,49 @@ def test_owf_and_pegel_aktuell_associations_handle_empty_units_outages_and_lake_
                 "204388",
                 [{"hzbnr": "204388", "file": "W-Tagesmittel-204388.csv", "ftyp": "owf_wasserst_tagesmittel"}],
             ),
+            _ehyd_owf_feature(
+                "207340",
+                [{"hzbnr": "207340", "file": "W-Monatsminima-207340.csv", "ftyp": "owf_wasserst_monatsminima"}],
+            ),
         ]
     }
     zip_bytes = _zip_archive(
         {
-            "Q-Tagesmittel/Q-Tagesmittel-209486.csv": _series_bytes(" m³/s"),
-            "W-Tagesmittel/W-Tagesmittel-209486.csv": _series_bytes(" [cm]"),
-            "WT-Monatsmittel/WT-Monatsmittel-209486.csv": _series_bytes(" [ [°C]]"),
-            "W-Tagesmittel/W-Tagesmittel-204388.csv": _series_bytes(" []"),
+            "Q-Tagesmittel/Q-Tagesmittel-209486.csv": _series_bytes(" m³/s", ezr="(1,Abfluss,I,Mit,T,1)"),
+            "W-Tagesmittel/W-Tagesmittel-209486.csv": _series_bytes(" [cm]", ezr="(1,Wasserstand,I,Mit,T,1)"),
+            "WT-Monatsmittel/WT-Monatsmittel-209486.csv": _series_bytes(" [ [°C]]", ezr="(1,WTemperatur,I,Mit,M,1)"),
+            "W-Tagesmittel/W-Tagesmittel-204388.csv": _series_bytes(" []", ezr="(Invalid ZR)", interval_rule=False),
+            "W-Monatsminima/W-Monatsminima-207340.csv": _series_bytes(
+                " [cm]", ezr="(10001027,Wasserstand,M,Min,T,1,F,Z,0,,,)", interval_rule=False
+            ),
         }
     )
-    owf = owf_associations(ehyd_owf, zip_bytes, station_ids={"209486", "204388"})
+    owf = owf_associations(ehyd_owf, zip_bytes, station_ids={"209486", "204388", "207340"})
     assert owf.rows() == [
+        ("207340", "owf", "owf_wasserst_monatsminima", "cm"),
         ("209486", "owf", "owf_abfl_tagesmittel", "m³/s"),
         ("209486", "owf", "owf_wasserst_tagesmittel", "cm"),
         ("209486", "owf", "owf_wassertemp_monatsmittel", "°C"),
     ]
+
+    # Unwitnessed daily period inside a monthly extrema file fails closed
+    bad_monthly_owf = {
+        "features": [
+            _ehyd_owf_feature(
+                "209486",
+                [{"hzbnr": "209486", "file": "W-Monatsminima-209486.csv", "ftyp": "owf_wasserst_monatsminima"}],
+            )
+        ]
+    }
+    bad_monthly_zip = _zip_archive(
+        {
+            "W-Monatsminima/W-Monatsminima-209486.csv": _series_bytes(
+                " [cm]", ezr="(1,Wasserstand,M,Min,T,1)", interval_rule=False
+            )
+        }
+    )
+    with pytest.raises(FatalContractError, match="Unexpected daily period"):
+        owf_associations(bad_monthly_owf, bad_monthly_zip, station_ids={"209486"})
 
     # 0-byte pegel_bgis outage and empty pegel_longterm array envelope return empty associations
     assert pegel_aktuell_associations(b"", kind="pegel_bgis", station="201087", station_ids={"201087"}).is_empty()
@@ -349,23 +391,32 @@ def test_source_descriptions_admit_cm_with_gauge_zero_and_group_stations():
             ("209486", "owf", "owf_wasserst_tagesmittel", "cm"),
             ("200014", "owf", "owf_wasserst_tagesmittel", "cm"),
             ("209486", "owf", "owf_wasserst_tagesmittel", "cm"),
+            ("209486", "owf", "owf_wasserst_monatsminima", "cm"),
+            ("207340", "owf", "owf_wasserst_monatsminima", "cm"),
         ],
         schema=ASSOCIATION_SCHEMA,
         orient="row",
     )
     descriptions = describe_associations(associations).descriptions
-    assert len(descriptions) == 1
-    desc = descriptions[0]
-    assert desc.station_ids == ("200014", "209486")
+    assert len(descriptions) == 3
+    by_stations = {(d.product_id, d.station_ids): d for d in descriptions}
+    desc = by_stations[("owf_wasserst_tagesmittel", ("200014", "209486"))]
     facts = desc.facts[0]
     assert facts.source_unit.value == "cm"
     assert facts.normalized_unit == "cm"
     assert facts.vertical_reference.value == "gauge_zero"
-    assert facts.frequency.value is None
+    assert facts.frequency.value == "daily"
+    assert facts.statistic.value == "mean"
+    assert facts.timestamp_anchor.value == "start"
+    assert facts.temporal_support.value is None
+    assert facts.time_zone.value is None
     decision = admission(facts)
     assert decision.status == "supported"
     assert decision.target_unit == "m"
     assert decision.factor == 0.01
+
+    assert by_stations[("owf_wasserst_monatsminima", ("209486",))].facts[0].frequency.value == "monthly"
+    assert by_stations[("owf_wasserst_monatsminima", ("207340",))].facts[0].frequency.value is None
 
 
 def test_provenance_and_offline_catalogue_publication_round_trip(tmp_path: Path):
@@ -434,6 +485,11 @@ def test_provenance_and_offline_catalogue_publication_round_trip(tmp_path: Path)
         "source.station.pegelnullpunkt_definition",
         "source.station_product.owf_associations",
         "source.station_product.pegel_aktuell_associations",
+        "source.product.owf_export_descriptors",
+        "source.product.pegelordnung_temporal_rules",
+        "source.product.pegel_aktuell_coordinates",
+        "source.series.pegel_aktuell_fields",
+        "source.product.pegel_aktuell_temporal_meaning",
         "source.provider.license",
         "source.provider.citation",
     )
@@ -526,6 +582,7 @@ def test_provenance_and_offline_catalogue_publication_round_trip(tmp_path: Path)
         declarations=(
             code(prefix + "origins.py", "build_acquisition_provenance"),
             code(prefix + "generate_catalogue.py", "build_catalogue"),
+            code(prefix + "series.py", "source_series"),
             code(prefix + "origins.py", "STATION_METADATA_FIELDS"),
             code(prefix + "station_metadata.py", "project_station_metadata"),
         ),
@@ -590,12 +647,27 @@ def test_selected_inputs_publish_deterministic_catalogue(
             )
             == 0
         )
-        load_packaged_catalogue_artifact(output, on_issue="raise")
+        artifact = load_packaged_catalogue_artifact(output, on_issue="raise")
+        assert artifact.source_descriptions is not None
+        assert len(artifact.source_descriptions.descriptions) == 12
         stations = pl.read_parquet(output / "stations.parquet")
         assert stations.height == 746
         assert stations["crs"].unique().to_list() == ["EPSG:4326"]
         products = pl.read_parquet(output / "products.parquet")
         assert products.height == 11
+        assert set(products["observed_property"].to_list()) == {"discharge", "stage", "water_temperature"}
+        products_by_id = {row["product_id"]: row for row in products.iter_rows(named=True)}
+        assert products_by_id["owf_abfl_tagesmittel"]["frequency"] == "daily"
+        assert products_by_id["owf_abfl_tagesmittel"]["statistic"] == "mean"
+        assert products_by_id["owf_abfl_tagesmittel"]["period_anchor"] == "start"
+        assert products_by_id["owf_abfl_tagesmittel"]["period_type"] == "unknown"
+        assert products_by_id["owf_wasserst_monatsminima"]["frequency"] == "unknown"
+        assert products_by_id["owf_wasserst_monatsminima"]["statistic"] == "min"
+        assert products_by_id["owf_wasserst_monatsminima"]["period_type"] == "unknown"
+        assert products_by_id["owf_wasserst_monatsmaxima"]["frequency"] == "monthly"
+        assert products_by_id["owf_wasserst_monatsmaxima"]["period_type"] == "calendar_month"
+        assert products_by_id["pegel_bgis_abfluss"]["frequency"] == "unknown"
+        assert products_by_id["pegel_longterm_abfluss"]["frequency"] == "daily"
         pairs = pl.read_parquet(output / "station_products.parquet")
         assert pairs.height == 746 * 11
         assert pairs.filter(pl.col("availability") == "available").height == 4837
