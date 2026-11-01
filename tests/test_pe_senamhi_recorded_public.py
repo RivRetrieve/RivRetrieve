@@ -62,6 +62,14 @@ def select_product(station, product):
             ("current", "minimum", "maximum"),
         ),
         (
+            "access/hydrogram-daily-level-2024-240103",
+            "240103",
+            "phisis_daily_level_above_sea_level",
+            "2024-06-01",
+            "2024-06-02T23:59:59",
+            ("current", "minimum", "maximum"),
+        ),
+        (
             "anchors/readings-47E0D438-202610",
             "47E0D438",
             "monthly_archive_n_nivelagua",
@@ -116,6 +124,18 @@ def test_public_retained_rows_clipping_and_cache(
     matching = sorted(actual, key=lambda row: row[:2]) == sorted(expected, key=lambda row: row[:2])
     assert matching, "Public observations differ from independently decoded source fields"
     assert result.data["time_zone"].unique().to_list() == ["unknown"]
+    level = product == "phisis_daily_level_above_sea_level"
+    assert result.data["quantity"].unique().to_list() == ["discharge" if product == "phisis_daily_flow" else "stage"]
+    assert result.data["source_unit"].unique().to_list() == (
+        ["m.s.n.m"] if level else ["m3/s"] if product == "phisis_daily_flow" else ["m"]
+    )
+    assert result.data["unit"].unique().to_list() == ["m3/s" if product == "phisis_daily_flow" else "m"]
+    for series in result.source_series:
+        for facts in series.facts:
+            assert facts.vertical_reference.value == ("above_sea_level" if level else None)
+            assert facts.vertical_datum.value is None
+            assert facts.frequency.value is None
+            assert facts.statistic.value is None
     assert replay.calls == 1
     original_bytes = len(result.receipts.entries) == 1 and result.receipts.entries[0].content == replay.content
     assert original_bytes, "Public receipt did not retain original source bytes"
