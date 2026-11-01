@@ -468,9 +468,32 @@ def build_modern_acquisition_provenance(
         acquisition_id=observation_request.acquisition_id,
     )
     source = legacy.source_records[0]
+    prior = next((item for item in source.acquisitions if item.acquisition_id == acquisition.acquisition_id), None)
+    acquisitions = source.acquisitions
+    if prior is not None:
+        instants = tuple(
+            value
+            for value in (
+                prior.retrieved_at_start,
+                prior.retrieved_at_end,
+                acquisition.retrieved_at_start,
+                acquisition.retrieved_at_end,
+            )
+            if value is not None
+        )
+        acquisition = acquisition.model_copy(
+            update={
+                "description": "Selected original station and modern metadata responses from one acquisition campaign",
+                "requested_from": tuple(dict.fromkeys(prior.requested_from + acquisition.requested_from)),
+                "recording_ids": prior.recording_ids + acquisition.recording_ids,
+                "retrieved_at_start": min(instants),
+                "retrieved_at_end": max(instants),
+            }
+        )
+        acquisitions = tuple(item for item in acquisitions if item.acquisition_id != acquisition.acquisition_id)
     source = source.model_copy(
         update={
-            "acquisitions": source.acquisitions + (acquisition, observation_request),
+            "acquisitions": acquisitions + (acquisition, observation_request),
             "evidence": source.evidence
             + tuple(
                 EvidenceReference(

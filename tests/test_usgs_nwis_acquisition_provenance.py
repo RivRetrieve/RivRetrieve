@@ -176,10 +176,11 @@ def test_selected_native_provenance_credits_each_actual_event_not_historical_cam
     assert bindings["source.station.nwis_identity_location_datum"].acquisition_id == "national_site_campaign_2026_08_02"
 
 
-def test_selected_modern_campaign_keeps_native_events_and_new_recording_root(tmp_path):
+@pytest.mark.parametrize("metadata_event", ["selected-metadata", "selected-native"])
+def test_selected_modern_campaign_keeps_native_events_and_new_recording_root(tmp_path, metadata_event):
     from datetime import UTC, datetime
 
-    from rivretrieve._internal.acquisition_provenance import AcquisitionRecord, NativeTableIdentity
+    from rivretrieve._internal.acquisition_provenance import AcquisitionRecord, NativeTableIdentity, RecordingReference
     from rivretrieve._internal.providers.usgs_nwis.origins import (
         build_modern_acquisition_provenance,
         selected_native_provenance,
@@ -196,18 +197,27 @@ def test_selected_modern_campaign_keeps_native_events_and_new_recording_root(tmp
     native = NativeTableIdentity(
         repository_path="selected/native.parquet", revision="a" * 40, sha256="b" * 64, byte_size=123
     )
-    base = selected_native_provenance(native, (event,), ())
+    record = RecordingReference(
+        recording_id="native-body",
+        repository_path="research/selected/native.gz",
+        source_url="https://example.org/native",
+        retrieved_at=datetime(2026, 10, 31, tzinfo=UTC),
+        media_type="application/gzip",
+        sha256="c" * 64,
+    )
+    event = event.model_copy(update={"recording_ids": (record.recording_id,)})
+    base = selected_native_provenance(native, (event,), (record,))
     (tmp_path / "page.json.gz").write_bytes(b"synthetic retained gzip member")
     receipts = [{"file": "page.json.gz", "url": "https://example.org/metadata", "retrieved_at": "2026-10-31T12:00:00Z"}]
     result = build_modern_acquisition_provenance(
         receipts,
         tmp_path,
         native_provenance=base,
-        metadata_acquisition_id="selected-metadata",
+        metadata_acquisition_id=metadata_event,
         metadata_recording_root="research/selected",
     )
     bindings = {fact: binding for binding in result.fact_bindings for fact in binding.facts}
-    assert bindings["source.station_product.modern_series_availability"].acquisition_id == "selected-metadata"
+    assert bindings["source.station_product.modern_series_availability"].acquisition_id == metadata_event
     for fact in ("station.latitude", "station.longitude", "station_product.availability"):
         dependencies = {item.fact for item in bindings[fact].transformation.external_inputs}
         assert "source.station.selected_input_0" in dependencies
@@ -217,3 +227,8 @@ def test_selected_modern_campaign_keeps_native_events_and_new_recording_root(tmp
     )
     assert recording.repository_path == "research/selected/page.json.gz"
     assert result.native_table == native
+    if metadata_event == "selected-native":
+        merged = next(item for item in result.source_records[0].acquisitions if item.acquisition_id == metadata_event)
+        assert set(merged.recording_ids) == {"native-body", "modern_metadata_0"}
+        assert merged.retrieved_at_start == datetime(2026, 10, 31, tzinfo=UTC)
+        assert merged.retrieved_at_end == datetime(2026, 10, 31, 12, tzinfo=UTC)
