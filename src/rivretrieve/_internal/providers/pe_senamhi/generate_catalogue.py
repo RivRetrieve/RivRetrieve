@@ -177,8 +177,8 @@ def catalogue_tables(
 ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """Build witnessed product candidates and leave all other station pairs unknown.
 
-    Sampling frequency names remain source identity, without claiming temporal
-    support or statistics. Sample dates never become published record bounds.
+    PHISIS resolution establishes frequency independently of temporal support
+    and statistics. Sample dates never become published record bounds.
     """
     from rivretrieve._internal.catalogues.schemas import (
         PRODUCT_CATALOG_SCHEMA,
@@ -208,7 +208,8 @@ def catalogue_tables(
                 "provider_id": "pe_senamhi",
                 "product_id": association_product(subsystem, resolution, variable, unit),
                 "observed_property": "discharge" if variable == "FLOW" else "stage",
-                "frequency": "unknown",
+                "frequency": next(iter(series_mappings(subsystem, resolution, variable, unit).values())).frequency
+                or "unknown",
                 "statistic": "unknown",
                 "period_type": "unknown",
                 "period_anchor": "unknown",

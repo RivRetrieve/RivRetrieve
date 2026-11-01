@@ -66,7 +66,7 @@ STATION_METADATA_FIELDS = (
 
 _CATALOGUE_SOURCE_FACTS = {
     "station": ("source.station.registry", "source.station.phisis_detail"),
-    "product": ("source.station_product.associations",),
+    "product": ("source.station_product.associations", "source.series.frequency"),
     "station_product": ("source.station_product.associations", "source.station_product.inventory_support"),
 }
 
@@ -82,7 +82,7 @@ def build_acquisition_provenance(
     """Bind original source evidence and a retained derivative to catalogue facts.
 
     Acquisitions and exact statements come from the verified selection. Unknown
-    CRS, temporal meanings and record bounds remain unknown in canonical output.
+    CRS, temporal support and record bounds remain unknown in canonical output.
     """
     if any(binding.source_id != "pe_senamhi" or binding.transformation is not None for binding in source_bindings):
         raise ValueError("SENAMHI source bindings must directly identify selected acquisitions")

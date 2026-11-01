@@ -129,7 +129,7 @@ def test_catalogue_keeps_unknown_pairs_and_distinguishes_unit_based_level_produc
     assert stations["crs"].to_list() == ["unknown", "unknown"]
     assert stations.select("latitude", "longitude").row(0) == (-12.0, -75.0)
     assert products.select("product_id", "frequency", "statistic").rows() == [
-        ("phisis_daily_level_above_sea_level", "unknown", "unknown")
+        ("phisis_daily_level_above_sea_level", "daily", "unknown")
     ]
     assert pairs.select("station_id", "availability").rows() == [("A", "available"), ("B", "unknown")]
     assert pairs["published_record_start_date"].null_count() == 2
@@ -150,7 +150,7 @@ def test_source_descriptions_preserve_unknown_time_and_datum():
     facts = description.facts[0]
     assert facts.source_unit.value == "m.s.n.m"
     assert facts.vertical_reference.value == "above_sea_level"
-    assert facts.frequency.value is None
+    assert facts.frequency.value == "daily"
     assert facts.time_zone.value is None
     assert facts.vertical_datum.value is None
 
@@ -409,6 +409,7 @@ def test_provenance_requires_direct_sources_and_retains_derived_native_identity(
         "source.station_product.associations",
         "source.station_product.inventory_support",
         "source.series.fields",
+        "source.series.frequency",
         "source.provider.terms",
         "source.provider.attribution",
     )
