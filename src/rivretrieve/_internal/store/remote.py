@@ -512,8 +512,8 @@ def inspect_remote_lifecycle(root: RemoteStoreRoot) -> LifecycleState:
         installed = record["phase"] in {"replacing", "committed"} and not stage_exists and store_exists
         if installed:
             cleanup = (*cleanup, *residue)
-        elif not store_exists and previous_exists and record["phase"] == "replacing":
-            committed = previous
+        elif record["phase"] == "replacing":
+            committed = previous if previous_exists else None
     return LifecycleState(
         committed,
         tuple(p for p in residue if p not in cleanup),
@@ -946,7 +946,7 @@ class RemoteStoreTransaction:
             self.record["phase"] in {"replacing", "committed"} and not stage_exists and store_exists
         )
         self.committed = committed
-        if not committed and previous_exists:
+        if not committed and self.record["phase"] == "replacing" and previous_exists:
             try:
                 _remove_remote_tree(self.root, parent_objs)
                 _copy_remote_tree(self.remote_previous, self.root, parent_objs)
@@ -966,7 +966,7 @@ class RemoteStoreTransaction:
             except OSError as error:
                 errors.append(error)
 
-        cleanup_targets = (self.remote_previous,) if committed else (self.remote_stage,)
+        cleanup_targets = (self.remote_previous,) if committed else (self.remote_stage, self.remote_previous)
         for target in cleanup_targets:
             try:
                 _remove_remote_tree(target)
@@ -1066,20 +1066,23 @@ def recover_remote_store(root: RemoteStoreRoot, validate: Callable[[Path], objec
         actions.append(f"kept committed store: {root}")
     elif record["phase"] == "committed":
         raise StoreLifecycleError("Committed store missing or conflicting stage; refusing backup restoration")
-    elif previous_exists and record["phase"] == "preparing":
-        raise StoreLifecycleError("Previous store contradicts preparation journal")
-    elif store_exists and previous_exists:
-        raise StoreLifecycleError("Conflicting committed paths")
-    elif previous_exists:
-        validate_candidate(previous)
-        _remove_remote_tree(root, parent_objs)
-        _copy_remote_tree(previous, root, parent_objs)
-        actions.append(f"restored previous store: {previous} -> {root}")
-    elif store_exists:
-        validate_candidate(root)
-        actions.append(f"kept previous store: {root}")
-    elif record["phase"] == "replacing" and not stage_exists:
-        raise StoreLifecycleError("No recoverable store or staged candidate")
+    elif record["phase"] == "preparing":
+        if previous_exists and not store_exists:
+            raise StoreLifecycleError("Previous store contradicts preparation journal")
+        if store_exists:
+            validate_candidate(root)
+            actions.append(f"kept previous store: {root}")
+    elif record["phase"] == "replacing":
+        if previous_exists:
+            validate_candidate(previous)
+            _remove_remote_tree(root, parent_objs)
+            _copy_remote_tree(previous, root, parent_objs)
+            actions.append(f"restored previous store: {previous} -> {root}")
+        elif not stage_exists:
+            raise StoreLifecycleError("No recoverable store or staged candidate")
+        elif store_exists:
+            _remove_remote_tree(root, parent_objs)
+            actions.append(f"removed {root}")
 
     if not installed:
         record["phase"] = "preparing"

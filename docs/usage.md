@@ -411,7 +411,7 @@ result = rr.fetch(
 )
 
 status = rr.cache_status("usgs_nwis")
-print(status.path, status.exists)
+print(status.store, status.exists)
 
 # Output:
 # s3://hydro-archive/rivretrieve/usgs_nwis/store True

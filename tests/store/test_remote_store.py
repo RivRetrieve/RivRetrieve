@@ -557,29 +557,66 @@ def test_remote_interruption_integrity_and_recovery(
     provider = ProviderId("usgs_nwis")
     definition = _series_definition("s1")
 
-    # 1. Interrupted first install during staging must not expose a valid store.
+    # 1a. Interrupted first install during staging or Step 4 replacement must not expose a valid store.
     from rivretrieve._internal.store.lifecycle import StoreTransactionError
 
-    s3_server.fail_on_put_key = lambda key: key.endswith("/manifest.json") and ".store.stage-" in key
+    s3_server.fail_on_put_key = lambda key: key.endswith("/integrity.json") and "/store/" in key
     out_1, rep_1 = _series_replacement("s1", "o-1", 2020, 1, [10.0])
     with pytest.raises((OSError, StoreTransactionError)):
         accumulate(store, provider, StoreUpdate((definition,), (), (out_1,), (rep_1,)))
     s3_server.fail_on_put_key = None
     assert not rr.cache_status("usgs_nwis").exists
 
+    # 1b. Out-of-process crash during first-install Step 4 (objects in store/ without seal + stage + replacing journal).
+    tx_first = "aaaa456789abcdef0123456789abcdef"
+    s3_server.objects[("hydro-bucket", "archive/usgs_nwis/store/manifest.json")] = b"{}"
+    s3_server.objects[("hydro-bucket", f"archive/usgs_nwis/.store.stage-{tx_first}/manifest.json")] = b"{}"
+    s3_server.objects[("hydro-bucket", "archive/usgs_nwis/.store.transaction.json")] = (
+        f'{{"id": "{tx_first}", "phase": "replacing"}}'.encode()
+    )
+    first_interrupted = rr.cache_status("usgs_nwis")
+    assert not first_interrupted.exists
+    assert len(first_interrupted.interrupted_paths) > 0
+    first_recovered = rr.recover_cache("usgs_nwis")
+    assert not first_recovered.status.exists
+    assert first_recovered.status.interrupted_paths == ()
+
     # Commit a valid initial generation.
     accumulate(store, provider, StoreUpdate((definition,), (), (out_1,), (rep_1,)))
     committed_gen = rr.cache_status("usgs_nwis").generation_id
     assert committed_gen is not None
 
-    # 2. Simulate an interrupted replacement that left .store.transaction.json, .store.previous-<id>, and .store.stage-<id>.
+    # 2a. Failure partway through Step 2 backup (.store.previous-<id> during "preparing") preserves committed store.
+    out_2, rep_2 = _series_replacement("s1", "o-2", 2021, 1, [20.0])
+    s3_server.fail_on_put_key = lambda key: ".store.previous-" in key and key.endswith("rows.parquet")
+    with pytest.raises((OSError, StoreTransactionError)):
+        accumulate(store, provider, StoreUpdate((definition,), (), (out_2,), (rep_2,)))
+    s3_server.fail_on_put_key = None
+    assert rr.cache_status("usgs_nwis").exists
+    assert rr.cache_status("usgs_nwis").generation_id == committed_gen
+
+    # 2b. Process crash during Step 2 backup ("preparing" with partial .store.previous-<id> and intact store/).
+    tx_prep = "bbbb456789abcdef0123456789abcdef"
+    s3_server.objects[("hydro-bucket", f"archive/usgs_nwis/.store.previous-{tx_prep}/manifest.json")] = b"{}"
+    s3_server.objects[("hydro-bucket", f"archive/usgs_nwis/.store.stage-{tx_prep}/manifest.json")] = b"{}"
+    s3_server.objects[("hydro-bucket", "archive/usgs_nwis/.store.transaction.json")] = (
+        f'{{"id": "{tx_prep}", "phase": "preparing"}}'.encode()
+    )
+    prep_recovery = rr.recover_cache("usgs_nwis")
+    assert prep_recovery.status.exists
+    assert prep_recovery.status.generation_id == committed_gen
+    assert prep_recovery.status.interrupted_paths == ()
+
+    # 2c. Simulate an interrupted Step 4 replacement where store/ has lost integrity.json while other objects
+    # remain in store/, alongside .store.previous-<id> and .store.stage-<id>.
     tx_id = "0123456789abcdef0123456789abcdef"
     for key in list(s3_server.get_keys("hydro-bucket")):
         if key.startswith("archive/usgs_nwis/store/"):
             rel = key.removeprefix("archive/usgs_nwis/store/")
-            s3_server.objects[("hydro-bucket", f"archive/usgs_nwis/.store.previous-{tx_id}/{rel}")] = (
-                s3_server.objects.pop(("hydro-bucket", key))
-            )
+            s3_server.objects[("hydro-bucket", f"archive/usgs_nwis/.store.previous-{tx_id}/{rel}")] = s3_server.objects[
+                ("hydro-bucket", key)
+            ]
+    s3_server.objects.pop(("hydro-bucket", "archive/usgs_nwis/store/integrity.json"))
     s3_server.objects[("hydro-bucket", f"archive/usgs_nwis/.store.stage-{tx_id}/manifest.json")] = b"{}"
     s3_server.objects[("hydro-bucket", "archive/usgs_nwis/.store.transaction.json")] = (
         f'{{"id": "{tx_id}", "phase": "replacing"}}'.encode()
