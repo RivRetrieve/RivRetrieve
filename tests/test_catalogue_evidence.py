@@ -32,6 +32,22 @@ from tests._provenance import historical_source_provenance
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 
 
+# Exact origins.py declarations at e845c58362bf1b3905612604ce10dd9d4c21b450.
+_USGS_PRE_ADOPTION_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_NOTICE"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py", "project_station_metadata"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "modern_source_descriptions"),
+)
+
+
 def _historical_metadata_extension_input(provider):
     """Use the fixed USGS graph to test its historical metadata-source extension."""
     if provider == "usgs_nwis":
@@ -1436,9 +1452,12 @@ def _assert_bulk_source_history_preserved(retained_evidence_root: Path, provider
         "th_thaiwater",
         pytest.param(
             "usgs_nwis",
-            marks=pytest.mark.recorded(
-                "research/usgs-modern-coverage",
-                "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+            marks=(
+                pytest.mark.recorded(
+                    "research/usgs-modern-coverage",
+                    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+                ),
+                pytest.mark.derived("tests/test_data/usgs_nwis_historical/catalogue"),
             ),
         ),
         pytest.param(
@@ -1457,14 +1476,24 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(request: p
     # This expected digest comes from original v2 Git bytes, not a v3 self-roundtrip.
     # The French oracle names the historical combined publication. Its exact
     # authenticated evidence remains readable for research, never as a current catalogue.
-    restored = _legacy(
-        provider,
-        retained_evidence_root / "tests/test_data/french_combined_catalogue" if provider == "fr_hubeau" else None,
-    )
+    historical_path = None
+    declaration_locations = None
+    metadata_path = ROOT / provider / "catalogue/station_metadata.parquet"
+    if provider == "fr_hubeau":
+        historical_path = retained_evidence_root / "tests/test_data/french_combined_catalogue"
+    elif provider == "usgs_nwis":
+        historical_path = retained_evidence_root / "tests/test_data/usgs_nwis_historical/catalogue"
+        metadata_path = historical_path / "station_metadata.parquet"
+        declaration_locations = _USGS_PRE_ADOPTION_BUILD_DECLARATIONS
+    restored = _legacy(provider, historical_path)
     if restored.build_inputs is not None:
-        restored = historical_source_provenance(
-            restored, pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
-        )
+        metadata = pl.read_parquet(metadata_path)
+        if provider == "usgs_nwis":
+            with pytest.raises(AssertionError):
+                historical_source_provenance(
+                    restored, metadata, declaration_locations=_USGS_PRE_ADOPTION_BUILD_DECLARATIONS[:-1]
+                )
+        restored = historical_source_provenance(restored, metadata, declaration_locations=declaration_locations)
     restored = _assert_metadata_source_extensions_and_restore_original(restored)
     if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
         restored = _assert_field_source_lineage_repair_and_restore_original(retained_evidence_root, restored)
