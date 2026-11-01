@@ -136,7 +136,7 @@ def test_station_native_table_filters_lakes_preserves_seebach_and_owf_coordinate
             _ehyd_owf_feature("208306", [{"hzbnr": "208306", "file": "Stammdaten-208306.csv", "ftyp": None}]),
         ]
     }
-    ehyd_pa = {
+    lfrz_pa = {
         "features": [
             _pa_feature(201533, lon=99.0, lat=88.0, messstelle="Vinaders PA", gewasser="Obernberger Seebach"),
             _pa_feature(200337, lon=9.7, lat=47.5, messstelle="Bregenz", gewasser="Bodensee"),
@@ -154,8 +154,9 @@ def test_station_native_table_filters_lakes_preserves_seebach_and_owf_coordinate
     native = station_native_table(
         lfrz,
         ehyd_owf,
-        ehyd_pa,
+        lfrz_pa,
         zip_bytes,
+        lfrz_pa=lfrz_pa,
         retrieved_at=RetrievedAt(datetime(2026, 10, 31, tzinfo=UTC)),
     )
     assert native.data["hzbnr"].to_list() == ["200675", "201533", "208306"]
@@ -167,6 +168,74 @@ def test_station_native_table_filters_lakes_preserves_seebach_and_owf_coordinate
     row_200675 = native.data.filter(pl.col("hzbnr") == "200675").row(0, named=True)
     assert (row_200675["longitude"], row_200675["latitude"]) == (10.1, 47.2)
     assert row_200675["in_owf"] is False and row_200675["orogr.Einzugsgebiet [km²]"] is None
+    assert_frame_equal(
+        native.data.select(
+            "hzbnr", "owf_latitude", "owf_longitude", "pegel_aktuell_latitude", "pegel_aktuell_longitude"
+        ),
+        pl.DataFrame(
+            {
+                "hzbnr": ["200675", "201533", "208306"],
+                "owf_latitude": [None, 47.0, 48.3],
+                "owf_longitude": [None, 11.5, 15.5],
+                "pegel_aktuell_latitude": [47.2, 88.0, None],
+                "pegel_aktuell_longitude": [10.1, 99.0, None],
+            }
+        ),
+    )
+
+
+def test_selected_native_uses_lfrz_telemetry_coordinates(monkeypatch):
+    from rivretrieve._internal.providers.at_ehyd import generate_catalogue
+
+    bodies = {
+        "lfrz_messstellen_owf": json.dumps({"features": [_lfrz_feature("201533")]}).encode(),
+        "ehyd_messstellen_owf": json.dumps({"features": [_ehyd_owf_feature("201533", [])]}).encode(),
+        "lfrz_pegel_aktuell": json.dumps(
+            {
+                "features": [
+                    {"geometry": {"type": "Point", "coordinates": [15.2, 48.2]}, "properties": {"hzbnr": 201533}},
+                    {"geometry": {"type": "Point", "coordinates": [10.1, 47.2]}, "properties": {"hzbnr": 200675}},
+                ]
+            }
+        ).encode(),
+        "ehyd_pegel_aktuell": json.dumps(
+            {"features": [_pa_feature(201533, lon=98.0, lat=87.0), _pa_feature(200675, lon=99.0, lat=88.0)]}
+        ).encode(),
+        "owf_national_archive": _zip_archive({"Stammdaten/Stammdaten-201533.csv": _stammdaten_bytes("201533")}),
+    }
+    selection = {
+        "captures": [
+            {
+                "kind": kind,
+                "body": kind,
+                "recording": {
+                    "recording_id": kind,
+                    "repository_path": kind,
+                    "source_url": "https://example.org/" + kind,
+                    "retrieved_at": "2026-10-31T00:00:00Z",
+                    "media_type": "application/octet-stream",
+                    "sha256": hashlib.sha256(body).hexdigest(),
+                },
+            }
+            for kind, body in bodies.items()
+        ]
+    }
+    consumed = []
+
+    def read_original(root, reference, *, input_receipt):
+        consumed.append(reference.repository_path)
+        return bodies[reference.repository_path]
+
+    monkeypatch.setattr(generate_catalogue, "read_original", read_original)
+    native = generate_catalogue._selected_native(Path("unused"), selection, None)
+    assert_frame_equal(
+        native.data.select("hzbnr", "latitude", "longitude"),
+        pl.DataFrame({"hzbnr": ["200675", "201533"], "latitude": [47.2, 48.0], "longitude": [10.1, 15.0]}),
+    )
+    assert set(consumed) == set(bodies)
+    bodies["lfrz_pegel_aktuell"] = json.dumps({"features": [_pa_feature(201533)]}).encode()
+    with pytest.raises(FatalContractError, match="disagree on station identities"):
+        generate_catalogue._selected_native(Path("unused"), selection, None)
 
 
 def test_owf_and_pegel_aktuell_associations_handle_empty_units_outages_and_lake_exclusions():
@@ -241,7 +310,7 @@ def test_endpoint_scoped_metadata_distinguishes_telemetry_only_absence_from_owf_
 
     lfrz = {"features": [_lfrz_feature("209486", name="Böheimkirchen", gewaesser="Perschling")]}
     ehyd_owf = {"features": [_ehyd_owf_feature("209486", [])]}
-    ehyd_pa = {
+    lfrz_pa = {
         "features": [
             _pa_feature(209486, messstelle="Böheimkirchen", gewasser="Perschling"),
             _pa_feature(200675, messstelle="Gargellen", gewasser="Suggiturenbach"),
@@ -249,7 +318,12 @@ def test_endpoint_scoped_metadata_distinguishes_telemetry_only_absence_from_owf_
     }
     zip_bytes = _zip_archive({"Stammdaten/Stammdaten-209486.csv": _stammdaten_bytes("209486", "55,3")})
     native = station_native_table(
-        lfrz, ehyd_owf, ehyd_pa, zip_bytes, retrieved_at=RetrievedAt(datetime(2026, 10, 31, tzinfo=UTC))
+        lfrz,
+        ehyd_owf,
+        lfrz_pa,
+        zip_bytes,
+        lfrz_pa=lfrz_pa,
+        retrieved_at=RetrievedAt(datetime(2026, 10, 31, tzinfo=UTC)),
     )
     stations = pl.DataFrame({"provider_id": ["at_ehyd", "at_ehyd"], "station_id": ["200675", "209486"]})
     metadata = project_station_metadata(native, stations)
@@ -402,10 +476,15 @@ def test_provenance_and_offline_catalogue_publication_round_trip(tmp_path: Path)
 
     lfrz = {"features": [_lfrz_feature("209486", name="Böheimkirchen", gewaesser="Perschling")]}
     ehyd_owf = {"features": [_ehyd_owf_feature("209486", [])]}
-    ehyd_pa = {"features": [_pa_feature(209486, messstelle="Böheimkirchen", gewasser="Perschling")]}
+    lfrz_pa = {"features": [_pa_feature(209486, messstelle="Böheimkirchen", gewasser="Perschling")]}
     zip_bytes = _zip_archive({"Stammdaten/Stammdaten-209486.csv": _stammdaten_bytes("209486", "55,3")})
     rows = station_native_table(
-        lfrz, ehyd_owf, ehyd_pa, zip_bytes, retrieved_at=RetrievedAt(datetime(2026, 10, 31, tzinfo=UTC))
+        lfrz,
+        ehyd_owf,
+        lfrz_pa,
+        zip_bytes,
+        lfrz_pa=lfrz_pa,
+        retrieved_at=RetrievedAt(datetime(2026, 10, 31, tzinfo=UTC)),
     )
     associations = pl.DataFrame(
         [("209486", "owf", "owf_abfl_tagesmittel", "m³/s"), ("209486", "pegel_bgis", "Wasserstand", "cm")],

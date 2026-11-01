@@ -62,8 +62,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "stations.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "2e838ad8ad280ad17bdf7a0ab0b63b0e8b5697f8b88d866f5c72dc5cfda8e673",
-      "contentSize": "14380 B"
+      "sha256": "137fb98ab329070057bd1d361d21de8d75a2c5791fc8f02a1e869cd434098932",
+      "contentSize": "14382 B"
     },
     {
       "@id": "station_products.parquet",
@@ -78,7 +78,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "2360f41cf8b2cb4278b77cad75f98179a20f695f9f4169aca767a2b89edaf503",
+      "sha256": "42804869d5a1fa46431029d2e226ab23ec83d4f1a278cf459516ecf874b8f628",
       "contentSize": "976088 B"
     },
     {
@@ -1573,8 +1573,8 @@
     "@type": "sc:MediaObject",
     "identifier": "native-table",
     "name": "Adopted retained input",
-    "sha256": "91e11f8bad86b67d780a617b5edd658433ae9d095d336964df83fdf61f696c1d",
-    "contentSize": "37488 B",
+    "sha256": "152a59790a4f465eae040f2308cc16f19e22d712d6113557e86805086806c952",
+    "contentSize": "54191 B",
     "additionalProperty": [
       {
         "@type": "sc:PropertyValue",
@@ -1584,12 +1584,12 @@
       {
         "@type": "sc:PropertyValue",
         "name": "collection_id",
-        "value": "at_ehyd-catalogue-native-2026-11-01-v1"
+        "value": "at_ehyd-catalogue-native-2026-11-01-v2"
       },
       {
         "@type": "sc:PropertyValue",
         "name": "manifest_sha256",
-        "value": "58ef99d255d1c090c97e05fca0da09fcd257f9c778ffca08019b5339c0fd2287"
+        "value": "3967e7747a0e04cdb15725f95825a3427a178bbdf33edf5b8328d37c1a84ba21"
       },
       {
         "@type": "sc:PropertyValue",
