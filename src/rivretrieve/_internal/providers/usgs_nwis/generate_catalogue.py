@@ -1276,7 +1276,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if found != selected:
             raise FatalContractError("Selected supplemental locations are missing from supplied inputs")
         features, _ = read_modern_metadata(args.modern_metadata)
-        for retrieved_at in set(instant for _, instant in rows):
+        for retrieved_at in {instant for _, instant in rows}:
             native = supplement_native_stations(
                 native,
                 [row for row, instant in rows if instant == retrieved_at],

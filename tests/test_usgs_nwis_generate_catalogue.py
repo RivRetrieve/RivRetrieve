@@ -1347,7 +1347,7 @@ def test_native_refresh_cli_composes_only_explicitly_selected_supplemental_locat
     (tmp_path / "WI_expanded.rdb").write_text(_rdb_text(EXPANDED_HEADER, EXPANDED_FORMAT, [national]))
     retrievals = tmp_path / "retrievals.json"
     retrievals.write_text(
-        json.dumps({"WI_expanded.rdb": "2026-08-02T01:14:11Z", "supplement.rdb": "2026-10-31T12:00:00Z"})
+        json.dumps({"WI_expanded.rdb": "2026-10-30T08:09:10Z", "supplement.rdb": "2026-10-31T12:00:00Z"})
     )
     monkeypatch.setattr(
         generator,
@@ -1403,7 +1403,9 @@ def test_native_refresh_cli_composes_only_explicitly_selected_supplemental_locat
     result = read_native_table(output).data
     assert result["site_no"].to_list() == ["new", "station-a"]
     assert result.filter(pl.col("site_no") == "new")["retrieved_at"].item() == datetime(2026, 10, 31, 12, tzinfo=UTC)
-    pl_testing.assert_frame_equal(result.filter(pl.col("site_no") == "station-a"), original.data)
+    national_result = result.filter(pl.col("site_no") == "station-a")
+    assert national_result["retrieved_at"].item() == datetime(2026, 10, 30, 8, 9, 10, tzinfo=UTC)
+    pl_testing.assert_frame_equal(national_result.drop("retrieved_at"), original.data.drop("retrieved_at"))
 
 
 def test_native_refresh_cli_refuses_incomplete_supplemental_inputs(tmp_path):
