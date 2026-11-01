@@ -139,3 +139,81 @@ def test_usgs_cli_invokes_recording_verification(
                 str(tmp_path),
             ]
         )
+
+
+def test_selected_native_provenance_credits_each_actual_event_not_historical_campaign():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.acquisition_provenance import AcquisitionRecord, NativeTableIdentity
+    from rivretrieve._internal.providers.usgs_nwis.origins import selected_native_provenance
+
+    events = tuple(
+        AcquisitionRecord(
+            acquisition_id=name,
+            method="http_request",
+            instant_type="retrieval",
+            description="Synthetic selected station source",
+            requested_from=("https://example.org/" + name,),
+            retrieved_at_start=datetime(2026, 10, 31, tzinfo=UTC),
+        )
+        for name in ("original-first", "original-second", "supplement")
+    )
+    native = NativeTableIdentity(
+        repository_path="selected/native.parquet",
+        revision="a" * 40,
+        sha256="b" * 64,
+        byte_size=123,
+        location_kind="retained",
+    )
+    result = selected_native_provenance(native, events, ())
+    assert result.native_table == native
+    bindings = {fact: item for item in result.fact_bindings for fact in item.facts}
+    station = bindings["station.latitude"]
+    dependencies = {item.fact for item in station.transformation.external_inputs}
+    selected = [bindings[fact] for fact in dependencies if fact.startswith("source.station.selected_input_")]
+    assert {item.acquisition_id for item in selected} == {"original-first", "original-second", "supplement"}
+    assert "source.station.nwis_identity_location_datum" not in dependencies
+    assert bindings["source.station.nwis_identity_location_datum"].acquisition_id == "national_site_campaign_2026_08_02"
+
+
+def test_selected_modern_campaign_keeps_native_events_and_new_recording_root(tmp_path):
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.acquisition_provenance import AcquisitionRecord, NativeTableIdentity
+    from rivretrieve._internal.providers.usgs_nwis.origins import (
+        build_modern_acquisition_provenance,
+        selected_native_provenance,
+    )
+
+    event = AcquisitionRecord(
+        acquisition_id="selected-native",
+        method="http_request",
+        instant_type="retrieval",
+        description="Synthetic selected source",
+        requested_from=("https://example.org/native",),
+        retrieved_at_start=datetime(2026, 10, 31, tzinfo=UTC),
+    )
+    native = NativeTableIdentity(
+        repository_path="selected/native.parquet", revision="a" * 40, sha256="b" * 64, byte_size=123
+    )
+    base = selected_native_provenance(native, (event,), ())
+    (tmp_path / "page.json.gz").write_bytes(b"synthetic retained gzip member")
+    receipts = [{"file": "page.json.gz", "url": "https://example.org/metadata", "retrieved_at": "2026-10-31T12:00:00Z"}]
+    result = build_modern_acquisition_provenance(
+        receipts,
+        tmp_path,
+        native_provenance=base,
+        metadata_acquisition_id="selected-metadata",
+        metadata_recording_root="research/selected",
+    )
+    bindings = {fact: binding for binding in result.fact_bindings for fact in binding.facts}
+    assert bindings["source.station_product.modern_series_availability"].acquisition_id == "selected-metadata"
+    for fact in ("station.latitude", "station.longitude", "station_product.availability"):
+        dependencies = {item.fact for item in bindings[fact].transformation.external_inputs}
+        assert "source.station.selected_input_0" in dependencies
+        assert "source.station.nwis_identity_location_datum" not in dependencies
+    recording = next(
+        item.recording for item in result.source_records[0].evidence if item.evidence_id == "modern_metadata_0"
+    )
+    assert recording.repository_path == "research/selected/page.json.gz"
+    assert result.native_table == native

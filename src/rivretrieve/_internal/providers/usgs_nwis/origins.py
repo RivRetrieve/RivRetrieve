@@ -358,15 +358,82 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
     return _complete_catalogue_carrier(_build_provider_acquisition_provenance())
 
 
-def build_modern_acquisition_provenance(receipts, metadata_directory):
+def selected_native_provenance(
+    native_identity: NativeTableIdentity,
+    acquisitions: tuple[AcquisitionRecord, ...],
+    recordings: tuple[RecordingReference, ...],
+) -> AcquisitionProvenance:
+    """Bind a selected station inventory to its original acquisition events.
+
+    Recording paths must be approved consumer references, not private archive
+    paths. Historical station claims remain historical and do not govern the
+    newly selected station coordinates. This function does not acquire inputs.
+    """
+    if not acquisitions:
+        raise ValueError("Selected native inputs require original acquisition events")
+    base = build_acquisition_provenance()
+    source = base.source_records[0]
+    source = source.model_copy(
+        update={
+            "acquisitions": source.acquisitions + acquisitions,
+            "evidence": source.evidence
+            + tuple(
+                EvidenceReference(
+                    evidence_id=record.recording_id, description="Selected original station input", recording=record
+                )
+                for record in recordings
+            ),
+        }
+    )
+    facts = tuple(f"source.station.selected_input_{index}" for index in range(len(acquisitions)))
+    bindings = tuple(
+        FactBinding(
+            fact_group=f"selected_station_input_{index}",
+            facts=(facts[index],),
+            source_id="usgs_nwis",
+            acquisition_id=event.acquisition_id,
+        )
+        for index, event in enumerate(acquisitions)
+    )
+    updated = []
+    for binding in base.fact_bindings:
+        if binding.transformation is not None and any(fact.startswith("station.") for fact in binding.facts):
+            dependencies = tuple(
+                item
+                for item in binding.transformation.external_inputs
+                if item.fact != "source.station.nwis_identity_location_datum"
+            ) + tuple(ExternalFactReference(source_id="usgs_nwis", fact=fact) for fact in facts)
+            binding = binding.model_copy(
+                update={"transformation": binding.transformation.model_copy(update={"external_inputs": dependencies})}
+            )
+        updated.append(binding)
+    return AcquisitionProvenance.model_validate(
+        {
+            **base.model_dump(),
+            "native_table": native_identity,
+            "source_records": (source,),
+            "fact_universe": base.fact_universe + facts,
+            "fact_bindings": tuple(updated) + bindings,
+        }
+    )
+
+
+def build_modern_acquisition_provenance(
+    receipts,
+    metadata_directory,
+    *,
+    native_provenance: AcquisitionProvenance | None = None,
+    metadata_acquisition_id: str = "modern_time_series_metadata_2026_09_22",
+    metadata_recording_root: str = "research/usgs-modern-coverage",
+):
     """Supplement retained station provenance with independently acquired modern facts."""
     import hashlib
 
-    legacy = _build_provider_acquisition_provenance()
+    legacy = native_provenance or _build_provider_acquisition_provenance()
     recordings = tuple(
         RecordingReference(
             recording_id=f"modern_metadata_{index}",
-            repository_path=f"research/usgs-modern-coverage/{receipt['file']}",
+            repository_path=f"{metadata_recording_root}/{receipt['file']}",
             source_url=receipt["url"],
             retrieved_at=datetime.fromisoformat(receipt["retrieved_at"]),
             media_type="application/gzip",
@@ -375,7 +442,7 @@ def build_modern_acquisition_provenance(receipts, metadata_directory):
         for index, receipt in enumerate(receipts)
     )
     acquisition = AcquisitionRecord(
-        acquisition_id="modern_time_series_metadata_2026_09_22",
+        acquisition_id=metadata_acquisition_id,
         method="http_campaign",
         instant_type="retrieval_interval",
         description="Complete unsorted v1 metadata pagination for parameters 00060 and 00065, including discontinued records; exact decompressed response hashes and request receipts retained alongside gzip recordings. Station scope remains the independently acquired native station table. UTC metadata ranges do not establish physical daily support.",
@@ -433,18 +500,25 @@ def build_modern_acquisition_provenance(receipts, metadata_directory):
             "fact_bindings": legacy.fact_bindings + (binding, observation_binding),
         }
     )
+    if native_provenance is not None:
+        canonical = set(CATALOGUE_FACT_UNIVERSE)
+        payload = provenance.model_dump()
+        payload["fact_universe"] = tuple(fact for fact in provenance.fact_universe if fact not in canonical)
+        payload["fact_bindings"] = tuple(
+            binding for binding in provenance.fact_bindings if not canonical.intersection(binding.facts)
+        )
+        provenance = AcquisitionProvenance.model_validate(payload)
+    station_facts = tuple(
+        fact for fact in provenance.fact_universe if fact.startswith("source.station.selected_input_")
+    ) or ("source.station.nwis_identity_location_datum",)
     return complete_transformed_fact_universe(
         provenance,
         CATALOGUE_FACT_UNIVERSE,
         transformation=Transformation(
-            name="USGS native station facts and modern series metadata to canonical catalogue carriers",
+            name="USGS selected station inputs and modern series metadata to canonical catalogue carriers",
             external_inputs=tuple(
                 ExternalFactReference(source_id="usgs_nwis", fact=fact)
-                for fact in (
-                    "source.provider.usgs_agency_identity",
-                    "source.station.nwis_identity_location_datum",
-                    *modern_facts,
-                )
+                for fact in ("source.provider.usgs_agency_identity", *station_facts, *modern_facts)
             ),
         ),
     )
