@@ -41,6 +41,10 @@ STATION_SOURCE_SCHEMA = pl.Schema(
         "hzbnr": pl.String,
         "latitude": pl.Float64,
         "longitude": pl.Float64,
+        "owf_latitude": pl.Float64,
+        "owf_longitude": pl.Float64,
+        "pegel_aktuell_latitude": pl.Float64,
+        "pegel_aktuell_longitude": pl.Float64,
         "in_owf": pl.Boolean,
         "in_pegel_aktuell": pl.Boolean,
         "name": pl.String,
@@ -147,14 +151,17 @@ def station_native_table(
     ehyd_pa: Mapping[str, object],
     zip_bytes: bytes,
     *,
+    lfrz_pa: Mapping[str, object],
     retrieved_at: RetrievedAt,
 ) -> NativeTable:
     """Reconcile river gauges across owf and Pegel Aktuell while excluding standing-water lakes.
 
     Authoritative CRS84 coordinates from ``i000501:messstellen_owf`` take precedence
-    for ``owf`` gauges; ``PegelAktuell`` supplies coordinates only for telemetry-only
-    river gauges absent from ``owf``. Standing-water lakes (gauges without discharge
-    carrying ``Seefläche``, ``(Seepegel)``, or impounded lake bodies) are excluded.
+    for ``owf`` gauges; ``i000501:pegel_aktuell`` supplies coordinates for telemetry-only
+    river gauges absent from ``owf``. Both source coordinate pairs are retained
+    separately, with nulls where a station is absent from an endpoint. Station names
+    and water-body names remain sourced from eHYD. Standing-water lakes (gauges
+    without discharge carrying ``Seefläche``, ``(Seepegel)``, or impounded lake bodies) are excluded.
     Decommissioned ``owf`` river gauges remain in scope.
     """
     fjson_by_hzb: dict[str, list[dict[str, object]]] = {}
@@ -211,6 +218,10 @@ def station_native_table(
                 "hzbnr": hzb,
                 "latitude": lat,
                 "longitude": lon,
+                "owf_latitude": lat,
+                "owf_longitude": lon,
+                "pegel_aktuell_latitude": None,
+                "pegel_aktuell_longitude": None,
                 "in_owf": True,
                 "in_pegel_aktuell": False,
                 "name": name,
@@ -227,6 +238,17 @@ def station_native_table(
             _validate_row_types(row)
             selected[hzb] = row
 
+    pa_coordinates: dict[str, tuple[float, float]] = {}
+    for feature in _features(lfrz_pa, "lfrz_pegel_aktuell"):
+        props = _mapping(feature.get("properties"), "LFRZ pegel_aktuell feature requires properties")
+        raw_hzb = props.get("hzbnr")
+        if type(raw_hzb) is not int and (not isinstance(raw_hzb, str) or not raw_hzb.strip()):
+            raise FatalContractError("LFRZ pegel_aktuell requires integer or nonblank string hzbnr")
+        hzb = str(raw_hzb).strip()
+        if hzb in pa_coordinates:
+            raise FatalContractError("LFRZ pegel_aktuell contains duplicate station identities")
+        pa_coordinates[hzb] = _point_lon_lat(feature, "lfrz_pegel_aktuell")
+
     seen_pa: set[str] = set()
     for feature in _features(ehyd_pa, "ehyd_pegel_aktuell"):
         props = _mapping(feature.get("properties"), "eHYD PegelAktuell feature requires properties")
@@ -237,7 +259,9 @@ def station_native_table(
         if hzb in seen_pa:
             raise FatalContractError("eHYD PegelAktuell contains duplicate station identities")
         seen_pa.add(hzb)
-        lon, lat = _point_lon_lat(feature, "ehyd_pegel_aktuell")
+        if hzb not in pa_coordinates:
+            raise FatalContractError("LFRZ and eHYD Pegel Aktuell disagree on station identities")
+        lon, lat = pa_coordinates[hzb]
         messstelle = props.get("messstelle")
         gewasser = props.get("gewasser")
         hd = props.get("hd")
@@ -252,6 +276,8 @@ def station_native_table(
         if hzb in lake_owf:
             continue
         if hzb in selected:
+            selected[hzb]["pegel_aktuell_latitude"] = lat
+            selected[hzb]["pegel_aktuell_longitude"] = lon
             selected[hzb]["in_pegel_aktuell"] = True
             selected[hzb]["messstelle"] = messstelle
             selected[hzb]["gewasser"] = gewasser
@@ -264,6 +290,10 @@ def station_native_table(
                 "hzbnr": hzb,
                 "latitude": lat,
                 "longitude": lon,
+                "owf_latitude": None,
+                "owf_longitude": None,
+                "pegel_aktuell_latitude": lat,
+                "pegel_aktuell_longitude": lon,
                 "in_owf": False,
                 "in_pegel_aktuell": True,
                 "name": None,
@@ -279,6 +309,9 @@ def station_native_table(
             }
             _validate_row_types(row)
             selected[hzb] = row
+
+    if seen_pa != set(pa_coordinates):
+        raise FatalContractError("LFRZ and eHYD Pegel Aktuell disagree on station identities")
 
     frame = pl.DataFrame(list(selected.values()), schema=STATION_SOURCE_SCHEMA).sort("hzbnr")
     return stamp_native_table(frame, retrieved_at)
@@ -567,6 +600,7 @@ def _selected_native(evidence_root: Path, selection: dict, input_receipt: Retain
     required_kinds = {
         "lfrz_messstellen_owf",
         "ehyd_messstellen_owf",
+        "lfrz_pegel_aktuell",
         "ehyd_pegel_aktuell",
         "owf_national_archive",
     }
@@ -587,14 +621,16 @@ def _selected_native(evidence_root: Path, selection: dict, input_receipt: Retain
         raise FatalContractError("eHYD selection lacks required registry or archive snapshots")
     lfrz_owf = json.loads(raw_by_kind["lfrz_messstellen_owf"])
     ehyd_owf = json.loads(raw_by_kind["ehyd_messstellen_owf"])
+    lfrz_pa = json.loads(raw_by_kind["lfrz_pegel_aktuell"])
     ehyd_pa = json.loads(raw_by_kind["ehyd_pegel_aktuell"])
-    if not all(isinstance(doc, dict) for doc in (lfrz_owf, ehyd_owf, ehyd_pa)):
+    if not all(isinstance(doc, dict) for doc in (lfrz_owf, ehyd_owf, lfrz_pa, ehyd_pa)):
         raise FatalContractError("eHYD registry JSON captures must be GeoJSON objects")
     return station_native_table(
         lfrz_owf,
         ehyd_owf,
         ehyd_pa,
         raw_by_kind["owf_national_archive"],
+        lfrz_pa=lfrz_pa,
         retrieved_at=RetrievedAt(max(registry_times)),
     )
 
