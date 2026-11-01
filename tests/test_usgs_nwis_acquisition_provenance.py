@@ -232,3 +232,21 @@ def test_selected_modern_campaign_keeps_native_events_and_new_recording_root(tmp
         assert set(merged.recording_ids) == {"native-body", "modern_metadata_0"}
         assert merged.retrieved_at_start == datetime(2026, 10, 31, tzinfo=UTC)
         assert merged.retrieved_at_end == datetime(2026, 10, 31, 12, tzinfo=UTC)
+
+
+def test_selected_native_can_credit_explicit_retained_historical_event_once():
+    from rivretrieve._internal.providers.usgs_nwis.origins import selected_native_provenance
+
+    original = build_acquisition_provenance()
+    result = selected_native_provenance(
+        original.native_table, (), (), retained_acquisition_ids=("national_site_campaign_2026_08_02",)
+    )
+    events = [item.acquisition_id for item in result.source_records[0].acquisitions]
+    assert events.count("national_site_campaign_2026_08_02") == 1
+    bindings = {fact: binding for binding in result.fact_bindings for fact in binding.facts}
+    assert bindings["source.station.selected_input_0"].acquisition_id == "national_site_campaign_2026_08_02"
+    assert "source.station.selected_input_0" in {
+        item.fact for item in bindings["station.latitude"].transformation.external_inputs
+    }
+    with pytest.raises(ValueError, match="Unknown retained acquisition"):
+        selected_native_provenance(original.native_table, (), (), retained_acquisition_ids=("invented",))

@@ -362,6 +362,8 @@ def selected_native_provenance(
     native_identity: NativeTableIdentity,
     acquisitions: tuple[AcquisitionRecord, ...],
     recordings: tuple[RecordingReference, ...],
+    *,
+    retained_acquisition_ids: tuple[str, ...] = (),
 ) -> AcquisitionProvenance:
     """Bind a selected station inventory to its original acquisition events.
 
@@ -369,10 +371,16 @@ def selected_native_provenance(
     paths. Historical station claims remain historical and do not govern the
     newly selected station coordinates. This function does not acquire inputs.
     """
-    if not acquisitions:
+    if not acquisitions and not retained_acquisition_ids:
         raise ValueError("Selected native inputs require original acquisition events")
     base = build_acquisition_provenance()
     source = base.source_records[0]
+    known = {item.acquisition_id for item in source.acquisitions}
+    if not set(retained_acquisition_ids) <= known:
+        raise ValueError("Unknown retained acquisition identity")
+    selected_event_ids = tuple(event.acquisition_id for event in acquisitions) + retained_acquisition_ids
+    if len(selected_event_ids) != len(set(selected_event_ids)):
+        raise ValueError("Selected station acquisitions must be distinct")
     source = source.model_copy(
         update={
             "acquisitions": source.acquisitions + acquisitions,
@@ -385,15 +393,15 @@ def selected_native_provenance(
             ),
         }
     )
-    facts = tuple(f"source.station.selected_input_{index}" for index in range(len(acquisitions)))
+    facts = tuple(f"source.station.selected_input_{index}" for index in range(len(selected_event_ids)))
     bindings = tuple(
         FactBinding(
             fact_group=f"selected_station_input_{index}",
             facts=(facts[index],),
             source_id="usgs_nwis",
-            acquisition_id=event.acquisition_id,
+            acquisition_id=event_id,
         )
-        for index, event in enumerate(acquisitions)
+        for index, event_id in enumerate(selected_event_ids)
     )
     updated = []
     for binding in base.fact_bindings:
