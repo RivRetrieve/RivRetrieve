@@ -174,6 +174,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/pe_senamhi/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/pe_senamhi/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/pe_senamhi/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/pe_senamhi/series.py", "series_mappings"),
     ("src/rivretrieve/_internal/providers/pe_senamhi/generate_catalogue.py", "read_catalogue_sources"),
     ("src/rivretrieve/_internal/providers/pe_senamhi/station_metadata.py", "project_station_metadata"),
 )
