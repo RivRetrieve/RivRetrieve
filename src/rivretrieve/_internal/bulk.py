@@ -102,7 +102,12 @@ def clear_cache(provider: str) -> CacheClearResult:
     remains. Managed symlinks are removed without following their targets.
     Unrelated siblings and external direct-compiler inputs are not removed.
     """
+    from rivretrieve._internal.store.remote import RemoteStoreRoot, clear_remote_store
+
     provider_id, root = _cache_registration(provider)
+    if isinstance(root, RemoteStoreRoot):
+        removed_paths, bytes_freed = clear_remote_store(root)
+        return CacheClearResult(provider_id, root, bool(removed_paths), bytes_freed, removed_paths)
     path = Path(root)
     if path.parent.is_symlink():
         raise BulkArtifactCleanupRefusedError(f'Cannot clear symlinked pending-download namespace: "{path.parent}"')
@@ -142,7 +147,62 @@ def _download(
     client_factory: ClientFactory,
     today: date,
 ) -> ValidatedStore:
+    import tempfile
+    from typing import cast
+
+    from rivretrieve._internal.store.lifecycle import StoreTransaction
+    from rivretrieve._internal.store.remote import (
+        RemoteStoreRoot,
+        inspect_remote_integrity,
+        inspect_remote_lifecycle,
+        remote_store_transaction,
+        verify_remote_files,
+    )
+
     provider_id, store_config, root, operations = _bulk_registration(provider)
+    if isinstance(root, RemoteStoreRoot):
+        probe_path = _nearest_existing_parent(Path(tempfile.gettempdir()))
+        available = free_space_probe(probe_path)
+        required = store_config.required_free_bytes
+        if available < required:
+            raise InsufficientDiskSpaceError(provider_id, required, available)
+        with remote_store_transaction(root) as remote_tx:
+            previous_source_vintage = None
+            if inspect_remote_lifecycle(root).committed_path == root:
+                try:
+                    sealed = inspect_remote_integrity(root, provider_id)
+                    verify_remote_files(sealed, tuple(sealed.store.partition_files))
+                except ObservationStoreRefusedError:
+                    pass
+                else:
+                    if isinstance(sealed.store.manifest, StoreManifest):
+                        previous_source_vintage = sealed.store.manifest.source_vintage
+            remote_tx.workspace.mkdir(exist_ok=True)
+            artifact = remote_tx.workspace / "publisher-artifact.download"
+            client = client_factory()
+            downloaded_value = operations.download(
+                BulkDownloadRequest(
+                    destination=artifact,
+                    today=today,
+                    probe=lambda url: client.send(TransportRequest(HttpMethod.HEAD, url)).status_code,
+                    transfer=lambda url, destination: _transfer(client, url, destination),
+                    previous_source_vintage=previous_source_vintage,
+                )
+            )
+            downloaded = downloaded_value if isinstance(downloaded_value, tuple) else (downloaded_value,)
+            from rivretrieve import __version__
+
+            return operations.compile(
+                BulkCompileRequest(
+                    publisher_artifacts=downloaded,
+                    destination=root,
+                    built_at=datetime.now(UTC),
+                    compiler_version=__version__,
+                    transaction=cast(StoreTransaction, remote_tx),
+                    free_space_probe=free_space_probe,
+                )
+            )
+
     # This is deliberately the first effectful operation. In particular the cache
     # directory and HTTP client do not exist until admission succeeds.
     probe_path = _nearest_existing_parent(Path(root))

@@ -381,6 +381,42 @@ bandwidth and disk space. Both `bypass` and `reuse` read these stores; `refresh`
 raises. Use `download` to replace a store. Polish daily archive series have no
 archive-wide statistic, so they do not match an explicit mean-statistic filter.
 
+### S3-compatible object storage
+
+Set `RIVRETRIEVE_CACHE_DIR` to an `s3://bucket` or `s3://bucket/prefix` URI to store
+and reuse the observation cache directly in S3 or S3-compatible object storage. No
+extra package installation is needed. Configure the endpoint, region and access
+keys in the process environment or a working-directory `.env` file:
+
+```ini
+RIVRETRIEVE_CACHE_DIR="s3://hydro-archive/rivretrieve"
+RIVRETRIEVE_S3_ENDPOINT_URL="https://fsn1.your-objectstorage.com"
+RIVRETRIEVE_S3_REGION="fsn1"
+AWS_ACCESS_KEY_ID="your-access-key"
+AWS_SECRET_ACCESS_KEY="your-secret-key"
+```
+
+Standard AWS variable names (`AWS_ENDPOINT_URL_S3`, `AWS_ENDPOINT_URL`, `AWS_REGION`,
+`AWS_DEFAULT_REGION` and `AWS_SESSION_TOKEN`) and `RIVRETRIEVE_S3_*` equivalents are
+also accepted, with `RIVRETRIEVE_S3_*` taking precedence. Once configured, normal
+retrieval and cache inspection use the bucket without requiring a persistent local
+cache copy:
+
+```python
+result = rr.fetch(
+    chosen_gauges,
+    start="2023-01-01",
+    end="2023-01-31",
+    cache="reuse",
+)
+
+status = rr.cache_status("usgs_nwis")
+print(status.path, status.exists)
+
+# Output:
+# s3://hydro-archive/rivretrieve/usgs_nwis/store True
+```
+
 ## Provenance
 
 ```python

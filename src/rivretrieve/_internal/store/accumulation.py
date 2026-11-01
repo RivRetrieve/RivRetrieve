@@ -122,21 +122,33 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
     Inventory and unsuccessful outcomes are durable even without successful rows.
     Failed refreshes do not remove held native rows or successful coverage.
     """
-    root = Path(store)
-    with store_transaction(root) as transaction:
+    from rivretrieve._internal.store.remote import (
+        RemoteStoreRoot,
+        RemoteStoreTransaction,
+        materialize_verified_remote_partitions,
+        remote_store_transaction,
+        seal_remote_stage,
+    )
+
+    is_remote = isinstance(store, RemoteStoreRoot)
+    tx_cm = remote_store_transaction(store) if is_remote else store_transaction(Path(store))
+    with tx_cm as transaction:
         stage = transaction.stage
-        sealed = inspect_integrity(store, provider_id) if root.exists() else None
+        store_exists = bool(store.client.list_objects(store.prefix)) if is_remote else Path(store).exists()
+        sealed = inspect_integrity(store, provider_id) if store_exists else None
         previous = sealed.store.manifest if sealed else None
         certified = None
 
-        def refresh_link_witnesses(path: Path) -> None:
-            # An aborted attempt may have discovered pre-existing ctime drift.
-            # Never refresh that unverified prior witness. Retry hashes the
-            # original digest before it can inherit an unchanged partition.
-            if transaction.committed and certified is not None:
-                refresh_witnesses(certified, StoreRoot(path))
+        if not is_remote:
 
-        transaction.after_cleanup = refresh_link_witnesses
+            def refresh_link_witnesses(path: Path) -> None:
+                # An aborted attempt may have discovered pre-existing ctime drift.
+                # Never refresh that unverified prior witness. Retry hashes the
+                # original digest before it can inherit an unchanged partition.
+                if transaction.committed and certified is not None:
+                    refresh_witnesses(certified, StoreRoot(path))
+
+            transaction.after_cleanup = refresh_link_witnesses
         if previous is not None and not isinstance(previous, AccumulatedStoreManifest):
             raise FatalContractError(f'Expected an accumulated store at "{store}"; refusing to modify a compiled store')
         held = previous.coverage if previous else ()
@@ -298,20 +310,40 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                 identifier = f"product={definition.product_id}/year={year:04d}"
                 partition_updates.setdefault(identifier, []).append(replacement)
         reused = {}
+        remote_reused = {}
+        materialized_updates: dict[PartitionIdentifier, Path] = {}
         if sealed is not None:
-            verify_files(sealed, tuple(key for key in sealed.store.partition_files if str(key) in partition_updates))
+            updated_keys = tuple(key for key in sealed.store.partition_files if str(key) in partition_updates)
+            if is_remote:
+                from rivretrieve._internal.store.integrity import _fail as _integrity_fail
+
+                current = inspect_integrity(store, provider_id)
+                if current.generation_id != sealed.generation_id:
+                    _integrity_fail(store, provider_id, "generation_changed")
+                materialized_updates = materialize_verified_remote_partitions(
+                    current, updated_keys, transaction.workspace
+                )
+            else:
+                verify_files(sealed, updated_keys)
         if sealed is not None:
             for identifier, source in sealed.store.partition_files.items():
                 if str(identifier) not in partition_updates:
-                    destination = stage / str(identifier) / source.name
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    reused[identifier] = link_partition(sealed, identifier, destination)
+                    if is_remote:
+                        rel = source.relative_to(store).as_posix()
+                        remote_reused[identifier] = (rel, sealed.files[rel])
+                    else:
+                        destination = stage / str(identifier) / source.name
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        reused[identifier] = link_partition(sealed, identifier, destination)
+            if isinstance(transaction, RemoteStoreTransaction):
+                transaction.set_reused_relpaths(rel for rel, _ in remote_reused.values())
         for identifier, changes in partition_updates.items():
             year = int(identifier.rsplit("=", 1)[1])
             key = PartitionIdentifier(identifier)
             existing_rows = None
             if sealed is not None and key in sealed.store.partition_files:
-                existing_rows = pl.read_parquet(sealed.store.partition_files[key])
+                source_parquet = materialized_updates[key] if is_remote else sealed.store.partition_files[key]
+                existing_rows = pl.read_parquet(source_parquet)
             for replacement in changes:
                 coverage, rows = replacement.coverage, replacement.rows
                 replaced_facts = replacement.replaced_facts_ids or coverage.facts_ids
@@ -386,7 +418,10 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
         }
         manifest.update(publication_identity_fields((provider_id,)))
         (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        certified = seal_store(StoreRoot(stage), provider_id, previous=sealed, reused=reused)
+        if isinstance(store, RemoteStoreRoot):
+            certified = seal_remote_stage(stage, store, provider_id, previous=sealed, reused_identities=remote_reused)
+        else:
+            certified = seal_store(StoreRoot(stage), provider_id, previous=sealed, reused=reused)
         candidate = certified.store.manifest
         assert isinstance(candidate, AccumulatedStoreManifest)
         transaction.publish(lambda _: certified)
