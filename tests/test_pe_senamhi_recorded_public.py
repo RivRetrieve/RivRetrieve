@@ -22,6 +22,10 @@ class Replay:
             self.status = self.receipt["status"]
             self.retrieved_at = datetime.fromisoformat(self.receipt["acquired_at"])
             self.headers = self.receipt["response_headers"].items()
+        elif member.startswith("web/"):
+            self.status = self.receipt["http_status"]
+            self.retrieved_at = datetime.fromisoformat(self.receipt["completed_at"])
+            self.headers = self.receipt["response_headers"].items()
         else:
             self.status = self.receipt["http_status"]
             self.retrieved_at = datetime.fromisoformat(self.receipt["finished_at"])
@@ -55,48 +59,84 @@ def select_product(station, product):
     return rr.pick(selected, series_id=identities)
 
 
-@pytest.mark.recorded(_SCOPE)
 @pytest.mark.parametrize(
-    ("member", "station", "product", "start", "end", "fields"),
+    ("scope", "member", "station", "product", "start", "end", "fields"),
     [
-        (
+        pytest.param(
+            _SCOPE,
             "anchors/daily-ramis-05",
             "47251282",
             "phisis_daily_flow",
             "2024-02-28",
             "2024-03-01T23:59:59",
             ("current", "minimum", "maximum"),
+            marks=pytest.mark.recorded(_SCOPE),
         ),
-        (
+        pytest.param(
+            _SCOPE,
             "access/hydrogram-daily-level-2024-240103",
             "240103",
             "phisis_daily_level_above_sea_level",
             "2024-06-01",
             "2024-06-02T23:59:59",
             ("current", "minimum", "maximum"),
+            marks=pytest.mark.recorded(_SCOPE),
         ),
-        (
+        pytest.param(
+            _SCOPE,
             "anchors/readings-47E0D438-202610",
             "47E0D438",
             "monthly_archive_n_nivelagua",
             "2026-10-03",
             "2026-10-29T23:59:59",
             ("N_NIVELAGUA",),
+            marks=pytest.mark.recorded(_SCOPE),
         ),
-        (
-            "anchors/readings-200322-202609",
-            "200322",
-            "monthly_archive_nivel_del_rio_promedio",
-            "2026-09-03",
-            "2026-09-28T23:59:59",
-            ("NIVEL_DEL_RIO_PROMEDIO",),
-        ),
+        *[
+            pytest.param(
+                _SCOPE,
+                "anchors/readings-200322-202609",
+                "200322",
+                "monthly_archive_" + field.lower(),
+                "2026-09-03",
+                "2026-09-28T23:59:59",
+                (field,),
+                marks=pytest.mark.recorded(_SCOPE),
+            )
+            for field in (
+                "NIVEL_DEL_RIO_06H",
+                "NIVEL_DEL_RIO_10H",
+                "NIVEL_DEL_RIO_14H",
+                "NIVEL_DEL_RIO_18H",
+                "NIVEL_DEL_RIO_PROMEDIO",
+            )
+        ],
+        *[
+            pytest.param(
+                "maintenance/catalogue/pe_senamhi/official",
+                f"web/readings-{station}-202610",
+                station,
+                "monthly_archive_" + field.lower(),
+                "2026-10-03",
+                "2026-10-29T23:59:59",
+                (field,),
+                marks=pytest.mark.recorded(
+                    "maintenance/catalogue/pe_senamhi/official",
+                    "maintenance/catalogue/pe_senamhi/official/selection.json",
+                ),
+            )
+            for station, field in (
+                ("114118", "N_NIVELMEDIO"),
+                ("212605", "N_NIV_INST_00"),
+                ("270202", "N_NIV_INST_10"),
+            )
+        ],
     ],
 )
 def test_public_retained_rows_clipping_and_cache(
-    retained_evidence_root, monkeypatch, member, station, product, start, end, fields
+    retained_evidence_root, monkeypatch, scope, member, station, product, start, end, fields
 ):
-    replay = Replay(retained_evidence_root / _SCOPE, member)
+    replay = Replay(retained_evidence_root / scope, member)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selected = select_product(station, product)
     kwargs = {"start": start, "end": end, "on_issue": "ignore", "receipts": True}
