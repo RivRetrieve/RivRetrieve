@@ -1729,10 +1729,12 @@ def cache_status(provider: str):
     StoreStatus
         Resolved path, committed generation and metadata-checked manifest,
         interrupted paths, cleanup residue and local ownership. Observation bytes
-        are not audited. ``present`` means committed data exists; ``interrupted``
-        means recognized unfinished work exists without committed data. Only
-        ``absent`` means neither exists. Coverage describes established successful
-        intervals, not continuous observations or a permanent retrieval history.
+        are not audited when recorded file witnesses match; a copied store whose
+        witnesses differ is verified in full once before updating local witnesses.
+        ``present`` means committed data exists; ``interrupted`` means recognized
+        unfinished work exists without committed data. Only ``absent`` means
+        neither exists. Coverage describes established successful intervals, not
+        continuous observations or a permanent retrieval history.
 
     Raises
     ------
@@ -1823,9 +1825,12 @@ def audit_cache(provider: str):
 
     Notes
     -----
-    This read-only operation makes no source request and does not repeat
-    certification against original publisher artifacts. It can read the whole
-    national dataset. ``cache_status`` does not perform this complete check.
+    This operation makes no source request and does not repeat certification
+    against original publisher artifacts. If a copied store's local file
+    witnesses have not yet been updated, successful verification records the
+    new local witnesses in ``integrity.json``. It can read the whole national
+    dataset. ``cache_status`` does not perform this complete check when
+    recorded file witnesses already match.
     """
     from rivretrieve._internal.bulk import _cache_registration
     from rivretrieve._internal.store.integrity import audit_store

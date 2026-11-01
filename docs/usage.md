@@ -329,14 +329,19 @@ Stations and routes in one request share preparation. This avoids a national
 observation audit for each small request. Metadata inspection still depends on
 store size, and checking a selected file reads all its bytes. Damage confined to
 unselected observation bytes can remain undiscovered until a relevant read or
-complete audit.
+complete audit. When a complete cache is copied to another directory or machine
+so its local file identities change, the first local read, status check, audit
+or update verifies every saved file and observation against the original seal
+and records the new local file witnesses in `integrity.json`. Later reads use
+the normal selective check.
 
 Set `RIVRETRIEVE_CACHE_DIR` to override the platform's user cache directory.
 The following operations make no source request:
 
 - `cache_status(provider)` checks stored metadata and reports committed data,
   interrupted work, cleanup residue and active ownership separately. It does not
-  read every observation byte.
+  read every observation byte unless a copied store's local file witnesses need
+  initial verification.
 - `audit_cache(provider)` checks every saved file and observation. A returned
   `CacheAuditResult` identifies the generation checked and reports partition, row
   and byte counts. Missing or damaged data raises an error. This local check does

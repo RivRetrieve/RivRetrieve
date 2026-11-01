@@ -425,9 +425,9 @@ Operations have distinct detection scopes:
 
 | Operation | Checks performed |
 | --- | --- |
-| `cache_status` | Journal and ownership, closed file inventory, file identities, manifest digest and metadata relations. No observation bytes are decoded or hashed. |
-| Store read | Current metadata and closed inventory, then original content digests for selected product/year partitions. Published validation establishes observation consistency; verified bytes preserve that authority. Observation decoding applies conservative request predicates. |
-| `audit_cache` | Every sealed file digest and all observation and metadata consistency rules for one generation. Return identifies the generation and checked counts. |
+| `cache_status` | Journal and ownership, closed file inventory, file identities, manifest digest and metadata relations. When recorded device, inode, size and modification-time witnesses match, no observation bytes are decoded or hashed; when they differ on an idle committed store, complete digest and observation validation runs once before updating local witnesses. |
+| Store read | Current metadata and closed inventory, then original content digests for selected product/year partitions. When recorded witnesses differ on first access after copying, the complete store is validated and re-witnessed before reading. Published validation establishes observation consistency; verified bytes preserve that authority. Observation decoding applies conservative request predicates. |
+| `audit_cache` | Every sealed file digest and all observation and metadata consistency rules for one generation. Updates local witnesses if a complete copied store was not yet re-witnessed. Return identifies the generation and checked counts. |
 | Accumulated update | Current metadata, new or changed partitions and the retained support for unchanged partitions. Original digests are carried forward, never inferred from replacement bytes. |
 
 The selected-read boundary uses `inspect_integrity` and the shared selected-file
@@ -453,10 +453,16 @@ request inspects current metadata; there is no permanent path-only trust.
 A filesystem witness contains device, inode, size, modification time and change
 time. Owned hardlink creation and removal change the last field without changing
 content. Under exclusive ownership, the writer can record those known transitions
-while preserving the original digest. An unexpected witness change requires
-verification against that original digest before reuse. Interrupted cleanup can
-therefore require extra byte checks on recovery or the next update. It MUST NOT
-cause changed bytes to acquire a new certified identity automatically.
+while preserving the original digest. When device, inode, size or modification-time
+witnesses differ on a complete idle store, such as after copying a cache to another
+directory or machine, inspection verifies the closed file inventory, every file's
+saved size and SHA-256 digest, and all metadata and observation rules under the
+exclusive lease before atomically recording the new local witnesses in
+`integrity.json`. Subsequent operations use the normal witness check. Unfinished
+transaction paths, non-idle ownership, or `.integrity.pending` are not treated as
+relocated snapshots. Interrupted cleanup or witness replacement can require extra
+byte checks on recovery or the next update. Neither transition may cause changed
+bytes to acquire a new certified identity automatically.
 
 Digests detect local corruption and ordinary replacement. They do not authenticate
 an attacker who can replace data and rewrite its seal. Concurrent external mutation

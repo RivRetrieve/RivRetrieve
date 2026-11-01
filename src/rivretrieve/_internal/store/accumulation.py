@@ -135,7 +135,8 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
     with tx_cm as transaction:
         stage = transaction.stage
         store_exists = bool(store.client.list_objects(store.prefix)) if is_remote else Path(store).exists()
-        sealed = inspect_integrity(store, provider_id) if store_exists else None
+        lease = None if isinstance(transaction, RemoteStoreTransaction) else transaction.lease
+        sealed = inspect_integrity(store, provider_id, lease=lease) if store_exists else None
         previous = sealed.store.manifest if sealed else None
         certified = None
 
