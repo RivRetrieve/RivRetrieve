@@ -139,7 +139,8 @@ class StoreStatus:
         The exists property reports committed data, not unfinished staging.
     manifest : StoreManifest, AccumulatedStoreManifest or None
         Manifest checked against its publication identity and metadata rules.
-        Presence does not claim all observation bytes have been checked.
+        Presence does not claim all observation bytes have been checked unless
+        changed local file witnesses required initial full-store verification.
     bytes_on_disk : int
         Logical bytes in committed metadata, partitions and seal, zero without
         committed data. Cleanup residue is listed separately. This is not

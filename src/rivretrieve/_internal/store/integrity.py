@@ -1,7 +1,10 @@
 """Content identities for one local observation-store generation.
 
-Inspection hashes metadata, inventories paths, and checks file identities. It never
-reads observation bytes. Selected reads and complete audits verify content hashes.
+Inspection hashes metadata, inventories paths, and checks file identities without
+reading observation bytes when recorded witnesses match. When device, inode, size
+or mtime witnesses differ on a complete committed store, inspection verifies every
+sealed file digest and store semantic rule under the writer lease before recording
+the new local witnesses. Selected reads and complete audits verify content hashes.
 Hardlink reuse preserves those hashes; it does not certify changed bytes. The cheap
 witness includes ctime. Owned hardlink operations advance this witness under the
 writer lease. Interrupted transitions require verification against the old digest.
@@ -24,7 +27,7 @@ from datetime import UTC, datetime, timedelta
 from itertools import islice
 from pathlib import Path
 from types import MappingProxyType
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.source_series import OutcomeStatus, RetrievalOutcome
@@ -43,6 +46,9 @@ from rivretrieve._internal.store.validation import (
     validate_store,
 )
 from rivretrieve._internal.time_axis import TimeAxis
+
+if TYPE_CHECKING:
+    from rivretrieve._internal.store.lifecycle import StoreLease
 
 SEAL_NAME = "integrity.json"
 
@@ -170,21 +176,64 @@ def _check_identity(root: StoreRoot, provider: ProviderId, name: str, identity: 
         _fail(root, provider, f"file_identity:{name}")
 
 
-def inspect_integrity(root: StoreRoot, provider_id: ProviderId, *, allow_pending: bool = False) -> SealedStore:
-    """Check the closed inventory and metadata without opening observations.
+def _verify_all_contents(
+    root: StoreRoot,
+    provider_id: ProviderId,
+    files: Mapping[str, FileIdentity],
+    *,
+    allow_pending: bool = False,
+) -> tuple[ValidatedStore, dict[str, tuple[int, int, int, int, int]]]:
+    pending = {".integrity.pending"} if allow_pending and (Path(root) / ".integrity.pending").exists() else set()
+    _closed_files(root, provider_id, {*files, SEAL_NAME, *pending})
+    observed: dict[str, tuple[int, int, int, int, int]] = {}
+    for name in files:
+        try:
+            observed[name] = _witness(Path(root) / name)
+        except (OSError, ValueError):
+            _fail(root, provider_id, f"file_identity:{name}")
+    for name, identity in files.items():
+        path = Path(root) / name
+        if observed[name][2] != identity.size or _digest(path) != identity.sha256 or _witness(path) != observed[name]:
+            _fail(root, provider_id, f"digest:{name}")
+    checked = validate_store(root, provider_id)
+    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in checked.partition_files.values())}
+    if set(files) != expected:
+        _fail(root, provider_id, "manifest_inventory")
+    _closed_files(root, provider_id, {*files, SEAL_NAME, *pending})
+    for name, witness in observed.items():
+        try:
+            current = _witness(Path(root) / name)
+        except (OSError, ValueError):
+            _fail(root, provider_id, "generation_changed")
+        if current != witness:
+            _fail(root, provider_id, "generation_changed")
+    return checked, observed
 
-    Published stores require a seal. Inspection checks device, inode, size and
-    mtime. A ctime-only change is retained as an unverified transition: writers
-    must verify the original digest before reuse. Inspection never establishes
-    observation-byte integrity; selected verification and audit do that.
-    ``allow_pending`` is only for lifecycle inspection after it has identified
-    the exact regular pending-seal entry. It never accepts links or pending data.
+
+def inspect_integrity(
+    root: StoreRoot,
+    provider_id: ProviderId,
+    *,
+    allow_pending: bool = False,
+    lease: StoreLease | None = None,
+) -> SealedStore:
+    """Check the closed inventory and metadata, or validate and re-witness a copied store.
+
+    Published stores require a seal. When recorded device, inode, size and mtime
+    witnesses match, inspection hashes only ``manifest.json`` without opening
+    observations, retaining a ctime-only change as an unverified transition for
+    writers to verify against the original digest before reuse. When those
+    witnesses differ on a complete committed store, inspection verifies every
+    sealed file digest and all store semantics under the writer lease before
+    atomically recording the new local witnesses. ``allow_pending`` is only for
+    lifecycle inspection after it has identified the exact regular pending-seal
+    entry. It never accepts links or pending data.
     """
     from rivretrieve._internal.store.remote import RemoteStoreRoot, inspect_remote_integrity
 
     if isinstance(root, RemoteStoreRoot):
         return inspect_remote_integrity(root, provider_id, allow_pending=allow_pending)
-    return _inspect_integrity(root, provider_id, allow_ctime_drift=True, allow_pending=allow_pending)
+    return _inspect_integrity(root, provider_id, allow_ctime_drift=True, allow_pending=allow_pending, lease=lease)
 
 
 def _inspect_integrity(
@@ -193,6 +242,7 @@ def _inspect_integrity(
     *,
     allow_ctime_drift: bool,
     allow_pending: bool = False,
+    lease: StoreLease | None = None,
 ) -> SealedStore:
     seal_path = Path(root) / SEAL_NAME
     try:
@@ -246,12 +296,27 @@ def _inspect_integrity(
         _fail(root, provider_id, f"seal:{error}")
     pending = {".integrity.pending"} if allow_pending and (Path(root) / ".integrity.pending").exists() else set()
     _closed_files(root, provider_id, {*files, SEAL_NAME, *pending})
+    mismatched: str | None = None
     for name, identity in files.items():
-        if allow_ctime_drift:
-            if _witness(Path(root) / name)[:-1] != identity.witness[:-1]:
-                _fail(root, provider_id, f"file_identity:{name}")
-        else:
-            _check_identity(root, provider_id, name, identity)
+        try:
+            current = _witness(Path(root) / name)
+        except (OSError, ValueError):
+            _fail(root, provider_id, f"file_identity:{name}")
+        matched = current[:-1] == identity.witness[:-1] if allow_ctime_drift else current == identity.witness
+        if not matched and mismatched is None:
+            mismatched = name
+    if mismatched is not None:
+        from rivretrieve._internal.store.lifecycle import _residue, _root, store_lease
+
+        if Path(root).name.startswith(".") or (lease is None and bool(_residue(_root(Path(root))))):
+            _fail(root, provider_id, f"file_identity:{mismatched}")
+        if allow_pending:
+            checked, _ = _verify_all_contents(root, provider_id, files, allow_pending=True)
+            return SealedStore(checked, generation, files, _supporting_outcomes(_read_raw_manifest(root, provider_id)))
+        with store_lease(Path(root), lease=lease):
+            checked, observed = _verify_all_contents(root, provider_id, files)
+            restored = {name: FileIdentity(identity.sha256, *observed[name]) for name, identity in files.items()}
+            return _write_seal(checked, restored, _supporting_outcomes(_read_raw_manifest(root, provider_id)))
     if _digest(Path(root) / "manifest.json") != files["manifest.json"].sha256:
         _fail(root, provider_id, "digest:manifest.json")
     store = _validate_store_contents(root, provider_id, frozenset())
@@ -543,11 +608,7 @@ def audit_store(root: StoreRoot, provider_id: ProviderId, *, allow_pending: bool
     if isinstance(root, RemoteStoreRoot):
         return audit_remote_store(root, provider_id, allow_pending=allow_pending)
     sealed = _inspect_integrity(root, provider_id, allow_ctime_drift=True, allow_pending=allow_pending)
-    observed = {name: _witness(Path(root) / name) for name in sealed.files}
-    for name, identity in sealed.files.items():
-        if _digest(Path(root) / name) != identity.sha256 or _witness(Path(root) / name) != observed[name]:
-            _fail(root, provider_id, f"digest:{name}")
-    checked = validate_store(root, provider_id)
+    checked, observed = _verify_all_contents(root, provider_id, sealed.files, allow_pending=allow_pending)
     after = _inspect_integrity(root, provider_id, allow_ctime_drift=True, allow_pending=allow_pending)
     if after.generation_id != sealed.generation_id or any(
         _witness(Path(root) / name) != witness for name, witness in observed.items()

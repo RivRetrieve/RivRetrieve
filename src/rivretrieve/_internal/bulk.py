@@ -219,7 +219,7 @@ def _download(
         if Path(root).exists():
             try:
                 previous = validate_store(root, provider_id)
-                sealed = inspect_integrity(root, provider_id)
+                sealed = inspect_integrity(root, provider_id, lease=transaction.lease)
                 verify_files(sealed, tuple(previous.partition_files))
             except ObservationStoreRefusedError:
                 # Only an unambiguously selected valid snapshot establishes a floor.

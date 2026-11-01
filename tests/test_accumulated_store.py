@@ -529,3 +529,210 @@ def test_mlit_legacy_call_requires_clear_cache_without_relabeling_history(tmp_pa
         series["provider_id"] = str(_PROVIDER)
     path.write_text(json.dumps(document))
     seal_store(store, _PROVIDER)
+
+
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+def test_copied_native_cache_audit_reuse_selective_subsequent_read_and_update(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import rivretrieve as rr
+    import rivretrieve._internal.discovery as discovery
+    import rivretrieve._internal.store.integrity as integrity
+    import rivretrieve._internal.store.validation as validation
+    from tests.test_usgs_continuous_cache_axis import STATION, _Spans
+
+    origin_cache = tmp_path / "origin"
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(origin_cache))
+
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge")
+    continuous = next(item for item in selected.series if item.product_id == "discharge_instantaneous")
+    selected = rr.pick(selected, series_id=continuous.series_id)
+
+    transport = _Spans(continuous.identity.published_id)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+
+    early = rr.fetch(
+        selected,
+        start="1995-01-03",
+        end="1998-02-01",
+        cache="reuse",
+        receipts=True,
+        on_issue="raise",
+    )
+    first = rr.fetch(
+        selected,
+        start="2000-01-03",
+        end="2003-02-01",
+        cache="reuse",
+        receipts=True,
+        on_issue="raise",
+    )
+    expected_reuse = rr.fetch(
+        selected,
+        start="2000-01-03",
+        end="2003-02-01",
+        cache="reuse",
+        receipts=True,
+        on_issue="raise",
+    )
+    assert len(transport.calls) == 4
+    origin_store = origin_cache / "usgs_nwis" / "store"
+    original_sealed = integrity.inspect_integrity(StoreRoot(origin_store), ProviderId("usgs_nwis"))
+
+    class DeniedHttp:
+        def send(self, request):
+            pytest.fail(f"source HTTP must not be called: {request}")
+
+    # Copy 1: Public audit on a freshly copied cache with changed filesystem identities.
+    audit_cache_dir = tmp_path / "copied_for_audit"
+    shutil.copytree(origin_store, audit_cache_dir / "usgs_nwis" / "store")
+    for name, item in original_sealed.files.items():
+        assert (audit_cache_dir / "usgs_nwis" / "store" / name).stat().st_ino != item.inode
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(audit_cache_dir))
+    monkeypatch.setattr(discovery, "HttpClient", DeniedHttp)
+    audited = rr.audit_cache("usgs_nwis")
+    assert audited.generation_id == original_sealed.generation_id
+    assert audited.partitions_checked == 2
+    assert audited.rows_checked == 4
+
+    # Copy 2: Ordinary reuse on a freshly copied cache with source HTTP denied and no prior restore call.
+    reuse_cache_dir = tmp_path / "copied_for_reuse"
+    relocated_store = reuse_cache_dir / "usgs_nwis" / "store"
+    shutil.copytree(origin_store, relocated_store)
+    for name, item in original_sealed.files.items():
+        assert (relocated_store / name).stat().st_ino != item.inode
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(reuse_cache_dir))
+    reused = rr.fetch(
+        selected,
+        start="2000-01-03",
+        end="2003-02-01",
+        cache="reuse",
+        receipts=True,
+        on_issue="raise",
+    )
+    assert_frame_equal(reused.data, expected_reuse.data)
+    assert reused.provenance.served_intervals == expected_reuse.provenance.served_intervals
+    assert reused.provenance.calls_made == expected_reuse.provenance.calls_made == first.provenance.calls_made
+    assert reused.provenance.retrieved_at == expected_reuse.provenance.retrieved_at == first.provenance.retrieved_at
+    assert reused.outcomes == expected_reuse.outcomes
+    assert reused.source_series == expected_reuse.source_series
+    assert reused.inventories == expected_reuse.inventories
+    assert rr.cache_status("usgs_nwis").generation_id == original_sealed.generation_id
+
+    # Subsequent read uses the normal selective path and does not open or hash unselected year=1998.
+    real_digest, real_open = integrity._digest, validation._open_parquet
+
+    def guard_1998(operation):
+        def checked(path, *args, **kwargs):
+            assert "year=1998" not in str(path), "Unselected partition was scanned after restoration"
+            return operation(path, *args, **kwargs)
+
+        return checked
+
+    with monkeypatch.context() as patch:
+        patch.setattr(integrity, "_digest", guard_1998(real_digest))
+        patch.setattr(validation, "_open_parquet", guard_1998(real_open))
+        second_reuse = rr.fetch(
+            selected,
+            start="2000-01-03",
+            end="2003-02-01",
+            cache="reuse",
+            receipts=True,
+            on_issue="raise",
+        )
+    assert_frame_equal(second_reuse.data, expected_reuse.data)
+
+    # Subsequent update on the restored cache hardlink-reuses untouched year=1998 and preserves its provenance.
+    inode_1998 = next((relocated_store / "product=discharge_instantaneous/year=1998").glob("*.parquet")).stat().st_ino
+    transport.value = 25
+    with monkeypatch.context() as patch:
+        patch.setattr(discovery, "HttpClient", lambda: transport)
+        patch.setattr(integrity, "_digest", guard_1998(real_digest))
+        patch.setattr(validation, "_open_parquet", guard_1998(real_open))
+        refreshed = rr.fetch(
+            selected,
+            start="2000-01-03",
+            end="2003-02-01",
+            cache="refresh",
+            on_issue="raise",
+        )
+    assert len(transport.calls) == 6
+    assert refreshed.data.height == 2
+    assert (
+        next((relocated_store / "product=discharge_instantaneous/year=1998").glob("*.parquet")).stat().st_ino
+        == inode_1998
+    )
+
+    reused_early = rr.fetch(
+        selected,
+        start="1995-01-03",
+        end="1998-02-01",
+        cache="reuse",
+        receipts=True,
+        on_issue="raise",
+    )
+    assert_frame_equal(reused_early.data, early.data)
+    assert reused_early.provenance.served_intervals[0].retrieved_at == early.provenance.retrieved_at
+    assert rr.audit_cache("usgs_nwis").partitions_checked == len(original_sealed.store.partition_files)
+
+
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.parametrize(
+    "defect,match",
+    [
+        ("corrupt_unselected_partition", "digest"),
+        ("missing_unselected_partition", "inventory"),
+        ("extra_unselected_file", "unlisted_or_unsafe"),
+        ("semantic_unselected_partition", "coverage.row"),
+    ],
+)
+def test_copied_native_cache_verifies_unselected_partitions_before_acceptance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, defect: str, match: str
+) -> None:
+    import rivretrieve as rr
+    import rivretrieve._internal.discovery as discovery
+    from tests.store.test_integrity import _resign
+    from tests.test_usgs_continuous_cache_axis import STATION, _Spans
+
+    origin_cache = tmp_path / "origin"
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(origin_cache))
+
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge")
+    continuous = next(item for item in selected.series if item.product_id == "discharge_instantaneous")
+    selected = rr.pick(selected, series_id=continuous.series_id)
+
+    transport = _Spans(continuous.identity.published_id)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    rr.fetch(selected, start="1996-01-03", end="1999-02-01", cache="reuse", on_issue="raise")
+    rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="reuse", on_issue="raise")
+
+    origin_store = origin_cache / "usgs_nwis" / "store"
+    if defect == "semantic_unselected_partition":
+        part_1999 = next((origin_store / "product=discharge_instantaneous/year=1999").glob("*.parquet"))
+        pl.read_parquet(part_1999).with_columns(pl.lit("missing-fact").alias("facts_id")).write_parquet(part_1999)
+        _resign(origin_store)
+
+    copied_cache = tmp_path / "copied"
+    relocated_store = copied_cache / "usgs_nwis" / "store"
+    shutil.copytree(origin_store, relocated_store)
+    part_1999 = next((relocated_store / "product=discharge_instantaneous/year=1999").glob("*.parquet"))
+    if defect == "corrupt_unselected_partition":
+        data = bytearray(part_1999.read_bytes())
+        data[len(data) // 2] ^= 1
+        part_1999.write_bytes(data)
+    elif defect == "missing_unselected_partition":
+        part_1999.unlink()
+    elif defect == "extra_unselected_file":
+        (part_1999.parent / "extra.parquet").write_bytes(b"extra")
+
+    class DeniedHttp:
+        def send(self, request):
+            pytest.fail(f"must not fall back to source HTTP: {request}")
+
+    before_seal = (relocated_store / "integrity.json").read_bytes()
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(copied_cache))
+    monkeypatch.setattr(discovery, "HttpClient", DeniedHttp)
+    with pytest.raises(ObservationStoreRefusedError, match=match):
+        # Request only 2000..2003; unselected 1999 partition must still be verified before acceptance.
+        rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="reuse", on_issue="raise")
+    assert (relocated_store / "integrity.json").read_bytes() == before_seal
