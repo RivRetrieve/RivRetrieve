@@ -1432,3 +1432,46 @@ def test_native_refresh_cli_refuses_incomplete_supplemental_inputs(tmp_path):
             ]
         )
     assert not (tmp_path / "native.parquet").exists()
+
+
+def test_native_publication_uses_explicit_acquisition_identity_for_byte_verification(tmp_path, monkeypatch):
+    from rivretrieve._internal.providers.usgs_nwis.origins import build_acquisition_provenance
+
+    original = build_acquisition_provenance()
+    provenance = original.model_copy(
+        update={"native_table": original.native_table.model_copy(update={"sha256": "a" * 64, "byte_size": 123})}
+    )
+    source = tmp_path / "source.json"
+    source.write_text(provenance.model_dump_json())
+    build = tmp_path / "build.json"
+    build.write_text("{}")
+    seen = []
+    monkeypatch.setattr(generator.CatalogueBuildInputs, "model_validate_json", lambda value: object())
+    monkeypatch.setattr(generator, "verify_provenance_recordings", lambda value, root: seen.append(value))
+
+    def reject_native(path, *, expected_sha256, expected_byte_size):
+        assert expected_sha256 == provenance.native_table.sha256
+        assert expected_byte_size == provenance.native_table.byte_size
+        raise FatalContractError("synthetic changed native")
+
+    monkeypatch.setattr(generator, "read_native_table", reject_native)
+    destination = tmp_path / "output"
+    with pytest.raises(FatalContractError, match="synthetic changed native"):
+        generator.main(
+            [
+                "--native",
+                str(tmp_path / "native.parquet"),
+                "--out",
+                str(destination),
+                "--modern-metadata",
+                str(tmp_path),
+                "--evidence-root",
+                str(tmp_path),
+                "--build-inputs",
+                str(build),
+                "--acquisition-provenance",
+                str(source),
+            ]
+        )
+    assert seen == [provenance]
+    assert not destination.exists()

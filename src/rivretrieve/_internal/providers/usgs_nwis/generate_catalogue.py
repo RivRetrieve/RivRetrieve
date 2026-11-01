@@ -16,7 +16,11 @@ from typing import cast
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import CatalogueBuildInputs, verify_provenance_recordings
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    CatalogueBuildInputs,
+    verify_provenance_recordings,
+)
 from rivretrieve._internal.catalogue_origins import Field, OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -1030,6 +1034,7 @@ def write_catalogue(
     *,
     build_inputs: CatalogueBuildInputs | None = None,
     native_table: NativeTable | None = None,
+    acquisition_provenance: AcquisitionProvenance | None = None,
 ) -> None:
     """Write a catalogue using adopted build inputs and its verified native table."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
@@ -1065,7 +1070,7 @@ def write_catalogue(
     features, receipts = read_modern_metadata(catalogue.modern_metadata)
     locations = monitoring_locations(NativeTable(catalogue.source_native))
     descriptions = modern_source_descriptions(features, locations)
-    provenance = build_modern_acquisition_provenance(receipts, catalogue.modern_metadata)
+    provenance = acquisition_provenance or build_modern_acquisition_provenance(receipts, catalogue.modern_metadata)
     from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
 
     station_origin = STATION_CATALOGUE_ORIGINS["station_id"]
@@ -1179,6 +1184,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
     parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
     parser.add_argument(
+        "--acquisition-provenance", type=Path, help="Explicit reviewed source acquisition provenance JSON."
+    )
+    parser.add_argument(
         "--supplemental-expanded", type=Path, nargs="+", help="Verified supplemental expanded RDB files."
     )
     parser.add_argument(
@@ -1204,8 +1212,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.modern_metadata is None:
             parser.error("--native publication requires --modern-metadata")
         from rivretrieve._internal.providers.usgs_nwis.origins import (
-            NATIVE_TABLE_BYTE_SIZE,
-            NATIVE_TABLE_SHA256,
             STATION_CATALOGUE_ORIGINS,
             build_acquisition_provenance,
         )
@@ -1215,18 +1221,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.build_inputs is None:
             parser.error("--out requires --build-inputs")
         build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
-        verify_provenance_recordings(build_acquisition_provenance(), args.evidence_root)
+        provenance = (
+            AcquisitionProvenance.model_validate_json(args.acquisition_provenance.read_bytes())
+            if args.acquisition_provenance is not None
+            else build_acquisition_provenance()
+        )
+        if provenance.provider_id != PROVIDER_ID or provenance.native_table is None:
+            raise FatalContractError("USGS publication requires matching provider and explicit native identity")
+        verify_provenance_recordings(provenance, args.evidence_root)
         native_table = read_native_table(
             args.native,
-            expected_sha256=NATIVE_TABLE_SHA256,
-            expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
+            expected_sha256=provenance.native_table.sha256,
+            expected_byte_size=provenance.native_table.byte_size,
         )
         catalogue = build_modern_catalogue(native_table, STATION_CATALOGUE_ORIGINS, args.modern_metadata)
-        write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)
+        write_catalogue(
+            catalogue,
+            args.out,
+            build_inputs=build_inputs,
+            native_table=native_table,
+            acquisition_provenance=provenance if args.acquisition_provenance is not None else None,
+        )
         return 0
 
-    if args.out is not None:
-        parser.error("native refresh mode cannot be combined with --out")
+    if args.out is not None or args.acquisition_provenance is not None:
+        parser.error("native refresh mode cannot be combined with publication inputs")
     if args.native_out is None or args.retrieved_at is None:
         parser.error("native refresh mode requires --native-out and --retrieved-at")
 
