@@ -86,7 +86,7 @@ def remove_external_inputs(directory: Path, groups: tuple[str, ...]) -> None:
     )
 
 
-def historical_source_provenance(provenance, metadata):
+def historical_source_provenance(provenance, metadata, *, declaration_locations=None):
     """Validate publication-only additions before projecting an immutable old oracle.
 
     Source acquisitions, native identity, original facts and their ordering remain
@@ -106,12 +106,16 @@ def historical_source_provenance(provenance, metadata):
     provider = provenance.provider_id
     origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
     private_declarations = {
+        "maintenance/catalogue/usgs_nwis/selected-acquisitions.json": "declarations/usgs_nwis/selected-acquisitions.json",
+        "maintenance/catalogue/usgs_nwis/retained-series.json": "declarations/usgs_nwis/retained-series.json",
         "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json": "declarations/ba_fhmzbih/baseline_workbook_access.json",
         "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz": "declarations/fr_hubeau/governing_evidence.json.xz",
         "maintenance/catalogue/fr_hubeau/inventory/native_capture.json": "declarations/fr_hubeau/native_capture.json",
         "maintenance/catalogue/station_metadata/review.json": "declarations/station_metadata/review.json",
         "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv": "declarations/th_thaiwater/governing_station_product_evidence.csv",
     }
+    if declaration_locations is None:
+        declaration_locations = origins.CATALOGUE_BUILD_DECLARATIONS
     expected_declarations = tuple(
         (
             "https://github.com/RivRetrieve/verification-evidence"
@@ -120,7 +124,7 @@ def historical_source_provenance(provenance, metadata):
             private_declarations.get(path, path),
             symbol,
         )
-        for path, symbol in origins.CATALOGUE_BUILD_DECLARATIONS
+        for path, symbol in declaration_locations
     )
     assert tuple((item.repository, item.repository_path, item.symbol) for item in build.declarations) == (
         expected_declarations

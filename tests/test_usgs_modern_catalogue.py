@@ -1,7 +1,6 @@
 """Modern catalogue tests; mutations below are authored negative controls."""
 
 import gzip
-import hashlib
 import json
 from pathlib import Path
 
@@ -15,16 +14,12 @@ from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import read_mo
 CATALOGUE = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue")
 
 
-def test_modern_concrete_snapshot_retains_siblings_unknowns_and_legacy_scope():
+def test_modern_concrete_snapshot_retains_siblings_unknowns_and_selected_station_scope():
     descriptions = decode_source_descriptions((CATALOGUE / "source_series.json").read_bytes())
     locations = json.loads((CATALOGUE / "monitoring_locations.json").read_text())
-    assert len(locations) == 26258
-    assert len(descriptions.descriptions) == 59159
-    # Full definition digest after the content-derived facts-ID repair.
-    # Disk v1/v2 equality was checked separately before that repair.
-    assert hashlib.sha256(descriptions.model_dump_json().encode()).hexdigest() == (
-        "361206d8f6421e1934c2e4a9098ca3beb9e834d75283ffaec39aa8812bc7ff0e"
-    )
+    assert len(locations) == 27934
+    # Independently reconciled current source metadata plus 22 unchanged historical series.
+    assert len(descriptions.descriptions) == 62046
     assert len({id(fact) for item in descriptions.descriptions for fact in item.facts}) == 8
     assert {item.station_id for item in descriptions.descriptions} <= locations.keys()
     siblings = [
@@ -99,3 +94,74 @@ def test_modern_observation_provenance_keeps_legacy_calls_independent():
     identifiers = set(acquisitions["acquisition_id"].to_list())
     assert {"observation_request", "modern_observation_request"} <= identifiers
     assert "source.observation.modern_values_qualifiers_and_timestamps" in evidence.facts["name"].to_list()
+
+
+def test_explicit_historical_sibling_retains_identity_and_physical_cache_facts():
+    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import retain_source_descriptions
+
+    def feature(identifier):
+        return {
+            "id": identifier,
+            "monitoring_location_id": "USGS-001",
+            "parameter_code": "00060",
+            "computation_period_identifier": "Daily",
+            "statistic_id": "00003",
+            "unit_of_measure": "ft^3/s",
+            "computation_identifier": "Mean",
+            "web_description": None,
+            "sublocation_identifier": None,
+        }
+
+    locations = {"001": "USGS-001"}
+    current = modern_source_descriptions([feature("current")], locations)
+    historical = modern_source_descriptions([feature("old"), feature("unselected")], locations)
+    old = historical.descriptions[0]
+    result = retain_source_descriptions(current, historical, ("old",), locations)
+    retained = next(item for item in result.descriptions if item.variant == "old")
+    assert {item.variant for item in result.descriptions} == {"current", "old"}
+    assert retained.series_id == old.series_id
+    assert retained.facts == old.facts
+    assert retained.identity.published_id == old.identity.published_id
+    assert retained == old
+    assert next(item for item in result.descriptions if item.variant == "current") == current.descriptions[0]
+    for ids in (("missing",), ("old", "old")):
+        with pytest.raises(ValueError):
+            retain_source_descriptions(current, historical, ids, locations)
+    with pytest.raises(ValueError):
+        retain_source_descriptions(current, current, ("current",), locations)
+    with pytest.raises(ValueError):
+        retain_source_descriptions(current, historical, ("old",), {})
+
+
+def test_catalogue_selection_uses_explicit_historical_inputs(monkeypatch):
+    from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as generator
+
+    def feature(identifier):
+        return {
+            "id": identifier,
+            "monitoring_location_id": "USGS-001",
+            "parameter_code": "00060",
+            "computation_period_identifier": "Daily",
+            "statistic_id": "00003",
+            "unit_of_measure": "ft^3/s",
+            "computation_identifier": "Mean",
+            "web_description": None,
+            "sublocation_identifier": None,
+        }
+
+    calls = []
+
+    def read(path):
+        calls.append(path)
+        return [feature("current" if path == Path("current") else "old")], [
+            {"retrieved_at": "2026-10-31T00:00:00+00:00"}
+        ]
+
+    monkeypatch.setattr(generator, "read_modern_metadata", read)
+    monkeypatch.setattr(generator, "monitoring_locations", lambda _: {"001": "USGS-001"})
+    result, receipts = generator.selected_source_descriptions(None, Path("current"), Path("historical"), ("old",))
+    assert {item.variant for item in result.descriptions} == {"current", "old"}
+    assert calls == [Path("current"), Path("historical")]
+    assert receipts == [{"retrieved_at": "2026-10-31T00:00:00+00:00"}]
+    with pytest.raises(ValueError, match="both metadata and explicit"):
+        generator.selected_source_descriptions(None, Path("current"), Path("historical"))

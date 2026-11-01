@@ -16,7 +16,12 @@ from typing import cast
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import CatalogueBuildInputs, verify_provenance_recordings
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    CatalogueBuildInputs,
+    NativeTableIdentity,
+    verify_provenance_recordings,
+)
 from rivretrieve._internal.catalogue_origins import Field, OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 from rivretrieve._internal.catalogues.native import (
@@ -47,11 +52,10 @@ PROVIDER_NAME = "U.S. Geological Survey National Water Information System (USGS 
 METADATA_BASE_URL = "https://waterservices.usgs.gov/nwis/site/"
 SERIES_CATALOGUE_URL = (
     METADATA_BASE_URL
-    + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&seriesCatalogOutput=true"
+    + "?format=rdb&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&seriesCatalogOutput=true"
 )
 EXPANDED_SITE_URL = (
-    METADATA_BASE_URL
-    + "?format=rdb&siteType=ST&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&siteOutput=expanded"
+    METADATA_BASE_URL + "?format=rdb&hasDataTypeCd=dv&parameterCd=00060,00065&stateCd={state_cd}&siteOutput=expanded"
 )
 # USGS site service requires a geographic filter; nationwide queries return HTTP 400.
 # We iterate over the 50 state USPS codes plus DC.
@@ -300,6 +304,8 @@ class GeneratedUsgsNwisCatalogue:
     station_products: StationProductCatalog
     source_native: pl.DataFrame
     modern_metadata: Path | None = None
+    retained_metadata: Path | None = None
+    retained_series_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -565,6 +571,88 @@ def refresh_native_table(
     return WithIssues(value=native, issues=())
 
 
+def supplement_native_stations(
+    native_table: NativeTable,
+    expanded_rows: Iterable[object],
+    *,
+    modern_features: Iterable[dict[str, object]],
+    retrieved_at: RetrievedAt,
+) -> NativeTable:
+    """Add selected expanded station records with modern daily discharge.
+
+    Parameters
+    ----------
+    native_table
+        Independently validated national two-pass input.
+    expanded_rows
+        Genuine expanded source rows selected within the provider geography.
+        Their acquisition and geographic selection must be verified separately.
+    modern_features
+        Published series properties used to match agency-qualified identities.
+    retrieved_at
+        Retrieval instant of the supplemental station responses.
+
+    Notes
+    -----
+    Empty series arrays mean no legacy series records were selected for these
+    stations. They do not assert a successful empty legacy series request.
+    Supplemental acquisition lineage must accompany publication of this table.
+
+    Raises
+    ------
+    FatalContractError
+        A row has no matching daily discharge identity, collides with an existing
+        station, lacks required identity, or has malformed nonblank coordinates.
+    """
+    if native_table.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("USGS native table does not have the exact required schema")
+    locations = {
+        item.get("monitoring_location_id")
+        for item in modern_features
+        if (item.get("parameter_code"), item.get("computation_period_identifier"), item.get("statistic_id"))
+        == ("00060", "Daily", "00003")
+    }
+    station_ids = set(native_table.data["site_no"].to_list())
+    additions = []
+    for item in expanded_rows:
+        row = _validated_source_row(item, EXPANDED_HEADER, row_kind="supplemental expanded")
+        station_id = _required_site_no(row, row_kind="supplemental expanded")
+        agency = _required_native_string(row["agency_cd"], "agency_cd")
+        if f"{agency}-{station_id}" not in locations:
+            raise FatalContractError("Supplemental station has no matching modern daily discharge identity")
+        if station_id in station_ids:
+            raise FatalContractError("Supplemental station collides with an existing station identity")
+        station_ids.add(station_id)
+        additions.append({**row, **dict.fromkeys(SERIES_ONLY_FIELDS, []), "retrieved_at": retrieved_at.value})
+    if not additions:
+        return native_table
+    supplemental = NativeTable(pl.DataFrame(additions, schema=NATIVE_SCHEMA))
+    build_stations(supplemental)
+    return NativeTable(pl.concat([native_table.data, supplemental.data]).sort("site_no"))
+
+
+def retain_native_stations(
+    current: NativeTable, retained: NativeTable, monitoring_location_ids: Sequence[str]
+) -> NativeTable:
+    """Keep explicitly selected historical station rows with their original facts and times.
+
+    Both inputs must have verified acquisition identities at the composition
+    boundary. This never replaces current rows or invents current availability.
+    """
+    if current.data.schema != NATIVE_SCHEMA or retained.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("USGS retained station inputs require the exact native schema")
+    selected = set(monitoring_location_ids)
+    if len(selected) != len(monitoring_location_ids):
+        raise FatalContractError("Retained station selection contains duplicate identities")
+    rows = retained.data.with_columns((pl.col("agency_cd") + pl.lit("-") + pl.col("site_no")).alias("_location"))
+    rows = rows.filter(pl.col("_location").is_in(selected))
+    if set(rows["_location"].to_list()) != selected:
+        raise FatalContractError("Selected retained station identity is missing")
+    if set(rows["site_no"].to_list()) & set(current.data["site_no"].to_list()):
+        raise FatalContractError("Retained station identity collides with current inventory")
+    return NativeTable(pl.concat([current.data, rows.drop("_location")]).sort("site_no"))
+
+
 def refresh_native_table_from_fixtures(
     series_fixture_path: Path | str,
     expanded_fixture_path: Path | str,
@@ -748,17 +836,44 @@ def monitoring_locations(native_table: NativeTable) -> dict[str, str]:
     }
 
 
+def selected_source_descriptions(
+    native_table: NativeTable,
+    metadata_directory: Path,
+    retained_metadata: Path | None = None,
+    retained_series_ids: tuple[str, ...] = (),
+):
+    """Read current metadata and any explicitly selected historical series."""
+    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import (
+        modern_source_descriptions,
+        retain_source_descriptions,
+    )
+
+    features, receipts = read_modern_metadata(metadata_directory)
+    locations = monitoring_locations(native_table)
+    descriptions = modern_source_descriptions(features, locations)
+    if (retained_metadata is None) != (not retained_series_ids):
+        raise ValueError("Historical series require both metadata and explicit published IDs")
+    if retained_metadata is not None:
+        historical, _ = read_modern_metadata(retained_metadata)
+        descriptions = retain_source_descriptions(
+            descriptions, modern_source_descriptions(historical, locations), retained_series_ids, locations
+        )
+    return descriptions, receipts
+
+
 def build_modern_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
     metadata_directory: Path,
+    *,
+    retained_metadata: Path | None = None,
+    retained_series_ids: tuple[str, ...] = (),
 ) -> GeneratedUsgsNwisCatalogue:
-    """Build current availability from modern metadata within the legacy station scope."""
-    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
-
+    """Build availability from current and explicitly retained historical metadata."""
     legacy = build_catalogue(native_table, origins)
-    features, receipts = read_modern_metadata(metadata_directory)
-    descriptions = modern_source_descriptions(features, monitoring_locations(native_table))
+    descriptions, receipts = selected_source_descriptions(
+        native_table, metadata_directory, retained_metadata, retained_series_ids
+    )
     available = {(item.station_id, item.product_id) for item in descriptions.descriptions}
     vintage = max(datetime.fromisoformat(item["retrieved_at"]) for item in receipts).date()
     rows = []
@@ -783,7 +898,14 @@ def build_modern_catalogue(
         "bulk_observations": "true: modern daily or continuous requests per station-product; partial failures retained",
     }
     return GeneratedUsgsNwisCatalogue(
-        provider_info, legacy.products, legacy.stations, station_products, native_table.data, metadata_directory
+        provider_info,
+        legacy.products,
+        legacy.stations,
+        station_products,
+        native_table.data,
+        metadata_directory,
+        retained_metadata,
+        retained_series_ids,
     )
 
 
@@ -809,8 +931,8 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
     rows = []
     for native_row in native_table.data.iter_rows(named=True):
         station_id = _required_native_string(native_row["site_no"], "site_no")
-        latitude = _required_native_float(native_row["dec_lat_va"], station_id, "dec_lat_va")
-        longitude = _required_native_float(native_row["dec_long_va"], station_id, "dec_long_va")
+        latitude = _native_coordinate(native_row["dec_lat_va"], station_id, "dec_lat_va")
+        longitude = _native_coordinate(native_row["dec_long_va"], station_id, "dec_long_va")
         try:
             crs = crs_from_datum(native_row["dec_coord_datum_cd"])
         except ValueError as exc:
@@ -971,8 +1093,9 @@ def write_catalogue(
     *,
     build_inputs: CatalogueBuildInputs | None = None,
     native_table: NativeTable | None = None,
+    acquisition_provenance: AcquisitionProvenance | None = None,
 ) -> None:
-    """Write a catalogue using adopted build inputs and its verified native table."""
+    """Write a catalogue from explicit adopted inputs, native table and acquisition provenance."""
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.usgs_nwis.origins import (
@@ -988,7 +1111,16 @@ def write_catalogue(
 
     if build_inputs is None or native_table is None:
         raise FatalContractError("Catalogue publication requires explicit build_inputs and native_table")
+    if acquisition_provenance is None:
+        raise FatalContractError("Catalogue publication requires explicit acquisition_provenance")
 
+    if catalogue.retained_series_ids and not any(
+        "source.series.retained_historical_metadata" in binding.facts
+        and binding.acquisition_id is not None
+        and binding.transformation is None
+        for binding in acquisition_provenance.fact_bindings
+    ):
+        raise FatalContractError("Historical series require explicit historical acquisition support")
     output_path = Path(out_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     with (output_path / "provider.json").open("w", encoding="utf-8") as file:
@@ -997,16 +1129,15 @@ def write_catalogue(
     catalogue.products.write_parquet(output_path / "products.parquet")
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
-    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
-    from rivretrieve._internal.providers.usgs_nwis.origins import (
-        build_modern_acquisition_provenance,
-    )
-
     files = {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES}
-    features, receipts = read_modern_metadata(catalogue.modern_metadata)
     locations = monitoring_locations(NativeTable(catalogue.source_native))
-    descriptions = modern_source_descriptions(features, locations)
-    provenance = build_modern_acquisition_provenance(receipts, catalogue.modern_metadata)
+    descriptions, _ = selected_source_descriptions(
+        NativeTable(catalogue.source_native),
+        catalogue.modern_metadata,
+        catalogue.retained_metadata,
+        catalogue.retained_series_ids,
+    )
+    provenance = acquisition_provenance
     from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
 
     station_origin = STATION_CATALOGUE_ORIGINS["station_id"]
@@ -1083,9 +1214,11 @@ def _required_native_string(value: object, column: str) -> str:
     return value
 
 
-def _required_native_float(value: object, station_id: str, column: str) -> float:
-    if not isinstance(value, str) or not value or value.isspace():
-        raise FatalContractError(f"USGS station {station_id!r} has blank required {column}")
+def _native_coordinate(value: object, station_id: str, column: str) -> float | None:
+    if isinstance(value, str) and not value.strip():
+        return None
+    if not isinstance(value, str):
+        raise FatalContractError(f"USGS station {station_id!r} has invalid source {column}")
     try:
         return float(value)
     except ValueError as exc:
@@ -1117,7 +1250,46 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--native-out", type=Path, help="Output path for an attested native Parquet table.")
     parser.add_argument("--retrieved-at", type=_parse_retrieved_at, help="UTC retrieval instant ending in Z.")
     parser.add_argument("--build-inputs", type=Path, help="Reviewed adopted catalogue build inputs JSON.")
+    parser.add_argument(
+        "--acquisition-provenance", type=Path, help="Explicit reviewed source acquisition provenance JSON."
+    )
+    parser.add_argument(
+        "--supplemental-expanded", type=Path, nargs="+", help="Verified supplemental expanded RDB files."
+    )
+    parser.add_argument(
+        "--selected-locations", type=Path, help="Explicit agency-qualified supplemental location selection JSON."
+    )
+    parser.add_argument(
+        "--input-retrievals", type=Path, help="Expanded input filename to actual source retrieval UTC instant JSON."
+    )
+
+    parser.add_argument(
+        "--retained-native", type=Path, help="Verified historical native table for explicitly preserved stations."
+    )
+    parser.add_argument("--retained-native-identity", type=Path, help="Reviewed historical NativeTableIdentity JSON.")
+    parser.add_argument(
+        "--retained-locations", type=Path, help="Exact missing agency-qualified historical station IDs JSON."
+    )
+
+    parser.add_argument("--retained-metadata", type=Path, help="Verified historical complete metadata directory.")
+    parser.add_argument("--retained-series", type=Path, help="Explicit historical published series IDs JSON.")
     args = parser.parse_args(argv)
+    if (args.retained_metadata is None) != (args.retained_series is None) or (
+        args.retained_metadata is not None and args.native is None
+    ):
+        parser.error("historical series require --native, --retained-metadata and --retained-series")
+
+    retained_options = (args.retained_native, args.retained_native_identity, args.retained_locations)
+    if any(value is not None for value in retained_options) and (
+        any(value is None for value in retained_options) or args.rdb_dir is None
+    ):
+        parser.error("retained station inputs require --rdb-dir and all retained options")
+
+    supplemental_options = (args.supplemental_expanded, args.selected_locations, args.input_retrievals)
+    if any(value is not None for value in supplemental_options) and (
+        any(value is None for value in supplemental_options) or args.rdb_dir is None or args.modern_metadata is None
+    ):
+        parser.error("supplemental inputs require --rdb-dir, --modern-metadata and all supplemental options")
 
     if args.native is not None:
         if args.out is None:
@@ -1127,10 +1299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.modern_metadata is None:
             parser.error("--native publication requires --modern-metadata")
         from rivretrieve._internal.providers.usgs_nwis.origins import (
-            NATIVE_TABLE_BYTE_SIZE,
-            NATIVE_TABLE_SHA256,
             STATION_CATALOGUE_ORIGINS,
-            build_acquisition_provenance,
         )
 
         if args.evidence_root is None:
@@ -1138,18 +1307,45 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.build_inputs is None:
             parser.error("--out requires --build-inputs")
         build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
-        verify_provenance_recordings(build_acquisition_provenance(), args.evidence_root)
+        if args.acquisition_provenance is None:
+            parser.error("--native publication requires --acquisition-provenance")
+        provenance = AcquisitionProvenance.model_validate_json(args.acquisition_provenance.read_bytes())
+        if provenance.provider_id != PROVIDER_ID or provenance.native_table is None:
+            raise FatalContractError("USGS publication requires matching provider and explicit native identity")
+        verify_provenance_recordings(provenance, args.evidence_root)
         native_table = read_native_table(
             args.native,
-            expected_sha256=NATIVE_TABLE_SHA256,
-            expected_byte_size=NATIVE_TABLE_BYTE_SIZE,
+            expected_sha256=provenance.native_table.sha256,
+            expected_byte_size=provenance.native_table.byte_size,
         )
-        catalogue = build_modern_catalogue(native_table, STATION_CATALOGUE_ORIGINS, args.modern_metadata)
-        write_catalogue(catalogue, args.out, build_inputs=build_inputs, native_table=native_table)
+        retained_ids = ()
+        if args.retained_series is not None:
+            selection = json.loads(args.retained_series.read_text())
+            if (
+                not isinstance(selection, list)
+                or not selection
+                or any(not isinstance(item, str) or not item for item in selection)
+            ):
+                raise FatalContractError("Historical series selection requires nonempty published IDs")
+            retained_ids = tuple(selection)
+        catalogue = build_modern_catalogue(
+            native_table,
+            STATION_CATALOGUE_ORIGINS,
+            args.modern_metadata,
+            retained_metadata=args.retained_metadata,
+            retained_series_ids=retained_ids,
+        )
+        write_catalogue(
+            catalogue,
+            args.out,
+            build_inputs=build_inputs,
+            native_table=native_table,
+            acquisition_provenance=provenance,
+        )
         return 0
 
-    if args.out is not None:
-        parser.error("native refresh mode cannot be combined with --out")
+    if args.out is not None or args.acquisition_provenance is not None:
+        parser.error("native refresh mode cannot be combined with publication inputs")
     if args.native_out is None or args.retrieved_at is None:
         parser.error("native refresh mode requires --native-out and --retrieved-at")
 
@@ -1159,8 +1355,67 @@ def main(argv: Sequence[str] | None = None) -> int:
         outcome = refresh_native_table_from_rdb_directory(args.rdb_dir, retrieved_at=args.retrieved_at)
     else:
         outcome = refresh_native_table_from_live(retrieved_at=args.retrieved_at)
-    write_native_table(outcome.value, args.native_out)
-    print(f"USGS native table canonical SHA-256: {native_table_content_sha256(outcome.value)}")
+    native = outcome.value
+    if args.supplemental_expanded is not None:
+        input_retrievals = json.loads(args.input_retrievals.read_text())
+        input_names = [f"{state}_expanded.rdb" for state in _US_STATE_CODES] + [
+            path.name for path in args.supplemental_expanded
+        ]
+        if len(input_names) != len(set(input_names)):
+            raise FatalContractError("Expanded source inputs require distinct filenames for retrieval identity")
+        expected_files = set(input_names)
+        if not isinstance(input_retrievals, dict) or set(input_retrievals) != expected_files:
+            raise FatalContractError("Retrieval mapping must identify every supplied expanded input exactly")
+        input_retrievals = {name: _parse_retrieved_at(value) for name, value in input_retrievals.items()}
+        station_retrievals = {}
+        for state in _US_STATE_CODES:
+            name = f"{state}_expanded.rdb"
+            for row in parse_expanded_rdb((args.rdb_dir / name).read_text()):
+                station_retrievals[row["site_no"]] = input_retrievals[name].value
+        if set(station_retrievals) != set(native.data["site_no"].to_list()):
+            raise FatalContractError("National station retrieval mapping does not match native identities")
+        native = NativeTable(
+            native.data.with_columns(pl.col("site_no").replace_strict(station_retrievals).alias("retrieved_at"))
+        )
+        selection = json.loads(args.selected_locations.read_text())
+        if (
+            not isinstance(selection, list)
+            or any(not isinstance(item, str) or not item for item in selection)
+            or len(selection) != len(set(selection))
+        ):
+            raise FatalContractError("Supplemental selection must contain distinct agency-qualified location IDs")
+        selected = set(selection)
+        rows = []
+        found = set()
+        for path in args.supplemental_expanded:
+            for row in parse_expanded_rdb(path.read_text()):
+                location = f"{row['agency_cd']}-{row['site_no']}"
+                if location in selected:
+                    if location in found:
+                        raise FatalContractError("Duplicate selected supplemental location")
+                    rows.append((row, input_retrievals[path.name]))
+                    found.add(location)
+        if found != selected:
+            raise FatalContractError("Selected supplemental locations are missing from supplied inputs")
+        features, _ = read_modern_metadata(args.modern_metadata)
+        for retrieved_at in {instant for _, instant in rows}:
+            native = supplement_native_stations(
+                native,
+                [row for row, instant in rows if instant == retrieved_at],
+                modern_features=features,
+                retrieved_at=retrieved_at,
+            )
+    if args.retained_native is not None:
+        identity = NativeTableIdentity.model_validate_json(args.retained_native_identity.read_bytes())
+        retained = read_native_table(
+            args.retained_native, expected_sha256=identity.sha256, expected_byte_size=identity.byte_size
+        )
+        locations = json.loads(args.retained_locations.read_text())
+        if not isinstance(locations, list) or any(not isinstance(item, str) or not item for item in locations):
+            raise FatalContractError("Retained station selection requires agency-qualified IDs")
+        native = retain_native_stations(native, retained, locations)
+    write_native_table(native, args.native_out)
+    print(f"USGS native table canonical SHA-256: {native_table_content_sha256(native)}")
     return 0
 
 

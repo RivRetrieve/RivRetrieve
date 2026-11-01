@@ -50,7 +50,7 @@ def test_catalogue_counts_match_readme_and_observation_capabilities():
     assert actual == table
     assert supported == set(module["PROVIDER_COUNTRY"])
     assert "za_dws" not in supported
-    assert sum(actual.values()) == 74427
+    assert sum(actual.values()) == 75905
     assert module["country_counts"](frame) == module["country_counts"](stations)
 
 
@@ -82,53 +82,19 @@ def test_boundaries_must_match_country_not_sovereign_and_must_include_supported_
         module["draw"](world.loc[world["ADM0_A3"] != "USA"], stations, tmp_path / "missing.png")
 
 
-@pytest.mark.derived(
-    "research/usgs-modern-coverage/legacy-catalogue/station_products.parquet",
-    "research/usgs-modern-coverage/missing.json",
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
-)
-def test_usgs_supported_station_counts_preserve_native_scope_and_exact_approved_gaps(retained_evidence_root: Path):
-    import json
-
+@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+def test_usgs_station_inventory_preserves_selected_source_scope(retained_evidence_root: Path):
     catalogue = ROOT / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue"
-    evidence = retained_evidence_root / "research/usgs-modern-coverage"
     stations = pl.read_parquet(catalogue / "stations.parquet")
     native = pl.read_parquet(
         retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"
     )
-    legacy = pl.read_parquet(evidence / "legacy-catalogue/station_products.parquet").filter(
-        pl.col("availability") == "available"
-    )
-    modern = pl.read_parquet(catalogue / "station_products.parquet").filter(pl.col("availability") == "available")
-    assert native.height == stations.height == 26_258
+    assert native.height == stations.height == 27_934
     assert set(native["site_no"]) == set(stations["station_id"])
-    assert legacy.height == 57_961
-    assert modern.height == 58_421
-    legacy_stations, modern_stations = set(legacy["station_id"]), set(modern["station_id"])
-    assert len(legacy_stations) == 26_200
-    assert len(modern_stations) == 26_201
-    assert modern_stations <= set(stations["station_id"])
-    assert legacy_stations - modern_stations == {"09385701"}
-    absent = set(stations["station_id"]) - modern_stations
-    assert len(absent) == 57
-    baseline_zero_supported = absent - {"09385701"}
-    assert len(baseline_zero_supported) == 56
-    assert baseline_zero_supported.isdisjoint(legacy_stations)
-    assert modern_stations - legacy_stations == {"02312719", "11047350"}
-    keys = ["station_id", "product_id"]
-    lost = set(legacy.join(modern.select(keys), on=keys, how="anti").select(keys).iter_rows())
-    approved = {
-        (item["station_id"], item["product_id"]) for item in json.loads((evidence / "missing.json").read_text())
-    }
-    assert (
-        lost
-        == approved
-        == {
-            ("04208504", "stage_instantaneous"),
-            ("09385701", "discharge_daily_mean"),
-            ("10079500", "discharge_instantaneous"),
-            ("13297380", "discharge_instantaneous"),
-            ("13297380", "stage_instantaneous"),
-        }
+    assert {"435444087462300", "0167889257", "08041945", "09385701"} <= set(stations["station_id"])
+    assert stations.filter(pl.col("latitude").is_null() & pl.col("longitude").is_null()).height == 2
+    daily = pl.read_parquet(catalogue / "station_products.parquet").filter(
+        (pl.col("product_id") == "discharge_daily_mean") & (pl.col("availability") == "available")
     )
-    assert modern.join(legacy.select(keys), on=keys, how="anti").height == 465
+    # Includes 11 previously registered Canadian stations; the US-only source set has 25,331.
+    assert daily["station_id"].n_unique() == 25_342

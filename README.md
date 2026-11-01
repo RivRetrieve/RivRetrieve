@@ -49,7 +49,7 @@ for how to supply them.
 | Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Bulk download |
 | Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 558 | Open |
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
-| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,201 | Open |
+| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 27,679 | Open |
 
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
 Switzerland's `ch_foen` catalogue retains 1,341 stations; 558 have selectable official series in this snapshot.

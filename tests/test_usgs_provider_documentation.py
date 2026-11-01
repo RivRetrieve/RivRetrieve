@@ -76,13 +76,13 @@ def test_usgs_provider_offline_prevalence_and_singleton(monkeypatch):
     groups = frame.group_by("station_id", "quantity", "frequency", "statistic").agg(
         pl.col("variant").n_unique().alias("series_count")
     )
-    assert frame["station_id"].n_unique() == 26201
-    assert groups.filter(pl.col("series_count") > 1)["station_id"].n_unique() == 575
+    assert frame["station_id"].n_unique() == 27679
+    assert groups.filter(pl.col("series_count") > 1)["station_id"].n_unique() == 638
     daily = groups.filter(
         (pl.col("quantity") == "discharge") & (pl.col("frequency") == "daily") & (pl.col("statistic") == "mean")
     )
-    assert daily.height == 24495
-    assert daily.filter(pl.col("series_count") > 1).height == 134
+    assert daily.height == 25342
+    assert daily.filter(pl.col("series_count") > 1).height == 147
     singleton = rr.find(
         provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
     )

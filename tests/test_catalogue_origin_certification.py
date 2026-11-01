@@ -50,7 +50,7 @@ from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
 from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
-from rivretrieve._internal.providers.usgs_nwis.origins import DatumToCrsConversion
+from rivretrieve._internal.providers.usgs_nwis.origins import DatumToCrsConversion, OptionalCoordinateConversion
 from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
 
 ROOT = Path(__file__).parents[1]
@@ -443,8 +443,8 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
         (ProviderId("usgs_nwis"), "stations"): {
             "provider_id": authored("usgs_nwis"),
             "station_id": field("site_no"),
-            "latitude": field("dec_lat_va", FloatConversion()),
-            "longitude": field("dec_long_va", FloatConversion()),
+            "latitude": field("dec_lat_va", OptionalCoordinateConversion()),
+            "longitude": field("dec_long_va", OptionalCoordinateConversion()),
             "crs": field("dec_coord_datum_cd", DatumToCrsConversion()),
         },
         (ProviderId("za_dws"), "stations"): {
@@ -737,10 +737,10 @@ def test_japan_coordinate_representation_does_not_establish_crs(retained_evidenc
     assert _build(japan).stations["crs"].unique().to_list() == ["unknown"]
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
 def test_usgs_committed_datum_carrier_maps_exactly_to_reviewed_crs(retained_evidence_root: Path) -> None:
     adapter = _adapter(retained_evidence_root, "usgs_nwis", DECLARATIONS[ProviderId("usgs_nwis")])
-    native = read_native_table(adapter.native_path)
+    native = read_native_table(retained_evidence_root / "tests/test_data/usgs_nwis_historical/native.parquet")
     stations = _build(adapter, native).stations
     datum = native.data.select("site_no", "dec_coord_datum_cd")
     joined = stations.join(datum, left_on="station_id", right_on="site_no", how="left", validate="1:1")
@@ -754,12 +754,12 @@ def test_usgs_committed_datum_carrier_maps_exactly_to_reviewed_crs(retained_evid
 
 
 @pytest.mark.parametrize(("datum", "expected"), [("", "unknown"), ("ZZZ99", "unknown")])
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
 def test_usgs_full_native_string_datum_variants_use_explicit_unknown(
     retained_evidence_root: Path, datum: str, expected: str
 ) -> None:
     adapter = _adapter(retained_evidence_root, "usgs_nwis", DECLARATIONS[ProviderId("usgs_nwis")])
-    native = read_native_table(adapter.native_path)
+    native = read_native_table(retained_evidence_root / "tests/test_data/usgs_nwis_historical/native.parquet")
     changed = NativeTable(
         native.data.with_columns(
             pl.when(pl.col("site_no") == "01010000")
@@ -773,10 +773,10 @@ def test_usgs_full_native_string_datum_variants_use_explicit_unknown(
     assert catalogue.stations.filter(pl.col("station_id") == "01010000").select("crs").item() == expected
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
 def test_usgs_full_native_null_datum_variant_fails_closed_with_station_message(retained_evidence_root: Path) -> None:
     adapter = _adapter(retained_evidence_root, "usgs_nwis", DECLARATIONS[ProviderId("usgs_nwis")])
-    native = read_native_table(adapter.native_path)
+    native = read_native_table(retained_evidence_root / "tests/test_data/usgs_nwis_historical/native.parquet")
     changed = NativeTable(
         native.data.with_columns(
             pl.when(pl.col("site_no") == "01010000")
@@ -975,7 +975,11 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             marks=pytest.mark.governing(
                 *_catalogue_recording_paths("usgs_nwis"),
                 "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+                "research/usgs-station-inventory/capture-2026-10-31-02",
+                "maintenance/catalogue/usgs_nwis/selected-acquisitions.json",
+                "maintenance/catalogue/usgs_nwis/retained-series.json",
                 "research/usgs-modern-coverage",
+                "tests/test_data/usgs_nwis_historical/native.parquet",
                 "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
                 "tests/test_data/usgs_nwis_terms_citation-1.html",
                 "tests/test_data/usgs_nwis_terms_licence-1.html",
@@ -1093,11 +1097,10 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         generated = _build(adapter)
         provenance = generated.acquisition_provenance if adapter.provider_id != "usgs_nwis" else None
     if adapter.provider_id == "usgs_nwis":
-        from rivretrieve._internal.providers.usgs_nwis.origins import build_modern_acquisition_provenance
+        from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 
-        metadata_root = retained_evidence_root / "research/usgs-modern-coverage"
-        _, receipts = adapter.generator.read_modern_metadata(metadata_root)
-        provenance = build_modern_acquisition_provenance(receipts, metadata_root)
+        selected_graph = retained_evidence_root / "maintenance/catalogue/usgs_nwis/selected-acquisitions.json"
+        provenance = AcquisitionProvenance.model_validate_json(selected_graph.read_bytes())
     native = read_native_table(adapter.native_path)
     for case in adapter.cases:
         case_native, stations = _case_frames(adapter, case, native, generated.stations)
@@ -1140,9 +1143,29 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         source_inputs_before = {path: path.read_bytes() for path in (ledger, series_recording)}
         arguments.extend(("--workbook-access-ledger", str(ledger), "--series-recording", str(series_recording)))
     elif adapter.provider_id == "usgs_nwis":
-        metadata = retained_evidence_root / "research/usgs-modern-coverage"
-        source_inputs_before = {path: path.read_bytes() for path in metadata.glob("metadata-*") if path.is_file()}
-        arguments.extend(("--modern-metadata", str(metadata), "--evidence-root", str(retained_evidence_root)))
+        metadata = retained_evidence_root / "research/usgs-station-inventory/capture-2026-10-31-02"
+        source_inputs_before = {
+            path: path.read_bytes()
+            for directory in (metadata, retained_evidence_root / "research/usgs-modern-coverage")
+            for path in directory.glob("metadata-*")
+            if path.is_file()
+        }
+        selected_provenance = product_root / "usgs_nwis.acquisition-provenance.json"
+        selected_provenance.write_text(provenance.model_dump_json())
+        arguments.extend(
+            (
+                "--modern-metadata",
+                str(metadata),
+                "--retained-metadata",
+                str(retained_evidence_root / "research/usgs-modern-coverage"),
+                "--retained-series",
+                str(retained_evidence_root / "maintenance/catalogue/usgs_nwis/retained-series.json"),
+                "--evidence-root",
+                str(retained_evidence_root),
+                "--acquisition-provenance",
+                str(selected_provenance),
+            )
+        )
     elif adapter.provider_id == "jp_mlit":
         arguments.extend(
             (

@@ -172,3 +172,43 @@ def test_unrestricted_snapshot_does_not_hide_newly_encountered_real_identity(
     reused = rr.fetch(snapshot, start="2000-01-01", end="2000-01-07", cache="reuse", on_issue="raise")
     assert len(replay.calls) == 1
     pt.assert_frame_equal(result.data, reused.data)
+
+
+def test_public_daily_access_preserves_unknown_station_coordinates(monkeypatch, tmp_path):
+    from dataclasses import replace
+
+    import polars as pl
+
+    from rivretrieve._internal.registry import _registry
+    from tests.test_usgs_observation_acquisition import STATION, Transport, feature, page
+
+    rr.find(provider="usgs_nwis", station=STATION)
+    handle = _registry.get("usgs_nwis")
+    stations = handle._artifact.stations.with_columns(
+        pl.when(pl.col("station_id") == STATION).then(None).otherwise(pl.col(name)).alias(name)
+        for name in ("latitude", "longitude")
+    ).with_columns(
+        pl.when(pl.col("station_id") == STATION).then(pl.lit("unknown")).otherwise(pl.col("crs")).alias("crs")
+    )
+    artifact = replace(handle._artifact, stations=stations)
+    record = _registry._providers["usgs_nwis"]
+    monkeypatch.setitem(
+        _registry._providers,
+        "usgs_nwis",
+        replace(record, artifact=artifact, handle=replace(handle, _artifact=artifact)),
+    )
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge", frequency="daily", statistic="mean")
+    assert [(loc.latitude, loc.longitude, loc.crs) for loc in selected.locations] == [(None, None, "unknown")]
+    series = selected.series[0]
+    selected = rr.pick(selected, series_id=series.series_id)
+    response = page(feature(series.identity.published_id))
+    transport = Transport(response)
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    result = rr.fetch(selected, start="2000-01-01", end="2000-01-01", cache="reuse", receipts=True, on_issue="raise")
+    assert result.data.height == 1
+    assert result.data["value"].item() == pytest.approx(12.25 * 0.0283168466)
+    assert result.receipts.entries[0].content == response
+    reused = rr.fetch(selected, start="2000-01-01", end="2000-01-01", cache="reuse", on_issue="raise")
+    pt.assert_frame_equal(result.data, reused.data)
+    assert len(transport.requests) == 1
