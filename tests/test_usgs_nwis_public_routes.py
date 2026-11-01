@@ -168,3 +168,78 @@ def test_authored_non_date_daily_series_is_unsupported_with_peer_preserved(monke
     )
     assert any(i.details.get("series_id") == failed.series_id for i in result.issues)
     assert result.receipts.entries[0].content == content
+
+
+@pytest.mark.parametrize(
+    "station,variant,event,start,end",
+    [
+        (
+            "435444087462300",
+            "03384f9dd532449689539f674a9174a7",
+            "observation-witnesses-2026-10-31-01",
+            "2006-10-31",
+            "2006-11-02",
+        ),
+        (
+            "0167889257",
+            "5c93439c924e408d9ca06c2100bc67f3",
+            "observation-followup-2026-10-31-01",
+            "2015-07-16",
+            "2015-07-18",
+        ),
+    ],
+)
+@pytest.mark.recorded("tests/test_data/usgs_daily_station_access")
+def test_new_daily_stations_preserve_original_values_receipts_and_reuse(
+    monkeypatch, tmp_path, retained_evidence_root, station, variant, event, start, end
+):
+    import gzip
+    import hashlib
+    from datetime import timedelta
+
+    from rivretrieve._internal.transport import TransportResponse
+
+    root = retained_evidence_root / "tests/test_data/usgs_daily_station_access" / event
+    content = gzip.decompress((root / "witness-0000.json.gz").read_bytes())
+    receipt = json.loads((root / "witness-0000.receipt.json").read_text())
+    assert hashlib.sha256(content).hexdigest() == receipt["sha256"]
+    assert len(content) == receipt["bytes"]
+    calls = []
+
+    class Replay:
+        def send(self, request):
+            assert coordinates(request.url, request.params) == coordinates(receipt["url"])
+            calls.append(request)
+            return TransportResponse(
+                content,
+                receipt["status"],
+                datetime.fromisoformat(receipt["retrieved_at"]),
+                "application/json",
+                request.url,
+                request.params,
+            )
+
+    monkeypatch.setattr(discovery, "HttpClient", Replay)
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    selection = rr.pick(
+        rr.find(provider="usgs_nwis", station=station, quantity="discharge", frequency="daily", statistic="mean"),
+        variant=variant,
+    )
+    result = rr.fetch(selection, start=start, end=end, cache="reuse", receipts=True, on_issue="raise")
+    expected = pl.DataFrame(
+        {"time": [datetime.fromisoformat(start) + timedelta(days=i) for i in range(3)], "value": [0.0, 0.0, 0.0]}
+    )
+    pt.assert_frame_equal(result.data.select("time", "value").sort("time"), expected)
+    assert {series.identity.published_id for series in result.source_series} == {variant}
+    assert result.data["source_unit"].unique().to_list() == ["ft^3/s"]
+    assert result.data["unit"].unique().to_list() == ["m3/s"]
+    assert result.data["time_zone"].unique().to_list() == ["unknown"]
+    assert result.receipts.entries[0].content == content
+    assert result.receipts.entries[0].origin.retrieved_at == datetime.fromisoformat(receipt["retrieved_at"])
+    assert all(
+        item["properties"]["approval_status"] == "Approved" and item["properties"]["qualifier"] is None
+        for item in json.loads(content)["features"]
+    )
+    reused = rr.fetch(selection, start=start, end=end, cache="reuse", on_issue="raise")
+    pt.assert_frame_equal(result.data, reused.data)
+    assert len(calls) == 1
