@@ -408,6 +408,7 @@ def test_provenance_requires_direct_sources_and_retains_derived_native_identity(
         "source.station.altitude_unit",
         "source.station_product.associations",
         "source.station_product.inventory_support",
+        "source.series.fields",
         "source.provider.terms",
         "source.provider.attribution",
     )
@@ -491,7 +492,11 @@ def test_provenance_requires_direct_sources_and_retains_derived_native_identity(
     loaded = load_packaged_catalogue_artifact(tmp_path / "catalogue", on_issue="raise")
     assert loaded.stations["station_id"].to_list() == ["A"]
     assert loaded.stations["crs"].to_list() == ["unknown"]
-    assert len(loaded.source_descriptions.descriptions) == 1
+    assert {item.identity.published_id for item in loaded.source_descriptions.descriptions} == {
+        "current",
+        "minimum",
+        "maximum",
+    }
 
     attribution_recording = recording.model_copy(
         update={"recording_id": "attribution", "repository_path": "frontend.body"}

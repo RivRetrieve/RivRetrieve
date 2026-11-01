@@ -88,7 +88,9 @@ def build_acquisition_provenance(
         raise ValueError("SENAMHI source bindings must directly identify selected acquisitions")
     facts = tuple(fact for binding in source_bindings for fact in binding.facts)
     required = {fact for group in _CATALOGUE_SOURCE_FACTS.values() for fact in group}
-    required.update(("source.station.altitude_unit", "source.provider.terms", "source.provider.attribution"))
+    required.update(
+        ("source.station.altitude_unit", "source.provider.terms", "source.provider.attribution", "source.series.fields")
+    )
     if missing := required - set(facts):
         raise ValueError(f"Missing SENAMHI source facts: {sorted(missing)!r}")
     provenance = AcquisitionProvenance(
@@ -174,6 +176,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/pe_senamhi/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/pe_senamhi/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/pe_senamhi/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/pe_senamhi/series.py", "series_mappings"),
     ("src/rivretrieve/_internal/providers/pe_senamhi/generate_catalogue.py", "read_catalogue_sources"),
     ("src/rivretrieve/_internal/providers/pe_senamhi/station_metadata.py", "project_station_metadata"),
 )

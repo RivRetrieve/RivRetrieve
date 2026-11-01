@@ -19,6 +19,7 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, st
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.providers.pe_senamhi.series import MONTHLY_LEVEL_FIELDS, series_mappings
 
 HYDROLOGICAL_CATEGORIES = frozenset({"05", "06", "18", "22"})
 STATION_SOURCE_SCHEMA = pl.Schema(
@@ -105,19 +106,6 @@ def station_native_table(
 
 
 ASSOCIATION_SCHEMA = pl.Schema(dict.fromkeys(("station_id", "subsystem", "resolution", "variable", "unit"), pl.String))
-MONTHLY_LEVEL_FIELDS = frozenset(
-    {
-        "NIVEL_DEL_RIO_06H",
-        "NIVEL_DEL_RIO_10H",
-        "NIVEL_DEL_RIO_14H",
-        "NIVEL_DEL_RIO_18H",
-        "NIVEL_DEL_RIO_PROMEDIO",
-        "N_NIVELAGUA",
-        "N_NIVELMEDIO",
-        "N_NIV_INST_00",
-        "N_NIV_INST_10",
-    }
-)
 
 
 def phisis_associations(
@@ -263,36 +251,24 @@ def catalogue_tables(
     return products, stations, pairs
 
 
-def describe_associations(associations: pl.DataFrame):
-    """Describe witnessed source identities with only established physical facts."""
-    from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
-    from rivretrieve._internal.source_series import EvidenceFact, PhysicalFacts, SourceIdentity, known, stable_id
+def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
+    """Describe witnessed source fields with only established physical facts."""
+    from rivretrieve._internal.catalogues.source_series import SourceDescription
 
-    evidence = "catalogue:pe_senamhi:source.station_product.associations"
     descriptions = []
     for station, subsystem, resolution, variable, unit in (
         associations.unique().sort(ASSOCIATION_SCHEMA.names()).iter_rows()
     ):
-        facts = PhysicalFacts(
-            facts_id="pending",
-            quantity=known("discharge" if variable == "FLOW" else "stage", evidence),
-            source_unit=known(unit, evidence),
-            normalized_unit="m3/s" if variable == "FLOW" else "m",
-            vertical_reference=known("above_sea_level", evidence) if unit == "m.s.n.m" else EvidenceFact(),
-        )
-        facts = facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})
-        descriptions.append(
-            SourceDescription(
-                product_id=association_product(subsystem, resolution, variable, unit),
-                station_id=station,
-                identity_key=(subsystem, resolution, variable, unit),
-                native_coordinate=variable,
-                identity=SourceIdentity(
-                    namespace=f"senamhi.{subsystem}", published_id=variable, origin="catalogue", evidence=(evidence,)
-                ),
-                facts=(facts,),
+        for field, mapping in series_mappings(subsystem, resolution, variable, unit).items():
+            descriptions.append(
+                SourceDescription(
+                    product_id=association_product(subsystem, resolution, variable, unit),
+                    station_id=station,
+                    native_coordinate=field,
+                    identity=mapping.identity(),
+                    facts=(mapping.physical_facts(),),
+                )
             )
-        )
     return SourceDescriptions(provider_id="pe_senamhi", descriptions=tuple(descriptions))
 
 
