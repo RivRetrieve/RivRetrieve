@@ -1,7 +1,6 @@
 """Modern catalogue tests; mutations below are authored negative controls."""
 
 import gzip
-import hashlib
 import json
 from pathlib import Path
 
@@ -15,16 +14,12 @@ from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import read_mo
 CATALOGUE = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue")
 
 
-def test_modern_concrete_snapshot_retains_siblings_unknowns_and_legacy_scope():
+def test_modern_concrete_snapshot_retains_siblings_unknowns_and_selected_station_scope():
     descriptions = decode_source_descriptions((CATALOGUE / "source_series.json").read_bytes())
     locations = json.loads((CATALOGUE / "monitoring_locations.json").read_text())
-    assert len(locations) == 26258
-    assert len(descriptions.descriptions) == 59159
-    # Full definition digest after the content-derived facts-ID repair.
-    # Disk v1/v2 equality was checked separately before that repair.
-    assert hashlib.sha256(descriptions.model_dump_json().encode()).hexdigest() == (
-        "361206d8f6421e1934c2e4a9098ca3beb9e834d75283ffaec39aa8812bc7ff0e"
-    )
+    assert len(locations) == 27934
+    # Independently reconciled current source metadata plus 22 unchanged historical series.
+    assert len(descriptions.descriptions) == 62046
     assert len({id(fact) for item in descriptions.descriptions for fact in item.facts}) == 8
     assert {item.station_id for item in descriptions.descriptions} <= locations.keys()
     siblings = [

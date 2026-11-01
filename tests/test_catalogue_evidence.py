@@ -32,6 +32,15 @@ from tests._provenance import historical_source_provenance
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 
 
+def _historical_metadata_extension_input(provider):
+    """Use the fixed USGS graph to test its historical metadata-source extension."""
+    if provider == "usgs_nwis":
+        from rivretrieve._internal.providers.usgs_nwis.origins import build_acquisition_provenance
+
+        return build_acquisition_provenance()
+    return _legacy(provider)
+
+
 def _legacy(provider, path=None):
     path = ROOT / provider / "catalogue" if path is None else path
     content = (path / "provenance.json").read_bytes()
@@ -752,7 +761,7 @@ def test_polish_historical_restoration_preserves_unexpected_source_facts():
 
 @pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_removes_only_declared_metadata_source_closure(provider):
-    original = _legacy(provider)
+    original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     restored = _assert_metadata_source_extensions_and_restore_original(projected)
@@ -786,7 +795,7 @@ def test_historical_restoration_removes_only_declared_metadata_source_closure(pr
 
 @pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_preserves_changes_outside_the_extension(provider):
-    original = _legacy(provider)
+    original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     expected = _assert_metadata_source_extensions_and_restore_original(projected).model_dump(mode="json")
@@ -820,7 +829,7 @@ def test_historical_restoration_preserves_changes_outside_the_extension(provider
     ],
 )
 def test_historical_restoration_rejects_changed_complete_source_closure(provider, mutation):
-    original = _legacy(provider)
+    original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     payload = projected.model_dump(mode="json")

@@ -82,7 +82,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "pl_imgw": (3_903, 0, 0),
         "th_thaiwater": (1_650, 0, 0),
         # Modern metadata UTC ranges do not establish calendar observation support.
-        "usgs_nwis": (157_548, 0, 0),
+        "usgs_nwis": (167_604, 0, 0),
         "za_dws": (8_715, 0, 0),
     }
     expected_station_product_columns = (

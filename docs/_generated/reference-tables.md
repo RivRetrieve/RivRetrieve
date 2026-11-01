@@ -154,7 +154,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
 | `pl_imgw` | bulk store | none | 1301 | 0 | 3903 | 0 |
 | `th_thaiwater` | live | none | 825 | 1096 | 554 | 0 |
-| `usgs_nwis` | live | none | 26258 | 58421 | 0 | 99127 |
+| `usgs_nwis` | live | none | 27934 | 61214 | 0 | 106390 |
 
 ### Packaged access coordinates
 

@@ -50,7 +50,7 @@ def test_catalogue_counts_match_readme_and_observation_capabilities():
     assert actual == table
     assert supported == set(module["PROVIDER_COUNTRY"])
     assert "za_dws" not in supported
-    assert sum(actual.values()) == 74427
+    assert sum(actual.values()) == 75905
     assert module["country_counts"](frame) == module["country_counts"](stations)
 
 
@@ -96,4 +96,5 @@ def test_usgs_station_inventory_preserves_selected_source_scope(retained_evidenc
     daily = pl.read_parquet(catalogue / "station_products.parquet").filter(
         (pl.col("product_id") == "discharge_daily_mean") & (pl.col("availability") == "available")
     )
-    assert daily["station_id"].n_unique() == 25_331
+    # Includes 11 previously registered Canadian stations; the US-only source set has 25,331.
+    assert daily["station_id"].n_unique() == 25_342

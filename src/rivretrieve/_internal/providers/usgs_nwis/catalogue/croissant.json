@@ -46,7 +46,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provider.json",
       "encodingFormat": "application/json",
-      "sha256": "069550c25fb6eaefc64aceed9ff49594fe67dc38ab053ffe9a1d8c5627371ae4",
+      "sha256": "4b495581fe7ac3918e5646242312e0e044cfadaceece245be4b385ec789bc0ad",
       "contentSize": "355 B"
     },
     {
@@ -62,64 +62,64 @@
       "@type": "cr:FileObject",
       "contentUrl": "stations.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "7b13ba3eaed5ed206bd0924861e1ced4f7d9782aa2072d21cc1733bf82c02c1c",
-      "contentSize": "427815 B"
+      "sha256": "8e3072ff162997acd261a32abdae02c3ecf2de51027963f60f02a6afd2e2533f",
+      "contentSize": "456109 B"
     },
     {
       "@id": "station_products.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "station_products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "5de0cb38ac361cafec81fda284557774f1ef675f2b607d55fc44487ffa9b6da1",
-      "contentSize": "233110 B"
+      "sha256": "f15af154a4721957e4b7f61f774ec5af6ec0a8349cd1244cb5ec13c7076add20",
+      "contentSize": "248502 B"
     },
     {
       "@id": "provenance.json",
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "4df87eec57b96dd18398f0cc73990071901d6e8d690e8da4b89eab1c32730018",
-      "contentSize": "31348 B"
+      "sha256": "cb089f20e2716afece214603839e63a2bac5d64643123561546945bfdc6dcdcc",
+      "contentSize": "193775 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "177754d9ab9e0d9e570e9b266b7a722508c4385608e60cafe442b441612d9666",
-      "contentSize": "2893 B"
+      "sha256": "6f5e47bcdc1698ceee2cf42782a3b8f7ed9e60fb60413ec096cdc4d923f0f5c5",
+      "contentSize": "2944 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_acquisitions.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "8758bc16d2e473fe1ae317f176055297847f047d35da424bf434d3182a55fd75",
-      "contentSize": "7885 B"
+      "sha256": "66d86c6e73800f19e1b3521378fdf5ae150224442d50168298414efd315c4104",
+      "contentSize": "12861 B"
     },
     {
       "@id": "provenance_bindings.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "f3dffc90870502781629dd6f62e662862e03e1197f1d79e8b1ad7bf25b1ddd0c",
-      "contentSize": "2426 B"
+      "sha256": "388fe26c7bcc8ba13b7b77294cd7b703e74db04ad19ac14b0671083e8285815d",
+      "contentSize": "2500 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "9c752b30a637265ace881cd908b0f15f21a9a6c622e6915f97640b37272408b1",
-      "contentSize": "1387 B"
+      "sha256": "493b3c2cf4678d25c1c6ad4e5d29cdd29c9309cb06fc12eb1011aae3574058d8",
+      "contentSize": "1411 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "1cd4fe0e146b4f486b66b7201c374143e98334b4efa52519e511009de2d3d81e",
-      "contentSize": "1602 B"
+      "sha256": "aa344de9fcebb5d1144bb767724cc31a0adf5da628ab071e57c8d1241d154089",
+      "contentSize": "1711 B"
     },
     {
       "@id": "format.json",
@@ -134,8 +134,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "b7185684a181ee2caab1216572730bbb674a4dde6942935c641f3182d2f16955",
-      "contentSize": "28681480 B"
+      "sha256": "264798d0301ee9a5d8d728a0aeb7cd58184bbaf2f11cc56b42f064ef7bb2ab27",
+      "contentSize": "30085553 B"
     },
     {
       "@id": "series_claims.parquet",
@@ -150,16 +150,16 @@
       "@type": "cr:FileObject",
       "contentUrl": "station_metadata.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "823f02da64d7e4337e32ec8c00ee7f62dc0e33ed28ade59e7cec3403fa5ae6ff",
-      "contentSize": "830042 B"
+      "sha256": "30578186d1bff1b747b965b7ddb8e362771158c69569c881835698f4f21c4e6a",
+      "contentSize": "879870 B"
     },
     {
       "@id": "monitoring_locations.json",
       "@type": "cr:FileObject",
       "contentUrl": "monitoring_locations.json",
       "encodingFormat": "application/json",
-      "sha256": "0edd21d5400421f72033687b31e15d8bc323f6ee1b08c0569b996f93218747e5",
-      "contentSize": "719421 B"
+      "sha256": "f6b63acd87e7535e3bb8f4a221006e3cce2d356a2d4d7147163d5e5219a9ce60",
+      "contentSize": "771699 B"
     }
   ],
   "recordSet": [
@@ -614,7 +614,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Native column dec_lat_va; conversion float."
+          "description": "Native column dec_lat_va; conversion usgs_nwis.optional_coordinate."
         },
         {
           "@id": "stations/longitude",
@@ -635,7 +635,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Native column dec_long_va; conversion float."
+          "description": "Native column dec_long_va; conversion usgs_nwis.optional_coordinate."
         },
         {
           "@id": "stations/crs",
@@ -1574,19 +1574,46 @@
     "description": "build_inputs records exact adopted archive members, their supported fact names, and build and declaration revisions. transformations records executable and authored declaration references. Historical acquisition identities remain separate.",
     "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
   },
-  "version": "2026-09-22",
-  "datePublished": "2026-09-22",
+  "version": "2026-10-31",
+  "datePublished": "2026-10-31",
   "isBasedOn": {
     "@id": "native-table",
     "@type": "sc:MediaObject",
-    "name": "Historical committed native catalogue build input",
-    "contentUrl": "https://github.com/RivRetrieve/RivRetrieve/blob/bfeb825a6f3b3aad4982649625d570c070b4ee32/src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
-    "sha256": "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701",
-    "contentSize": "14093302 B",
-    "creator": {
-      "@type": "sc:Organization",
-      "name": "RivRetrieve"
-    },
-    "description": "RivRetrieve materialization of the separately attributed source inputs."
+    "identifier": "usgs-native-2026-11-01",
+    "name": "Adopted retained input",
+    "sha256": "caaf72c18a6a499b04fe886d8b4b871c066bed0870a7049ff6d6c48c26e966f8",
+    "contentSize": "14520274 B",
+    "additionalProperty": [
+      {
+        "@type": "sc:PropertyValue",
+        "name": "archive_repository",
+        "value": "https://github.com/RivRetrieve/verification-evidence"
+      },
+      {
+        "@type": "sc:PropertyValue",
+        "name": "collection_id",
+        "value": "usgs_nwis-native-2026-11-01-v1"
+      },
+      {
+        "@type": "sc:PropertyValue",
+        "name": "manifest_sha256",
+        "value": "85634c39565f88fbcb7b8160e79aad02edfd8313619dae36deffdbc307a11c3b"
+      },
+      {
+        "@type": "sc:PropertyValue",
+        "name": "artifact_id",
+        "value": "usgs-native-2026-11-01"
+      },
+      {
+        "@type": "sc:PropertyValue",
+        "name": "role",
+        "value": "derived_input"
+      },
+      {
+        "@type": "sc:PropertyValue",
+        "name": "usage",
+        "value": "native_table"
+      }
+    ]
   }
 }
