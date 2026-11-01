@@ -37,6 +37,7 @@ def _areas(selection) -> pl.DataFrame:
 
 # Independent source-column expectations, including established units only.
 SOURCE_FIELDS = {
+    "at_ehyd": ("hzbnr", {"orogr.Einzugsgebiet [km²]": "km²"}),
     "ba_fhmzbih": ("metadata_station_no", {"metadata_CATCHMENT_SIZE": None}),
     "br_ana": ("codigoestacao", {"Area_Drenagem": None}),
     "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": "km2", "DRAINAGE_AREA_EFFECT": "km2"}),
@@ -119,7 +120,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     keys = ["provider_id", "station_id"]
     assert_frame_equal(result.select(keys).unique().sort(keys), before.select(keys).unique().sort(keys))
     assert result.select(*keys, "source_field").is_duplicated().sum() == 0
-    assert result["provider_id"].n_unique() == 13
+    assert result["provider_id"].n_unique() == 14
     assert_frame_equal(rr.as_frame(selection), before)
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
@@ -140,7 +141,11 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     [
         pytest.param(
             provider,
-            marks=pytest.mark.derived(f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"),
+            marks=pytest.mark.derived(
+                "maintenance/catalogue/at_ehyd/official"
+                if provider == "at_ehyd"
+                else f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"
+            ),
         )
         for provider in BUILTIN_PROVIDER_IDS
     ],
@@ -148,9 +153,12 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
 def test_projection_preserves_every_native_scalar(provider: str, retained_evidence_root: Path) -> None:
     repository = Path(__file__).parents[1]
     catalogue = repository / "src/rivretrieve/_internal/providers" / provider / "catalogue"
-    native = pl.read_parquet(
-        retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
+    native_rel = (
+        Path("maintenance/catalogue/at_ehyd/official/native.parquet")
+        if provider == "at_ehyd"
+        else Path("src/rivretrieve/_internal/providers") / provider / "catalogue/native.parquet"
     )
+    native = pl.read_parquet(retained_evidence_root / native_rel)
     stations = pl.read_parquet(catalogue / "stations.parquet").select("station_id")
     projection = pl.read_parquet(catalogue / "station_metadata.parquet")
     # The shared catalogue-origin contract rebuilds the full publication. This
@@ -175,6 +183,13 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         assert set(site["source_scope"]) == {"hydrometrie/referentiel/sites"}
         assert set(site["source_dtype"]) == {"Float64"}
         assert set(site["source_unit"]) == {"km²"}
+    elif provider == "at_ehyd":
+        telemetry_only = native.filter(~pl.col("in_owf"))["hzbnr"]
+        absent = actual.filter(pl.col("station_id").is_in(telemetry_only.implode()))
+        assert absent.height == 7
+        assert set(absent["state"]) == {"no_metadata"}
+        native = native.filter(pl.col("in_owf"))
+        assert set(projection.filter(pl.col("source_field").is_in(list(fields)))["source_scope"]) == {"owf_stammdaten"}
     # Canonical scope excludes native-only gauges (notably Brazil).
     native = native.join(stations, left_on=identity, right_on="station_id", how="semi").sort(identity)
     for field, unit in fields.items():
