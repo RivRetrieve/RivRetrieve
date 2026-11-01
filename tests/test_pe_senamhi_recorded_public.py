@@ -180,7 +180,7 @@ def test_public_retained_rows_clipping_and_cache(
         for facts in series.facts:
             assert facts.vertical_reference.value == ("above_sea_level" if level else None)
             assert facts.vertical_datum.value is None
-            assert facts.frequency.value is None
+            assert facts.frequency.value == ("daily" if product.startswith("phisis_daily_") else None)
             assert facts.statistic.value is None
     assert replay.calls == 1
     original_bytes = len(result.receipts.entries) == 1 and result.receipts.entries[0].content == replay.content
@@ -265,7 +265,7 @@ def test_public_retained_hourly_point_uses_owned_partition(
     for facts in result.source_series[0].facts:
         assert facts.vertical_reference.value == ("above_sea_level" if source_unit == "m.s.n.m" else None)
         assert facts.vertical_datum.value is None
-        assert facts.frequency.value is None
+        assert facts.frequency.value == "hourly"
         assert facts.statistic.value is None
         assert facts.temporal_support.value is None
     assert not any(issue.severity == "error" for issue in result.issues)
