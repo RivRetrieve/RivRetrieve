@@ -277,6 +277,7 @@ def test_catalogue_origin_forms_never_compare_equal_to_each_other() -> None:
 def test_origin_gate_retains_registered_and_deferred_providers() -> None:
     expected = frozenset(
         {
+            ProviderId("at_ehyd"),
             ProviderId("ba_fhmzbih"),
             ProviderId("br_ana"),
             ProviderId("ca_eccc"),
@@ -296,7 +297,7 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
     registered = frozenset(map(ProviderId, rr.providers().get_column("provider_id").to_list()))
 
     assert expected == ORIGIN_GATE_ENROLLED_PROVIDERS
-    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws"), ProviderId("at_ehyd")}
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet")

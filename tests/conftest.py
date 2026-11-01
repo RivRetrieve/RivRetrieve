@@ -539,14 +539,16 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
             if provenance.provider_id == "ch_foen"
             else origins.NATIVE_TABLE_ACQUISITION_IDS
         )
-        if provenance.provider_id == "ch_foen":
+        if provenance.provider_id in {"at_ehyd", "ch_foen"}:
             import json
 
-            from rivretrieve._internal.providers.ch_foen.generate_catalogue import selected_supporting_inputs
+            selected_supporting_inputs = importlib.import_module(
+                f"rivretrieve._internal.providers.{provenance.provider_id}.generate_catalogue"
+            ).selected_supporting_inputs
 
-            selection_path = "maintenance/catalogue/ch_foen/official/selection.json"
+            selection_path = f"maintenance/catalogue/{provenance.provider_id}/official/selection.json"
             if selection_path not in {item.consumer_path for item in receipt.declaration_inputs}:
-                raise ValueError("Swiss build support requires the selected authored declaration")
+                raise ValueError("Build support requires the selected authored declaration")
             selection = json.loads((retained_evidence_root / selection_path).read_bytes())
             supporting_inputs.update(selected_supporting_inputs(provenance, selection))
         result = select_catalogue_build_inputs(
