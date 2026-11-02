@@ -152,6 +152,7 @@ def test_modern_station_universe_includes_continuous_nonstream_and_unlocated():
                 "monitoring_location_number": number,
                 "monitoring_location_name": f"Canal {number}",
                 "state_code": state,
+                "country_code": "US",
             },
         }
 
@@ -196,6 +197,7 @@ def test_modern_station_universe_refuses_missing_or_conflicting_identity():
             "monitoring_location_number": "001",
             "monitoring_location_name": "Name",
             "state_code": "55",
+            "country_code": "US",
         },
     }
     with pytest.raises(FatalContractError, match="identity"):
@@ -217,6 +219,7 @@ def test_modern_catalogue_builds_all_six_products_without_legacy_availability():
             "monitoring_location_number": "001",
             "monitoring_location_name": "Reservoir",
             "state_code": "55",
+            "country_code": "US",
         },
     }
     features = []
@@ -319,6 +322,7 @@ def test_modern_catalogue_keeps_continuous_only_and_retained_canadian_series():
                 "monitoring_location_number": number,
                 "monitoring_location_name": number,
                 "state_code": state,
+                "country_code": "US",
             },
         }
 
@@ -366,6 +370,7 @@ def test_modern_location_rejects_invalid_published_geometry(geometry):
             "monitoring_location_number": "001",
             "monitoring_location_name": "Canal",
             "state_code": "55",
+            "country_code": "US",
         },
     }
     with pytest.raises(FatalContractError, match="coordinates"):
@@ -465,3 +470,51 @@ def test_location_recordings_follow_exact_publisher_chain_to_terminal_page(tmp_p
     manifest.write_text(json.dumps(selection[::-1]))
     with pytest.raises(FatalContractError, match="offset|chain"):
         read_monitoring_locations(manifest)
+
+
+@pytest.mark.parametrize(
+    "country,state,included", [("CA", "94", False), ("CA", "01", False), ("JP", "00", False), ("US", "55", True)]
+)
+def test_modern_station_scope_uses_country_before_state(country, state, included):
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_stations
+
+    location = {
+        "type": "Feature",
+        "id": "USGS-001",
+        "geometry": None,
+        "properties": {
+            "agency_code": "USGS",
+            "monitoring_location_number": "001",
+            "country_code": country,
+            "state_code": state,
+        },
+    }
+    _, stations = build_modern_stations(
+        [location], {"USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC))
+    )
+    assert stations["station_id"].to_list() == (["001"] if included else [])
+
+
+@pytest.mark.parametrize("country,state", [(None, "55"), ("", "55"), (55, "55"), ("US", None), ("US", "unknown")])
+def test_modern_station_scope_refuses_unresolved_geography(country, state):
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_stations
+
+    location = {
+        "type": "Feature",
+        "id": "USGS-001",
+        "geometry": None,
+        "properties": {
+            "agency_code": "USGS",
+            "monitoring_location_number": "001",
+            "country_code": country,
+            "state_code": state,
+        },
+    }
+    with pytest.raises(FatalContractError):
+        build_modern_stations([location], {"USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)))

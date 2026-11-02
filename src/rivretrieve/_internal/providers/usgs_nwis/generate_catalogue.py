@@ -959,11 +959,17 @@ def build_modern_stations(
         if location != f"{agency}-{number}" or properties.get("id", location) != location or location in seen:
             raise FatalContractError("Modern monitoring-location identity is inconsistent or duplicated")
         seen.add(location)
-        state = properties.get("state_code")
-        if location not in retained_locations and (not isinstance(state, str) or not state):
-            raise FatalContractError("Modern monitoring-location lacks source state_code")
-        if state not in _US_STATE_FIPS and location not in retained_locations:
-            continue
+        if location not in retained_locations:
+            country = properties.get("country_code")
+            if not isinstance(country, str) or not country:
+                raise FatalContractError("Modern monitoring-location lacks source country_code")
+            if country != "US":
+                continue
+            state = properties.get("state_code")
+            if state in {"60", "66", "69", "72", "74", "78"}:
+                continue
+            if not isinstance(state, str) or state not in _US_STATE_FIPS:
+                raise FatalContractError("Modern monitoring-location has unresolved source state_code")
         if number in station_ids:
             raise FatalContractError("Modern monitoring-location agencies collide on station identity")
         station_ids.add(number)
