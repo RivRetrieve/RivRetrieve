@@ -927,6 +927,11 @@ def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_pat
     if corrupt == "baseline":
         build_inputs.inputs.pop()
     monkeypatch.setattr(generator.CatalogueBuildInputs, "model_validate_json", lambda _: build_inputs)
+    monkeypatch.setattr(
+        __import__("rivretrieve._internal.providers.usgs_nwis.origins", fromlist=["selected_role_inputs"]),
+        "selected_role_inputs",
+        lambda provenance, role: ("source.station.legacy_sitefile_attributes",),
+    )
     verified = []
     monkeypatch.setattr(generator, "verify_provenance_recordings", lambda value, root: verified.append(value))
     monkeypatch.setattr(

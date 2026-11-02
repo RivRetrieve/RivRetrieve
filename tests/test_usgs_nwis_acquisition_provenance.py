@@ -189,7 +189,7 @@ def test_selected_modern_campaign_keeps_native_events_and_new_recording_root(tmp
 
     from rivretrieve._internal.acquisition_provenance import AcquisitionRecord, NativeTableIdentity, RecordingReference
     from rivretrieve._internal.providers.usgs_nwis.origins import (
-        build_modern_acquisition_provenance,
+        historical_modern_acquisition_provenance,
         selected_native_provenance,
     )
 
@@ -216,7 +216,7 @@ def test_selected_modern_campaign_keeps_native_events_and_new_recording_root(tmp
     base = selected_native_provenance(native, (event,), (record,))
     (tmp_path / "page.json.gz").write_bytes(b"synthetic retained gzip member")
     receipts = [{"file": "page.json.gz", "url": "https://example.org/metadata", "retrieved_at": "2026-10-31T12:00:00Z"}]
-    result = build_modern_acquisition_provenance(
+    result = historical_modern_acquisition_provenance(
         receipts,
         tmp_path,
         native_provenance=base,
