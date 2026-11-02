@@ -133,35 +133,258 @@ def test_explicit_historical_sibling_retains_identity_and_physical_cache_facts()
         retain_source_descriptions(current, historical, ("old",), {})
 
 
-def test_catalogue_selection_uses_explicit_historical_inputs(monkeypatch):
-    from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as generator
+def test_modern_station_universe_includes_continuous_nonstream_and_unlocated():
+    from datetime import UTC, datetime
 
-    def feature(identifier):
+    import polars as pl
+    import polars.testing as plt
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_stations
+
+    def location(number, geometry, state="55"):
+        return {
+            "type": "Feature",
+            "id": f"USGS-{number}",
+            "geometry": geometry,
+            "properties": {
+                "agency_code": "USGS",
+                "monitoring_location_number": number,
+                "monitoring_location_name": f"Canal {number}",
+                "state_code": state,
+            },
+        }
+
+    locations = [
+        location("001", {"type": "Point", "coordinates": [-89.0, 43.0]}),
+        location("002", None),
+        location("003", None, "72"),
+    ]
+    native, stations = build_modern_stations(
+        locations,
+        {"USGS-001", "USGS-002", "USGS-003"},
+        retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+    )
+    expected = pl.DataFrame(
+        {
+            "provider_id": ["usgs_nwis", "usgs_nwis"],
+            "station_id": ["001", "002"],
+            "latitude": [43.0, None],
+            "longitude": [-89.0, None],
+            "crs": ["EPSG:4326", "unknown"],
+        }
+    )
+    plt.assert_frame_equal(stations, expected)
+    assert native.data["monitoring_location_name"].to_list() == ["Canal 001", "Canal 002"]
+
+
+def test_modern_station_universe_refuses_missing_or_conflicting_identity():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_stations
+
+    instant = RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC))
+    with pytest.raises(FatalContractError, match="missing"):
+        build_modern_stations([], {"USGS-001"}, retrieved_at=instant)
+    feature = {
+        "type": "Feature",
+        "id": "USGS-001",
+        "geometry": None,
+        "properties": {
+            "agency_code": "OTHER",
+            "monitoring_location_number": "001",
+            "monitoring_location_name": "Name",
+            "state_code": "55",
+        },
+    }
+    with pytest.raises(FatalContractError, match="identity"):
+        build_modern_stations([feature], {"USGS-001"}, retrieved_at=instant)
+
+
+def test_modern_catalogue_builds_all_six_products_without_legacy_availability():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_catalogue
+
+    location = {
+        "type": "Feature",
+        "id": "USGS-001",
+        "geometry": None,
+        "properties": {
+            "agency_code": "USGS",
+            "monitoring_location_number": "001",
+            "monitoring_location_name": "Reservoir",
+            "state_code": "55",
+        },
+    }
+    features = []
+    for index, (parameter, period, statistic) in enumerate(
+        [
+            ("00060", "Daily", "00003"),
+            ("00060", "Points", "00011"),
+            ("00065", "Daily", "00003"),
+            ("00065", "Daily", "00001"),
+            ("00065", "Daily", "00002"),
+            ("00065", "Points", "00011"),
+        ]
+    ):
+        features.append(
+            {
+                "id": str(index),
+                "monitoring_location_id": "USGS-001",
+                "parameter_code": parameter,
+                "computation_period_identifier": period,
+                "statistic_id": statistic,
+                "unit_of_measure": "ft^3/s" if parameter == "00060" else "ft",
+                "computation_identifier": {"00003": "Mean", "00001": "Max", "00002": "Min", "00011": "Instantaneous"}[
+                    statistic
+                ],
+                "web_description": None,
+                "sublocation_identifier": None,
+            }
+        )
+    catalogue = build_modern_catalogue(
+        features,
+        [location],
+        retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+    )
+    assert catalogue.stations["station_id"].to_list() == ["001"]
+    assert catalogue.station_products.height == 6
+    assert set(catalogue.station_products["availability"].to_list()) == {"available"}
+    assert len(catalogue.source_descriptions.descriptions) == 6
+    assert catalogue.station_products["published_record_start_date"].null_count() == 6
+
+
+def test_location_recordings_validate_exact_batch_and_bytes(tmp_path):
+    import hashlib
+
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import read_monitoring_locations
+
+    feature = {"type": "Feature", "id": "USGS-001", "properties": {}, "geometry": None}
+    body = json.dumps({"type": "FeatureCollection", "features": [feature], "numberReturned": 1, "links": []}).encode()
+    url = "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=json&id=USGS-001&limit=1"
+    receipt = {
+        "url": url,
+        "final_url": url,
+        "status": 200,
+        "sha256": hashlib.sha256(body).hexdigest(),
+        "bytes": len(body),
+        "retrieved_at": "2026-11-01T00:00:00Z",
+    }
+    (tmp_path / "body.gz").write_bytes(gzip.compress(body))
+    (tmp_path / "receipt.json").write_text(json.dumps(receipt))
+    manifest = [{"body": "body.gz", "receipt": "receipt.json"}]
+    path = tmp_path / "locations.json"
+    path.write_text(json.dumps(manifest))
+    assert read_monitoring_locations(path)[0] == [feature]
+    receipt["url"] = receipt["final_url"] = url.replace("USGS-001", "USGS-missing")
+    (tmp_path / "receipt.json").write_text(json.dumps(receipt))
+    with pytest.raises(FatalContractError, match="identities"):
+        read_monitoring_locations(path)
+    receipt["url"] = receipt["final_url"] = url
+    (tmp_path / "receipt.json").write_text(json.dumps(receipt))
+    (tmp_path / "body.gz").write_bytes(gzip.compress(body + b" "))
+    with pytest.raises(FatalContractError, match="receipt"):
+        read_monitoring_locations(path)
+
+
+def test_modern_catalogue_keeps_continuous_only_and_retained_canadian_series():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_catalogue
+
+    def feature(identifier, number, period, statistic, computation):
         return {
             "id": identifier,
-            "monitoring_location_id": "USGS-001",
+            "monitoring_location_id": f"USGS-{number}",
             "parameter_code": "00060",
-            "computation_period_identifier": "Daily",
-            "statistic_id": "00003",
+            "computation_period_identifier": period,
+            "statistic_id": statistic,
+            "computation_identifier": computation,
             "unit_of_measure": "ft^3/s",
-            "computation_identifier": "Mean",
             "web_description": None,
             "sublocation_identifier": None,
         }
 
-    calls = []
+    def location(number, state):
+        return {
+            "type": "Feature",
+            "id": f"USGS-{number}",
+            "geometry": None,
+            "properties": {
+                "agency_code": "USGS",
+                "monitoring_location_number": number,
+                "monitoring_location_name": number,
+                "state_code": state,
+            },
+        }
 
-    def read(path):
-        calls.append(path)
-        return [feature("current" if path == Path("current") else "old")], [
-            {"retrieved_at": "2026-10-31T00:00:00+00:00"}
-        ]
+    current = [feature("continuous", "001", "Points", "00011", "Instantaneous")]
+    historical = [feature("retained", "002", "Daily", "00003", "Mean")]
+    result = build_modern_catalogue(
+        current,
+        [location("001", "55"), location("002", "ON")],
+        retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+        historical_features=historical,
+        retained_series_ids=("retained",),
+        retained_locations=("USGS-002",),
+    )
+    assert result.stations["station_id"].to_list() == ["001", "002"]
+    available = result.station_products.filter(__import__("polars").col("availability") == "available")
+    assert set(available.select("station_id", "product_id").iter_rows()) == {
+        ("001", "discharge_instantaneous"),
+        ("002", "discharge_daily_mean"),
+    }
+    assert {item.identity.published_id for item in result.source_descriptions.descriptions} == {
+        "continuous",
+        "retained",
+    }
 
-    monkeypatch.setattr(generator, "read_modern_metadata", read)
-    monkeypatch.setattr(generator, "monitoring_locations", lambda _: {"001": "USGS-001"})
-    result, receipts = generator.selected_source_descriptions(None, Path("current"), Path("historical"), ("old",))
-    assert {item.variant for item in result.descriptions} == {"current", "old"}
-    assert calls == [Path("current"), Path("historical")]
-    assert receipts == [{"retrieved_at": "2026-10-31T00:00:00+00:00"}]
-    with pytest.raises(ValueError, match="both metadata and explicit"):
-        generator.selected_source_descriptions(None, Path("current"), Path("historical"))
+
+@pytest.mark.parametrize(
+    "geometry",
+    [
+        {"type": "Point", "coordinates": [181, 45]},
+        {"type": "Point", "coordinates": ["west", 45]},
+    ],
+)
+def test_modern_location_rejects_invalid_published_geometry(geometry):
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_stations
+
+    feature = {
+        "type": "Feature",
+        "id": "USGS-001",
+        "geometry": geometry,
+        "properties": {
+            "agency_code": "USGS",
+            "monitoring_location_number": "001",
+            "monitoring_location_name": "Canal",
+            "state_code": "55",
+        },
+    }
+    with pytest.raises(FatalContractError, match="coordinates"):
+        build_modern_stations([feature], {"USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)))
+
+
+def test_legacy_enrichment_preserves_expanded_locations_without_legacy_series():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as generator
+
+    expanded = dict.fromkeys(generator.EXPANDED_HEADER, "")
+    expanded.update(agency_cd="USGS", site_no="001", drain_area_va="12.0")
+    result = generator.refresh_native_table(
+        [],
+        [expanded],
+        retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+    ).value.data
+    assert result["site_no"].to_list() == ["001"]
+    assert result["drain_area_va"].to_list() == ["12.0"]
+    assert result["ts_id"].to_list() == [[]]

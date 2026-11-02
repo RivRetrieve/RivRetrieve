@@ -197,19 +197,27 @@ for the runtime and catalogue boundaries.
 
 ## Publish a USGS catalogue
 
-USGS native publication requires `--acquisition-provenance` alongside
-`--native`, `--modern-metadata`, `--evidence-root`, `--build-inputs` and `--out`.
-Supply the reviewed acquisition graph selected by the archive handoff. Library
-callers of `write_catalogue` pass the same graph as `acquisition_provenance`.
-The publisher verifies its recording references and native byte identity before
-building. Historical native inputs retain their original acquisitions; they do
-not become evidence of a later source request.
+USGS discovery builds from complete modern time-series metadata and explicitly
+selected monitoring-location recordings. Supply `--modern-metadata`,
+`--monitoring-locations` (the archive's `locations.json`), `--retention-manifest`
+and `--retained-metadata`. The retention declaration has `schema_version: 1`,
+`historical_series_ids` and agency-qualified `retained_station_ids`. Historical
+series must resolve exactly without overlapping current metadata.
 
-To preserve selected series missing from the current metadata snapshot, also pass
-`--retained-metadata` and `--retained-series`. These name a verified historical
-metadata directory and an explicit JSON list of published series IDs. The
-selection must resolve exactly and must not overlap the current snapshot.
-The complete historical descriptors stay unchanged. The selected acquisition
-graph records their historical source, and the retained-series declaration
-records which IDs it supports. This does not assert current publication or
-observation availability for those series.
+Use `--native-out` to prepare the derived modern station table for archive
+adoption. It preserves modern names and WGS84 geometry; null geometry remains
+unknown. This table is a transformation of retained responses, not an original
+publisher table. Preparation and publication are separate operations.
+
+Publication uses `--out`, `--native`, `--legacy-native`, `--build-inputs`,
+`--acquisition-provenance` and `--evidence-root`, in addition to the discovery
+inputs above. The publisher verifies the adopted modern and legacy byte
+identities, then compares the rebuilt modern projection with the adopted table.
+Legacy sitefile rows enrich matching agency-qualified identities with areas and
+USGS-issued elevations. They do not determine modern station availability.
+Historical NWIS series claims remain separate from executable modern series.
+
+Library callers of `write_catalogue` supply the same reviewed graph, build inputs,
+modern `native_table` and separate `legacy_table`. They must pass verified inputs.
+Historical acquisitions and descriptors remain historical; retention does not
+assert current publication or observation availability.

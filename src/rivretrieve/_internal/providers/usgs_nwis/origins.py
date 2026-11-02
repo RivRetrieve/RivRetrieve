@@ -32,7 +32,7 @@ STATION_METADATA_NOTICE = (
     "projection: RivRetrieve."
 )
 
-STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+LEGACY_STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "drain_area_va", "sq mi"),
     MetadataField(
         "drainage_area",
@@ -109,6 +109,39 @@ STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
     "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_long_va"), OptionalCoordinateConversion()),
     "crs": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_coord_datum_cd"), DatumToCrsConversion()),
 }
+MODERN_STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("usgs_nwis")),
+    "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("monitoring_location_number")),
+    **{
+        name: catalogue_origins.Field(catalogue_origins.NativeColumn(name)) for name in ("latitude", "longitude", "crs")
+    },
+}
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+    MetadataField(
+        "station_name", "monitoring_location_name", source_facts=("source.station.modern_monitoring_locations",)
+    ),
+    MetadataField(
+        "drainage_area", "drain_area_va", "sq mi", source_facts=("source.station.legacy_sitefile_attributes",)
+    ),
+    MetadataField(
+        "drainage_area",
+        "contrib_drain_area_va",
+        "sq mi",
+        source_facts=("source.station.legacy_sitefile_attributes",),
+        support_facts=("source.usgs.sitefile_drainage_area_definitions",),
+    ),
+    MetadataField(
+        "elevation",
+        "alt_va",
+        "feet",
+        datum_field="alt_datum_cd",
+        source_facts=("source.station.legacy_sitefile_attributes",),
+        support_facts=("source.usgs.sitefile_altitude_definition",),
+        datum_support=("source.usgs.sitefile_altitude_datum_definition",),
+    ),
+)
+
+
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"
 HISTORICAL_NATIVE_TABLE_REVISION = "bfeb825a6f3b3aad4982649625d570c070b4ee32"
 HISTORICAL_NATIVE_TABLE_SHA256 = "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701"
@@ -458,7 +491,7 @@ def build_modern_acquisition_provenance(
         acquisition_id=metadata_acquisition_id,
         method="http_campaign",
         instant_type="retrieval_interval",
-        description="Complete unsorted v1 metadata pagination for parameters 00060 and 00065, including discontinued records; exact decompressed response hashes and request receipts retained alongside gzip recordings. Station scope remains the independently acquired native station table. UTC metadata ranges do not establish physical daily support.",
+        description="Complete unsorted v1 metadata pagination for parameters 00060 and 00065, including discontinued records; exact decompressed response hashes and request receipts retained alongside gzip recordings. Station identity and geometry follow the selected monitoring-location source facts. UTC metadata ranges do not establish physical daily support.",
         requested_from=tuple(item.source_url for item in recordings),
         retrieved_at_start=min(item.retrieved_at for item in recordings),
         retrieved_at_end=max(item.retrieved_at for item in recordings),
@@ -544,9 +577,12 @@ def build_modern_acquisition_provenance(
             binding for binding in provenance.fact_bindings if not canonical.intersection(binding.facts)
         )
         provenance = AcquisitionProvenance.model_validate(payload)
-    station_facts = tuple(
-        fact for fact in provenance.fact_universe if fact.startswith("source.station.selected_input_")
-    ) or ("source.station.nwis_identity_location_datum",)
+    station_facts = (
+        ("source.station.modern_monitoring_locations",)
+        if "source.station.modern_monitoring_locations" in provenance.fact_universe
+        else tuple(fact for fact in provenance.fact_universe if fact.startswith("source.station.selected_input_"))
+        or ("source.station.nwis_identity_location_datum",)
+    )
     return complete_transformed_fact_universe(
         provenance,
         CATALOGUE_FACT_UNIVERSE,
@@ -574,7 +610,7 @@ NATIVE_TABLE_ACQUISITION_IDS = (
 CATALOGUE_BUILD_DECLARATIONS = (
     ("maintenance/catalogue/station_metadata/review.json", None),
     ("maintenance/catalogue/usgs_nwis/selected-acquisitions.json", None),
-    ("maintenance/catalogue/usgs_nwis/retained-series.json", None),
+    ("declarations/usgs_nwis/retention.json", None),
     ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "retain_source_descriptions"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
@@ -584,7 +620,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
-    ("src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py", "project_station_metadata"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py", "project_modern_station_metadata"),
     ("src/rivretrieve/_internal/assembly.py", "assemble"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/config.py", "config"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "modern_source_descriptions"),

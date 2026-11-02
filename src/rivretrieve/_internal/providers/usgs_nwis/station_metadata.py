@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from rivretrieve._internal.catalogue_origins import Field
+from rivretrieve._internal.catalogue_origins import Field, NativeColumn
 from rivretrieve._internal.catalogues.native import NativeTable
 from rivretrieve._internal.catalogues.station_metadata import MetadataField, build_station_metadata
 from rivretrieve._internal.issues import FatalContractError
@@ -38,6 +38,53 @@ def project_station_metadata(
                 station_origin,
                 tuple(field for field in fields if field.attribute_role != "elevation"),
             ),
+        ]
+    )
+    keys = stations.select(pl.lit("usgs_nwis").alias("provider_id"), "station_id")
+    return source_metadata_frame(keys, source)
+
+
+def project_modern_station_metadata(
+    modern_native: NativeTable,
+    legacy_native: NativeTable,
+    stations: pl.DataFrame,
+    fields: tuple[MetadataField, ...],
+) -> pl.DataFrame:
+    """Project modern names with legacy quantities for matching agency and number.
+
+    Modern station numbers identify canonical stations. Legacy drainage areas
+    require an exact agency-and-number match; elevations additionally require
+    USGS issuance. Unmatched quantities receive no_metadata. Modern null names
+    remain null even when a legacy name exists.
+    """
+    modern_names = build_station_metadata(
+        "usgs_nwis",
+        modern_native,
+        stations,
+        Field(NativeColumn("monitoring_location_number")),
+        tuple(field for field in fields if field.attribute_role == "station_name"),
+    )
+    matched = legacy_native.data.join(
+        modern_native.data.select("agency_code", "monitoring_location_number"),
+        left_on=["agency_cd", "site_no"],
+        right_on=["agency_code", "monitoring_location_number"],
+        how="semi",
+    )
+    matched_stations = stations.join(matched.select(pl.col("site_no").alias("station_id")), on="station_id", how="semi")
+    quantities = project_station_metadata(
+        NativeTable(matched),
+        matched_stations,
+        Field(NativeColumn("site_no")),
+        tuple(field for field in fields if field.attribute_role in ("drainage_area", "elevation")),
+    ).filter(pl.col("attribute_role").is_in(["drainage_area", "elevation"]))
+    source = pl.concat(
+        [
+            modern_names.join(
+                quantities.select("station_id", "attribute_role").unique(),
+                on=["station_id", "attribute_role"],
+                how="anti",
+            ),
+            quantities,
         ]
     )
     keys = stations.select(pl.lit("usgs_nwis").alias("provider_id"), "station_id")

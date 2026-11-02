@@ -85,27 +85,29 @@ def describe_catalogue(artifact: PackagedCatalogArtifact, *, config: ProviderCon
     return descriptions.model_copy(update={"descriptions": tuple(result)})
 
 
+MODERN_PRODUCT_ROUTES = {
+    ("00060", "Daily", "00003"): "discharge_daily_mean",
+    ("00065", "Daily", "00003"): "stage_daily_mean",
+    ("00065", "Daily", "00001"): "stage_daily_max",
+    ("00065", "Daily", "00002"): "stage_daily_min",
+    **{
+        (parameter, "Points", statistic): product
+        for parameter, product in (("00060", "discharge_instantaneous"), ("00065", "stage_instantaneous"))
+        for statistic in ("00011", None)
+    },
+}
+
+
 def modern_source_descriptions(
     features: Iterable[Mapping[str, object]],
     monitoring_locations: Mapping[str, str],
 ) -> SourceDescriptions:
-    """Match supported metadata records inside the retained native station scope."""
+    """Describe supported published series at selected modern monitoring locations."""
     from rivretrieve._internal.catalogues.source_series import SourceDescription
     from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
     from rivretrieve._internal.providers.usgs_nwis.metadata import source_series
 
     stations = {location: station for station, location in monitoring_locations.items()}
-    routes = {
-        ("00060", "Daily", "00003"): "discharge_daily_mean",
-        ("00065", "Daily", "00003"): "stage_daily_mean",
-        ("00065", "Daily", "00001"): "stage_daily_max",
-        ("00065", "Daily", "00002"): "stage_daily_min",
-        **{
-            (parameter, "Points", statistic): product
-            for parameter, product in (("00060", "discharge_instantaneous"), ("00065", "stage_instantaneous"))
-            for statistic in ("00011", None)
-        },
-    }
     result = {}
     for properties in features:
         location = properties.get("monitoring_location_id")
@@ -123,7 +125,7 @@ def modern_source_descriptions(
             or (statistic is not None and not isinstance(statistic, str))
         ):
             raise ValueError("Malformed modern metadata product coordinates")
-        product = routes.get((parameter, period, statistic))
+        product = MODERN_PRODUCT_ROUTES.get((parameter, period, statistic))
         if product is None:
             continue
         coordinates = UsgsNwisSourceCoordinates(
