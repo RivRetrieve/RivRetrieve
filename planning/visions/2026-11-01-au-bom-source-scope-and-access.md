@@ -43,22 +43,38 @@ Poland's or Canada's bulk publications, and the catalogue can be built from
 
 Include:
 
-1. **Discharge (`discharge`, native `m³/s`, returned `m3/s`):** Daily mean
-   (`DMQaQc.Merged.DailyMean.24HR` and `...DailyMean.09HR`), both published at the
-   same ~5,710–5,784 stations network-wide (#334). Keep both as distinct source
-   identities and selectable `variant`s; do not merge the midnight-anchored and
-   09:00-anchored daily means into one series. Series lookup must filter on both
+1. **Discharge (`discharge`, native `m³/s`, returned `m3/s`):** `DMQaQc.Merged.`
+   `HourlyMean.HR`, `DailyMean.24HR`, `DailyMean.09HR`, `DailyMax.24HR`,
+   `DailyMin.24HR`, `MonthlyMean.CalMonth` and `YearlyMean.CalYear`, all published
+   at the same ~5,710–5,784 stations network-wide (#334) and confirmed present at
+   station `410730` on 2026-11-02 (ts_ids `1571010`, `1573010`, `1572010`,
+   `1576010`, `1577010`, `1574010`, `1575010`). Keep each as a distinct source
+   identity and selectable `variant`; do not merge the midnight-anchored and
+   09:00-anchored daily means, or any of the aggregations, into one series. This
+   matches the precedent in `no_nve`, `cz_chmi`, `fr_hubeau` and `usgs_nwis`, each
+   of which exposes multiple frequencies or statistics of the same quantity as
+   separate variants rather than picking one. Series lookup must filter on both
    `parametertype_name="Water Course Discharge"` and the exact `ts_name`, not on
    `ts_name` alone, to avoid the ambiguity hydrodownloadR's adapter does not
    resolve (ts_name alone can match a non-discharge series at some stations).
 2. **Stage (`stage`, native `m`, source values already in m per the live CSV
    header's unit field; confirm exactly during step 3 rather than assuming the
    cm/m behavior of the legacy fetcher or hydrodownloadR's conditional
-   divide-by-100):** Daily mean (`DMQaQc.Merged.DailyMean.24HR`) only. BoM
-   publishes no `DailyMean.09HR` stage series anywhere in the network (#334);
-   this absence is a source fact to preserve, not an implementation gap.
-3. **Water temperature (`temperature`, native `°C`):** Daily mean
-   (`DMQaQc.Merged.DailyMean.24HR`), published at ~2,846–2,849 stations (#334).
+   divide-by-100):** `DMQaQc.Merged.HourlyMean.HR`, `DailyMean.24HR`,
+   `DailyMax.24HR`, `DailyMin.24HR`, `MonthlyMean.CalMonth` and
+   `YearlyMean.CalYear` (ts_ids `1597010`, `1598010`, `1601010`, `1602010`,
+   `1599010`, confirmed at station `410730` on 2026-11-02; `YearlyMean.CalYear`
+   confirmed network-wide in #334). BoM publishes no `DailyMean.09HR` stage series
+   anywhere in the network (#334); this absence is a source fact to preserve, not
+   an implementation gap.
+3. **Water temperature (`temperature`, native `°C`):** `DMQaQc.Merged.`
+   `DailyMean.24HR`, `DailyMax.24HR`, `DailyMin.24HR`, `MonthlyMean.CalMonth` and
+   `YearlyMean.CalYear`, published at ~2,846–2,849 stations (#334) and confirmed
+   at station `410730` on 2026-11-02 (ts_ids `380167010`, `380170010`,
+   `380171010`, `380168010`, `380169010`). BoM publishes no `HourlyMean.HR` water
+   temperature series (#334's aggregation table shows "—" for this combination,
+   confirmed absent at station `410730`); this absence is a source fact, not an
+   implementation gap.
 
 ### Documented upstream options excluded from `au_bom`
 
@@ -82,12 +98,16 @@ Include:
   rather than a revision state of the same historical value. Record whatever
   that check establishes in the research record; do not carry this doc's
   current guess forward without it.
-- **Hourly, monthly and yearly aggregations** (`HourlyMean.HR`,
-  `MonthlyMean.CalMonth`, `YearlyMean.CalYear`) and **daily max/min**
-  (`DailyMax.24HR`, `DailyMin.24HR`): published ready-made at the same stations
-  as the daily mean (#334), but out of this port's scope. Defer them while
-  recording their availability; a future Effort can extend `au_bom` to them
-  without revisiting source access.
+- **Raw, unaggregated instantaneous readings** (`DMQaQc.Merged.AsStored.1`):
+  confirmed present for all three quantities at station `410730` on 2026-11-02
+  (ts_ids `1570010` discharge, `1596010` stage, `380166010` water temperature).
+  Unlike the non-`DMQaQc` series above, this sits inside the same
+  quality-controlled `DMQaQc.Merged` family as the admitted series; it is a
+  finer temporal resolution, not a competing consistency level, comparable to
+  `no_nve`'s "Raw resolution" or `usgs_nwis`'s "Continuous observations"
+  variants. Out of scope for this port, but a candidate for Effort #645 to add
+  as a straightforward new variant on the same access method, not something
+  that needs new source-access research.
 - **Other parameter types** available at the same stations or network-wide:
   electrical conductivity, pH, turbidity, storage volume/level, groundwater
   level, rainfall, evaporation and the long tail `getParameterTypeList` returns
@@ -174,11 +194,16 @@ The handoff establishes downstream responsibilities across the port:
   identity (`station_no`) and coordinates, and derive the river-gauge subset as
   stations exposing at least one admitted `DMQaQc.Merged.*` series.
 - **[Series meaning #645](https://github.com/RivRetrieve/RivRetrieve/issues/645):**
-  Map the four admitted series (`24HR`/`09HR` discharge, `24HR` stage, `24HR`
-  water temperature) to distinct `SourceIdentity` and `PhysicalFacts` records;
-  confirm the stage unit directly from a live response rather than assuming
-  legacy `australia.py`'s or hydrodownloadR's conflicting cm/m behavior; verify
-  the `+10:00` timestamp convention and quality-code propagation.
+  Map the 18 admitted series (7 discharge, 6 stage, 5 water temperature; see
+  "Settled scope" above) to distinct `SourceIdentity` and `PhysicalFacts`
+  records; confirm the stage unit directly from a live response rather than
+  assuming legacy `australia.py`'s or hydrodownloadR's conflicting cm/m
+  behavior; verify the `+10:00` timestamp convention, quality-code propagation,
+  and the exact averaging/anchoring definition of each aggregation
+  (`HourlyMean.HR`, `DailyMax.24HR`, `DailyMin.24HR`, `MonthlyMean.CalMonth`,
+  `YearlyMean.CalYear`); and resolve the two open questions this vision leaves
+  unsettled: the non-`DMQaQc` consistency-level question, and whether to add
+  `DMQaQc.Merged.AsStored.1` as a further variant.
 - **[Retrieval #646](https://github.com/RivRetrieve/RivRetrieve/issues/646):**
   Implement `fetch.py`/`parse.py` with retry-with-backoff on the transient
   `DatasourceError` failure shape identified above, distinguishing it from a
