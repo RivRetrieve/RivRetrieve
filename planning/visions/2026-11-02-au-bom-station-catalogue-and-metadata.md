@@ -112,14 +112,18 @@ a per-station column, not a single provider-wide constant — use that. Add a
 `Field(NativeColumn("station_georefsystem"), <conversion>)` origin for `crs`
 with a small conversion mapping each station's own `station_georefsystem`
 value to its EPSG code, analogous to `za_dws`'s custom
-`UnsignedDmsConversion`:
+`UnsignedDmsConversion`. The mapping carries two different levels of
+confidence, and the implementation should say so rather than presenting both
+as equally certain:
 
-| `station_georefsystem` | `crs` |
-|---|---|
-| `WGS84`, `WGS84 (3D)` | `EPSG:4326` |
-| `GDA94 2D`, `GDA94 3D`, `MGA Zone *` | `EPSG:4283` |
-| `AGD66`, `AMG Zone *` | `EPSG:4202` |
-| `---` / unrecognized | withheld as unknown, not guessed |
+| `station_georefsystem` | `crs` | Basis |
+|---|---|---|
+| `WGS84`, `WGS84 (3D)` | `EPSG:4326` | Direct: BoM's own label names this datum. |
+| `GDA94 2D`, `GDA94 3D` | `EPSG:4283` | Direct: BoM's own label names this datum. |
+| `MGA Zone *` | `EPSG:4283` | Inferred: `MGA` (Map Grid of Australia) zones are a projection of `GDA94`, a standard, well-documented Australian geodetic convention — but BoM's label names the projection, not the datum directly. |
+| `AGD66` | `EPSG:4202` | Direct: BoM's own label names this datum. |
+| `AMG Zone *` | `EPSG:4202` | Inferred: `AMG` (Australian Map Grid) zones are a projection of `AGD66`, by the same external convention as `MGA`/`GDA94` above, not a direct BoM statement about these specific stations. |
+| `---` / unrecognized | withheld as unknown, not guessed | No label at all. |
 
 This preserves the real heterogeneity the source states, station by station,
 instead of either asserting one CRS for a network that doesn't have one, or
