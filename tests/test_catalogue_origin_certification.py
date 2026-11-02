@@ -103,11 +103,19 @@ def _adapter(
         locations, _ = generator.read_monitoring_locations(handoff / "monitoring-locations/locations.json")
         historical, _ = generator.read_modern_metadata(handoff / "retained-metadata")
         retention = json.loads((handoff / "retention.json").read_text())
+        from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+
+        baseline_path = "maintenance/catalogue/usgs_nwis/baseline-monitoring-locations.json"
+        if input_receipt is None or baseline_path not in {item.consumer_path for item in input_receipt.inputs}:
+            raise FatalContractError("USGS baseline identity requires a selected retained input")
+        verify_retained_input_files(input_receipt, retained_evidence_root)
+        baseline_locations = json.loads((retained_evidence_root / baseline_path).read_text())
 
         def build(native, origins):
             generated = generator.build_modern_catalogue(
                 features,
                 locations,
+                baseline_locations=baseline_locations,
                 retrieved_at=RetrievedAt(native.data["retrieved_at"].max()),
                 historical_features=historical,
                 retained_series_ids=tuple(retention["historical_series_ids"]),
@@ -269,6 +277,19 @@ def test_usgs_adapter_builds_modern_sources_with_explicit_origins(monkeypatch, t
             }
         )
     )
+    baseline = {"001": "USGS-001"}
+    baseline_path = handoff / "baseline-monitoring-locations.json"
+    baseline_path.write_text(json.dumps(baseline))
+    receipt = SimpleNamespace(
+        inputs=[
+            SimpleNamespace(
+                consumer_path="maintenance/catalogue/usgs_nwis/baseline-monitoring-locations.json",
+                sha256=hashlib.sha256(baseline_path.read_bytes()).hexdigest(),
+                byte_size=baseline_path.stat().st_size,
+            )
+        ],
+        declaration_inputs=[],
+    )
     native = NativeTable(pl.DataFrame({"retrieved_at": [datetime(2026, 1, 1, tzinfo=UTC)]}))
     reads = []
     seen = {}
@@ -288,12 +309,13 @@ def test_usgs_adapter_builds_modern_sources_with_explicit_origins(monkeypatch, t
         main=lambda argv: 0,
     )
     monkeypatch.setattr(__import__(__name__, fromlist=["_module"]), "_module", lambda *args: generator)
-    adapter = _adapter(tmp_path, "usgs_nwis", ())
+    adapter = _adapter(tmp_path, "usgs_nwis", (), input_receipt=receipt)
     origins = {"station_id": object()}
     adapter.build(native, origins)
     assert adapter.native_path == handoff / "modern-native.parquet"
     assert reads == [handoff / "modern-metadata", handoff / "retained-metadata"]
     assert seen == {
+        "baseline_locations": baseline,
         "features": [{"id": "modern-metadata"}],
         "locations": [{"id": "USGS-001"}],
         "historical_features": [{"id": "retained-metadata"}],
@@ -302,6 +324,11 @@ def test_usgs_adapter_builds_modern_sources_with_explicit_origins(monkeypatch, t
         "retrieved_at": RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
         "origins": origins,
     }
+    baseline_path.write_text("{}")
+    with pytest.raises(FatalContractError, match="differs"):
+        _adapter(tmp_path, "usgs_nwis", (), input_receipt=receipt)
+    with pytest.raises(FatalContractError, match="selected retained input"):
+        _adapter(tmp_path, "usgs_nwis", ())
 
 
 def _stations_case(provider: str) -> tuple[DeclarationCase, ...]:
@@ -378,7 +405,7 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
 
 @pytest.fixture(scope="module")
 def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> ProviderAdapter:
-    receipt = request.getfixturevalue("catalogue_input_receipt") if request.param == "ch_foen" else None
+    receipt = request.getfixturevalue("catalogue_input_receipt") if request.param in {"ch_foen", "usgs_nwis"} else None
     return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param], input_receipt=receipt)
 
 
@@ -515,7 +542,7 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
         },
         (ProviderId("usgs_nwis"), "stations"): {
             "provider_id": authored("usgs_nwis"),
-            "station_id": field("monitoring_location_number"),
+            "station_id": field("station_id"),
             "latitude": field("latitude"),
             "longitude": field("longitude"),
             "crs": field("crs"),
@@ -795,9 +822,7 @@ def _assert_reviewed_crs(
         assert adapter.provider_id == ProviderId("usgs_nwis")
         assert isinstance(origin, Field)
         assert str(origin.native_column) == "crs"
-        expected = case_native.data.select(pl.col("monitoring_location_number").alias("station_id"), "crs").sort(
-            "station_id"
-        )
+        expected = case_native.data.select("station_id", "crs").sort("station_id")
         pl_testing.assert_frame_equal(stations.select("station_id", "crs").sort("station_id"), expected)
 
 
@@ -1168,6 +1193,14 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         selected_provenance.write_text(provenance.model_dump_json())
         arguments.extend(
             (
+                "--baseline-locations",
+                str(handoff / "baseline-monitoring-locations.json"),
+                "--baseline-sha256",
+                next(
+                    item.sha256
+                    for item in catalogue_input_receipt.inputs
+                    if item.consumer_path == "maintenance/catalogue/usgs_nwis/baseline-monitoring-locations.json"
+                ),
                 "--modern-metadata",
                 str(handoff / "modern-metadata"),
                 "--monitoring-locations",
