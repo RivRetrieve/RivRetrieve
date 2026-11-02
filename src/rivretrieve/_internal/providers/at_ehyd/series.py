@@ -145,6 +145,8 @@ class OwfHeaderFacts:
     descriptor: ExportzeitreiheDescriptor | None
     has_interval_rule: bool
     pegelnullpunkt_epochs: tuple[tuple[str, str], ...] = ()
+    hzbnr: str | None = None
+    exportzeitraum_raw: str | None = None
 
 
 def association_product(subsystem: str, variable: str) -> str:
@@ -208,12 +210,17 @@ def parse_owf_header_facts(raw: bytes, *, expected_ftyp: str | None = None) -> O
     found_unit = False
     unit: str | None = None
     raw_ezr: str | None = None
+    hzbnr: str | None = None
+    exportzeitraum_raw: str | None = None
     has_interval_rule = False
     pnp_epochs: list[tuple[str, str]] = []
     in_pnp = False
 
     for line in lines:
-        if line.startswith("Einheit:"):
+        if line.startswith("HZB-Nummer:"):
+            raw_hzb = line.split(";", 1)[1].strip() if ";" in line else line.split(":", 1)[1].strip()
+            hzbnr = raw_hzb or None
+        elif line.startswith("Einheit:"):
             found_unit = True
             value = line.split(";", 1)[1].strip() if ";" in line else line.split(":", 1)[1].strip()
             while value.startswith("[") and value.endswith("]"):
@@ -221,6 +228,10 @@ def parse_owf_header_facts(raw: bytes, *, expected_ftyp: str | None = None) -> O
             unit = value or None
         elif line.startswith("Exportzeitreihe:"):
             raw_ezr = line.split(";", 1)[1].strip() if ";" in line else line.split(":", 1)[1].strip()
+        elif line.startswith("Exportzeitraum:"):
+            after = line.split(":", 1)[1].lstrip()
+            raw_ez = after[1:].strip() if after.startswith(";") else after.strip()
+            exportzeitraum_raw = raw_ez or None
         if OWF_INTERVAL_RULE_TEXT in line:
             has_interval_rule = True
 
@@ -247,6 +258,8 @@ def parse_owf_header_facts(raw: bytes, *, expected_ftyp: str | None = None) -> O
             descriptor=None,
             has_interval_rule=has_interval_rule,
             pegelnullpunkt_epochs=tuple(pnp_epochs),
+            hzbnr=hzbnr,
+            exportzeitraum_raw=exportzeitraum_raw,
         )
 
     descriptor = parse_exportzeitreihe(raw_ezr)
@@ -285,6 +298,8 @@ def parse_owf_header_facts(raw: bytes, *, expected_ftyp: str | None = None) -> O
         descriptor=descriptor,
         has_interval_rule=has_interval_rule,
         pegelnullpunkt_epochs=tuple(pnp_epochs),
+        hzbnr=hzbnr,
+        exportzeitraum_raw=exportzeitraum_raw,
     )
 
 
