@@ -1000,7 +1000,7 @@ def build_provider_info(
         "live_station_products": False,
         "bulk_observations": (
             "true: requests per station-product pair; "
-            "DV and IV endpoints selected by product; "
+            "modern daily and continuous endpoints selected by product; "
             "partial failures reported as recoverable issues"
         ),
         "catalogue_version": catalogue_date.isoformat(),
@@ -1098,8 +1098,9 @@ def write_catalogue(
         files,
         source_descriptions=descriptions,
         catalogue_claims=catalogue_claims(
-            legacy_table.data.filter(pl.col("site_no").is_in(catalogue.stations["station_id"])),
+            legacy_table.data,
             {definition.series_key: definition.product_id for definition in PRODUCT_DEFINITIONS},
+            catalogue.source_native,
         ),
         build_inputs=build_inputs,
         native_table=native_table,

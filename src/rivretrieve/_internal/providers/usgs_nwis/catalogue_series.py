@@ -13,8 +13,18 @@ from rivretrieve._internal.engine import ProviderConfig
 from rivretrieve._internal.primitives import ProductId
 
 
-def catalogue_claims(native: pl.DataFrame, products: Mapping[tuple[str, str, str], str]) -> pl.DataFrame:
-    """Project parallel publisher catalogue arrays at their established source coordinates."""
+def catalogue_claims(
+    native: pl.DataFrame,
+    products: Mapping[tuple[str, str, str], str],
+    modern_stations: pl.DataFrame,
+) -> pl.DataFrame:
+    """Project legacy claims only for matching modern agency-qualified stations."""
+    native = native.join(
+        modern_stations.select("agency_code", "monitoring_location_number"),
+        left_on=["agency_cd", "site_no"],
+        right_on=["agency_code", "monitoring_location_number"],
+        how="semi",
+    )
     columns = ("data_type_cd", "parm_cd", "stat_cd", "ts_id", "loc_web_ds")
     source = native.select("site_no", *columns).explode(columns)
     rows = []

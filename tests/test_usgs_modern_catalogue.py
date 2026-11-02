@@ -388,3 +388,24 @@ def test_legacy_enrichment_preserves_expanded_locations_without_legacy_series():
     assert result["site_no"].to_list() == ["001"]
     assert result["drain_area_va"].to_list() == ["12.0"]
     assert result["ts_id"].to_list() == [[]]
+
+
+def test_legacy_claims_match_modern_agency_and_number():
+    import polars as pl
+
+    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import catalogue_claims
+
+    legacy = pl.DataFrame(
+        {
+            "agency_cd": ["OTHER", "USGS"],
+            "site_no": ["001", "002"],
+            "data_type_cd": [["dv"], ["dv"]],
+            "parm_cd": [["00060"], ["00060"]],
+            "stat_cd": [["00003"], ["00003"]],
+            "ts_id": [["other-ts"], ["usgs-ts"]],
+            "loc_web_ds": [["Other agency"], ["USGS claim"]],
+        }
+    )
+    modern = pl.DataFrame({"agency_code": ["USGS", "USGS"], "monitoring_location_number": ["001", "002"]})
+    claims = catalogue_claims(legacy, {("dv", "00060", "00003"): "discharge_daily_mean"}, modern)
+    assert claims.select("station_id", "published_id").rows() == [("002", "usgs-ts")]
