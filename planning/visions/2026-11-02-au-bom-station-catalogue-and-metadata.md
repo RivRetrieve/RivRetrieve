@@ -41,14 +41,21 @@ Checked live for the three daily-mean series on 2026-11-02:
 This union of the three daily-mean series is the best current estimate of the
 river-gauge station universe, and is close to #334's 2026-09-22 figures
 (5,710 / 6,693 / 2,846 stations respectively), confirming the method is
-stable. **Not yet verified:** whether the other 15 admitted series (hourly,
-daily max/min, monthly, yearly) are published at the same stations as their
-quantity's daily mean, or at a smaller subset. Issue #334's aggregation table
-reports identical station counts per quantity across frequencies, but this
-vision doesn't re-run all 18 network-wide calls to confirm it — the
-implementation PR builds the full `station_products` table from all 18 calls
-directly, which checks this as a side effect. Record the actual counts there
-rather than trusting this vision's 3-series shortcut.
+stable.
+
+**All 18 admitted series checked, not just the 3 daily means.** Re-run on
+2026-11-02 for the remaining 15 series (hourly, daily max/min, monthly,
+yearly, across all three quantities where each applies): every one of them
+returns the **exact same station set** as its quantity's daily mean, with
+zero stations added or missing — discharge 5,712, stage 6,698, water
+temperature 2,848, in every series. This confirms #334's aggregation-table
+claim directly rather than assuming it holds. One implementation gotcha
+found while checking this: a `ts_name` request missing the
+`DMQaQc.Merged.` prefix returns `HTTP 200` with a well-formed, **empty**
+result (`[["ts_id","station_no"]]`, header only) — not an error. The
+station-product association builder must construct exact `ts_name` strings
+carefully; a silent typo there produces a quietly-empty series rather than a
+visible failure.
 
 **Coordinates and station name** come from `getStationList` filtered by
 `parametertype_name`, run once per quantity (3 calls): between them these
@@ -58,48 +65,65 @@ get full coverage. The implementation PR should run all three
 `parametertype_name` filters and take the union, rather than assuming any one
 alone is sufficient.
 
-## Coordinate reference system: an open question, not a settled fact
+## Coordinate reference system: per-station, not one blanket value
 
-`at_ehyd` could declare `crs` as `Documented(DocumentedValue("EPSG:4326"), Evidence(...))`
-because the LFRZ OGC API Features collection metadata explicitly states the
-storage CRS. **BoM gives no equivalent explicit statement found so far, and
-the evidence here is more ambiguous than that case:**
+`at_ehyd` declared `crs` as one `Documented(DocumentedValue("EPSG:4326"), Evidence(...))`
+constant for every station, because the LFRZ OGC API Features collection
+metadata explicitly states a single storage CRS for the whole network. BoM
+gives no equivalent single statement, because **BoM's stations genuinely do
+not share one coordinate datum** — but this is resolved, not an open
+question, once the delivered coordinates are checked against each station's
+own reference system rather than assumed to be uniform.
 
 - `getStationList`'s `station_georefsystem` field is **not constant**
   network-wide. Checked live on 2026-11-02 across 6,939 discharge-filtered
   stations: 14 distinct values, dominated by `GDA94 2D` (5,590) and
-  `WGS84 (3D)` (945), with a long tail of legacy or projected systems —
+  `WGS84 (3D)` (945), with a minority on legacy or projected systems —
   `AGD66` (128), various `AMG Zone *`/`MGA Zone *` entries (around 100
   combined), and `---`/unknown (104).
-- Despite that, `station_latitude`/`station_longitude` are always plain
-  decimal-degree values in valid Australian ranges regardless of the tagged
-  `station_georefsystem` — confirmed by direct comparison across stations
-  tagged `WGS84 (3D)`, `MGA Zone 54`, `AGD66` and `WGS84`. None of them
-  returned raw projected eastings/northings.
-- Tested whether the service's `crs` request parameter (accepted values:
-  `global`, `localxy`, `regional` — not EPSG codes) changes the delivered
-  `station_latitude`/`station_longitude` for an `AGD66`-tagged station: it
-  does not. All three modes returned byte-identical coordinate values.
+- BoM's self-documenting endpoint (`request=getrequestinfo`, which lists
+  every request's exact parameters and fields) states that `getStationList`'s
+  `crs` *request parameter* only controls bbox-filtering behaviour, not the
+  datum of returned coordinates — so toggling it (tested: `global`,
+  `localxy`, `regional`) correctly made no difference and doesn't resolve
+  the question by itself.
+- The resolving check: compare `station_latitude`/`station_longitude`
+  against the separate `station_local_x`/`station_local_y` fields (BoM's own
+  "local station reference system," per `getrequestinfo`), across stations
+  on different `station_georefsystem` values. Result, confirmed on multiple
+  stations per case:
+  - **Geographic datums** (`WGS84`, `GDA94`, and — the important case —
+    `AGD66`): local and global coordinates are **byte-identical**. BoM is
+    not reprojecting these; the "global" fields are each station's own
+    original datum, copied through unchanged.
+  - **Projected datums** (`MGA Zone *`, `AGD66`-based `AMG Zone *`): local
+    and global differ, because local is in metres (e.g. `293019.3,
+    6122961.1`) and global is in degrees — necessarily a projection inverse,
+    which for `MGA` zones (built on `GDA94`) naturally yields `GDA94`
+    coordinates, and for `AMG` zones (built on `AGD66`) yields `AGD66`
+    coordinates.
+  - Net effect: an `AGD66`-tagged station's delivered "global" coordinates
+    carry `AGD66`'s real, roughly 200-metre offset from `GDA94`/`WGS84` in
+    this part of Australia, **uncorrected**. This is a genuine source-data
+    heterogeneity, not a documentation gap this vision failed to find.
 
-This leaves genuine ambiguity: `station_georefsystem` may simply record each
-station's **original survey datum** for provenance, while delivered
-coordinates are already uniformly reprojected to one modern datum (in which
-case declaring `GDA94`/`WGS84` network-wide would be safe, since the two are
-within about a metre of each other) — or the `AGD66`/`AMG`/`MGA`-tagged
-stations' delivered coordinates may still carry their original datum's
-positional offset (`AGD66` differs from `GDA94`/`WGS84` by roughly 200
-metres in this part of Australia), in which case declaring one CRS for the
-whole network would be wrong for that minority of stations. Neither BoM's
-public site content nor the KiWIS service's own parameters resolved this
-during this check.
+**Recommendation for the implementation PR:** `STATION_CATALOG_SCHEMA.crs` is
+a per-station column, not a single provider-wide constant — use that. Add a
+`Field(NativeColumn("station_georefsystem"), <conversion>)` origin for `crs`
+with a small conversion mapping each station's own `station_georefsystem`
+value to its EPSG code, analogous to `za_dws`'s custom
+`UnsignedDmsConversion`:
 
-**Recommendation for the implementation PR:** do not use `Documented` for
-`crs` the way `at_ehyd` did. Either find explicit documentation (BoM's water
-data API reference, if one exists beyond what this vision checked) stating
-the delivered-coordinate datum, or use `NotPublished`/`Withheld` the way
-`za_dws` did when a provider's coordinate datum is genuinely unresolved, and
-record the `station_georefsystem` ambiguity itself as a recorded unknown. Do
-not assume `GDA94`/`WGS84` "because most stations say so."
+| `station_georefsystem` | `crs` |
+|---|---|
+| `WGS84`, `WGS84 (3D)` | `EPSG:4326` |
+| `GDA94 2D`, `GDA94 3D`, `MGA Zone *` | `EPSG:4283` |
+| `AGD66`, `AMG Zone *` | `EPSG:4202` |
+| `---` / unrecognized | withheld as unknown, not guessed |
+
+This preserves the real heterogeneity the source states, station by station,
+instead of either asserting one CRS for a network that doesn't have one, or
+giving up with `NotPublished` for stations where the datum is actually known.
 
 ## Station metadata is thin
 
@@ -179,7 +203,8 @@ intake.
 
 ## Completion
 
-Post a concise scope update on #644 referencing this vision and its open
-questions (CRS, the un-reverified 15-of-18 series station counts). Keep #644
+Post a concise scope update on #644 referencing this vision, including the
+resolved CRS mapping and the confirmed station counts for all 18 series.
+Keep #644
 open until the implementation PR (origins.py, generate_catalogue.py, the
 `catalogue/` artifact, the three registration edits, and tests) is merged.
