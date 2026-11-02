@@ -468,6 +468,7 @@ def selected_native_provenance(
 SELECTED_SOURCE_ROLES = (
     "modern_monitoring_locations",
     "legacy_sitefile_attributes",
+    "legacy_series_claims",
     "modern_series",
     "retained_historical_metadata",
 )
@@ -551,10 +552,31 @@ def build_modern_acquisition_provenance(
         "source.usgs.instantaneous_value_definition",
         "source.usgs.license_statement",
         "source.usgs.citation_statement",
+        "source.observation.nwis_values_qualifiers_and_timestamps",
     }
     bindings = [binding for binding in base.fact_bindings if set(binding.facts) <= retained_facts]
     support_events = {binding.acquisition_id for binding in bindings}
     support = tuple(event for event in source.acquisitions if event.acquisition_id in support_events)
+    support += (
+        AcquisitionRecord(
+            acquisition_id="modern_observation_request",
+            method="runtime_http_request",
+            instant_type="runtime",
+            description="Modern Water Data daily or continuous retrieval; independent of historical NWIS routes",
+            requested_from=(
+                "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items",
+                "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items",
+            ),
+        ),
+    )
+    bindings.append(
+        FactBinding(
+            fact_group="modern_observation_values",
+            facts=("source.observation.modern_values_qualifiers_and_timestamps",),
+            source_id="usgs_nwis",
+            acquisition_id="modern_observation_request",
+        )
+    )
     recording_ids = {key for event in support for key in event.recording_ids}
     evidence = tuple(item for item in source.evidence if item.recording.recording_id in recording_ids)
     source = source.model_copy(

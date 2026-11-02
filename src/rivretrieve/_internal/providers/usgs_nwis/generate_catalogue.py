@@ -1168,6 +1168,9 @@ def write_catalogue(
             legacy_table.data,
             {definition.series_key: definition.product_id for definition in PRODUCT_DEFINITIONS},
             catalogue.source_native,
+            evidence=tuple(
+                f"catalogue:usgs_nwis:{fact}" for fact in selected_role_inputs(provenance, "legacy_series_claims")
+            ),
         ),
         build_inputs=build_inputs,
         native_table=native_table,

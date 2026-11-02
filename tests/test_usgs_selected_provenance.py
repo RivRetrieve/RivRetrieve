@@ -54,6 +54,7 @@ def selected_graph():
         role_acquisitions={
             "modern_monitoring_locations": ("original-0", "original-1"),
             "legacy_sitefile_attributes": ("original-0", "original-1"),
+            "legacy_series_claims": ("original-0", "original-1"),
             "modern_series": ("original-0",),
             "retained_historical_metadata": ("original-1",),
         },
@@ -82,10 +83,7 @@ def test_two_original_events_support_stable_roles_and_direct_metadata_leaves():
     assert "source.station.nwis_identity_location_datum" not in graph.fact_universe
 
 
-def test_two_event_graph_publishes_metadata_with_original_support():
-    import json
-    from io import BytesIO
-
+def test_two_event_graph_publishes_and_loads_legacy_claims(tmp_path):
     import polars as pl
 
     from rivretrieve._internal.acquisition_provenance import (
@@ -94,18 +92,16 @@ def test_two_event_graph_publishes_metadata_with_original_support():
         CodeReference,
         RetainedInputUse,
     )
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
     from rivretrieve._internal.catalogues.native import NativeTable
-    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.catalogues.schemas import (
-        PRODUCT_CATALOG_SCHEMA,
         STATION_CATALOG_SCHEMA,
         STATION_PRODUCT_CATALOG_SCHEMA,
     )
-    from rivretrieve._internal.catalogues.source_series import SourceDescriptions
-    from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_modern_station_metadata
+    from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as generator
+    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_source_descriptions
 
     graph = selected_graph()
-    fields = origins.selected_station_metadata_fields(graph)
     stations = pl.DataFrame(
         [("usgs_nwis", "001", 40.0, -75.0, "EPSG:4326")], schema=STATION_CATALOG_SCHEMA.polars_schema, orient="row"
     )
@@ -116,6 +112,7 @@ def test_two_event_graph_publishes_metadata_with_original_support():
                 "monitoring_location_number": ["001"],
                 "agency_code": ["USGS"],
                 "monitoring_location_name": ["Modern name"],
+                "monitoring_location_id": ["USGS-001"],
                 "retrieved_at": [datetime(2026, 1, 1, tzinfo=UTC)],
             }
         )
@@ -129,11 +126,15 @@ def test_two_event_graph_publishes_metadata_with_original_support():
                 "contrib_drain_area_va": [""],
                 "alt_va": ["3"],
                 "alt_datum_cd": ["NAVD88"],
+                "data_type_cd": [["dv"]],
+                "parm_cd": [["00060"]],
+                "stat_cd": [["00003"]],
+                "ts_id": [["legacy-17"]],
+                "loc_web_ds": [["source description"]],
                 "retrieved_at": [datetime(2026, 1, 1, tzinfo=UTC)],
             }
         )
     )
-    metadata = project_modern_station_metadata(modern, legacy, stations, fields)
 
     def code(path, symbol):
         return CodeReference(
@@ -153,7 +154,13 @@ def test_two_event_graph_publishes_metadata_with_original_support():
             ("station_metadata.py", "project_modern_station_metadata"),
         ]
     )
-    direct = tuple(f for binding in graph.fact_bindings if binding.transformation is None for f in binding.facts)
+    direct = tuple(
+        f
+        for binding in graph.fact_bindings
+        if binding.transformation is None
+        for f in binding.facts
+        if not f.startswith("source.observation.")
+    )
     reference = ArchiveMemberReference(
         archive_repository="https://github.com/RivRetrieve/verification-evidence",
         archive_revision="a" * 40,
@@ -180,31 +187,59 @@ def test_two_event_graph_publishes_metadata_with_original_support():
         "license": None,
         "citation": None,
     }
-    files = {"provider.json": json.dumps(provider).encode()}
-    for name, frame in [
-        ("stations", stations),
-        ("products", pl.DataFrame(schema=PRODUCT_CATALOG_SCHEMA.polars_schema)),
-        ("station_products", pl.DataFrame(schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema)),
-    ]:
-        buffer = BytesIO()
-        frame.write_parquet(buffer)
-        files[name + ".parquet"] = buffer.getvalue()
-    result = build_catalogue_metadata(
-        graph,
-        (origins.MODERN_STATION_CATALOGUE_ORIGINS,),
-        files,
-        build_inputs=build,
-        native_table=modern,
-        metadata_fields=fields,
-        station_metadata=metadata,
-        metadata_implementation=(prefix + "station_metadata.py", "project_modern_station_metadata"),
-        transformation_implementations={
-            "selected_" + role: (prefix + "origins.py", "build_modern_acquisition_provenance")
-            for role in origins.SELECTED_SOURCE_ROLES
-        },
-        source_descriptions=SourceDescriptions(provider_id="usgs_nwis", descriptions=()),
+    catalogue = generator.GeneratedUsgsNwisCatalogue(
+        provider_info=provider,
+        products=generator.build_products(),
+        stations=stations,
+        station_products=pl.DataFrame(schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema),
+        source_native=modern.data,
+        source_descriptions=modern_source_descriptions(
+            [
+                {
+                    "id": "modern-17",
+                    "monitoring_location_id": "USGS-001",
+                    "parameter_code": "00060",
+                    "statistic_id": "00003",
+                    "unit_of_measure": "ft^3/s",
+                    "computation_period_identifier": "Daily",
+                    "computation_identifier": "Mean",
+                    "web_description": "modern description",
+                    "sublocation_identifier": None,
+                }
+            ],
+            {"001": "USGS-001"},
+        ),
     )
-    published = pl.read_parquet(BytesIO(result["station_metadata.parquet"]))
-    assert published.filter(pl.col("source_field") == "monitoring_location_name")["source_value"].to_list() == [
-        '"Modern name"'
+    generator.write_catalogue(
+        catalogue, tmp_path, build_inputs=build, native_table=modern, acquisition_provenance=graph, legacy_table=legacy
+    )
+    loaded = load_packaged_catalogue_artifact(tmp_path)
+    claims = pl.read_parquet(tmp_path / "series_claims.parquet")
+    assert claims["published_id"].to_list() == ["legacy-17"]
+    assert claims["evidence"].to_list() == [
+        [
+            "catalogue:usgs_nwis:source.legacy_series_claims.input_0",
+            "catalogue:usgs_nwis:source.legacy_series_claims.input_1",
+        ]
     ]
+    assert loaded.provider_info["provider_id"] == "usgs_nwis"
+
+
+def test_selected_graph_keeps_historical_and_current_observation_routes_independent():
+    graph = selected_graph()
+    source = next(source for source in graph.source_records if source.source_id == "usgs_nwis")
+    acquisitions = {item.acquisition_id: item for item in source.acquisitions}
+    bindings = {fact: binding for binding in graph.fact_bindings for fact in binding.facts}
+    assert bindings["source.observation.nwis_values_qualifiers_and_timestamps"].acquisition_id == "observation_request"
+    assert (
+        bindings["source.observation.modern_values_qualifiers_and_timestamps"].acquisition_id
+        == "modern_observation_request"
+    )
+    assert acquisitions["observation_request"].requested_from == (
+        "https://waterservices.usgs.gov/nwis/dv/",
+        "https://waterservices.usgs.gov/nwis/iv/",
+    )
+    assert acquisitions["modern_observation_request"].requested_from == (
+        "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items",
+        "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items",
+    )
