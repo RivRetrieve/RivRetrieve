@@ -165,6 +165,7 @@ def test_modern_station_universe_includes_continuous_nonstream_and_unlocated():
         locations,
         {"USGS-001", "USGS-002", "USGS-003"},
         retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+        baseline_locations={},
     )
     expected = pl.DataFrame(
         {
@@ -187,7 +188,7 @@ def test_modern_station_universe_refuses_missing_or_conflicting_identity():
 
     instant = RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC))
     with pytest.raises(FatalContractError, match="missing"):
-        build_modern_stations([], {"USGS-001"}, retrieved_at=instant)
+        build_modern_stations([], {"USGS-001"}, retrieved_at=instant, baseline_locations={})
     feature = {
         "type": "Feature",
         "id": "USGS-001",
@@ -201,7 +202,7 @@ def test_modern_station_universe_refuses_missing_or_conflicting_identity():
         },
     }
     with pytest.raises(FatalContractError, match="identity"):
-        build_modern_stations([feature], {"USGS-001"}, retrieved_at=instant)
+        build_modern_stations([feature], {"USGS-001"}, retrieved_at=instant, baseline_locations={})
 
 
 def test_modern_catalogue_builds_all_six_products_without_legacy_availability():
@@ -249,9 +250,7 @@ def test_modern_catalogue_builds_all_six_products_without_legacy_availability():
             }
         )
     catalogue = build_modern_catalogue(
-        features,
-        [location],
-        retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+        features, [location], retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)), baseline_locations={}
     )
     assert catalogue.stations["station_id"].to_list() == ["001"]
     assert catalogue.station_products.height == 6
@@ -335,6 +334,7 @@ def test_modern_catalogue_keeps_continuous_only_and_retained_canadian_series():
         historical_features=historical,
         retained_series_ids=("retained",),
         retained_locations=("USGS-002",),
+        baseline_locations={},
     )
     assert result.stations["station_id"].to_list() == ["001", "002"]
     available = result.station_products.filter(__import__("polars").col("availability") == "available")
@@ -374,7 +374,9 @@ def test_modern_location_rejects_invalid_published_geometry(geometry):
         },
     }
     with pytest.raises(FatalContractError, match="coordinates"):
-        build_modern_stations([feature], {"USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)))
+        build_modern_stations(
+            [feature], {"USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)), baseline_locations={}
+        )
 
 
 def test_legacy_enrichment_preserves_expanded_locations_without_legacy_series():
@@ -411,9 +413,15 @@ def test_legacy_claims_match_modern_agency_and_number():
             "loc_web_ds": [["Other agency"], ["USGS claim"]],
         }
     )
-    modern = pl.DataFrame({"agency_code": ["USGS", "USGS"], "monitoring_location_number": ["001", "002"]})
+    modern = pl.DataFrame(
+        {
+            "agency_code": ["USGS", "USGS"],
+            "monitoring_location_number": ["001", "002"],
+            "station_id": ["001", "USGS-002"],
+        }
+    )
     claims = catalogue_claims(legacy, {("dv", "00060", "00003"): "discharge_daily_mean"}, modern)
-    assert claims.select("station_id", "published_id").rows() == [("002", "usgs-ts")]
+    assert claims.select("station_id", "published_id").rows() == [("USGS-002", "usgs-ts")]
 
 
 @pytest.mark.parametrize("next_suffix", ["&offset=1", "&offset=0", "&offset=1&state_code=55"])
@@ -493,7 +501,7 @@ def test_modern_station_scope_uses_country_before_state(country, state, included
         },
     }
     _, stations = build_modern_stations(
-        [location], {"USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC))
+        [location], {"USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)), baseline_locations={}
     )
     assert stations["station_id"].to_list() == (["001"] if included else [])
 
@@ -517,4 +525,78 @@ def test_modern_station_scope_refuses_unresolved_geography(country, state):
         },
     }
     with pytest.raises(FatalContractError):
-        build_modern_stations([location], {"USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)))
+        build_modern_stations(
+            [location], {"USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)), baseline_locations={}
+        )
+
+
+@pytest.mark.parametrize(
+    "baseline,expected", [({"001": "CA574-001"}, ["001", "USGS-001"]), ({}, ["CA574-001", "USGS-001"])]
+)
+def test_modern_collision_preserves_explicit_baseline(baseline, expected):
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_stations
+
+    features = [
+        {
+            "type": "Feature",
+            "id": agency + "-001",
+            "geometry": None,
+            "properties": {
+                "agency_code": agency,
+                "monitoring_location_number": "001",
+                "country_code": "US",
+                "state_code": "06",
+            },
+        }
+        for agency in ("USGS", "CA574")
+    ]
+    native, stations = build_modern_stations(
+        features,
+        {f["id"] for f in features},
+        retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+        baseline_locations=baseline,
+    )
+    assert stations["station_id"].to_list() == expected
+    assert native.data["monitoring_location_number"].to_list() == ["001", "001"]
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_catalogue
+
+    series = [
+        {
+            "id": "daily",
+            "monitoring_location_id": "CA574-001",
+            "parameter_code": "00060",
+            "computation_period_identifier": "Daily",
+            "statistic_id": "00003",
+            "computation_identifier": "Mean",
+            "unit_of_measure": "ft^3/s",
+            "begin": "2000-01-01T00:00:00Z",
+            "end": "2001-01-01T00:00:00Z",
+        },
+        {
+            "id": "stage",
+            "monitoring_location_id": "USGS-001",
+            "parameter_code": "00065",
+            "computation_period_identifier": "Points",
+            "statistic_id": "00011",
+            "computation_identifier": "Instantaneous",
+            "unit_of_measure": "ft",
+            "begin": "2000-01-01T00:00:00Z",
+            "end": "2001-01-01T00:00:00Z",
+        },
+    ]
+    for item in series:
+        item.update(web_description=None, sublocation_identifier=None)
+    catalogue = build_modern_catalogue(
+        series, features, baseline_locations=baseline, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC))
+    )
+    assert {(item.station_id, item.product_id) for item in catalogue.source_descriptions.descriptions} == {
+        (expected[0], "discharge_daily_mean"),
+        ("USGS-001", "stage_instantaneous"),
+    }
+
+    assert dict(native.data.select("station_id", "monitoring_location_id").iter_rows()) == dict(
+        zip(expected, ["CA574-001", "USGS-001"], strict=True)
+    )

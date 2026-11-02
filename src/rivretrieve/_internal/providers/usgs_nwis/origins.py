@@ -111,7 +111,7 @@ STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
 }
 MODERN_STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
     "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("usgs_nwis")),
-    "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("monitoring_location_number")),
+    "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("station_id")),
     **{
         name: catalogue_origins.Field(catalogue_origins.NativeColumn(name)) for name in ("latitude", "longitude", "crs")
     },

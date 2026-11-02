@@ -20,13 +20,14 @@ def catalogue_claims(
 ) -> pl.DataFrame:
     """Project legacy claims only for matching modern agency-qualified stations."""
     native = native.join(
-        modern_stations.select("agency_code", "monitoring_location_number"),
+        modern_stations.select("agency_code", "monitoring_location_number", "station_id"),
         left_on=["agency_cd", "site_no"],
         right_on=["agency_code", "monitoring_location_number"],
-        how="semi",
+        how="inner",
+        validate="1:1",
     )
     columns = ("data_type_cd", "parm_cd", "stat_cd", "ts_id", "loc_web_ds")
-    source = native.select("site_no", *columns).explode(columns)
+    source = native.select("station_id", *columns).explode(columns)
     rows = []
     evidence = [
         "catalogue:usgs_nwis:source.station_product.nwis_series_availability_and_coverage",

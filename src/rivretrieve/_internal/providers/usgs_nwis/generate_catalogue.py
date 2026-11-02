@@ -7,7 +7,7 @@ import gzip
 import hashlib
 import json
 import urllib.request
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -773,6 +773,7 @@ def build_modern_catalogue(
     features: Sequence[dict[str, object]],
     location_features: Iterable[dict[str, object]],
     *,
+    baseline_locations: Mapping[str, str],
     retrieved_at: RetrievedAt,
     historical_features: Sequence[dict[str, object]] = (),
     retained_series_ids: tuple[str, ...] = (),
@@ -802,6 +803,7 @@ def build_modern_catalogue(
     native, stations = build_modern_stations(
         location_features,
         selected,
+        baseline_locations=baseline_locations,
         retrieved_at=retrieved_at,
         retained_locations=retained_locations,
     )
@@ -810,7 +812,7 @@ def build_modern_catalogue(
     enforce_catalogue_origins(
         PROVIDER_ID, MODERN_STATION_CATALOGUE_ORIGINS if origins is None else origins, native, stations
     )
-    locations = dict(native.data.select("monitoring_location_number", "monitoring_location_id").iter_rows())
+    locations = dict(native.data.select("station_id", "monitoring_location_id").iter_rows())
     descriptions = modern_source_descriptions(features, locations)
     if retained_series_ids:
         descriptions = retain_source_descriptions(
@@ -918,6 +920,7 @@ MODERN_STATION_SCHEMA = pl.Schema(
     {
         "agency_code": pl.String,
         "monitoring_location_number": pl.String,
+        "station_id": pl.String,
         "monitoring_location_id": pl.String,
         "monitoring_location_name": pl.String,
         "latitude": pl.Float64,
@@ -932,6 +935,7 @@ def build_modern_stations(
     features: Iterable[dict[str, object]],
     series_locations: set[str],
     *,
+    baseline_locations: Mapping[str, str],
     retrieved_at: RetrievedAt,
     retained_locations: tuple[str, ...] = (),
 ) -> tuple[NativeTable, StationCatalog]:
@@ -940,12 +944,13 @@ def build_modern_stations(
     Explicitly retained locations may lie outside the 50 states and DC. Every
     requested identity must resolve to a publisher feature, even when its
     geometry is null. Missing responses are errors, not unlocated stations.
+    ``baseline_locations`` preserves public IDs for previously registered source
+    identities. New colliding station numbers use agency-qualified IDs.
     """
     import math
 
     rows = []
     seen = set()
-    station_ids = set()
     selected = series_locations | set(retained_locations)
     for feature in features:
         location = feature.get("id")
@@ -970,9 +975,6 @@ def build_modern_stations(
                 continue
             if not isinstance(state, str) or state not in _US_STATE_FIPS:
                 raise FatalContractError("Modern monitoring-location has unresolved source state_code")
-        if number in station_ids:
-            raise FatalContractError("Modern monitoring-location agencies collide on station identity")
-        station_ids.add(number)
         name = properties.get("monitoring_location_name")
         if name is not None and not isinstance(name, str):
             raise FatalContractError("Modern monitoring-location name must be a string or null")
@@ -1010,10 +1012,29 @@ def build_modern_stations(
         )
     if selected - seen:
         raise FatalContractError("Modern monitoring-location features are missing selected series identities")
-    native = NativeTable(pl.DataFrame(rows, schema=MODERN_STATION_SCHEMA).sort("monitoring_location_number"))
+    counts: dict[str, int] = {}
+    for row in rows:
+        number = str(row["monitoring_location_number"])
+        counts[number] = counts.get(number, 0) + 1
+    baseline_by_location = {location: station for station, location in baseline_locations.items()}
+    if len(baseline_by_location) != len(baseline_locations) or any(
+        not isinstance(station, str)
+        or not isinstance(location, str)
+        or station not in (location, location.partition("-")[2])
+        for station, location in baseline_locations.items()
+    ):
+        raise FatalContractError("Invalid baseline monitoring-location mapping")
+    for row in rows:
+        location, number = str(row["monitoring_location_id"]), str(row["monitoring_location_number"])
+        row["station_id"] = baseline_by_location.get(
+            location, number if counts[number] == 1 and number not in baseline_locations else location
+        )
+    if len({row["station_id"] for row in rows}) != len(rows):
+        raise FatalContractError("Canonical station identities collide")
+    native = NativeTable(pl.DataFrame(rows, schema=MODERN_STATION_SCHEMA).sort("station_id"))
     stations = native.data.select(
         pl.lit(str(PROVIDER_ID)).alias("provider_id"),
-        pl.col("monitoring_location_number").alias("station_id"),
+        "station_id",
         "latitude",
         "longitude",
         "crs",
@@ -1130,7 +1151,7 @@ def write_catalogue(
     catalogue.stations.write_parquet(output_path / "stations.parquet")
     catalogue.station_products.write_parquet(output_path / "station_products.parquet")
     files = {name: (output_path / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES}
-    locations = dict(catalogue.source_native.select("monitoring_location_number", "monitoring_location_id").iter_rows())
+    locations = dict(catalogue.source_native.select("station_id", "monitoring_location_id").iter_rows())
     descriptions = catalogue.source_descriptions
     provenance = acquisition_provenance
     from rivretrieve._internal.providers.usgs_nwis.catalogue_series import catalogue_claims
@@ -1222,6 +1243,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--monitoring-locations", type=Path, required=True, help="Explicit locations.json recording selection."
     )
     parser.add_argument("--retention-manifest", type=Path, required=True)
+    parser.add_argument("--baseline-locations", type=Path, required=True)
+    parser.add_argument("--baseline-sha256", required=True)
     parser.add_argument("--retained-metadata", type=Path, required=True)
     parser.add_argument("--native", type=Path, help="Adopted modern station projection.")
     parser.add_argument("--legacy-native", type=Path, help="Verified legacy enrichment and historical claims table.")
@@ -1269,9 +1292,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     retrieved_at = RetrievedAt(
         max(datetime.fromisoformat(item["retrieved_at"]) for item in receipts + location_receipts)
     )
+    baseline_bytes = args.baseline_locations.read_bytes()
+    if hashlib.sha256(baseline_bytes).hexdigest() != args.baseline_sha256:
+        raise FatalContractError("Baseline monitoring-location bytes changed")
     catalogue = build_modern_catalogue(
         features,
         locations,
+        baseline_locations=json.loads(baseline_bytes),
         retrieved_at=retrieved_at,
         historical_features=historical,
         retained_series_ids=tuple(selection["historical_series_ids"]),
@@ -1284,6 +1311,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         provenance = AcquisitionProvenance.model_validate_json(args.acquisition_provenance.read_bytes())
         verify_provenance_recordings(provenance, args.evidence_root)
         build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
+        baseline_inputs = [item for item in build_inputs.inputs if "source.station.baseline_identity" in item.facts]
+        if len(baseline_inputs) != 1 or (
+            baseline_inputs[0].reference.sha256 != args.baseline_sha256
+            or baseline_inputs[0].reference.byte_size != len(baseline_bytes)
+        ):
+            raise FatalContractError("Publication requires the adopted baseline identity input")
         if provenance.provider_id != PROVIDER_ID or provenance.native_table is None:
             raise FatalContractError("Modern publication requires explicit matching native identity")
         adopted = read_native_table(

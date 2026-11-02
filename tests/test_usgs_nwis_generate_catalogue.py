@@ -345,7 +345,7 @@ def test_refresh_rejects_absent_or_blank_site_no(retained_evidence_root, site_no
             series,
             expanded,
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            )
+        )
 
 
 @pytest.mark.derived(
@@ -362,7 +362,7 @@ def test_refresh_rejects_duplicate_expanded_site(
             _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH),
             [expanded[0], dict(expanded[0])],
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            )
+        )
 
 
 @pytest.mark.derived(
@@ -379,7 +379,7 @@ def test_refresh_rejects_series_without_expanded_site(retained_evidence_root) ->
             series,
             expanded,
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            )
+        )
 
 
 @pytest.mark.derived(
@@ -397,7 +397,7 @@ def test_refresh_rejects_conflicting_repeated_fact_within_series(
             series,
             _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH),
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            )
+        )
 
 
 @pytest.mark.derived(
@@ -415,7 +415,7 @@ def test_refresh_rejects_conflicting_repeated_fact_between_passes(
             _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH),
             expanded,
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            )
+        )
 
 
 @pytest.mark.derived(
@@ -433,7 +433,7 @@ def test_refresh_rejects_malformed_series_shape(
             series,
             _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH),
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            )
+        )
 
 
 def test_native_build_rejects_impossible_retrieval_timestamp() -> None:
@@ -753,6 +753,8 @@ def test_current_publication_requires_selected_provenance_before_writing(tmp_pat
 
 
 def _modern_cli_arguments(tmp_path):
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text("{}")
     manifest = tmp_path / "retention.json"
     manifest.write_text(
         json.dumps(
@@ -764,6 +766,10 @@ def _modern_cli_arguments(tmp_path):
         )
     )
     return [
+        "--baseline-locations",
+        str(baseline),
+        "--baseline-sha256",
+        hashlib.sha256(baseline.read_bytes()).hexdigest(),
         "--modern-metadata",
         str(tmp_path / "metadata"),
         "--monitoring-locations",
@@ -849,6 +855,7 @@ def test_modern_cli_passes_manifest_selection_and_uses_source_retrieval_time(tmp
     assert generator.main([*args, "--native-out", str(output)]) == 0
     assert reads == [tmp_path / "metadata", tmp_path / "historical"]
     assert seen == {
+        "baseline_locations": {},
         "features": [{"id": "metadata"}],
         "locations": [{"id": "USGS-001"}],
         "historical_features": [{"id": "historical"}],
@@ -871,7 +878,7 @@ def test_missing_legacy_enrichment_leaves_publication_destination_untouched(tmp_
     assert not output.exists()
 
 
-@pytest.mark.parametrize("corrupt", ["modern", "legacy"])
+@pytest.mark.parametrize("corrupt", ["modern", "legacy", "baseline"])
 def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_path, monkeypatch, corrupt):
     from types import SimpleNamespace
 
@@ -910,9 +917,15 @@ def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_pat
             SimpleNamespace(
                 facts=("source.station.legacy_sitefile_attributes",),
                 reference=SimpleNamespace(sha256="b" * 64, byte_size=123),
-            )
+            ),
+            SimpleNamespace(
+                facts=("source.station.baseline_identity",),
+                reference=SimpleNamespace(sha256=hashlib.sha256(b"{}").hexdigest(), byte_size=2),
+            ),
         ]
     )
+    if corrupt == "baseline":
+        build_inputs.inputs.pop()
     monkeypatch.setattr(generator.CatalogueBuildInputs, "model_validate_json", lambda _: build_inputs)
     verified = []
     monkeypatch.setattr(generator, "verify_provenance_recordings", lambda value, root: verified.append(value))
@@ -934,7 +947,9 @@ def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_pat
     )
     monkeypatch.setattr(generator, "write_catalogue", lambda *args, **kwargs: pytest.fail("invalid native published"))
     output = tmp_path / "catalogue"
-    with pytest.raises(FatalContractError, match="native table digest mismatch"):
+    with pytest.raises(
+        FatalContractError, match="baseline identity input" if corrupt == "baseline" else "native table digest mismatch"
+    ):
         generator.main(
             [
                 *_modern_cli_arguments(tmp_path),

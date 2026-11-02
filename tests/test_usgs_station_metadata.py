@@ -25,6 +25,7 @@ def test_modern_name_is_authoritative_with_legacy_quantities():
         {
             "agency_code": ["USGS"],
             "monitoring_location_number": ["001"],
+            "station_id": ["001"],
             "monitoring_location_id": ["USGS-001"],
             "monitoring_location_name": ["Modern name"],
         }
@@ -61,6 +62,7 @@ def test_enrichment_requires_matching_agency_and_elevation_requires_usgs():
         {
             "agency_code": ["USGS", "OTHER", "USGS"],
             "monitoring_location_number": ["001", "002", "003"],
+            "station_id": ["001", "002", "003"],
             "monitoring_location_id": ["USGS-001", "OTHER-002", "USGS-003"],
             "monitoring_location_name": [None, "Other gauge", "Modern only"],
         }
@@ -106,3 +108,37 @@ def test_enrichment_requires_matching_agency_and_elevation_requires_usgs():
     area = result.filter((pl.col("station_id") == "002") & (pl.col("attribute_role") == "drainage_area"))
     assert area["source_field"].item() == "drain_area_va"
     assert area["source_unit"].item() == "mi2"
+
+
+def test_colliding_agency_metadata_stays_with_canonical_identity():
+    modern = native(
+        {
+            "agency_code": ["CA574", "USGS"],
+            "monitoring_location_number": ["001", "001"],
+            "station_id": ["001", "USGS-001"],
+            "monitoring_location_id": ["CA574-001", "USGS-001"],
+            "monitoring_location_name": ["Other", "USGS"],
+        }
+    )
+    legacy = native(
+        {
+            "agency_cd": ["CA574", "USGS"],
+            "site_no": ["001", "001"],
+            "drain_area_va": ["12", "34"],
+            "alt_va": ["99", "56"],
+        }
+    )
+    result = project_modern_station_metadata(modern, legacy, pl.DataFrame({"station_id": ["001", "USGS-001"]}), FIELDS)
+    assert result.filter(pl.col("attribute_role") == "drainage_area").select("station_id", "source_value").sort(
+        "station_id"
+    ).rows() == [("001", '"12"'), ("USGS-001", '"34"')]
+    assert (
+        result.filter((pl.col("attribute_role") == "elevation") & (pl.col("station_id") == "001"))["state"].item()
+        == "no_metadata"
+    )
+    assert (
+        result.filter((pl.col("attribute_role") == "elevation") & (pl.col("station_id") == "USGS-001"))[
+            "source_value"
+        ].item()
+        == '"56"'
+    )

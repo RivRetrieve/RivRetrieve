@@ -52,7 +52,7 @@ def project_modern_station_metadata(
 ) -> pl.DataFrame:
     """Project modern names with legacy quantities for matching agency and number.
 
-    Modern station numbers identify canonical stations. Legacy drainage areas
+    Canonical station IDs retain baseline identities and distinguish agency collisions. Legacy drainage areas
     require an exact agency-and-number match; elevations additionally require
     USGS issuance. Unmatched quantities receive no_metadata. Modern null names
     remain null even when a legacy name exists.
@@ -61,22 +61,32 @@ def project_modern_station_metadata(
         "usgs_nwis",
         modern_native,
         stations,
-        Field(NativeColumn("monitoring_location_number")),
+        Field(NativeColumn("station_id")),
         tuple(field for field in fields if field.attribute_role == "station_name"),
     )
     matched = legacy_native.data.join(
-        modern_native.data.select("agency_code", "monitoring_location_number"),
+        modern_native.data.select("agency_code", "monitoring_location_number", "station_id"),
         left_on=["agency_cd", "site_no"],
         right_on=["agency_code", "monitoring_location_number"],
-        how="semi",
+        how="inner",
+        validate="1:1",
     )
-    matched_stations = stations.join(matched.select(pl.col("site_no").alias("station_id")), on="station_id", how="semi")
-    quantities = project_station_metadata(
-        NativeTable(matched),
-        matched_stations,
-        Field(NativeColumn("site_no")),
-        tuple(field for field in fields if field.attribute_role in ("drainage_area", "elevation")),
-    ).filter(pl.col("attribute_role").is_in(["drainage_area", "elevation"]))
+    quantities = []
+    for usgs, eligible_fields in (
+        (True, tuple(field for field in fields if field.attribute_role in ("drainage_area", "elevation"))),
+        (False, tuple(field for field in fields if field.attribute_role == "drainage_area")),
+    ):
+        selected = matched.filter((pl.col("agency_cd") == "USGS") == usgs)
+        quantities.append(
+            build_station_metadata(
+                "usgs_nwis",
+                NativeTable(selected),
+                stations.join(selected.select("station_id"), on="station_id", how="semi"),
+                Field(NativeColumn("station_id")),
+                eligible_fields,
+            )
+        )
+    quantities = pl.concat(quantities).filter(pl.col("attribute_role").is_in(["drainage_area", "elevation"]))
     source = pl.concat(
         [
             modern_names.join(
