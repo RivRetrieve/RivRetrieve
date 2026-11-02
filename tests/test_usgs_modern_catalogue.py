@@ -420,7 +420,12 @@ def test_legacy_claims_match_modern_agency_and_number():
             "station_id": ["001", "USGS-002"],
         }
     )
-    claims = catalogue_claims(legacy, {("dv", "00060", "00003"): "discharge_daily_mean"}, modern)
+    claims = catalogue_claims(
+        legacy,
+        {("dv", "00060", "00003"): "discharge_daily_mean"},
+        modern,
+        evidence=("catalogue:usgs_nwis:source.legacy_series_claims.input_0",),
+    )
     assert claims.select("station_id", "published_id").rows() == [("USGS-002", "usgs-ts")]
 
 

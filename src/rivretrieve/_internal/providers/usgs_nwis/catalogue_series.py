@@ -17,6 +17,8 @@ def catalogue_claims(
     native: pl.DataFrame,
     products: Mapping[tuple[str, str, str], str],
     modern_stations: pl.DataFrame,
+    *,
+    evidence: tuple[str, ...],
 ) -> pl.DataFrame:
     """Project legacy claims only for matching modern agency-qualified stations."""
     native = native.join(
@@ -29,10 +31,6 @@ def catalogue_claims(
     columns = ("data_type_cd", "parm_cd", "stat_cd", "ts_id", "loc_web_ds")
     source = native.select("station_id", *columns).explode(columns)
     rows = []
-    evidence = [
-        "catalogue:usgs_nwis:source.station_product.nwis_series_availability_and_coverage",
-        "catalogue:usgs_nwis:source.product.nwis_parameter_statistic_data_type_codes",
-    ]
     for station, data_type, parameter, statistic, ts_id, description in source.iter_rows():
         product = products.get((data_type, parameter, statistic))
         if product is None:
