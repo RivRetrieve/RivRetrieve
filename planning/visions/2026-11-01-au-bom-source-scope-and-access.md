@@ -28,11 +28,13 @@ which uses the `https://` endpoint consistently. Live re-verification on
 301s to `https://`, confirmed the exact series mapping at station `410730`
 (`1573010`=discharge `DailyMean.24HR`, `1572010`=discharge `DailyMean.09HR`,
 `1598010`=stage `DailyMean.24HR`, `380167010`=water temperature
-`DailyMean.24HR`), and found a provisional-processing discharge series
-(`PR01QaQc.Merged.DailyMean.09HR`) not described in #334, which stays out of
-scope: `au_bom` admits only the `DMQaQc.Merged.*` quality-controlled family,
-matching the legacy fetcher and #334's own analysis of the processing-stage
-ladder.
+`DailyMean.24HR`), and found a series named `PR01QaQc.Merged.DailyMean.09HR`
+(discharge) not described in #334. For this first port, `au_bom` admits only the
+`DMQaQc.Merged.*` family, matching both reference clients. This is a provisional
+exclusion, not a verified one: whether `PR01QaQc.*` and BoM's other non-`DMQaQc`
+series are redundant pipeline stages of the same value, or a source-stated
+consistency level comparable to `br_ana`'s separately-exposed `bruto`/`consistido`
+pair, is an open question for Effort #645 (see below), not settled here.
 
 Use `LiveStages` rather than `BulkStore`: KiWIS answers per station and per time
 window through `getTimeseriesValues`, with no large archive file comparable to
@@ -63,10 +65,23 @@ Include:
 - **Non-`DMQaQc` processing stages**, including `PR01QaQc.*`, `Received.*`,
   `Harmonised.*`, `ObsPOR.Merged`, `CombinedProv.Merged` and `DMmanQC.Manual`:
   each station carries roughly 25 further series names in these families (#334).
-  They are processing stages of the same underlying measurement, not new
-  variables; `au_bom` admits only the `DMQaQc.Merged.*` quality-controlled
-  family. Record their existence in the research record without implementing
-  them.
+  #334 describes them as "processing stages of the same measurement, not new
+  variables," but that description was not independently verified during this
+  Effort and is not established here. `au_bom` admits only `DMQaQc.Merged.*` for
+  this first port, matching both reference clients, but this exclusion is
+  provisional, not a settled conclusion that the other series are redundant.
+  `br_ana` is a direct precedent for the opposite outcome: ANA's `bruto` (raw)
+  and `consistido` (checked) consistency levels are kept as two separate,
+  independently selectable source identities, never merged or dropped, because
+  the same station and date can carry a genuinely different value under each
+  level. Before Effort #645 (series identity) finalizes this exclusion, it must
+  check whether any of BoM's other series names represent a comparable
+  source-documented consistency duality (a candidate "raw" counterpart to
+  `DMQaQc.Merged`'s "checked" role) rather than genuine pipeline noise, and
+  whether any behave like Austria's separate near-real-time telemetry variant
+  rather than a revision state of the same historical value. Record whatever
+  that check establishes in the research record; do not carry this doc's
+  current guess forward without it.
 - **Hourly, monthly and yearly aggregations** (`HourlyMean.HR`,
   `MonthlyMean.CalMonth`, `YearlyMean.CalYear`) and **daily max/min**
   (`DailyMax.24HR`, `DailyMin.24HR`): published ready-made at the same stations
