@@ -1,26 +1,25 @@
-"""Offline discovery and explicit retrieval refusal for the Austria eHYD catalogue."""
+"""Offline discovery remains independent of the live Austria eHYD stages."""
 
 import polars as pl
 import pytest
 
 
-def test_declaration_exposes_catalogue_only_without_credentials():
+def test_declaration_exposes_live_stages_without_credentials():
     from rivretrieve._internal.providers.at_ehyd.declaration import declaration
-    from rivretrieve._internal.providers.registration import CatalogueOnly
+    from rivretrieve._internal.providers.registration import LiveStages
 
-    assert isinstance(declaration.observations, CatalogueOnly)
+    assert isinstance(declaration.observations, LiveStages)
     assert declaration.required_credentials == ()
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
-def test_discovery_metadata_and_retrieval_refusal_remain_offline(policy, monkeypatch):
+def test_discovery_and_metadata_remain_offline(policy, monkeypatch):
     import socket
 
     import rivretrieve as rr
-    from rivretrieve._internal.issues import ObservationsUnavailableError
 
     def refuse_network(*args, **kwargs):
-        pytest.fail("eHYD catalogue-only workflow attempted network access")
+        pytest.fail("eHYD discovery workflow attempted network access")
 
     monkeypatch.setattr(socket.socket, "connect", refuse_network)
     monkeypatch.setattr(socket.socket, "connect_ex", refuse_network)
@@ -95,7 +94,6 @@ def test_discovery_metadata_and_retrieval_refusal_remain_offline(policy, monkeyp
     )
     assert monthly_min_w_207340.series == ()
 
-    discharge = rr.find(provider="at_ehyd", quantity="discharge", station="209486", on_issue=policy)
-    for cache in ("bypass", "reuse", "refresh"):
-        with pytest.raises(ObservationsUnavailableError, match="at_ehyd"):
-            rr.fetch(discharge, start="2020-01-01", end="2020-01-02", cache=cache, on_issue=policy)
+    description = rr.describe("at_ehyd")
+    assert description["license"] == "CC BY 4.0"
+    assert description["citation"] == "Datenquelle: ehyd.gv.at"

@@ -45,6 +45,11 @@ from rivretrieve._internal.source_series import (
 )
 
 _PROVIDER_ID = ProviderId("at_ehyd")
+_OWF_ENDPOINT_EVIDENCE = "https://ehyd.gv.at/services/MessstellenExtraData/owf"
+_PEGEL_ENDPOINT_EVIDENCE: dict[str, str] = {
+    "pegel_bgis": "https://ehyd.gv.at/services/Diagram/pegelBgis",
+    "pegel_longterm": "https://ehyd.gv.at/services/Diagram/pegelLongterm",
+}
 _OWF_TIMESTAMP_RE = re.compile(r"^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$")
 _OWF_NUMERIC_RE = re.compile(r"^[+-]?\d+(?:,\d+)?$")
 _OWF_INVALID_BODY_RE = re.compile(r"^Invalid\s*;\s*Lücke$")
@@ -175,11 +180,11 @@ def _validated_product_coordinates(
     if isinstance(payload_coords, AtEhydOwfCoordinates):
         if payload_coords != configured:
             raise FatalContractError("at_ehyd owf payload coordinates contradict configured product")
-        return configured
+        return payload_coords
     if isinstance(payload_coords, AtEhydPegelCoordinates):
         if payload_coords != configured:
             raise FatalContractError("at_ehyd Pegel Aktuell payload coordinates contradict configured product")
-        return configured
+        return payload_coords
     if isinstance(payload_coords, AtEhydPegelEndpointCoordinates):
         if not isinstance(configured, AtEhydPegelCoordinates) or payload_coords.subsystem != configured.subsystem:
             raise FatalContractError("at_ehyd Pegel Aktuell endpoint payload contradicts configured subsystem")
@@ -261,7 +266,14 @@ def _parse_owf_csv(
 
     if header.unit is None:
         definition = _reused_series(
-            source_series(station, "owf", coords.ftyp, units=(None,), origin="response", evidence=evidence),
+            source_series(
+                station,
+                "owf",
+                coords.ftyp,
+                units=(None,),
+                origin="response",
+                evidence=_OWF_ENDPOINT_EVIDENCE,
+            ),
             payload.known_series,
         )
         return _unsupported_series_result(
@@ -320,7 +332,7 @@ def _parse_owf_csv(
             units=(header.unit,),
             origin="response",
             descriptor=descriptor,
-            evidence=evidence,
+            evidence=_OWF_ENDPOINT_EVIDENCE,
         ),
         payload.known_series,
     )
@@ -417,61 +429,61 @@ def _parse_owf_csv(
     issues: list[Issue] = []
     outcomes: list[RetrievalOutcome] = []
 
+    covered_bounds: tuple[datetime, datetime] | None = None
     if finite_bounds is not None:
         t_start, raw_t_end = finite_bounds
         first_time = cast("datetime", numeric_rows[0]["time"]) if numeric_rows else None
         last_time = cast("datetime", numeric_rows[-1]["time"]) if numeric_rows else None
-        covered_start = min(t_start, first_time) if first_time is not None else t_start
-        covered_end = (
+        cand_start = min(t_start, first_time) if first_time is not None else t_start
+        cand_end = (
             raw_t_end if (last_time is not None and last_time >= raw_t_end) else raw_t_end - timedelta(microseconds=1)
         )
-        if covered_start <= covered_end:
-            covered_window = SeriesWindow(start=covered_start, end=covered_end)
-            positive_outcome = RetrievalOutcome(
-                outcome_id=stable_id(payload.acquisition_id, definition.series_id, fact.facts_id, "interval"),
-                series_id=definition.series_id,
-                station_id=station,
-                product_id=str(product),
-                window=covered_window,
-                status=OutcomeStatus.SUCCESS if numeric_rows else OutcomeStatus.EMPTY,
-                facts_ids=(fact.facts_id,),
-                retrieved_at=retrieved,
-                coverage="interval",
-            )
-            outcomes.append(positive_outcome)
-            _append_disjoint_unresolved_bounds(
-                outcomes,
-                acquisition_id=payload.acquisition_id,
-                series_id=definition.series_id,
-                station=station,
-                product=str(product),
-                facts_id=fact.facts_id,
-                window=window,
-                active_start=covered_start,
-                active_end=covered_end,
-                retrieved_at=retrieved,
-                pre_reason="Requested interval precedes published eHYD Exportzeitraum start",
-                post_reason="Requested interval extends beyond published eHYD Exportzeitraum end",
-            )
-            inventory = InventorySnapshot(
-                snapshot_id=stable_id(payload.acquisition_id, definition.series_id, "owf-inventory"),
-                scope=scope,
-                members=(definition.series_id,),
-                member_facts=((definition.series_id, (fact.facts_id,)),),
-                completeness=InventoryCompleteness.COMPLETE,
-                access=coords.ftyp,
-                origin="response",
-                acquired_at=retrieved,
-                window=covered_window,
-                evidence=(evidence,),
-            )
-            primary_outcome_id: str | None = positive_outcome.outcome_id
-        else:
-            finite_bounds = None
-            primary_outcome_id = None
-            inventory = None  # type: ignore[assignment]
+        if cand_start <= cand_end:
+            covered_bounds = (cand_start, cand_end)
 
-    if finite_bounds is None:
+    if covered_bounds is not None:
+        covered_start, covered_end = covered_bounds
+        covered_window = SeriesWindow(start=covered_start, end=covered_end)
+        positive_outcome = RetrievalOutcome(
+            outcome_id=stable_id(payload.acquisition_id, definition.series_id, fact.facts_id, "interval"),
+            series_id=definition.series_id,
+            station_id=station,
+            product_id=str(product),
+            window=covered_window,
+            status=OutcomeStatus.SUCCESS if numeric_rows else OutcomeStatus.EMPTY,
+            facts_ids=(fact.facts_id,),
+            retrieved_at=retrieved,
+            coverage="interval",
+        )
+        outcomes.append(positive_outcome)
+        _append_disjoint_unresolved_bounds(
+            outcomes,
+            acquisition_id=payload.acquisition_id,
+            series_id=definition.series_id,
+            station=station,
+            product=str(product),
+            facts_id=fact.facts_id,
+            window=window,
+            active_start=covered_start,
+            active_end=covered_end,
+            retrieved_at=retrieved,
+            pre_reason="Requested interval precedes published eHYD Exportzeitraum start",
+            post_reason="Requested interval extends beyond published eHYD Exportzeitraum end",
+        )
+        inventory = InventorySnapshot(
+            snapshot_id=stable_id(payload.acquisition_id, definition.series_id, "owf-inventory"),
+            scope=scope,
+            members=(definition.series_id,),
+            member_facts=((definition.series_id, (fact.facts_id,)),),
+            completeness=InventoryCompleteness.COMPLETE,
+            access=coords.ftyp,
+            origin="response",
+            acquired_at=retrieved,
+            window=covered_window,
+            evidence=(evidence,),
+        )
+        primary_outcome_id: str | None = positive_outcome.outcome_id
+    else:
         if numeric_rows:
             active_start = cast("datetime", numeric_rows[0]["time"])
             active_end = cast("datetime", numeric_rows[-1]["time"])
@@ -685,7 +697,14 @@ def _parse_pegel_json(
         )
 
     definition = _reused_series(
-        source_series(station, coords.subsystem, coords.parameter, units=(unit,), origin="response", evidence=evidence),
+        source_series(
+            station,
+            coords.subsystem,
+            coords.parameter,
+            units=(unit,),
+            origin="response",
+            evidence=_PEGEL_ENDPOINT_EVIDENCE[coords.subsystem],
+        ),
         payload.known_series,
     )
     fact = definition.facts[0]
@@ -1060,6 +1079,7 @@ def _reused_series(definition: SourceSeries, known_series: tuple[SourceSeries, .
     retained = {_fact_signature(fact): fact for fact in candidate.facts}
     return definition.model_copy(
         update={
+            "identity": candidate.identity,
             "facts": tuple(retained.get(_fact_signature(fact), fact) for fact in definition.facts),
         }
     )

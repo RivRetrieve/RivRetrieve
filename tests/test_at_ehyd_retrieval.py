@@ -40,7 +40,7 @@ from rivretrieve._internal.providers.at_ehyd.declaration import declaration
 from rivretrieve._internal.providers.at_ehyd.fetch import fetch, resolve_messstellen_info_files
 from rivretrieve._internal.providers.at_ehyd.parse import parse
 from rivretrieve._internal.providers.at_ehyd.series import OWF_INTERVAL_RULE_TEXT, source_series
-from rivretrieve._internal.providers.registration import CatalogueOnly
+from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.source_series import (
     ClippingAxis,
     EvidenceState,
@@ -65,7 +65,7 @@ _RETRIEVED_AT = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
 
 @dataclass(frozen=True)
 class _AtEhydStages:
-    """Internal stage bundle for exercising eHYD retrieval while declaration stays CatalogueOnly."""
+    """Explicit stage bundle matching the live declaration contract."""
 
     config: ProviderConfig = config()
     window_declarations: ProductWindowDeclarations = window_declarations()
@@ -148,8 +148,10 @@ def _owf_csv(
     return "\r\n".join(header).encode("cp1252")
 
 
-def test_declaration_stays_catalogue_only_in_step4_and_config_declares_11_source_fixed_products() -> None:
-    assert isinstance(declaration.observations, CatalogueOnly)
+def test_declaration_wires_live_stages_and_config_declares_11_source_fixed_products() -> None:
+    assert isinstance(declaration.observations, LiveStages)
+    assert declaration.observations.stages.observation_source == "live"
+    assert declaration.observations.stages.shared_acquisition_products == SHARED_ACQUISITION_PRODUCTS
 
     cfg = config()
     decls = window_declarations()

@@ -83,20 +83,27 @@ def resolve_messstellen_info_files(content: bytes, station: str) -> dict[Product
             for field in cast("list[object]", info_obj["data"]):
                 if not isinstance(field, dict):
                     raise UnsupportedSourceStructureError("eHYD Messstellen/info field must be an object")
-                if field.get("caption") == "HZBNR":
-                    raw_hzb = field.get("text")
+                field_map = cast("dict[str, object]", field)
+                if field_map.get("caption") == "HZBNR":
+                    raw_hzb = field_map.get("text")
                     if type(raw_hzb) not in (int, str) or str(raw_hzb).strip() != station:
                         raise UnsupportedSourceStructureError(
                             f"eHYD Messstellen/info HZBNR {raw_hzb!r} contradicts requested station {station!r}"
                         )
                     matched_station = True
-                if field.get("tag") == "dl_mstfiles":
-                    dl_data = field.get("data")
-                    if not isinstance(dl_data, dict) or not isinstance(dl_data.get("fileData"), list):
+                if field_map.get("tag") == "dl_mstfiles":
+                    dl_data = field_map.get("data")
+                    if not isinstance(dl_data, dict):
                         raise UnsupportedSourceStructureError(
                             "eHYD Messstellen/info dl_mstfiles.data.fileData must be a list"
                         )
-                    file_entries.extend(cast("list[object]", dl_data["fileData"]))
+                    dl_map = cast("dict[str, object]", dl_data)
+                    raw_files = dl_map.get("fileData")
+                    if not isinstance(raw_files, list):
+                        raise UnsupportedSourceStructureError(
+                            "eHYD Messstellen/info dl_mstfiles.data.fileData must be a list"
+                        )
+                    file_entries.extend(cast("list[object]", raw_files))
 
     if not matched_station:
         raise UnsupportedSourceStructureError("eHYD Messstellen/info lacks a matching HZBNR station entry")
@@ -106,13 +113,14 @@ def resolve_messstellen_info_files(content: bytes, station: str) -> dict[Product
     for raw_entry in file_entries:
         if not isinstance(raw_entry, dict):
             raise UnsupportedSourceStructureError("eHYD Messstellen/info fileData entry must be an object")
-        if raw_entry.get("msttyp") != "owf":
+        entry_map = cast("dict[str, object]", raw_entry)
+        if entry_map.get("msttyp") != "owf":
             continue
-        entry_hzb = raw_entry.get("hzbnr")
+        entry_hzb = entry_map.get("hzbnr")
         if type(entry_hzb) not in (int, str) or str(entry_hzb).strip() != station:
             raise UnsupportedSourceStructureError("eHYD Messstellen/info fileData hzbnr contradicts requested station")
-        file_nr = raw_entry.get("fileNr")
-        file_name = raw_entry.get("fileName")
+        file_nr = entry_map.get("fileNr")
+        file_name = entry_map.get("fileName")
         if type(file_nr) is not int or file_nr < 1 or not isinstance(file_name, str) or not file_name:
             raise UnsupportedSourceStructureError("eHYD Messstellen/info fileData entry lacks valid fileNr or fileName")
         if not file_name.endswith(suffix):
