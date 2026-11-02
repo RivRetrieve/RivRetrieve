@@ -50,6 +50,12 @@ _PEGEL_ENDPOINT_EVIDENCE: dict[str, str] = {
     "pegel_bgis": "https://ehyd.gv.at/services/Diagram/pegelBgis",
     "pegel_longterm": "https://ehyd.gv.at/services/Diagram/pegelLongterm",
 }
+_UNIT_QUANTITIES: dict[str, str] = {
+    "m3/s": "discharge",
+    "cm": "stage",
+    "m": "stage",
+    "degC": "temperature",
+}
 _OWF_TIMESTAMP_RE = re.compile(r"^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$")
 _OWF_NUMERIC_RE = re.compile(r"^[+-]?\d+(?:,\d+)?$")
 _OWF_INVALID_BODY_RE = re.compile(r"^Invalid\s*;\s*Lücke$")
@@ -319,7 +325,11 @@ def _parse_owf_csv(
                 f"eHYD extrema series {coords.ftyp!r} has unexpected period {descriptor.period_code},{descriptor.period_step}"
             )
 
-    if header.unit != exp_unit and header.unit in UNITS:
+    if (
+        header.unit != exp_unit
+        and header.unit in UNITS
+        and _UNIT_QUANTITIES[UNITS[header.unit]] != _UNIT_QUANTITIES[UNITS[exp_unit]]
+    ):
         raise UnsupportedSourceStructureError(
             f"eHYD owf unit {header.unit!r} contradicts expected unit {exp_unit!r} for {coords.ftyp!r}"
         )
@@ -691,7 +701,12 @@ def _parse_pegel_json(
         raise UnsupportedSourceStructureError(f"eHYD {coords.subsystem} response lacks a string einheit field")
     unit = raw_unit.strip() or None
     expected_unit = "m³/s" if coords.parameter == "Abfluss" else "cm"
-    if unit is not None and unit != expected_unit and unit in UNITS and UNITS[unit] != UNITS[expected_unit]:
+    if (
+        unit is not None
+        and unit != expected_unit
+        and unit in UNITS
+        and _UNIT_QUANTITIES[UNITS[unit]] != _UNIT_QUANTITIES[UNITS[expected_unit]]
+    ):
         raise UnsupportedSourceStructureError(
             f"eHYD {coords.subsystem} unit {unit!r} contradicts parameter {coords.parameter!r}"
         )

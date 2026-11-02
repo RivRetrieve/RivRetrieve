@@ -49,6 +49,7 @@ from rivretrieve._internal.source_series import (
     PhysicalPredicate,
     RestrictionKind,
     SeriesScope,
+    admission,
 )
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import (
@@ -838,7 +839,8 @@ def test_outcome_boundaries_distinguish_no_match_unresolved_unsupported_and_fail
     )
     assert [item.status for item in finite_empty_owf.outcomes] == [OutcomeStatus.EMPTY]
 
-    # 3. UNSUPPORTED: cleared owf unit [] (station 203539 W-Monatsminima); cleared pegelLongterm ""; "m ü.A" stage.
+    # 3. UNSUPPORTED: cleared owf unit [] (station 203539 W-Monatsminima), cleared pegelLongterm "", unrecognized unit;
+    #    meanwhile "m ü.A" (Meter über Adria) stage is admitted with factor=1.0 and vertical_reference="above_sea_level".
     cleared_owf = parse(
         Payload(
             SourceCoordinates(AtEhydOwfCoordinates("owf_wasserst_monatsminima", "W-Monatsminima")),
@@ -899,7 +901,34 @@ def test_outcome_boundaries_distinguish_no_match_unresolved_unsupported_and_fail
         ),
         cfg,
     )
-    assert [item.status for item in mua_bgis.outcomes] == [OutcomeStatus.UNSUPPORTED]
+    assert OutcomeStatus.SUCCESS in {item.status for item in mua_bgis.outcomes}
+    assert mua_bgis.rows["source_unit"].to_list() == ["m ü.A"]
+    assert mua_bgis.rows["value"].to_list() == [pytest.approx(402.15)]
+    assert mua_bgis.series[0].facts[0].vertical_reference.value == "above_sea_level"
+    assert admission(mua_bgis.series[0].facts[0]).target_unit == "m"
+    assert admission(mua_bgis.series[0].facts[0]).factor == 1.0
+
+    unrecognized_bgis = parse(
+        Payload(
+            SourceCoordinates(AtEhydPegelCoordinates("pegel_bgis", "Wasserstand")),
+            (("210120", ProductId("pegel_bgis_wasserstand")),),
+            win,
+            json.dumps(
+                {
+                    "hzbnr": 210120,
+                    "parameter": "Wasserstand",
+                    "einheit": "‰",
+                    "valCount": 1,
+                    "categories": ["2026-10-31 10:00:00"],
+                    "data": [402.15],
+                }
+            ).encode("utf-8"),
+            _origin(),
+            (),
+        ),
+        cfg,
+    )
+    assert [item.status for item in unrecognized_bgis.outcomes] == [OutcomeStatus.UNSUPPORTED]
 
     # 4. FAILED: 0-byte owf, HZB-Nummer mismatch, pegelBgis hzbnr mismatch, Exportzeitreihe mismatch, malformed Lücke timestamp.
     failed_cases = [

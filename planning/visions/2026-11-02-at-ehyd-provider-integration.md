@@ -90,7 +90,8 @@ guide scoped to #618.
 Public retrieval must preserve the established series facts, absence states, and
 store invariants end-to-end:
 
-- Convert river stage from `cm` to `m` (`factor=0.01`, `vertical_reference="gauge_zero"`),
+- Convert stage from `cm` to `m` (`factor=0.01`, `vertical_reference="gauge_zero"`)
+  and `m ü.A` / `m ü.A.` (`Meter über Adria`, `factor=1.0`, `vertical_reference="above_sea_level"`),
   preserving negative stages below `Pegelnullpunkt`, zero discharge, and
   negative water temperatures (`°C` to `degC`).
 - Preserve row time zones (`"unknown"` on `owf` and `pegelLongterm`; `"+01:00"`
@@ -104,7 +105,7 @@ store invariants end-to-end:
 - Distinguish published `null` values (`pegelBgis` / interior `pegelLongterm`),
   omitted `'Lücke'` state-transition markers (`source.gap_marker` info issues),
   trimmed future-year `pegelLongterm` `null` tails, `NO_MATCH`, `UNSUPPORTED`
-  (`Einheit: ;[]`, cleared `einheit`, `m ü.A`), `UNRESOLVED` (`0`-byte or empty
+  (`Einheit: ;[]`, cleared `einheit`, or unrecognized unit strings), `UNRESOLVED` (`0`-byte or empty
   `Pegel Aktuell` responses and unpublished post-yearbook `2024..present`
   intervals), and `FAILED` requests.
 - Reuse cached `owf` observations offline (`0` network requests) when queries

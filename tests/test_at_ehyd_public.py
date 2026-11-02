@@ -675,8 +675,12 @@ def test_public_rolling_telemetry_accumulation_and_failed_refresh_retention(monk
     ]
 
 
-def test_public_unsupported_response_unit_and_empty_pegel_unresolved(monkeypatch: pytest.MonkeyPatch) -> None:
-    datum_doc = {
+def test_public_sea_level_stage_unsupported_response_unit_and_empty_pegel_unresolved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 1. "m ü.A" (Meter über Adria = meters above sea level) is admitted in m (factor=1.0)
+    #    with vertical_reference="above_sea_level", and withheld under vertical_reference="gauge_zero".
+    sea_level_doc = {
         "hzbnr": 206557,
         "parameter": "Wasserstand",
         "einheit": "m ü.A",
@@ -685,10 +689,10 @@ def test_public_unsupported_response_unit_and_empty_pegel_unresolved(monkeypatch
         "data": [412.35],
     }
 
-    class _DatumReplay:
+    class _SeaLevelReplay:
         def send(self, request: TransportRequest) -> TransportResponse:
             return TransportResponse(
-                json.dumps(datum_doc).encode("utf-8"),
+                json.dumps(sea_level_doc).encode("utf-8"),
                 200,
                 _RETRIEVED_AT,
                 "application/json",
@@ -696,8 +700,60 @@ def test_public_unsupported_response_unit_and_empty_pegel_unresolved(monkeypatch
                 request.params,
             )
 
-    monkeypatch.setattr(discovery, "HttpClient", _DatumReplay)
+    monkeypatch.setattr(discovery, "HttpClient", _SeaLevelReplay)
     stage_sel = _select_products("206557", "pegel_bgis_wasserstand")
+    sea_res = rr.fetch(stage_sel, start="2026-10-31T09:00:00", end="2026-10-31T11:00:00", cache="bypass")
+    assert sea_res.data["source_unit"].to_list() == ["m ü.A"]
+    assert sea_res.data["unit"].to_list() == ["m"]
+    assert sea_res.data["value"].to_list() == [pytest.approx(412.35)]
+    sea_facts = [fact for series in sea_res.source_series for fact in series.facts if fact.source_unit.value == "m ü.A"]
+    assert len(sea_facts) == 1
+    assert sea_facts[0].vertical_reference.value == "above_sea_level"
+    assert sea_facts[0].source_unit.evidence == ("https://ehyd.gv.at/services/Diagram/pegelBgis",)
+
+    gauge_zero_sel = rr.find(
+        provider="at_ehyd",
+        station="206557",
+        quantity="stage",
+        vertical_reference="gauge_zero",
+    )
+    gauge_zero_bgis = rr.pick(
+        gauge_zero_sel,
+        series_id=rr.as_frame(gauge_zero_sel)
+        .filter(pl.col("product_id") == "pegel_bgis_wasserstand")["series_id"]
+        .to_list(),
+    )
+    withheld_res = rr.fetch(
+        gauge_zero_bgis,
+        start="2026-10-31T09:00:00",
+        end="2026-10-31T11:00:00",
+        cache="bypass",
+        on_issue="ignore",
+    )
+    assert withheld_res.data.is_empty()
+
+    # 2. Unrecognized response unit ("‰") raises under on_issue="raise" and reports UNSUPPORTED under "ignore".
+    bad_unit_doc = {
+        "hzbnr": 206557,
+        "parameter": "Wasserstand",
+        "einheit": "‰",
+        "valCount": 1,
+        "categories": ["2026-10-31 10:00:00"],
+        "data": [412.35],
+    }
+
+    class _BadUnitReplay:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            return TransportResponse(
+                json.dumps(bad_unit_doc).encode("utf-8"),
+                200,
+                _RETRIEVED_AT,
+                "application/json",
+                request.url,
+                request.params,
+            )
+
+    monkeypatch.setattr(discovery, "HttpClient", _BadUnitReplay)
     with pytest.raises(IssuePolicyError):
         rr.fetch(stage_sel, start="2026-10-31T09:00:00", end="2026-10-31T11:00:00", cache="bypass", on_issue="raise")
 
@@ -710,11 +766,9 @@ def test_public_unsupported_response_unit_and_empty_pegel_unresolved(monkeypatch
     )
     assert unsupported.data.is_empty()
     assert OutcomeStatus.UNSUPPORTED in {item.status for item in unsupported.outcomes}
-    datum_facts = [
-        fact for series in unsupported.source_series for fact in series.facts if fact.source_unit.value == "m ü.A"
-    ]
-    assert len(datum_facts) == 1
-    assert datum_facts[0].source_unit.evidence == ("https://ehyd.gv.at/services/Diagram/pegelBgis",)
+    bad_facts = [fact for series in unsupported.source_series for fact in series.facts if fact.source_unit.value == "‰"]
+    assert len(bad_facts) == 1
+    assert bad_facts[0].source_unit.evidence == ("https://ehyd.gv.at/services/Diagram/pegelBgis",)
 
     class _EmptyBodyReplay:
         def send(self, request: TransportRequest) -> TransportResponse:
