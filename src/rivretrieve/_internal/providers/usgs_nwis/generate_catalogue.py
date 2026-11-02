@@ -466,21 +466,21 @@ def refresh_native_table(
     *,
     retrieved_at: RetrievedAt,
 ) -> WithIssues[NativeTable]:
-    expanded_by_site: dict[str, dict[str, str]] = {}
+    expanded_by_site: dict[tuple[str, str], dict[str, str]] = {}
     for item in expanded_rows:
         row = _validated_source_row(item, EXPANDED_HEADER, row_kind="expanded")
-        site_no = _required_site_no(row, row_kind="expanded")
+        site_no = (_required_site_no(row, row_kind="expanded"), row["agency_cd"])
         if site_no in expanded_by_site:
-            raise FatalContractError(f"USGS expanded input contains duplicate site_no {site_no!r}")
+            raise FatalContractError(f"USGS expanded input contains duplicate agency/site identity {site_no!r}")
         expanded_by_site[site_no] = row
     if not expanded_by_site:
         raise FatalContractError("USGS expanded input is empty")
 
-    series_records: dict[str, list[tuple[str, ...]]] = {}
-    series_shared: dict[str, tuple[str, ...]] = {}
+    series_records: dict[tuple[str, str], list[tuple[str, ...]]] = {}
+    series_shared: dict[tuple[str, str], tuple[str, ...]] = {}
     for item in series_rows:
         row = _validated_source_row(item, SERIES_HEADER, row_kind="series")
-        site_no = _required_site_no(row, row_kind="series")
+        site_no = (_required_site_no(row, row_kind="series"), row["agency_cd"])
         shared = tuple(row[name] for name in SHARED_STATION_FIELDS)
         previous_shared = series_shared.setdefault(site_no, shared)
         if shared != previous_shared:
