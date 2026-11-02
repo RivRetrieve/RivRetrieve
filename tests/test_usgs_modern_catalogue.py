@@ -409,3 +409,59 @@ def test_legacy_claims_match_modern_agency_and_number():
     modern = pl.DataFrame({"agency_code": ["USGS", "USGS"], "monitoring_location_number": ["001", "002"]})
     claims = catalogue_claims(legacy, {("dv", "00060", "00003"): "discharge_daily_mean"}, modern)
     assert claims.select("station_id", "published_id").rows() == [("002", "usgs-ts")]
+
+
+@pytest.mark.parametrize("next_suffix", ["&offset=1", "&offset=0", "&offset=1&state_code=55"])
+def test_location_recordings_follow_exact_publisher_chain_to_terminal_page(tmp_path, next_suffix):
+    import hashlib
+
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import read_monitoring_locations
+
+    first = "https://api.waterdata.usgs.gov/ogcapi/v1/collections/monitoring-locations/items?f=json&id=USGS-001%2CUSGS-002&limit=2"
+    second = first + next_suffix
+    selection = []
+    for index, (url, identifier, links) in enumerate(
+        [
+            (first, "USGS-001", [{"rel": "next", "href": second}]),
+            (second, "USGS-002", [{"rel": "next", "href": first + "&offset=2"}]),
+            (first + "&offset=2", None, []),
+        ]
+    ):
+        feature = {"type": "Feature", "id": identifier, "properties": {}, "geometry": None}
+        page_features = [] if identifier is None else [feature]
+        raw = json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": page_features,
+                "numberReturned": len(page_features),
+                "links": links,
+            }
+        ).encode()
+        body, receipt = f"page-{index}.gz", f"page-{index}.receipt.json"
+        (tmp_path / body).write_bytes(gzip.compress(raw))
+        (tmp_path / receipt).write_text(
+            json.dumps(
+                {
+                    "url": url,
+                    "final_url": url,
+                    "status": 200,
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                    "bytes": len(raw),
+                    "retrieved_at": "2026-11-01T00:00:00Z",
+                }
+            )
+        )
+        selection.append({"body": body, "receipt": receipt})
+    manifest = tmp_path / "locations.json"
+    manifest.write_text(json.dumps(selection))
+    if next_suffix != "&offset=1":
+        with pytest.raises(FatalContractError, match="changes identity|fails to advance"):
+            read_monitoring_locations(manifest)
+        return
+    assert [item["id"] for item in read_monitoring_locations(manifest)[0]] == ["USGS-001", "USGS-002"]
+    manifest.write_text(json.dumps(selection[:1]))
+    with pytest.raises(FatalContractError, match="incomplete"):
+        read_monitoring_locations(manifest)
+    manifest.write_text(json.dumps(selection[::-1]))
+    with pytest.raises(FatalContractError, match="offset|chain"):
+        read_monitoring_locations(manifest)

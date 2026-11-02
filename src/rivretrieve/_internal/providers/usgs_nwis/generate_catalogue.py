@@ -666,6 +666,10 @@ def read_monitoring_locations(manifest_path: Path):
         raise FatalContractError("Monitoring-location selection must be an array")
     features, receipts = [], []
     seen = set()
+    expected_url = None
+    batch_ids: set[str] = set()
+    batch_seen: set[str] = set()
+    batch_pages = 0
     for request in requests:
         paths = []
         for key in ("body", "receipt"):
@@ -695,6 +699,21 @@ def read_monitoring_locations(manifest_path: Path):
             raise FatalContractError("Monitoring-location request has an unsupported source URL")
         if query.get("f") != ["json"]:
             raise FatalContractError("Monitoring-location request URL contradicts selected identities")
+        try:
+            offset = int(query.get("offset", ["0"])[0])
+        except ValueError as exc:
+            raise FatalContractError("Monitoring-location offset is invalid") from exc
+        if expected_url is None:
+            if offset != 0:
+                raise FatalContractError("Monitoring-location chain must start at offset zero")
+            batch_ids = set(identities)
+            batch_seen = set()
+            batch_pages = 0
+        elif url != expected_url:
+            raise FatalContractError("Monitoring-location receipt breaks the publisher chain")
+        batch_pages += 1
+        if batch_pages > len(batch_ids) + 1:
+            raise FatalContractError("Monitoring-location pagination exceeds selected identities plus terminal page")
         raw = gzip.decompress(body_path.read_bytes())
         if (
             receipt.get("status") != 200
@@ -711,15 +730,40 @@ def read_monitoring_locations(manifest_path: Path):
             page.get("type") != "FeatureCollection"
             or not isinstance(page.get("features"), list)
             or page.get("numberReturned") != len(page["features"])
-            or any(link.get("rel") == "next" for link in page.get("links", []))
         ):
             raise FatalContractError("Monitoring-location batch is malformed or incomplete")
-        returned = [item.get("id") for item in page["features"]]
-        if len(returned) != len(set(returned)) or set(returned) != set(identities) or seen.intersection(returned):
+        returned = [_required_native_string(item.get("id"), "monitoring-location id") for item in page["features"]]
+        if len(returned) != len(set(returned)) or not set(returned) <= batch_ids or seen.intersection(returned):
             raise FatalContractError("Monitoring-location response identities do not resolve exactly")
         seen.update(returned)
+        batch_seen.update(returned)
+        links = [link["href"] for link in page.get("links", []) if link.get("rel") == "next"]
+        if len(links) > 1:
+            raise FatalContractError("Monitoring-location pagination is ambiguous")
+        expected_url = links[0] if links else None
+        if expected_url is not None:
+            following = urlsplit(expected_url)
+            next_query = parse_qs(following.query)
+            try:
+                next_offset = int(next_query.get("offset", ["0"])[0])
+            except ValueError as exc:
+                raise FatalContractError("Monitoring-location next offset is invalid") from exc
+            if (
+                following.scheme != parsed.scheme
+                or following.netloc != parsed.netloc
+                or following.path != parsed.path
+                or following.fragment
+                or {key: value for key, value in next_query.items() if key != "offset"}
+                != {key: value for key, value in query.items() if key != "offset"}
+                or next_offset <= offset
+            ):
+                raise FatalContractError("Monitoring-location next link changes identity or fails to advance")
+        elif batch_seen != batch_ids:
+            raise FatalContractError("Monitoring-location terminal batch identities do not resolve exactly")
         features.extend(page["features"])
         receipts.append(receipt)
+    if expected_url is not None:
+        raise FatalContractError("Monitoring-location publisher chain is incomplete")
     if not receipts:
         raise FatalContractError("Monitoring-location selection is empty")
     return features, receipts
