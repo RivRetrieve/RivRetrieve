@@ -106,6 +106,7 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
     provider = provenance.provider_id
     origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
     private_declarations = {
+        "declarations/usgs_nwis/retention.json": "declarations/usgs_nwis/retention.json",
         "maintenance/catalogue/usgs_nwis/selected-acquisitions.json": "declarations/usgs_nwis/selected-acquisitions.json",
         "maintenance/catalogue/usgs_nwis/retained-series.json": "declarations/usgs_nwis/retained-series.json",
         "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json": "declarations/ba_fhmzbih/baseline_workbook_access.json",
@@ -182,7 +183,11 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
 
     source_metadata_frame(metadata.select("provider_id", "station_id").unique(), metadata)
     assert set(metadata["provider_id"]) == {provider}
-    fields = origins.STATION_METADATA_FIELDS
+    fields = (
+        origins.LEGACY_STATION_METADATA_FIELDS
+        if provider == "usgs_nwis" and declaration_locations != origins.CATALOGUE_BUILD_DECLARATIONS
+        else origins.STATION_METADATA_FIELDS
+    )
     if provider == "fr_hubeau":
         recording_ids = tuple(
             entry.recording.recording_id
@@ -218,6 +223,11 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
                 if provider in {"ch_foen", "fr_hubeau", "usgs_nwis"}
                 else ("src/rivretrieve/_internal/catalogues/station_metadata.py", "build_station_metadata")
             )
+            if provider == "usgs_nwis" and declaration_locations == origins.CATALOGUE_BUILD_DECLARATIONS:
+                expected_location = (
+                    "src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py",
+                    "project_modern_station_metadata",
+                )
             if provider == "pl_imgw":
                 expected_location = (
                     "src/rivretrieve/_internal/providers/pl_imgw/station_metadata.py",
