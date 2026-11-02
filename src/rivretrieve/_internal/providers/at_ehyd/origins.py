@@ -101,6 +101,11 @@ _CATALOGUE_SOURCE_FACTS = {
         "source.station_product.owf_associations",
         "source.station_product.pegel_aktuell_associations",
         "source.station.pegelnullpunkt_definition",
+        "source.product.owf_export_descriptors",
+        "source.product.pegelordnung_temporal_rules",
+        "source.product.pegel_aktuell_coordinates",
+        "source.series.pegel_aktuell_fields",
+        "source.product.pegel_aktuell_temporal_meaning",
     ),
     "station_product": (
         "source.station.owf_registry",
@@ -121,8 +126,8 @@ def build_acquisition_provenance(
 ) -> AcquisitionProvenance:
     """Bind selected official eHYD source evidence and derived native table to catalogue facts.
 
-    Acquisitions and exact statements come from the verified selection. Temporal
-    meanings and record bounds remain unknown in canonical catalogue products.
+    Acquisitions and exact statements come from the verified selection. Unestablished
+    temporal meanings and record bounds remain unknown in canonical catalogue products.
     """
     if any(binding.source_id != "at_ehyd" or binding.transformation is not None for binding in source_bindings):
         raise ValueError("eHYD source bindings must directly identify selected acquisitions")
@@ -201,5 +206,6 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/at_ehyd/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/at_ehyd/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/providers/at_ehyd/generate_catalogue.py", "read_catalogue_sources"),
+    ("src/rivretrieve/_internal/providers/at_ehyd/series.py", "source_series"),
     ("src/rivretrieve/_internal/providers/at_ehyd/station_metadata.py", "project_station_metadata"),
 )

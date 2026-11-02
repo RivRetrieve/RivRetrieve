@@ -23,18 +23,15 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, st
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.providers.at_ehyd.series import (
+    IN_SCOPE_OWF_FTYPES,
+    association_product,
+    parse_owf_header_facts,
+    route_product_facts,
+    source_series,
+)
 
 STANDING_WATER_BODIES = frozenset({"Hinterer Gosausee", "Alte Donau"})
-
-IN_SCOPE_OWF_FTYPES = {
-    "owf_abfl_tagesmittel": ("Q-Tagesmittel", "m³/s"),
-    "owf_abfl_monatsminima": ("Q-Monatsminima", "m³/s"),
-    "owf_abfl_monatsmaxima": ("Q-Monatsmaxima", "m³/s"),
-    "owf_wasserst_tagesmittel": ("W-Tagesmittel", "cm"),
-    "owf_wasserst_monatsminima": ("W-Monatsminima", "cm"),
-    "owf_wasserst_monatsmaxima": ("W-Monatsmaxima", "cm"),
-    "owf_wassertemp_monatsmittel": ("WT-Monatsmittel", "°C"),
-}
 
 STATION_SOURCE_SCHEMA = pl.Schema(
     {
@@ -115,20 +112,6 @@ def _parse_stammdaten(raw: bytes, expected_hzb: str) -> tuple[str, bool]:
     if hzb != expected_hzb or not ezg:
         raise FatalContractError("eHYD Stammdaten CSV lacks matching HZB-Nummer or orogr.Einzugsgebiet")
     return ezg, has_seeflaeche
-
-
-def _parse_owf_unit(raw: bytes) -> str | None:
-    try:
-        text = raw.decode("cp1252")
-    except UnicodeDecodeError as error:
-        raise FatalContractError("eHYD owf series CSV is not valid Windows-1252 text") from error
-    for line in text.splitlines()[:40]:
-        if line.startswith("Einheit:"):
-            value = line.split(";", 1)[1].strip() if ";" in line else line.split(":", 1)[1].strip()
-            while value.startswith("[") and value.endswith("]"):
-                value = value[1:-1].strip()
-            return value or None
-    raise FatalContractError("eHYD owf series CSV lacks an Einheit header line")
 
 
 def _validate_row_types(values: dict[str, object]) -> None:
@@ -361,12 +344,20 @@ def owf_associations(
                 member_name = f"{folder}/{filename}"
                 if member_name not in members:
                     raise FatalContractError(f"eHYD national owf archive lacks {member_name}")
-                unit = _parse_owf_unit(archive.read(member_name))
-                if unit is None:
+                header = parse_owf_header_facts(archive.read(member_name), expected_ftyp=str(ftyp))
+                if header.unit is None or header.descriptor is None:
                     continue
-                if unit != expected_unit:
-                    raise FatalContractError(f"Unsupported eHYD owf unit {unit!r} for {ftyp}")
-                rows.append((hzb, "owf", str(ftyp), unit))
+                if header.unit != expected_unit:
+                    raise FatalContractError(f"Unsupported eHYD owf unit {header.unit!r} for {ftyp}")
+                if (
+                    header.descriptor.period_code == "T"
+                    and str(ftyp).endswith(("monatsminima", "monatsmaxima"))
+                    and (hzb, str(ftyp)) != ("207340", "owf_wasserst_monatsminima")
+                ):
+                    raise FatalContractError(
+                        f"Unexpected daily period code in monthly extrema {ftyp!r} at station {hzb}"
+                    )
+                rows.append((hzb, "owf", str(ftyp), header.unit))
     return pl.DataFrame(rows, schema=ASSOCIATION_SCHEMA, orient="row").unique().sort(ASSOCIATION_SCHEMA.names())
 
 
@@ -427,22 +418,6 @@ def pegel_aktuell_associations(
     return pl.DataFrame([(station, kind, str(parameter), unit)], schema=ASSOCIATION_SCHEMA, orient="row")
 
 
-def association_product(subsystem: str, variable: str) -> str:
-    if subsystem == "owf":
-        return variable
-    return f"{subsystem}_{variable.lower()}"
-
-
-def _quantity_and_canonical_unit(unit: str) -> tuple[str, str, str]:
-    if unit == "m³/s":
-        return "discharge", "m3/s", "m3/s"
-    if unit == "cm":
-        return "stage", "m", "cm"
-    if unit == "°C":
-        return "temperature", "degC", "degC"
-    raise FatalContractError(f"Unsupported eHYD source unit: {unit!r}")
-
-
 def catalogue_tables(
     native: NativeTable,
     associations: pl.DataFrame,
@@ -450,6 +425,7 @@ def catalogue_tables(
     checked_on: date,
 ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """Build witnessed eHYD product candidates and leave unestablished pairs unknown."""
+    from rivretrieve._internal.catalogues.products import product_row
     from rivretrieve._internal.catalogues.schemas import (
         PRODUCT_CATALOG_SCHEMA,
         STATION_CATALOG_SCHEMA,
@@ -466,24 +442,20 @@ def catalogue_tables(
     ).sort("station_id")
     if not set(associations["station_id"]) <= set(stations["station_id"]):
         raise FatalContractError("eHYD association references a station absent from canonical river scope")
-    product_rows = []
-    for subsystem, variable, unit in (
-        associations.select("subsystem", "variable", "unit").unique().sort("subsystem", "variable", "unit").iter_rows()
-    ):
-        observed_property, canonical_unit, _ = _quantity_and_canonical_unit(unit)
-        product_rows.append(
-            {
-                "provider_id": "at_ehyd",
-                "product_id": association_product(subsystem, variable),
-                "observed_property": observed_property,
-                "frequency": "unknown",
-                "statistic": "unknown",
-                "period_type": "unknown",
-                "period_anchor": "unknown",
-                "unit": canonical_unit,
-                "native_id": f"{subsystem}:{variable}:{unit}",
-            }
+    product_rows = [
+        product_row(
+            "at_ehyd",
+            association_product(subsystem, variable),
+            f"{subsystem}:{variable}:{unit}",
+            route_product_facts(subsystem, variable, unit),
         )
+        for subsystem, variable, unit in (
+            associations.select("subsystem", "variable", "unit")
+            .unique()
+            .sort("subsystem", "variable", "unit")
+            .iter_rows()
+        )
+    ]
     products = pl.DataFrame(product_rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
     observed = {
         (station, association_product(subsystem, variable))
@@ -520,50 +492,35 @@ def catalogue_tables(
 
 
 def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
-    """Describe witnessed eHYD source identities with established physical units and gauge-zero reference."""
+    """Describe witnessed eHYD source identities and established physical facts."""
     from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
-    from rivretrieve._internal.source_series import EvidenceFact, PhysicalFacts, SourceIdentity, known, stable_id
+    from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity
 
-    grouped: dict[tuple[str, str, str], list[str]] = {}
+    grouped: dict[tuple[str, str, SourceIdentity, tuple[PhysicalFacts, ...]], list[str]] = {}
     for station, subsystem, variable, unit in associations.unique().sort(ASSOCIATION_SCHEMA.names()).iter_rows():
-        grouped.setdefault((subsystem, variable, unit), []).append(station)
+        series = source_series(station, subsystem, variable, units=(unit,), origin="catalogue")
+        grouped.setdefault((series.product_id, variable, series.identity, series.facts), []).append(station)
 
-    descriptions = []
-    for (subsystem, variable, unit), station_list in sorted(grouped.items()):
-        evidence = (
-            "catalogue:at_ehyd:source.station_product.owf_associations"
-            if subsystem == "owf"
-            else "catalogue:at_ehyd:source.station_product.pegel_aktuell_associations"
+    descriptions = [
+        SourceDescription(
+            product_id=product_id,
+            station_ids=tuple(sorted(station_list)),
+            identity_key=(identity.namespace, identity.published_id),
+            native_coordinate=variable,
+            identity=identity,
+            facts=facts,
         )
-        quantity, _, normalized_unit = _quantity_and_canonical_unit(unit)
-        vertical_ref = (
-            known("gauge_zero", "catalogue:at_ehyd:source.station.pegelnullpunkt_definition")
-            if unit == "cm"
-            else EvidenceFact()
+        for (product_id, variable, identity, facts), station_list in sorted(
+            grouped.items(),
+            key=lambda item: (
+                item[0][0],
+                item[0][1],
+                item[0][2].namespace,
+                item[0][2].published_id,
+                sorted(item[1])[0],
+            ),
         )
-        facts = PhysicalFacts(
-            facts_id="pending",
-            quantity=known(quantity, evidence),
-            source_unit=known(unit, evidence),
-            normalized_unit=normalized_unit,
-            vertical_reference=vertical_ref,
-        )
-        facts = facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})
-        descriptions.append(
-            SourceDescription(
-                product_id=association_product(subsystem, variable),
-                station_ids=tuple(sorted(station_list)),
-                identity_key=(subsystem, variable, unit),
-                native_coordinate=variable,
-                identity=SourceIdentity(
-                    namespace=f"ehyd.{subsystem}",
-                    published_id=variable,
-                    origin="catalogue",
-                    evidence=(evidence,),
-                ),
-                facts=(facts,),
-            )
-        )
+    ]
     return SourceDescriptions(provider_id="at_ehyd", descriptions=tuple(descriptions))
 
 
@@ -814,6 +771,24 @@ def read_catalogue_sources(
             for cid in ("i000501:messstellen_owf", "i000501:pegel_aktuell"):
                 if collections.get(cid, {}).get("storageCrs") != "http://www.opengis.net/def/crs/OGC/1.3/CRS84":
                     raise FatalContractError("LFRZ collection storageCrs does not establish CRS84")
+        elif kind == "ehyd_index":
+            if b"main-UFXEVZGM.js" not in content:
+                raise FatalContractError("eHYD index HTML lacks expected main bundle reference")
+        elif kind == "ehyd_main_bundle":
+            for marker in (
+                b"Gepr\\xFCfte Daten",
+                b"chunk-XKX4RDEK.js",
+                b"pegelBgis",
+                b"pegelLongterm",
+            ):
+                if marker not in content:
+                    raise FatalContractError("eHYD main bundle lacks required route or quality marker")
+        elif kind == "ehyd_diagram_bundle":
+            for marker in (b"Zeitangaben in MEZ", b"ungepr\\xFCfte Rohdaten!", b"current_value"):
+                if marker not in content:
+                    raise FatalContractError("eHYD diagram bundle lacks required temporal or field marker")
+        elif kind in {"ehyd_aktuelle_daten_pdf", "pegelordnung_pdf"} and not content.startswith(b"%PDF-"):
+            raise FatalContractError(f"eHYD {kind} body is not a PDF document")
 
     if ehyd_owf_doc is None or owf_zip_bytes is None:
         raise FatalContractError("eHYD selection lacks owf registry or national archive")
