@@ -1580,3 +1580,13 @@ def test_evidence_rejects_indirect_cycles_after_valid_relation_shapes() -> None:
     )
     with pytest.raises(ValidationError, match="cycle"):
         CatalogueEvidence.model_validate(_change(chain, "external_inputs", cyclic))
+
+
+def test_registered_usgs_baseline_rejects_changed_historical_declaration():
+    original = _legacy("usgs_nwis")
+    assert original.build_inputs.build.revision == "7dd47d9ec899eec2b2b91a111e7372222073c031"
+    metadata = pl.read_parquet(ROOT / "usgs_nwis/catalogue/station_metadata.parquet")
+    payload = original.model_dump(mode="json")
+    payload["build_inputs"]["declarations"][-1]["symbol"] = "unreviewed_projection"
+    with pytest.raises(AssertionError):
+        historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)

@@ -86,6 +86,27 @@ def remove_external_inputs(directory: Path, groups: tuple[str, ...]) -> None:
     )
 
 
+# Exact registered-baseline declarations at public revision 7dd47d9ec899eec2b2b91a111e7372222073c031.
+_USGS_REGISTERED_BASELINE_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
+    ("maintenance/catalogue/usgs_nwis/selected-acquisitions.json", None),
+    ("maintenance/catalogue/usgs_nwis/retained-series.json", None),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "retain_source_descriptions"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "selected_native_provenance"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "station_metadata_supporting_inputs"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_NOTICE"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py", "project_station_metadata"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "modern_source_descriptions"),
+)
+
+
 def historical_source_provenance(provenance, metadata, *, declaration_locations=None):
     """Validate publication-only additions before projecting an immutable old oracle.
 
@@ -116,7 +137,11 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
         "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv": "declarations/th_thaiwater/governing_station_product_evidence.csv",
     }
     if declaration_locations is None:
-        declaration_locations = origins.CATALOGUE_BUILD_DECLARATIONS
+        declaration_locations = (
+            _USGS_REGISTERED_BASELINE_DECLARATIONS
+            if provider == "usgs_nwis" and build.build.revision == "7dd47d9ec899eec2b2b91a111e7372222073c031"
+            else origins.CATALOGUE_BUILD_DECLARATIONS
+        )
     expected_declarations = tuple(
         (
             "https://github.com/RivRetrieve/verification-evidence"
