@@ -6,7 +6,7 @@ Work proceeds under the established [evidence process](../../docs/maintenance/ev
 
 ## Supported scope and coverage
 
-Include eligible monitoring locations and distinct published series across the 50 United States and District of Columbia without stream-only (`siteType=ST`) or daily-data availability (`hasDataTypeCd=dv`) exclusions. Retain all previously registered stations (27,934) and all 11 Canadian daily stations (`04010500`, `04024000`, `04024430`, `04040500`, `04045500`, `04071058`, `04071765`, `040851385`, `04087119`, `04087130`, `04240105`):
+Include eligible monitoring locations and distinct published series across the 50 United States and District of Columbia without stream-only (`siteType=ST`) or daily-data availability (`hasDataTypeCd=dv`) exclusions. Retain all previously registered stations (27,934) and all 11 Canadian daily stations (`01129300`, `05020500`, `06133000`, `06134000`, `06134500`, `06145500`, `06149500`, `06164000`, `06178500`, `12355000`, `15388960`):
 
 1. **Continuous-only monitoring locations**: Include stations publishing instantaneous continuous telemetry (`uv`) for discharge (`00060`) or stage (`00065`) without published daily summary averages (`dv`).
 2. **Non-stream monitoring locations**: Include eligible monitoring locations publishing supported discharge or stage across canals, flumes, lakes, reservoirs, estuaries, and agricultural runoff sites (such as Discovery Farms).
