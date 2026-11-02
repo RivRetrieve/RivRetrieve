@@ -1119,8 +1119,10 @@ def write_catalogue(
         MODERN_STATION_CATALOGUE_ORIGINS as STATION_CATALOGUE_ORIGINS,
     )
     from rivretrieve._internal.providers.usgs_nwis.origins import (
-        STATION_METADATA_FIELDS,
+        SELECTED_SOURCE_ROLES,
         STATION_METADATA_NOTICE,
+        selected_role_inputs,
+        selected_station_metadata_fields,
     )
 
     if catalogue.source_descriptions is None:
@@ -1133,13 +1135,8 @@ def write_catalogue(
     if acquisition_provenance is None:
         raise FatalContractError("Catalogue publication requires explicit acquisition_provenance")
 
-    if catalogue.retained_series_ids and not any(
-        "source.series.retained_historical_metadata" in binding.facts
-        and binding.acquisition_id is not None
-        and binding.transformation is None
-        for binding in acquisition_provenance.fact_bindings
-    ):
-        raise FatalContractError("Historical series require explicit historical acquisition support")
+    if catalogue.retained_series_ids:
+        selected_role_inputs(acquisition_provenance, "retained_historical_metadata")
     if legacy_table is None:
         raise FatalContractError("Modern publication requires explicit legacy enrichment and claims input")
     output_path = Path(out_dir)
@@ -1160,9 +1157,8 @@ def write_catalogue(
     station_origin = STATION_CATALOGUE_ORIGINS["station_id"]
     if not isinstance(station_origin, Field):
         raise FatalContractError("USGS metadata requires a native station identity field")
-    station_metadata = project_modern_station_metadata(
-        native_table, legacy_table, catalogue.stations, STATION_METADATA_FIELDS
-    )
+    metadata_fields = selected_station_metadata_fields(provenance)
+    station_metadata = project_modern_station_metadata(native_table, legacy_table, catalogue.stations, metadata_fields)
     metadata = build_catalogue_metadata(
         provenance,
         (STATION_CATALOGUE_ORIGINS,),
@@ -1175,13 +1171,20 @@ def write_catalogue(
         ),
         build_inputs=build_inputs,
         native_table=native_table,
-        metadata_fields=STATION_METADATA_FIELDS,
+        metadata_fields=metadata_fields,
         station_metadata=station_metadata,
         metadata_implementation=(
             "src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py",
             "project_modern_station_metadata",
         ),
         station_metadata_notice=STATION_METADATA_NOTICE,
+        transformation_implementations={
+            f"selected_{role}": (
+                "src/rivretrieve/_internal/providers/usgs_nwis/origins.py",
+                "build_modern_acquisition_provenance",
+            )
+            for role in SELECTED_SOURCE_ROLES
+        },
     )
     from rivretrieve._internal.catalogues.source_series import decode_source_descriptions, encode_source_descriptions
 
@@ -1326,9 +1329,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if not adopted.data.equals(native.data):
             raise FatalContractError("Rebuilt modern stations differ from the adopted native projection")
-        legacy_inputs = [
-            item for item in build_inputs.inputs if "source.station.legacy_sitefile_attributes" in item.facts
-        ]
+        from rivretrieve._internal.providers.usgs_nwis.origins import selected_role_inputs
+
+        legacy_facts = set(selected_role_inputs(provenance, "legacy_sitefile_attributes"))
+        legacy_inputs = [item for item in build_inputs.inputs if legacy_facts <= set(item.facts)]
         if len(legacy_inputs) != 1:
             raise FatalContractError("Modern publication requires one adopted legacy enrichment table")
         reference = legacy_inputs[0].reference
