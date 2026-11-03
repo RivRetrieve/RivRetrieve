@@ -403,3 +403,49 @@ def test_recorded_pegel_aktuell_rolling_accumulation_null_preservation_and_outco
         assert parsed.series[0].facts[0].vertical_reference.value == "above_sea_level"
         assert admission(parsed.series[0].facts[0]).target_unit == "m"
         assert admission(parsed.series[0].facts[0]).factor == 1.0
+
+
+@pytest.mark.recorded(_SCOPE)
+def test_recorded_cleared_unit_unsupported_sibling_survival_on_211078(
+    retained_evidence_root: Path, tmp_path: Path
+) -> None:
+    class _Transport211078:
+        calls = 0
+
+        def send(self, request: TransportRequest) -> TransportResponse:
+            self.calls += 1
+            params = dict(request.params or {})
+            if request.url.endswith("/Messstellen/info"):
+                assert params == {"hzbnr": "211078"}
+                return _response_from_capture(retained_evidence_root, "verification", "messstellen-info-211078")
+            file_nr = str(params["file"])
+            capture_name = "owf-211078-file2-w-tagesmittel" if file_nr == "2" else "owf-211078-file5-q-tagesmittel"
+            return _response_from_capture(retained_evidence_root, "verification", capture_name)
+
+    transport = _Transport211078()
+    req = ObservationRequest(
+        provider_id=ProviderId("at_ehyd"),
+        stations=("211078",),
+        products=(ProductId("owf_wasserst_tagesmittel"), ProductId("owf_abfl_tagesmittel")),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2020, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2020, 1, 10, 23, 59, 59)),
+        ),
+    )
+    res = drive(
+        req,
+        _AtEhydStages(),
+        provenance=_provenance(req),
+        transport=transport,
+        cache="reuse",
+        store=StoreRoot(tmp_path / "store_211078"),
+    )
+    assert transport.calls == 3
+    assert res.canonical_rows["product_id"].unique().to_list() == ["owf_abfl_tagesmittel"]
+    assert res.canonical_rows.height == 10
+    assert [item.status for item in res.outcomes if item.product_id == "owf_wasserst_tagesmittel"] == [
+        OutcomeStatus.UNSUPPORTED
+    ]
+    assert [item.status for item in res.outcomes if item.product_id == "owf_abfl_tagesmittel"] == [
+        OutcomeStatus.SUCCESS
+    ]
