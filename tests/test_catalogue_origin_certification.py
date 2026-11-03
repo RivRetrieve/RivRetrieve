@@ -1036,7 +1036,7 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
         pytest.param(
             "usgs_nwis",
             marks=pytest.mark.governing(
-                *_catalogue_recording_paths("usgs_nwis"),
+                *_catalogue_recording_paths("usgs_nwis", scopes=("maintenance/catalogue/usgs_nwis",)),
                 "maintenance/catalogue/usgs_nwis",
                 "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
                 "tests/test_data/usgs_nwis_terms_citation-1.html",
