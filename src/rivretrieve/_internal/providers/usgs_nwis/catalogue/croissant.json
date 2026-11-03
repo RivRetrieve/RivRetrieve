@@ -42,6 +42,8 @@
       "name": "RivRetrieve"
     }
   ],
+  "license": "USGS-authored or produced data and information are considered to be in the U.S. Public Domain.",
+  "citation": "Example of how to cite USGS Water Data for the Nation in general: U.S. Geological Survey, [2024], USGS Water Data for the Nation: U.S. Geological Survey National Water Information System database, accessed [April 8, 2024], at https://doi.org/10.5066/F7P55KJN.",
   "distribution": [
     {
       "@id": "provider.json",
@@ -80,16 +82,16 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "9b616f81b3939c7e5b0bb1abd7368a8b9a1e97d63cfccd1442b7e1e8b5392cc5",
-      "contentSize": "1430668 B"
+      "sha256": "19996fb5025d18d3388f228622714ecc0155a6148ec00d538230e6a27c8ac7d0",
+      "contentSize": "1431843 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "b060bba8fed4dc289a79df92f9b05c9f0cdce14d605c27a61b0e92045deecf87",
-      "contentSize": "3040 B"
+      "sha256": "0bd0697cfb2ab7eb226d2251512321d2bee9810471a205ae58e6510668c8f94d",
+      "contentSize": "3038 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
@@ -104,24 +106,24 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "29c306cedd01e2233ed08df42c8e4e7413e38157b7e105490df8fc94fbbc5bce",
-      "contentSize": "2662 B"
+      "sha256": "ab158fbe6623b9ff964de81124d3d4eb6458c55c1eca6ff49b41b1186de3d9e7",
+      "contentSize": "2690 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "abd69a2dcf00c06af012090dca00beafcffce041847d94925565acc06f87e330",
-      "contentSize": "1426 B"
+      "sha256": "06fde03e536212119432e7cc559d22b2be82db5ba0674696501fa69b7684453c",
+      "contentSize": "1424 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "f11cd3bd504a788671c550f5405bbec96a8e8499352359ea52dc60a9aac7fee2",
-      "contentSize": "1644 B"
+      "sha256": "1c0f24b07f7fef09601193f6b6fa65da5052cd6265d822f78927c1dd106ec342",
+      "contentSize": "1660 B"
     },
     {
       "@id": "format.json",
