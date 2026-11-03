@@ -50,14 +50,14 @@ for how to supply them.
 | Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Bulk download |
 | Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 558 | Open |
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
-| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 26,201 | Open |
+| United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 29,387 | Open |
 
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
 Austria's `at_ehyd` catalogue retains 746 river station identities; 744 have selectable series in this snapshot.
 See the [Austrian provider guide](https://rivretrieve.github.io/providers/at_ehyd/) for catalogue coverage and limitations.
 Switzerland's `ch_foen` catalogue retains 1,341 stations; 558 have selectable official series in this snapshot.
 See the [Swiss provider guide](https://rivretrieve.github.io/providers/ch_foen/) for catalogue coverage and limitations.
-The USGS catalogue retains 26,258 station identities; 26,201 have selectable modern series in this snapshot.
+The USGS catalogue retains 29,642 station identities; 29,387 have selectable series in this snapshot.
 A station can appear under both French services; their series remain separate.
 
 </details>

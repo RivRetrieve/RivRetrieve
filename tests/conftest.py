@@ -34,8 +34,16 @@ def isolated_runtime_inputs(monkeypatch, tmp_path):
     """Keep ambient configuration out without replacing test-selected stores or dotenv."""
     from rivretrieve._internal import discovery
     from rivretrieve._internal.providers import registration
+    from rivretrieve._internal.store.remote import S3_ENV_VARIABLE_NAMES
 
-    for name in ("RIVRETRIEVE_CACHE_DIR", "NVE_API_KEY", "USGS_API_KEY", "ANA_IDENTIFICADOR", "ANA_SENHA"):
+    for name in (
+        "RIVRETRIEVE_CACHE_DIR",
+        "NVE_API_KEY",
+        "USGS_API_KEY",
+        "ANA_IDENTIFICADOR",
+        "ANA_SENHA",
+        *S3_ENV_VARIABLE_NAMES,
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("NETRC", str(tmp_path / "absent.netrc"))
     monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost,::1")
@@ -523,7 +531,7 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
         supporting_inputs = {}
         supporting_declarations = (
             origins.station_metadata_supporting_inputs(provenance)
-            if provenance.provider_id in {"ch_foen", "fr_hubeau"}
+            if provenance.provider_id in {"ch_foen", "fr_hubeau", "usgs_nwis"}
             else origins.CATALOGUE_SUPPORTING_INPUTS
         )
         for fact, paths in supporting_declarations.items():
@@ -537,6 +545,8 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
                 if "source.station.native_identity" in binding.facts and binding.transformation is None
             )
             if provenance.provider_id == "ch_foen"
+            else origins.selected_native_acquisition_ids(provenance)
+            if provenance.provider_id == "usgs_nwis"
             else origins.NATIVE_TABLE_ACQUISITION_IDS
         )
         if provenance.provider_id in {"at_ehyd", "ch_foen"}:
