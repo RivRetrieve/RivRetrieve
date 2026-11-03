@@ -101,8 +101,10 @@ def _adapter(
         native_path = handoff / "modern-native.parquet"
         features, _ = generator.read_modern_metadata(handoff / "modern-metadata")
         locations, _ = generator.read_monitoring_locations(handoff / "monitoring-locations/locations.json")
-        historical, _ = generator.read_modern_metadata(handoff / "retained-metadata")
-        retention = json.loads((handoff / "retention.json").read_text())
+        from rivretrieve._internal.providers.usgs_nwis.retention import load_historical_features, read_retention
+
+        retention = read_retention(handoff / "retention.json")
+        historical = load_historical_features(retention, retained_evidence_root)
         from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
 
         baseline_path = "maintenance/catalogue/usgs_nwis/baseline-monitoring-locations.json"
@@ -118,8 +120,8 @@ def _adapter(
                 baseline_locations=baseline_locations,
                 retrieved_at=RetrievedAt(native.data["retrieved_at"].max()),
                 historical_features=historical,
-                retained_series_ids=tuple(retention["historical_series_ids"]),
-                retained_locations=tuple(retention["retained_station_ids"]),
+                retained_series_ids=retention.historical_series_ids,
+                retained_locations=retention.retained_station_ids,
                 origins=origins,
             )
             pl_testing.assert_frame_equal(generated.source_native, native.data)
@@ -271,8 +273,17 @@ def test_usgs_adapter_builds_modern_sources_with_explicit_origins(monkeypatch, t
     (handoff / "retention.json").write_text(
         json.dumps(
             {
-                "schema_version": 1,
-                "historical_series_ids": ["retained"],
+                "schema_version": 2,
+                "historical_sources": [
+                    {
+                        "consumer_directory": "maintenance/catalogue/usgs_nwis/retained-metadata",
+                        "series_ids": ["retained-metadata"],
+                    },
+                    {
+                        "consumer_directory": "maintenance/catalogue/usgs_nwis/retained-metadata-october",
+                        "series_ids": ["retained-metadata-october"],
+                    },
+                ],
                 "retained_station_ids": ["USGS-001"],
             }
         )
@@ -309,17 +320,20 @@ def test_usgs_adapter_builds_modern_sources_with_explicit_origins(monkeypatch, t
         main=lambda argv: 0,
     )
     monkeypatch.setattr(__import__(__name__, fromlist=["_module"]), "_module", lambda *args: generator)
+    from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as usgs_generator
+
+    monkeypatch.setattr(usgs_generator, "read_modern_metadata", read)
     adapter = _adapter(tmp_path, "usgs_nwis", (), input_receipt=receipt)
     origins = {"station_id": object()}
     adapter.build(native, origins)
     assert adapter.native_path == handoff / "modern-native.parquet"
-    assert reads == [handoff / "modern-metadata", handoff / "retained-metadata"]
+    assert reads == [handoff / "modern-metadata", handoff / "retained-metadata", handoff / "retained-metadata-october"]
     assert seen == {
         "baseline_locations": baseline,
         "features": [{"id": "modern-metadata"}],
         "locations": [{"id": "USGS-001"}],
-        "historical_features": [{"id": "retained-metadata"}],
-        "retained_series_ids": ("retained",),
+        "historical_features": [{"id": "retained-metadata"}, {"id": "retained-metadata-october"}],
+        "retained_series_ids": ("retained-metadata", "retained-metadata-october"),
         "retained_locations": ("USGS-001",),
         "retrieved_at": RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
         "origins": origins,
