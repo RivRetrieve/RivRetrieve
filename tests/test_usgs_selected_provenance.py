@@ -296,6 +296,17 @@ def test_two_event_graph_publishes_and_loads_legacy_claims(tmp_path, monkeypatch
     assert summary["drainage_area_field"].to_list() == [["contrib_drain_area_va"]]
     assert summary["elevation_value"].to_list() == [['"3"']]
     descriptor = rr.describe("usgs_nwis")
+    from rivretrieve._internal.catalogues.terms import verified_catalogue_terms
+
+    expected_terms = {
+        statement.kind: statement.exact_text
+        for statement in graph.source_records[0].statements
+        if statement.kind in {"license", "citation"}
+    }
+    assert verified_catalogue_terms(loaded.acquisition_provenance) == expected_terms
+    for kind, exact_text in expected_terms.items():
+        assert loaded.provider_info[kind] is None
+        assert descriptor[kind] == exact_text
     assert any(item["contentUrl"] == "provenance_facts.parquet" for item in descriptor["distribution"])
 
 
@@ -317,3 +328,22 @@ def test_selected_graph_keeps_historical_and_current_observation_routes_independ
         "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items",
         "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items",
     )
+
+
+def test_selected_provider_terms_depend_only_on_usgs_issuer():
+    from rivretrieve._internal.acquisition_provenance import verified_provider_terms
+
+    graph = selected_graph()
+    source = next(source for source in graph.source_records if source.source_id == "usgs_nwis")
+    expected = {
+        statement.kind: statement.exact_text
+        for statement in source.statements
+        if statement.kind in {"license", "citation"} and statement.verification_status == "verified_public_recording"
+    }
+    assert set(expected) == {"license", "citation"}
+    assert verified_provider_terms(graph.source_records, graph.fact_bindings, graph.withheld_facts) == expected
+    for kind in expected:
+        binding = next(binding for binding in graph.fact_bindings if f"provider.{kind}" in binding.facts)
+        assert [(ref.source_id, ref.fact) for ref in binding.transformation.external_inputs] == [
+            ("usgs_nwis", f"source.usgs.{kind}_statement")
+        ]

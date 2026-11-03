@@ -66,6 +66,8 @@ def _inputs(provider: str):
     origins = (
         (module.HYDROMETRY_STATION_CATALOGUE_ORIGINS, module.TEMPERATURE_STATION_CATALOGUE_ORIGINS)
         if provider == "fr_hubeau"
+        else (module.MODERN_STATION_CATALOGUE_ORIGINS,)
+        if provider == "usgs_nwis"
         else (module.STATION_CATALOGUE_ORIGINS,)
     )
     files = {
