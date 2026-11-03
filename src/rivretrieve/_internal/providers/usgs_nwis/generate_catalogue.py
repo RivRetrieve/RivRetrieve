@@ -822,7 +822,7 @@ def build_modern_catalogue(
     inputs. They do not restrict modern station or series existence.
     """
     from rivretrieve._internal.providers.usgs_nwis.catalogue_series import (
-        MODERN_PRODUCT_ROUTES,
+        modern_product,
         modern_source_descriptions,
         retain_source_descriptions,
     )
@@ -830,8 +830,7 @@ def build_modern_catalogue(
     selected_historical = [item for item in historical_features if item.get("id") in retained_series_ids]
     selected = set()
     for item in [*features, *selected_historical]:
-        key = (item.get("parameter_code"), item.get("computation_period_identifier"), item.get("statistic_id"))
-        if key in MODERN_PRODUCT_ROUTES:
+        if modern_product(item) is not None:
             location = item.get("monitoring_location_id")
             if not isinstance(location, str) or not location:
                 raise FatalContractError("Modern source series has no monitoring-location identity")
