@@ -796,7 +796,7 @@ NATIVE_TABLE_ACQUISITION_IDS = (
 CATALOGUE_BUILD_DECLARATIONS = (
     ("maintenance/catalogue/station_metadata/review.json", None),
     ("maintenance/catalogue/usgs_nwis/selected-acquisitions.json", None),
-    ("declarations/usgs_nwis/retention.json", None),
+    ("maintenance/catalogue/usgs_nwis/retention.json", None),
     ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "retain_source_descriptions"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
@@ -830,9 +830,30 @@ CATALOGUE_SUPPORTING_INPUTS = {
 }
 
 
+def selected_native_acquisition_ids(provenance: AcquisitionProvenance) -> tuple[str, ...]:
+    """Select original events represented by the adopted modern station table."""
+    facts = set(selected_role_inputs(provenance, "modern_monitoring_locations"))
+    return tuple(
+        dict.fromkeys(
+            binding.acquisition_id
+            for binding in provenance.fact_bindings
+            if facts.intersection(binding.facts) and binding.acquisition_id is not None
+        )
+    )
+
+
 def station_metadata_supporting_inputs(provenance: AcquisitionProvenance) -> dict[str, tuple[str, ...]]:
-    """Select the historical native member only for explicitly retained station facts."""
+    """Select adopted legacy and baseline support for the declared source roles."""
     supporting: dict[str, tuple[str, ...]] = dict(CATALOGUE_SUPPORTING_INPUTS)
+    if "selected.modern_monitoring_locations" in provenance.fact_universe:
+        for role in ("legacy_sitefile_attributes", "legacy_series_claims"):
+            for fact in selected_role_inputs(provenance, role):
+                supporting[fact] = ("maintenance/catalogue/usgs_nwis/legacy-native.parquet",)
+        supporting["source.station.baseline_identity"] = (
+            "maintenance/catalogue/usgs_nwis/baseline-monitoring-locations.json",
+            "maintenance/catalogue/usgs_nwis/baseline/recovery.receipt.json",
+        )
+        return supporting
     for binding in provenance.fact_bindings:
         if binding.acquisition_id == "national_site_campaign_2026_08_02":
             for fact in binding.facts:

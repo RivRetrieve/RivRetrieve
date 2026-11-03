@@ -1388,7 +1388,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         from rivretrieve._internal.providers.usgs_nwis.origins import selected_role_inputs
 
         legacy_facts = set(selected_role_inputs(provenance, "legacy_sitefile_attributes"))
-        legacy_inputs = [item for item in build_inputs.inputs if legacy_facts <= set(item.facts)]
+        legacy_inputs = [
+            item
+            for item in build_inputs.inputs
+            if legacy_facts <= set(item.facts)
+            and item.usage == "reviewed_support"
+            and item.reference.role == "derived_input"
+        ]
         if len(legacy_inputs) != 1:
             raise FatalContractError("Modern publication requires one adopted legacy enrichment table")
         reference = legacy_inputs[0].reference
