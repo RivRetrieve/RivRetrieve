@@ -243,6 +243,7 @@ _france_origins = _module("fr_hubeau", "origins")
 DECLARATIONS = {
     ProviderId(provider): _stations_case(provider)
     for provider in (
+        "au_bom",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
@@ -344,7 +345,16 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
     def withheld() -> Withheld:
         return Withheld()
 
+    from rivretrieve._internal.providers.au_bom.origins import GeorefsystemToEpsgConversion
+
     return {
+        (ProviderId("au_bom"), "stations"): {
+            "provider_id": authored("au_bom"),
+            "station_id": field("station_no"),
+            "latitude": field("station_latitude"),
+            "longitude": field("station_longitude"),
+            "crs": field("station_georefsystem", GeorefsystemToEpsgConversion()),
+        },
         (ProviderId("br_ana"), "stations"): {
             "provider_id": authored("br_ana"),
             "station_id": field("codigoestacao"),

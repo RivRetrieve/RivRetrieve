@@ -142,6 +142,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 
 | Provider | Observation kind | Required credential variables | Stations | Available pairs | Unknown pairs | Unavailable pairs |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
+| `au_bom` | catalogue-only | none | 8120 | 94412 | 51748 | 0 |
 | `ba_fhmzbih` | live | none | 60 | 132 | 48 | 0 |
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
@@ -162,6 +163,24 @@ Access coordinates and declared units come from products.parquet. These are inte
 
 | Provider | Product | Canonical unit |
 | --- | --- | --- |
+| `au_bom` | `discharge_daily_max` | `m3/s` |
+| `au_bom` | `discharge_daily_mean_09hr` | `m3/s` |
+| `au_bom` | `discharge_daily_mean_24hr` | `m3/s` |
+| `au_bom` | `discharge_daily_min` | `m3/s` |
+| `au_bom` | `discharge_hourly_mean` | `m3/s` |
+| `au_bom` | `discharge_monthly_mean` | `m3/s` |
+| `au_bom` | `discharge_yearly_mean` | `m3/s` |
+| `au_bom` | `stage_daily_max` | `m` |
+| `au_bom` | `stage_daily_mean` | `m` |
+| `au_bom` | `stage_daily_min` | `m` |
+| `au_bom` | `stage_hourly_mean` | `m` |
+| `au_bom` | `stage_monthly_mean` | `m` |
+| `au_bom` | `stage_yearly_mean` | `m` |
+| `au_bom` | `water_temperature_daily_max` | `degC` |
+| `au_bom` | `water_temperature_daily_mean` | `degC` |
+| `au_bom` | `water_temperature_daily_min` | `degC` |
+| `au_bom` | `water_temperature_monthly_mean` | `degC` |
+| `au_bom` | `water_temperature_yearly_mean` | `degC` |
 | `ba_fhmzbih` | `discharge_reported` | `m3/s` |
 | `ba_fhmzbih` | `stage_reported` | `m` |
 | `ba_fhmzbih` | `water_temperature_reported` | `degC` |
