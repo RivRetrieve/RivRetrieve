@@ -23,7 +23,7 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.providers.au_bom.generate_catalogue import PRODUCT_DEFINITIONS
+from rivretrieve._internal.providers.au_bom.series import PRODUCT_DEFINITIONS
 
 # ts_unitsymbol per quantity, confirmed live and stable across every admitted
 # series checked (research/au-bom-source-access.md, 2026-11-03 retrieval pass).

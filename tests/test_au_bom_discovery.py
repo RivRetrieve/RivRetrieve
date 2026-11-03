@@ -1,4 +1,4 @@
-"""Offline discovery contracts for au_bom (CatalogueOnly, no network)."""
+"""Offline discovery contracts for au_bom: find/pick/providers/as_frame stay network-free."""
 
 from __future__ import annotations
 
@@ -9,15 +9,15 @@ import pytest
 
 import rivretrieve as rr
 from rivretrieve._internal.providers.au_bom.declaration import declaration
-from rivretrieve._internal.providers.registration import CatalogueOnly
+from rivretrieve._internal.providers.registration import LiveStages
 
 
 def _deny_network(*args: object, **kwargs: object) -> None:
     raise AssertionError("au_bom discovery must not use the network")
 
 
-def test_declaration_is_catalogue_only_with_no_credentials() -> None:
-    assert isinstance(declaration.observations, CatalogueOnly)
+def test_declaration_is_live_stages_with_no_credentials() -> None:
+    assert isinstance(declaration.observations, LiveStages)
     assert declaration.required_credentials == ()
     assert declaration.optional_credentials == ()
 
@@ -31,18 +31,6 @@ def test_au_bom_is_registered_and_discoverable(monkeypatch: pytest.MonkeyPatch) 
     assert row.height == 1
     assert row["access"].item() == "open"
     assert row["credentials"].to_list() == [[]]
-
-
-def test_fetch_refuses_without_live_stages(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(socket.socket, "connect", _deny_network)
-    monkeypatch.setattr(socket, "create_connection", _deny_network)
-
-    selection = rr.find(provider="au_bom", station="001101A")
-    frame = rr.as_frame(selection)
-    assert frame.height > 0
-    assert set(frame["provider_id"]) == {"au_bom"}
-    with pytest.raises(Exception):  # noqa: B017 - CatalogueOnly must refuse observation retrieval
-        rr.fetch(selection, start="2020-01-01", end="2020-01-02")
 
 
 def test_eighteen_products_across_three_quantities() -> None:

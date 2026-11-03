@@ -2,7 +2,7 @@
 
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
-from rivretrieve._internal.providers.au_bom.generate_catalogue import PRODUCT_DEFINITIONS
+from rivretrieve._internal.providers.au_bom.series import PRODUCT_DEFINITIONS
 from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, known
 
 EVIDENCE = "https://www.bom.gov.au/waterdata/services?service=kisters&type=queryServices&request=getrequestinfo&format=html&desc=getall"

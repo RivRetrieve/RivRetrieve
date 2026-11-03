@@ -1,8 +1,8 @@
 """BoM KiWIS series identity and per-series physical evidence."""
 
+from dataclasses import dataclass
 from typing import Literal
 
-from rivretrieve._internal.providers.au_bom.generate_catalogue import PRODUCT_DEFINITIONS
 from rivretrieve._internal.source_series import (
     ClippingAxis,
     PhysicalFacts,
@@ -10,6 +10,208 @@ from rivretrieve._internal.source_series import (
     SourceSeries,
     known,
     stable_id,
+)
+
+# Shared with generate_catalogue.py (maintainer-tier): this dataclass and tuple live
+# here, not there, because declaration.py's runtime import graph (series.py <- parse.py
+# <- declaration.py) must never reach generate_catalogue.py, a MAINTAINER_ROLES module
+# (tests/test_provider_architecture_contracts.py). generate_catalogue.py imports these
+# from series.py instead.
+
+
+@dataclass(frozen=True)
+class ProductDefinition:
+    product_id: str
+    observed_property: str
+    quantity: str
+    frequency: str
+    statistic: str
+    canonical_unit: str
+    native_id: str
+    timeseries_list_kind: str
+
+
+PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
+    ProductDefinition(
+        "discharge_hourly_mean",
+        "discharge",
+        "discharge",
+        "hourly",
+        "mean",
+        "m3/s",
+        "DMQaQc.Merged.HourlyMean.HR",
+        "timeseries_list_discharge_HourlyMean_HR",
+    ),
+    ProductDefinition(
+        "discharge_daily_mean_24hr",
+        "discharge",
+        "discharge",
+        "daily",
+        "mean",
+        "m3/s",
+        "DMQaQc.Merged.DailyMean.24HR",
+        "timeseries_list_discharge_DailyMean_24HR",
+    ),
+    ProductDefinition(
+        "discharge_daily_mean_09hr",
+        "discharge",
+        "discharge",
+        "daily",
+        "mean",
+        "m3/s",
+        "DMQaQc.Merged.DailyMean.09HR",
+        "timeseries_list_discharge_DailyMean_09HR",
+    ),
+    ProductDefinition(
+        "discharge_daily_max",
+        "discharge",
+        "discharge",
+        "daily",
+        "max",
+        "m3/s",
+        "DMQaQc.Merged.DailyMax.24HR",
+        "timeseries_list_discharge_DailyMax_24HR",
+    ),
+    ProductDefinition(
+        "discharge_daily_min",
+        "discharge",
+        "discharge",
+        "daily",
+        "min",
+        "m3/s",
+        "DMQaQc.Merged.DailyMin.24HR",
+        "timeseries_list_discharge_DailyMin_24HR",
+    ),
+    ProductDefinition(
+        "discharge_monthly_mean",
+        "discharge",
+        "discharge",
+        "monthly",
+        "mean",
+        "m3/s",
+        "DMQaQc.Merged.MonthlyMean.CalMonth",
+        "timeseries_list_discharge_MonthlyMean_CalMonth",
+    ),
+    ProductDefinition(
+        "discharge_yearly_mean",
+        "discharge",
+        "discharge",
+        "yearly",
+        "mean",
+        "m3/s",
+        "DMQaQc.Merged.YearlyMean.CalYear",
+        "timeseries_list_discharge_YearlyMean_CalYear",
+    ),
+    ProductDefinition(
+        "stage_hourly_mean",
+        "stage",
+        "stage",
+        "hourly",
+        "mean",
+        "m",
+        "DMQaQc.Merged.HourlyMean.HR",
+        "timeseries_list_stage_HourlyMean_HR",
+    ),
+    ProductDefinition(
+        "stage_daily_mean",
+        "stage",
+        "stage",
+        "daily",
+        "mean",
+        "m",
+        "DMQaQc.Merged.DailyMean.24HR",
+        "timeseries_list_stage_DailyMean_24HR",
+    ),
+    ProductDefinition(
+        "stage_daily_max",
+        "stage",
+        "stage",
+        "daily",
+        "max",
+        "m",
+        "DMQaQc.Merged.DailyMax.24HR",
+        "timeseries_list_stage_DailyMax_24HR",
+    ),
+    ProductDefinition(
+        "stage_daily_min",
+        "stage",
+        "stage",
+        "daily",
+        "min",
+        "m",
+        "DMQaQc.Merged.DailyMin.24HR",
+        "timeseries_list_stage_DailyMin_24HR",
+    ),
+    ProductDefinition(
+        "stage_monthly_mean",
+        "stage",
+        "stage",
+        "monthly",
+        "mean",
+        "m",
+        "DMQaQc.Merged.MonthlyMean.CalMonth",
+        "timeseries_list_stage_MonthlyMean_CalMonth",
+    ),
+    ProductDefinition(
+        "stage_yearly_mean",
+        "stage",
+        "stage",
+        "yearly",
+        "mean",
+        "m",
+        "DMQaQc.Merged.YearlyMean.CalYear",
+        "timeseries_list_stage_YearlyMean_CalYear",
+    ),
+    ProductDefinition(
+        "water_temperature_daily_mean",
+        "water_temperature",
+        "temperature",
+        "daily",
+        "mean",
+        "degC",
+        "DMQaQc.Merged.DailyMean.24HR",
+        "timeseries_list_temperature_DailyMean_24HR",
+    ),
+    ProductDefinition(
+        "water_temperature_daily_max",
+        "water_temperature",
+        "temperature",
+        "daily",
+        "max",
+        "degC",
+        "DMQaQc.Merged.DailyMax.24HR",
+        "timeseries_list_temperature_DailyMax_24HR",
+    ),
+    ProductDefinition(
+        "water_temperature_daily_min",
+        "water_temperature",
+        "temperature",
+        "daily",
+        "min",
+        "degC",
+        "DMQaQc.Merged.DailyMin.24HR",
+        "timeseries_list_temperature_DailyMin_24HR",
+    ),
+    ProductDefinition(
+        "water_temperature_monthly_mean",
+        "water_temperature",
+        "temperature",
+        "monthly",
+        "mean",
+        "degC",
+        "DMQaQc.Merged.MonthlyMean.CalMonth",
+        "timeseries_list_temperature_MonthlyMean_CalMonth",
+    ),
+    ProductDefinition(
+        "water_temperature_yearly_mean",
+        "water_temperature",
+        "temperature",
+        "yearly",
+        "mean",
+        "degC",
+        "DMQaQc.Merged.YearlyMean.CalYear",
+        "timeseries_list_temperature_YearlyMean_CalYear",
+    ),
 )
 
 EVIDENCE = (

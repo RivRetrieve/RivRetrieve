@@ -28,6 +28,7 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.au_bom.series import PRODUCT_DEFINITIONS
 
 PROVIDER_ID = ProviderId("au_bom")
 PROVIDER_NAME = "Bureau of Meteorology (BoM) Water Data Online"
@@ -46,201 +47,6 @@ NATIVE_SCHEMA = pl.Schema({**NATIVE_SOURCE_SCHEMA, "retrieved_at": pl.Datetime(t
 
 ASSOCIATION_SCHEMA = pl.Schema({"station_no": pl.String, "product_id": pl.String})
 
-
-@dataclass(frozen=True)
-class ProductDefinition:
-    product_id: str
-    observed_property: str
-    quantity: str
-    frequency: str
-    statistic: str
-    canonical_unit: str
-    native_id: str
-    timeseries_list_kind: str
-
-
-PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
-    ProductDefinition(
-        "discharge_hourly_mean",
-        "discharge",
-        "discharge",
-        "hourly",
-        "mean",
-        "m3/s",
-        "DMQaQc.Merged.HourlyMean.HR",
-        "timeseries_list_discharge_HourlyMean_HR",
-    ),
-    ProductDefinition(
-        "discharge_daily_mean_24hr",
-        "discharge",
-        "discharge",
-        "daily",
-        "mean",
-        "m3/s",
-        "DMQaQc.Merged.DailyMean.24HR",
-        "timeseries_list_discharge_DailyMean_24HR",
-    ),
-    ProductDefinition(
-        "discharge_daily_mean_09hr",
-        "discharge",
-        "discharge",
-        "daily",
-        "mean",
-        "m3/s",
-        "DMQaQc.Merged.DailyMean.09HR",
-        "timeseries_list_discharge_DailyMean_09HR",
-    ),
-    ProductDefinition(
-        "discharge_daily_max",
-        "discharge",
-        "discharge",
-        "daily",
-        "max",
-        "m3/s",
-        "DMQaQc.Merged.DailyMax.24HR",
-        "timeseries_list_discharge_DailyMax_24HR",
-    ),
-    ProductDefinition(
-        "discharge_daily_min",
-        "discharge",
-        "discharge",
-        "daily",
-        "min",
-        "m3/s",
-        "DMQaQc.Merged.DailyMin.24HR",
-        "timeseries_list_discharge_DailyMin_24HR",
-    ),
-    ProductDefinition(
-        "discharge_monthly_mean",
-        "discharge",
-        "discharge",
-        "monthly",
-        "mean",
-        "m3/s",
-        "DMQaQc.Merged.MonthlyMean.CalMonth",
-        "timeseries_list_discharge_MonthlyMean_CalMonth",
-    ),
-    ProductDefinition(
-        "discharge_yearly_mean",
-        "discharge",
-        "discharge",
-        "yearly",
-        "mean",
-        "m3/s",
-        "DMQaQc.Merged.YearlyMean.CalYear",
-        "timeseries_list_discharge_YearlyMean_CalYear",
-    ),
-    ProductDefinition(
-        "stage_hourly_mean",
-        "stage",
-        "stage",
-        "hourly",
-        "mean",
-        "m",
-        "DMQaQc.Merged.HourlyMean.HR",
-        "timeseries_list_stage_HourlyMean_HR",
-    ),
-    ProductDefinition(
-        "stage_daily_mean",
-        "stage",
-        "stage",
-        "daily",
-        "mean",
-        "m",
-        "DMQaQc.Merged.DailyMean.24HR",
-        "timeseries_list_stage_DailyMean_24HR",
-    ),
-    ProductDefinition(
-        "stage_daily_max",
-        "stage",
-        "stage",
-        "daily",
-        "max",
-        "m",
-        "DMQaQc.Merged.DailyMax.24HR",
-        "timeseries_list_stage_DailyMax_24HR",
-    ),
-    ProductDefinition(
-        "stage_daily_min",
-        "stage",
-        "stage",
-        "daily",
-        "min",
-        "m",
-        "DMQaQc.Merged.DailyMin.24HR",
-        "timeseries_list_stage_DailyMin_24HR",
-    ),
-    ProductDefinition(
-        "stage_monthly_mean",
-        "stage",
-        "stage",
-        "monthly",
-        "mean",
-        "m",
-        "DMQaQc.Merged.MonthlyMean.CalMonth",
-        "timeseries_list_stage_MonthlyMean_CalMonth",
-    ),
-    ProductDefinition(
-        "stage_yearly_mean",
-        "stage",
-        "stage",
-        "yearly",
-        "mean",
-        "m",
-        "DMQaQc.Merged.YearlyMean.CalYear",
-        "timeseries_list_stage_YearlyMean_CalYear",
-    ),
-    ProductDefinition(
-        "water_temperature_daily_mean",
-        "water_temperature",
-        "temperature",
-        "daily",
-        "mean",
-        "degC",
-        "DMQaQc.Merged.DailyMean.24HR",
-        "timeseries_list_temperature_DailyMean_24HR",
-    ),
-    ProductDefinition(
-        "water_temperature_daily_max",
-        "water_temperature",
-        "temperature",
-        "daily",
-        "max",
-        "degC",
-        "DMQaQc.Merged.DailyMax.24HR",
-        "timeseries_list_temperature_DailyMax_24HR",
-    ),
-    ProductDefinition(
-        "water_temperature_daily_min",
-        "water_temperature",
-        "temperature",
-        "daily",
-        "min",
-        "degC",
-        "DMQaQc.Merged.DailyMin.24HR",
-        "timeseries_list_temperature_DailyMin_24HR",
-    ),
-    ProductDefinition(
-        "water_temperature_monthly_mean",
-        "water_temperature",
-        "temperature",
-        "monthly",
-        "mean",
-        "degC",
-        "DMQaQc.Merged.MonthlyMean.CalMonth",
-        "timeseries_list_temperature_MonthlyMean_CalMonth",
-    ),
-    ProductDefinition(
-        "water_temperature_yearly_mean",
-        "water_temperature",
-        "temperature",
-        "yearly",
-        "mean",
-        "degC",
-        "DMQaQc.Merged.YearlyMean.CalYear",
-        "timeseries_list_temperature_YearlyMean_CalYear",
-    ),
-)
 
 STATION_LIST_KINDS = ("station_list_discharge", "station_list_stage", "station_list_temperature")
 
@@ -406,7 +212,11 @@ def build_provider_info(
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": "false: catalogue-only station discovery; observation retrieval is unavailable",
+        "bulk_observations": (
+            "true: a station's getTimeseriesList lookup is shared across every requested product; "
+            "a station's duplicate ts_id for one product are combined into one getTimeseriesValues call; "
+            "HTTP 500 retried by the shared transport before being reported as a recoverable issue"
+        ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": license_text,
         "citation": citation_text,

@@ -28,6 +28,7 @@ from rivretrieve._internal.providers.registration import CatalogueOnly, load_man
 
 BOUNDARIES = "https://naturalearth.s3.amazonaws.com/50m_cultural/ne_50m_admin_0_countries.zip"
 PROVIDER_COUNTRY = {
+    "au_bom": "AUS",
     "ba_fhmzbih": "BIH",
     "br_ana": "BRA",
     "ca_eccc": "CAN",
@@ -44,7 +45,6 @@ PROVIDER_COUNTRY = {
 }
 PLANNED_COUNTRY = {
     "ARG": "Argentina",
-    "AUS": "Australia",
     "AUT": "Austria",
     "BEL": "Belgium (Flanders, Wallonia)",
     "CHL": "Chile",

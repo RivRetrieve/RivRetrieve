@@ -17,8 +17,7 @@ from rivretrieve._internal.providers.au_bom.config import (
     AuBomTimeseriesValuesCoordinates,
 )
 from rivretrieve._internal.providers.au_bom.fetch import resolve_timeseries_list
-from rivretrieve._internal.providers.au_bom.generate_catalogue import PRODUCT_DEFINITIONS
-from rivretrieve._internal.providers.au_bom.series import describe_series
+from rivretrieve._internal.providers.au_bom.series import PRODUCT_DEFINITIONS, describe_series
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
