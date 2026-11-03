@@ -619,15 +619,50 @@ def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[N
 
 def read_modern_metadata(directory: Path):
     """Verify exact publisher bytes and every link in both saved metadata chains."""
+    from urllib.parse import parse_qs, urlsplit
+
     features = []
     receipts = []
     for parameter in ("00060", "00065"):
         completion = json.loads((directory / f"metadata-{parameter}-completion.json").read_text())
-        if completion["status"] != "complete" or completion["active_filter"] is not None or completion["sorting"]:
+        required = {"status", "pages", "features"}
+        optional = {"parameter_code", "reason", "active_filter", "sorting", "last_url"}
+        if (
+            not isinstance(completion, dict)
+            or not required <= completion.keys()
+            or completion.keys() - required - optional
+            or completion["status"] != "complete"
+            or type(completion["pages"]) is not int
+            or completion["pages"] < 1
+            or type(completion["features"]) is not int
+            or completion["features"] < 0
+            or ("active_filter" in completion and completion["active_filter"] is not None)
+            or ("sorting" in completion and completion["sorting"] is not False)
+            or ("parameter_code" in completion and completion["parameter_code"] != parameter)
+            or ("reason" in completion and not isinstance(completion["reason"], str))
+        ):
             raise FatalContractError("Modern metadata must include complete unsorted discontinued records")
         expected = f"https://api.waterdata.usgs.gov/ogcapi/v1/collections/time-series-metadata/items?f=json&parameter_code={parameter}&limit=10000"
         count = 0
+        seen = set()
         for index in range(completion["pages"]):
+            if expected is None or expected in seen:
+                raise FatalContractError("Modern metadata pagination terminates early or repeats a request")
+            parsed = urlsplit(expected)
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            if (
+                parsed.scheme != "https"
+                or parsed.netloc != "api.waterdata.usgs.gov"
+                or parsed.path != "/ogcapi/v1/collections/time-series-metadata/items"
+                or parsed.fragment
+                or query.get("f") != ["json"]
+                or query.get("parameter_code") != [parameter]
+                or query.get("limit") != ["10000"]
+                or set(query) - {"f", "parameter_code", "limit", "cursor"}
+                or ("cursor" in query and (len(query["cursor"]) != 1 or not query["cursor"][0]))
+            ):
+                raise FatalContractError("Modern metadata pagination changes requested scope")
+            seen.add(expected)
             stem = f"metadata-{parameter}-{index:04d}"
             receipt = json.loads((directory / f"{stem}.receipt.json").read_text())
             raw = gzip.decompress((directory / f"{stem}.json.gz").read_bytes())
@@ -649,7 +684,11 @@ def read_modern_metadata(directory: Path):
                 features.append(properties)
             count += len(page["features"])
             receipts.append(receipt)
-        if expected is not None or count != completion["features"] or receipts[-1]["url"] != completion["last_url"]:
+        if (
+            expected is not None
+            or count != completion["features"]
+            or ("last_url" in completion and receipts[-1]["url"] != completion["last_url"])
+        ):
             raise FatalContractError("Modern metadata chain is incomplete")
     return features, receipts
 

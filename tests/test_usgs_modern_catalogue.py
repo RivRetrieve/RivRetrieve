@@ -665,3 +665,80 @@ def test_legacy_alternative_rows_preserve_exact_fields_and_matching_series():
             [first, second],
             retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
         )
+
+
+@pytest.mark.parametrize("historical", [False, True])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        None,
+        "filtered",
+        "sorted",
+        "cycle",
+        "count",
+        "last_url",
+        "pages",
+        "unknown",
+        "active_claim",
+        "sort_claim",
+        "unterminated",
+    ],
+)
+def test_metadata_completion_uses_verified_request_scope(tmp_path, historical, mutation):
+    import hashlib
+
+    for parameter in ("00060", "00065"):
+        first = f"https://api.waterdata.usgs.gov/ogcapi/v1/collections/time-series-metadata/items?f=json&parameter_code={parameter}&limit=10000"
+        second = first + "&cursor=next"
+        if mutation == "filtered":
+            second += "&active=true"
+        if mutation == "sorted":
+            second += "&sortby=id"
+        if mutation == "cycle":
+            second = first
+        for index, url in enumerate((first, second)):
+            page = {
+                "type": "FeatureCollection",
+                "features": [],
+                "numberReturned": 0,
+                "links": [{"rel": "next", "href": second}] if index == 0 or mutation == "unterminated" else [],
+            }
+            raw = json.dumps(page).encode()
+            stem = f"metadata-{parameter}-{index:04d}"
+            (tmp_path / f"{stem}.json.gz").write_bytes(gzip.compress(raw))
+            (tmp_path / f"{stem}.receipt.json").write_text(
+                json.dumps(
+                    {
+                        "url": url,
+                        "final_url": url,
+                        "status": 200,
+                        "bytes": len(raw),
+                        "sha256": hashlib.sha256(raw).hexdigest(),
+                    }
+                )
+            )
+        completion = {"status": "complete", "pages": 2, "features": 0}
+        if historical:
+            completion.update(
+                parameter_code=parameter, active_filter=None, sorting=False, last_url=second, reason="terminated"
+            )
+        if mutation == "count":
+            completion["features"] = 1
+        if mutation == "last_url":
+            completion["last_url"] = first
+        if mutation == "pages":
+            completion["pages"] = True
+        if mutation == "unknown":
+            completion["unexpected"] = "value"
+        if mutation == "active_claim":
+            completion["active_filter"] = True
+        if mutation == "sort_claim":
+            completion["sorting"] = True
+        (tmp_path / f"metadata-{parameter}-completion.json").write_text(json.dumps(completion))
+    if mutation:
+        with pytest.raises(FatalContractError):
+            read_modern_metadata(tmp_path)
+    else:
+        features, receipts = read_modern_metadata(tmp_path)
+        assert features == []
+        assert len(receipts) == 4
