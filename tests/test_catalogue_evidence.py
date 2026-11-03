@@ -27,7 +27,7 @@ from rivretrieve._internal.catalogues.evidence_encoding import (
     reconstruct_provenance,
 )
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
-from tests._provenance import historical_source_provenance
+from tests._provenance import historical_source_provenance, registered_usgs_baseline
 
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 
@@ -668,8 +668,11 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
 
 @pytest.mark.parametrize("provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p != "ch_foen"))
 def test_historical_projection_preserves_sources_and_validates_metadata(provider):
-    original = _legacy(provider)
-    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    if provider == "usgs_nwis":
+        original, metadata = registered_usgs_baseline()
+    else:
+        original = _legacy(provider)
+        metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     assert projected.source_records == original.source_records
     assert not any(fact.startswith("metadata.") for fact in projected.fact_universe)
@@ -677,8 +680,11 @@ def test_historical_projection_preserves_sources_and_validates_metadata(provider
 
 @pytest.mark.parametrize("provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p != "ch_foen"))
 def test_historical_projection_rejects_changed_current_producer(provider):
-    original = _legacy(provider)
-    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    if provider == "usgs_nwis":
+        original, metadata = registered_usgs_baseline()
+    else:
+        original = _legacy(provider)
+        metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     payload = original.model_dump(mode="json")
     # Even metadata-empty forms must validate their declared current producers.
     transformations = [
@@ -1583,9 +1589,8 @@ def test_evidence_rejects_indirect_cycles_after_valid_relation_shapes() -> None:
 
 
 def test_registered_usgs_baseline_rejects_changed_historical_declaration():
-    original = _legacy("usgs_nwis")
-    assert original.build_inputs.build.revision == "7dd47d9ec899eec2b2b91a111e7372222073c031"
-    metadata = pl.read_parquet(ROOT / "usgs_nwis/catalogue/station_metadata.parquet")
+    original, metadata = registered_usgs_baseline()
+    historical_source_provenance(original, metadata)
     payload = original.model_dump(mode="json")
     payload["build_inputs"]["declarations"][-1]["symbol"] = "unreviewed_projection"
     with pytest.raises(AssertionError):

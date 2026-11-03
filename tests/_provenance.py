@@ -107,6 +107,22 @@ _USGS_REGISTERED_BASELINE_DECLARATIONS = (
 )
 
 
+def registered_usgs_baseline():
+    """Read the public ef92fc04 graph and one gauge's exact metadata rows.
+
+    The fixture retains the 7dd47d9e build's complete lineage and declarations.
+    Its five metadata rows cover every adopted field and datum association;
+    full catalogue/source verification remains in the retained-evidence suite.
+    Original public Git revision and artifact digests accompany the projection.
+    """
+    from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA
+
+    document = json.loads((Path(__file__).parent / "fixtures/usgs_registered_baseline.json").read_text())
+    provenance = AcquisitionProvenance.model_validate(document["provenance"])
+    assert provenance.build_inputs.build.revision == "7dd47d9ec899eec2b2b91a111e7372222073c031"
+    return provenance, pl.DataFrame(document["metadata"], schema=SOURCE_METADATA_SCHEMA)
+
+
 def historical_source_provenance(provenance, metadata, *, declaration_locations=None):
     """Validate publication-only additions before projecting an immutable old oracle.
 
