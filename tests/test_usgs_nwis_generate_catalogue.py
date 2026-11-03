@@ -19,14 +19,13 @@ from rivretrieve._internal.catalogues.schemas import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as generator
 from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import PRODUCT_DEFINITIONS
-from rivretrieve._internal.providers.usgs_nwis.origins import STATION_CATALOGUE_ORIGINS
 from rivretrieve._internal.recordings import read_recording
 
 # Decoded historical native-table subsets, not HTTP response recordings.
 # Exact equality with the retained snapshot is tested below.
 SERIES_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_series.json")
 EXPANDED_FIXTURE_PATH = Path("tests/test_data/usgs_nwis_metadata_expanded.json")
-NATIVE_PATH = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+NATIVE_PATH = Path("tests/test_data/usgs_nwis_historical/native.parquet")
 CATALOGUE_PATH = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue")
 ATTESTED_DATETIME = datetime(2026, 8, 2, 1, 14, 11, tzinfo=UTC)
 ATTESTED_RETRIEVED_AT = RetrievedAt(ATTESTED_DATETIME)
@@ -262,17 +261,6 @@ def _frame_content_sha256(frame: pl.DataFrame) -> str:
     return hashlib.sha256(json.dumps(rows, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
-def test_existing_generation_path_does_not_fabricate_all_unknown_station_products(
-    retained_evidence_root,
-) -> None:
-    catalogue = generator.build_catalogue(
-        read_native_table(retained_evidence_root / NATIVE_PATH), STATION_CATALOGUE_ORIGINS
-    )
-
-    assert "unknown" not in set(catalogue.station_products["availability"].cast(str))
-
-
 @pytest.mark.derived("tests/test_data/usgs_nwis_metadata_series.json")
 def test_strict_rdb_parser_preserves_source_strings_and_empty_fields(
     retained_evidence_root,
@@ -357,7 +345,6 @@ def test_refresh_rejects_absent_or_blank_site_no(retained_evidence_root, site_no
             series,
             expanded,
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            input_kind=generator.NativeInputKind.FIXTURE,
         )
 
 
@@ -365,39 +352,16 @@ def test_refresh_rejects_absent_or_blank_site_no(retained_evidence_root, site_no
     "tests/test_data/usgs_nwis_metadata_expanded.json",
     "tests/test_data/usgs_nwis_metadata_series.json",
 )
-def test_refresh_rejects_duplicate_expanded_site(
-    retained_evidence_root,
-) -> None:
-    expanded = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
-
-    with pytest.raises(FatalContractError, match="duplicate"):
-        generator.refresh_native_table(
-            _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH),
-            [expanded[0], dict(expanded[0])],
-            retrieved_at=ATTESTED_RETRIEVED_AT,
-            input_kind=generator.NativeInputKind.FIXTURE,
-        )
-
-
-@pytest.mark.parametrize("orphan_pass", ["series", "expanded"])
-@pytest.mark.derived(
-    "tests/test_data/usgs_nwis_metadata_expanded.json",
-    "tests/test_data/usgs_nwis_metadata_series.json",
-)
-def test_refresh_rejects_cross_pass_orphan(retained_evidence_root, orphan_pass: str) -> None:
+def test_refresh_rejects_series_without_expanded_site(retained_evidence_root) -> None:
     series = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
     expanded = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
-    if orphan_pass == "series":
-        series[0]["site_no"] = "99999999"
-    else:
-        expanded[0]["site_no"] = "99999999"
+    series[0]["site_no"] = "99999999"
 
-    with pytest.raises(FatalContractError, match="site sets"):
+    with pytest.raises(FatalContractError, match="series identities have no expanded site record"):
         generator.refresh_native_table(
             series,
             expanded,
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            input_kind=generator.NativeInputKind.FIXTURE,
         )
 
 
@@ -416,7 +380,6 @@ def test_refresh_rejects_conflicting_repeated_fact_within_series(
             series,
             _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH),
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            input_kind=generator.NativeInputKind.FIXTURE,
         )
 
 
@@ -435,7 +398,6 @@ def test_refresh_rejects_conflicting_repeated_fact_between_passes(
             _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH),
             expanded,
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            input_kind=generator.NativeInputKind.FIXTURE,
         )
 
 
@@ -454,299 +416,7 @@ def test_refresh_rejects_malformed_series_shape(
             series,
             _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH),
             retrieved_at=ATTESTED_RETRIEVED_AT,
-            input_kind=generator.NativeInputKind.FIXTURE,
         )
-
-
-@pytest.mark.derived(
-    "tests/test_data/usgs_nwis_metadata_expanded.json",
-    "tests/test_data/usgs_nwis_metadata_series.json",
-)
-def test_refresh_rejects_missing_required_data_type(
-    retained_evidence_root,
-) -> None:
-    series = [row for row in _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH) if row["data_type_cd"] == "dv"]
-
-    with pytest.raises(FatalContractError, match="dv and uv"):
-        generator.refresh_native_table(
-            series,
-            _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH),
-            retrieved_at=ATTESTED_RETRIEVED_AT,
-            input_kind=generator.NativeInputKind.FIXTURE,
-        )
-
-
-@pytest.mark.derived(
-    "tests/test_data/usgs_nwis_metadata_expanded.json",
-    "tests/test_data/usgs_nwis_metadata_series.json",
-)
-def test_fixture_refresh_is_exempt_from_live_minimum(
-    retained_evidence_root,
-) -> None:
-    outcome = _fixture_refresh(retained_evidence_root)
-
-    assert outcome.value.data.height == 1
-
-
-@pytest.mark.derived(
-    "tests/test_data/usgs_nwis_metadata_expanded.json",
-    "tests/test_data/usgs_nwis_metadata_series.json",
-)
-def test_supplied_national_refresh_enforces_live_minimum(
-    retained_evidence_root,
-) -> None:
-    expanded_template = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)[0]
-    series_template = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)[0]
-    expanded_rows: list[dict[str, str]] = []
-    series_rows: list[dict[str, str]] = []
-    for index in range(9_999):
-        site_no = f"{index:08d}"
-        expanded_rows.append({**expanded_template, "site_no": site_no})
-        for definition in PRODUCT_DEFINITIONS:
-            data_type_cd, parm_cd, stat_cd = definition.series_key
-            series_rows.append(
-                {
-                    **series_template,
-                    "site_no": site_no,
-                    "data_type_cd": data_type_cd,
-                    "parm_cd": parm_cd,
-                    "stat_cd": stat_cd,
-                }
-            )
-
-    with pytest.raises(
-        FatalContractError,
-        match="USGS supplied-national native input has only 9,999 stations; expected at least 10,000",
-    ):
-        generator.refresh_native_table(
-            series_rows,
-            expanded_rows,
-            retrieved_at=ATTESTED_RETRIEVED_AT,
-            input_kind=generator.NativeInputKind.SUPPLIED_NATIONAL,
-        )
-
-
-def _national_product_records(*, omitted_key: tuple[str, str, str] | None = None) -> dict[str, list[tuple[str, ...]]]:
-    records: list[tuple[str, ...]] = []
-    for definition in PRODUCT_DEFINITIONS:
-        key = definition.series_key
-        if key == omitted_key:
-            continue
-        record = dict.fromkeys(SERIES_ONLY_FIELDS, "")
-        record.update(zip(("data_type_cd", "parm_cd", "stat_cd"), key, strict=True))
-        records.append(tuple(record[name] for name in SERIES_ONLY_FIELDS))
-    return {"national": records}
-
-
-def test_national_product_validation_rejects_a_product_with_zero_matching_rows() -> None:
-    missing_key = ("dv", "00065", "00001")
-
-    with pytest.raises(FatalContractError, match="zero matching series rows"):
-        generator._validate_national_products(_national_product_records(omitted_key=missing_key))
-
-
-def test_national_product_validation_accepts_the_complete_product_key_set() -> None:
-    generator._validate_national_products(_national_product_records())
-
-
-def test_station_product_matching_covers_absent_unique_duplicate_agreeing_blank_and_conflicting_series() -> None:
-    definitions = {definition.product_id: definition for definition in PRODUCT_DEFINITIONS}
-    first_series = [
-        _series_row(*definitions["discharge_daily_mean"].series_key),
-        _series_row(*definitions["discharge_instantaneous"].series_key),
-        _series_row(*definitions["discharge_instantaneous"].series_key),
-        _series_row(*definitions["stage_daily_mean"].series_key, begin_date="", end_date=""),
-        _series_row(*definitions["stage_daily_max"].series_key, begin_date="2000-01-01", end_date="2010-01-01"),
-        _series_row(*definitions["stage_daily_max"].series_key, begin_date="2001-01-01", end_date="2010-01-01"),
-        _series_row(*definitions["stage_instantaneous"].series_key),
-    ]
-    native = _native_table(
-        [
-            {"site_no": "outcomes", "series": first_series},
-            {"site_no": "national-coverage", "series": _complete_product_series()},
-        ]
-    )
-
-    result = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS).station_products.filter(
-        pl.col("station_id") == "outcomes"
-    )
-    rows = {row["product_id"]: row for row in result.iter_rows(named=True)}
-    assert (
-        rows["discharge_daily_mean"]
-        | {
-            "availability": "available",
-            "availability_reason": None,
-            "published_record_start_date": date(2001, 1, 2),
-            "published_record_end_date": date(2025, 3, 4),
-        }
-        == rows["discharge_daily_mean"]
-    )
-    assert rows["discharge_instantaneous"]["availability"] == "available"
-    assert rows["discharge_instantaneous"]["published_record_start_date"] == date(2001, 1, 2)
-    assert rows["discharge_instantaneous"]["published_record_end_date"] == date(2025, 3, 4)
-    assert rows["stage_daily_mean"]["availability_reason"] == "Matching USGS source series states blank coverage dates"
-    assert (
-        rows["stage_daily_max"]["availability_reason"]
-        == "Several matching USGS source series state conflicting coverage boundaries"
-    )
-    assert rows["stage_daily_min"]["availability"] == "unavailable"
-    assert (
-        rows["stage_daily_min"]["availability_reason"]
-        == "No matching USGS source series was published for this station-product"
-    )
-    assert rows["stage_daily_min"]["published_record_start_date"] is None
-    assert rows["stage_daily_min"]["published_record_end_date"] is None
-
-
-@pytest.mark.parametrize("omitted", PRODUCT_DEFINITIONS, ids=lambda definition: definition.product_id)
-def test_native_build_rejects_product_with_zero_national_matches(omitted: object) -> None:
-    assert isinstance(omitted, generator.ProductDefinition)
-    series = [row for row in _complete_product_series() if _series_key_from_row(row) != omitted.series_key]
-    native = _native_table(
-        [
-            {"site_no": "first", "series": series},
-            {"site_no": "second", "series": list(series)},
-        ]
-    )
-
-    with pytest.raises(FatalContractError, match=omitted.product_id):
-        generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
-
-
-def _series_key_from_row(row: dict[str, str]) -> tuple[str, str, str]:
-    return (row["data_type_cd"], row["parm_cd"], row["stat_cd"])
-
-
-def test_native_build_allows_a_product_absent_locally_when_present_nationally() -> None:
-    rhode_island_series = [
-        row
-        for row in _complete_product_series()
-        if _series_key_from_row(row) not in {("dv", "00065", "00001"), ("dv", "00065", "00002")}
-    ]
-    native = _native_table(
-        [
-            {"site_no": "rhode-island", "series": rhode_island_series},
-            {"site_no": "elsewhere", "series": _complete_product_series()},
-        ]
-    )
-
-    station_products = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS).station_products
-    local = station_products.filter(pl.col("station_id") == "rhode-island")
-    assert set(
-        local.filter(pl.col("product_id").is_in(["stage_daily_max", "stage_daily_min"]))["availability"].cast(str)
-    ) == {"unavailable"}
-
-
-@pytest.mark.parametrize(
-    ("token", "expected"),
-    [
-        ("NAD27", "EPSG:4267"),
-        ("NAD83", "EPSG:4269"),
-        ("OLDHI", "EPSG:4135"),
-        ("WGS72", "EPSG:4322"),
-        ("WGS84", "EPSG:4326"),
-        ("OLDAK", "unknown"),
-        ("OLDGUAM", "unknown"),
-        ("OLDPR", "unknown"),
-        ("OLDSAMOA", "unknown"),
-        ("PUERTORICO", "unknown"),
-        ("", "unknown"),
-        ("UNRECOGNISED", "unknown"),
-    ],
-)
-def test_datum_token_maps_only_when_licensed(token: str, expected: str) -> None:
-    catalogue = generator.build_catalogue(_native_table([{"datum": token}]), STATION_CATALOGUE_ORIGINS)
-
-    assert catalogue.stations["crs"].item() == expected
-
-
-def test_station_frame_preserves_native_identity_and_coordinates_exactly() -> None:
-    native = _native_table([{"site_no": "  exact-id  ", "dec_lat_va": "41.125", "dec_long_va": "-73.875"}])
-
-    stations = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS).stations
-    expected = pl.DataFrame(
-        [
-            {
-                "provider_id": "usgs_nwis",
-                "station_id": "  exact-id  ",
-                "latitude": 41.125,
-                "longitude": -73.875,
-                "crs": "EPSG:4269",
-            }
-        ],
-        schema=STATION_CATALOG_SCHEMA.polars_schema,
-    )
-    pl_testing.assert_frame_equal(stations, expected, check_exact=True)
-
-
-def test_catalogue_dates_derive_only_from_native_retrieved_at() -> None:
-    native = _native_table(
-        [
-            {"site_no": "older", "retrieved_at": datetime(2026, 7, 31, 23, tzinfo=UTC)},
-            {"site_no": "newer", "retrieved_at": datetime(2026, 8, 3, 1, tzinfo=UTC)},
-        ]
-    )
-
-    catalogue = generator.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
-    dates = {
-        station_id: set(rows["last_catalogue_check"])
-        for station_id, rows in catalogue.station_products.partition_by("station_id", as_dict=True).items()
-    }
-    assert dates[("older",)] == {date(2026, 7, 31)}
-    assert dates[("newer",)] == {date(2026, 8, 3)}
-    assert catalogue.provider_info["catalogue_version"] == "2026-08-03"
-
-
-def test_usgs_build_is_gated_on_origins() -> None:
-    broken = dict(STATION_CATALOGUE_ORIGINS)
-    del broken["longitude"]
-
-    with pytest.raises(
-        FatalContractError,
-        match=r"usgs_nwis\.longitude: canonical column has no origin declaration",
-    ):
-        generator.build_catalogue(_native_table(), broken)
-
-
-@pytest.mark.parametrize(
-    ("column", "value", "message"),
-    [
-        ("site_no", " ", "blank required site_no"),
-        ("dec_lat_va", "", "blank required dec_lat_va"),
-        ("dec_long_va", " ", "blank required dec_long_va"),
-        ("dec_lat_va", "north", "nonnumeric required dec_lat_va"),
-        ("dec_long_va", "west", "nonnumeric required dec_long_va"),
-    ],
-)
-def test_native_build_rejects_invalid_required_native_value(column: str, value: str, message: str) -> None:
-    spec: dict[str, object] = {column: value}
-
-    with pytest.raises(FatalContractError, match=message):
-        generator.build_catalogue(_native_table([spec]), STATION_CATALOGUE_ORIGINS)
-
-
-def test_native_build_rejects_malformed_series_alignment() -> None:
-    native = _native_table()
-    malformed = native.data.with_columns(pl.col("end_date").list.slice(1).alias("end_date"))
-
-    with pytest.raises(FatalContractError, match="station-a.*misaligned source-series"):
-        generator.build_catalogue(NativeTable(malformed), STATION_CATALOGUE_ORIGINS)
-
-
-def test_native_build_rejects_non_exact_schema() -> None:
-    native = _native_table()
-    reordered = native.data.select("site_no", *[column for column in native.data.columns if column != "site_no"])
-
-    with pytest.raises(FatalContractError, match="USGS native table does not have the exact required schema"):
-        generator.build_catalogue(NativeTable(reordered), STATION_CATALOGUE_ORIGINS)
-
-
-def test_native_build_rejects_invalid_nonblank_coverage_date() -> None:
-    series = _complete_product_series()
-    series[0]["begin_date"] = "not-a-date"
-
-    with pytest.raises(FatalContractError, match="invalid nonblank coverage date"):
-        generator.build_catalogue(_native_table([{"series": series}]), STATION_CATALOGUE_ORIGINS)
 
 
 def test_native_build_rejects_impossible_retrieval_timestamp() -> None:
@@ -788,226 +458,97 @@ class _FixtureResponse(io.BytesIO):
     status = 200
 
 
-@pytest.mark.derived(
-    "tests/test_data/usgs_nwis_metadata_expanded.json",
-    "tests/test_data/usgs_nwis_metadata_series.json",
-)
-def test_live_transport_uses_exact_102_in_scope_urls(retained_evidence_root, monkeypatch: pytest.MonkeyPatch) -> None:
-    series_bytes = _rdb_text(
-        SERIES_HEADER, SERIES_FORMAT, _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
-    ).encode()
-    expanded_bytes = _rdb_text(
-        EXPANDED_HEADER, EXPANDED_FORMAT, _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
-    ).encode()
-    calls: list[tuple[str, int]] = []
+def test_live_transport_includes_all_site_types_across_50_states_and_dc(monkeypatch: pytest.MonkeyPatch) -> None:
+    from urllib.parse import parse_qs, urlsplit
+
+    # Authored source rows: site classification must not exclude daily discharge.
+    expanded_row = dict.fromkeys(EXPANDED_HEADER, "")
+    expanded_row.update(agency_cd="USGS", site_no="synthetic-field", site_tp_cd="FA-FON")
+    series_row = {name: expanded_row.get(name, "") for name in SERIES_HEADER}
+    series_row.update(data_type_cd="dv", parm_cd="00060", stat_cd="00003")
+    series_bytes = _rdb_text(SERIES_HEADER, SERIES_FORMAT, [series_row]).encode()
+    expanded_bytes = _rdb_text(EXPANDED_HEADER, EXPANDED_FORMAT, [expanded_row]).encode()
+    calls: list[str] = []
 
     def fake_urlopen(url: str, *, timeout: int) -> _FixtureResponse:
-        calls.append((url, timeout))
+        calls.append(url)
         return _FixtureResponse(series_bytes if "seriesCatalogOutput=true" in url else expanded_bytes)
 
     monkeypatch.setattr(generator.urllib.request, "urlopen", fake_urlopen)
-
     series, expanded = generator.read_live_native_rows()
 
-    expected_urls = [
-        url
-        for state_cd in generator._US_STATE_CODES
-        for url in (
-            generator.SERIES_CATALOGUE_URL.format(state_cd=state_cd),
-            generator.EXPANDED_SITE_URL.format(state_cd=state_cd),
-        )
+    states = [
+        "AL",
+        "AK",
+        "AZ",
+        "AR",
+        "CA",
+        "CO",
+        "CT",
+        "DE",
+        "FL",
+        "GA",
+        "HI",
+        "ID",
+        "IL",
+        "IN",
+        "IA",
+        "KS",
+        "KY",
+        "LA",
+        "ME",
+        "MD",
+        "MA",
+        "MI",
+        "MN",
+        "MS",
+        "MO",
+        "MT",
+        "NE",
+        "NV",
+        "NH",
+        "NJ",
+        "NM",
+        "NY",
+        "NC",
+        "ND",
+        "OH",
+        "OK",
+        "OR",
+        "PA",
+        "RI",
+        "SC",
+        "SD",
+        "TN",
+        "TX",
+        "UT",
+        "VT",
+        "VA",
+        "WA",
+        "WV",
+        "WI",
+        "WY",
+        "DC",
     ]
-    assert calls == [(url, 60) for url in expected_urls]
-    assert len(series) == len(generator._US_STATE_CODES) * 4
-    assert len(expanded) == len(generator._US_STATE_CODES)
-    assert not any(f"stateCd={territory}" in url for url in expected_urls for territory in ("GU", "MP", "PR", "VI"))
+    expected = [
+        {
+            "format": ["rdb"],
+            "parameterCd": ["00060,00065"],
+            "stateCd": [state],
+            **output,
+        }
+        for state in states
+        for output in ({"seriesCatalogOutput": ["true"]}, {"siteOutput": ["expanded"]})
+    ]
+    actual = [parse_qs(urlsplit(url).query) for url in calls]
+    assert len(actual) == 102
+    assert all(query in actual for query in expected)
+    assert series == [series_row] * 51
+    assert expanded == [expanded_row] * 51
 
 
-def test_native_cli_requires_strict_z_retrieval_instant(tmp_path: Path) -> None:
-    common = ["--rdb-dir", str(tmp_path.resolve()), "--native-out", str(tmp_path / "native.parquet")]
-    with pytest.raises(SystemExit):
-        generator.main(common)
-    with pytest.raises(SystemExit):
-        generator.main([*common, "--retrieved-at", "2026-08-02T01:14:11+00:00"])
-
-
-@pytest.mark.derived(
-    "tests/test_data/usgs_nwis_metadata_expanded.json",
-    "tests/test_data/usgs_nwis_metadata_series.json",
-)
-def test_native_cli_writes_table_without_rewriting_canonical_artifacts(
-    retained_evidence_root,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    native_out = tmp_path / "native.parquet"
-    sentinel = tmp_path / "provider.json"
-    sentinel.write_text("unchanged", encoding="utf-8")
-    expected = _fixture_refresh(retained_evidence_root)
-
-    monkeypatch.setattr(generator, "refresh_native_table_from_rdb_directory", lambda *args, **kwargs: expected)
-
-    result = generator.main(
-        [
-            "--rdb-dir",
-            str(tmp_path.resolve()),
-            "--native-out",
-            str(native_out),
-            "--retrieved-at",
-            "2026-08-02T01:14:11Z",
-        ]
-    )
-
-    assert result == 0
-    assert sentinel.read_text(encoding="utf-8") == "unchanged"
-    pl_testing.assert_frame_equal(read_native_table(native_out).data, expected.value.data, check_exact=True)
-    assert capsys.readouterr().out == (
-        f"USGS native table canonical SHA-256: {generator.native_table_content_sha256(expected.value)}\n"
-    )
-
-
-@pytest.mark.parametrize(
-    "case",
-    [
-        "removed-fixture",
-        "live-with-out",
-        "rdb-with-out",
-    ],
-)
-def test_cli_rejects_cross_mode_combinations(
-    case: str,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    def fail(*args: object, **kwargs: object) -> None:
-        pytest.fail("invalid CLI reached file or network seam")
-
-    monkeypatch.setattr(generator, "read_native_table", fail)
-    monkeypatch.setattr(generator, "refresh_native_table_from_live", fail)
-    monkeypatch.setattr(generator, "refresh_native_table_from_rdb_directory", fail)
-    argv_by_case = {
-        "removed-fixture": ["--fixture", "removed.json"],
-        "live-with-out": [
-            "--live",
-            "--out",
-            "catalogue",
-            "--native-out",
-            "native.parquet",
-            "--retrieved-at",
-            "2026-08-02T01:14:11Z",
-        ],
-        "rdb-with-out": [
-            "--rdb-dir",
-            str(tmp_path.resolve()),
-            "--out",
-            "catalogue",
-            "--native-out",
-            "native.parquet",
-            "--retrieved-at",
-            "2026-08-02T01:14:11Z",
-        ],
-    }
-
-    with pytest.raises(SystemExit):
-        generator.main(argv_by_case[case])
-
-
-@pytest.mark.parametrize(
-    ("argv", "message"),
-    [
-        (["--native", "native.parquet"], "--native requires --out"),
-        (
-            ["--native", "native.parquet", "--out", "catalogue"],
-            "--native publication requires --modern-metadata",
-        ),
-        (
-            ["--native", "native.parquet", "--out", "catalogue", "--modern-metadata", "metadata"],
-            "--native publication requires --evidence-root",
-        ),
-        (
-            ["--native", "native.parquet", "--out", "catalogue", "--native-out", "other.parquet"],
-            "--native cannot be combined with --native-out or --retrieved-at",
-        ),
-        (
-            [
-                "--native",
-                "native.parquet",
-                "--out",
-                "catalogue",
-                "--retrieved-at",
-                "2026-08-02T01:14:11Z",
-            ],
-            "--native cannot be combined with --native-out or --retrieved-at",
-        ),
-        (
-            [
-                "--native",
-                "native.parquet",
-                "--out",
-                "catalogue",
-                "--modern-metadata",
-                "metadata",
-                "--evidence-root",
-                "evidence",
-            ],
-            "--out requires --build-inputs",
-        ),
-    ],
-    ids=[
-        "requires-out",
-        "requires-modern-metadata",
-        "requires-evidence",
-        "rejects-native-out",
-        "rejects-retrieved-at",
-        "requires-build-inputs",
-    ],
-)
-def test_cli_rejects_invalid_native_mode_options(
-    argv: list[str],
-    message: str,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.setattr(
-        generator,
-        "read_native_table",
-        lambda path: pytest.fail(f"invalid CLI reached native reader: {path}"),
-    )
-
-    with pytest.raises(SystemExit):
-        generator.main(argv)
-
-    assert message in capsys.readouterr().err
-
-
-def test_cli_rejects_relative_rdb_directory(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.setattr(
-        generator,
-        "refresh_native_table_from_rdb_directory",
-        lambda *args, **kwargs: pytest.fail("invalid CLI reached RDB reader"),
-    )
-
-    with pytest.raises(SystemExit):
-        generator.main(
-            [
-                "--rdb-dir",
-                "relative-rdb",
-                "--native-out",
-                "native.parquet",
-                "--retrieved-at",
-                "2026-08-02T01:14:11Z",
-            ]
-        )
-
-    assert "--rdb-dir must be an absolute path" in capsys.readouterr().err
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
-def test_committed_native_table_exact_schema_counts_and_provenance(
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
+def test_historical_native_table_exact_schema_counts_and_provenance(
     retained_evidence_root,
 ) -> None:
     native_table = read_native_table(retained_evidence_root / NATIVE_PATH)
@@ -1032,8 +573,8 @@ def test_committed_native_table_exact_schema_counts_and_provenance(
     assert total_records == 2_036_546
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
-def test_committed_native_table_representative_station(
+@pytest.mark.derived("tests/test_data/usgs_nwis_historical/native.parquet")
+def test_historical_native_table_representative_station(
     retained_evidence_root,
 ) -> None:
     row = (
@@ -1065,11 +606,11 @@ def test_committed_native_table_representative_station(
 
 
 @pytest.mark.derived(
-    "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet",
+    "tests/test_data/usgs_nwis_historical/native.parquet",
     "tests/test_data/usgs_nwis_metadata_expanded.json",
     "tests/test_data/usgs_nwis_metadata_series.json",
 )
-def test_fixture_refresh_frame_equals_matching_committed_subset(
+def test_fixture_refresh_frame_equals_matching_historical_subset(
     retained_evidence_root,
 ) -> None:
     committed_row = (
@@ -1161,7 +702,6 @@ def test_live_rdb_recordings_preserve_source_strings_and_native_alignment(
         series,
         expanded,
         retrieved_at=RetrievedAt(expanded_recording.retrieved_at),
-        input_kind=generator.NativeInputKind.FIXTURE,
     )
     ordered = sorted(series, key=lambda row: tuple(row[name] for name in SERIES_HEADER))
     expected_row: dict[str, object] = dict(expanded[0])
@@ -1173,23 +713,299 @@ def test_live_rdb_recordings_preserve_source_strings_and_native_alignment(
     assert refreshed.issues == ()
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
-def test_legacy_native_build_cannot_publish_under_modern_identity(retained_evidence_root, tmp_path: Path) -> None:
-    catalogue = generator.build_catalogue(
-        read_native_table(retained_evidence_root / NATIVE_PATH), STATION_CATALOGUE_ORIGINS
-    )
-    output = tmp_path / "must-not-be-created"
-    with pytest.raises(FatalContractError, match="legacy native builds cannot be published"):
-        generator.write_catalogue(catalogue, output)
-    assert not output.exists()
-
-
 def test_missing_publication_inputs_leave_destination_untouched(tmp_path: Path) -> None:
     from types import SimpleNamespace
 
     output = tmp_path / "catalogue"
     # The prerequisite is present. No catalogue frames should be read or written.
-    catalogue = SimpleNamespace(modern_metadata=tmp_path / "metadata")
+    catalogue = SimpleNamespace(source_descriptions=object())
     with pytest.raises(FatalContractError, match="requires explicit build_inputs and native_table"):
         generator.write_catalogue(catalogue, output)
     assert not output.exists()
+
+
+def test_current_publication_requires_selected_provenance_before_writing(tmp_path):
+    from types import SimpleNamespace
+
+    native = _native_table()
+    catalogue = SimpleNamespace(source_descriptions=object())
+    output = tmp_path / "output"
+    with pytest.raises(FatalContractError, match="explicit acquisition_provenance"):
+        generator.write_catalogue(catalogue, output, build_inputs=object(), native_table=native)
+    assert not output.exists()
+
+
+def _modern_cli_arguments(tmp_path):
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text("{}")
+    manifest = tmp_path / "retention.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "historical_sources": [],
+                "retained_station_ids": [],
+            }
+        )
+    )
+    return [
+        "--baseline-locations",
+        str(baseline),
+        "--baseline-sha256",
+        hashlib.sha256(baseline.read_bytes()).hexdigest(),
+        "--modern-metadata",
+        str(tmp_path / "metadata"),
+        "--monitoring-locations",
+        str(tmp_path / "locations.json"),
+        "--retention-manifest",
+        str(manifest),
+        "--evidence-root",
+        str(tmp_path),
+    ]
+
+
+def test_modern_cli_requires_output_before_reading_sources(tmp_path, monkeypatch):
+    monkeypatch.setattr(generator, "read_modern_metadata", lambda _: pytest.fail("unexpected source read"))
+    with pytest.raises(SystemExit):
+        generator.main(_modern_cli_arguments(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        [],
+        {"schema_version": 2, "historical_series_ids": [], "retained_station_ids": []},
+        {"schema_version": 1, "historical_series_ids": ["same", "same"], "retained_station_ids": []},
+        {"schema_version": 1, "historical_series_ids": [], "retained_station_ids": [""]},
+    ],
+)
+def test_modern_cli_rejects_invalid_retention_before_reading_sources(tmp_path, monkeypatch, manifest):
+    args = _modern_cli_arguments(tmp_path)
+    (tmp_path / "retention.json").write_text(json.dumps(manifest))
+    monkeypatch.setattr(generator, "read_modern_metadata", lambda _: pytest.fail("unexpected source read"))
+    with pytest.raises(FatalContractError, match="retention manifest"):
+        generator.main([*args, "--native-out", str(tmp_path / "native.parquet")])
+    assert not (tmp_path / "native.parquet").exists()
+
+
+def test_modern_cli_requires_publication_inputs_before_reading_or_writing(tmp_path, monkeypatch):
+    monkeypatch.setattr(generator, "read_modern_metadata", lambda _: pytest.fail("unexpected source read"))
+    output = tmp_path / "catalogue"
+    native = tmp_path / "native.parquet"
+    with pytest.raises(SystemExit):
+        generator.main([*_modern_cli_arguments(tmp_path), "--out", str(output), "--native-out", str(native)])
+    assert not output.exists()
+    assert not native.exists()
+
+
+def test_modern_cli_passes_manifest_selection_and_uses_source_retrieval_time(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    args = _modern_cli_arguments(tmp_path)
+    (tmp_path / "retention.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "historical_sources": [
+                    {"consumer_directory": "historical", "series_ids": ["old-series"]},
+                    {"consumer_directory": "october", "series_ids": ["additional-series"]},
+                ],
+                "retained_station_ids": ["USGS-001"],
+            }
+        )
+    )
+    reads = []
+
+    def read(path):
+        reads.append(path)
+        return (
+            [{"id": {"historical": "old-series", "october": "additional-series"}.get(path.name, path.name)}],
+            [{"retrieved_at": "2026-10-30T00:00:00+00:00"}],
+        )
+
+    monkeypatch.setattr(generator, "read_modern_metadata", read)
+    monkeypatch.setattr(
+        generator,
+        "read_monitoring_locations",
+        lambda path: (
+            [{"id": "USGS-001"}],
+            [{"retrieved_at": "2026-10-31T12:00:00+00:00"}],
+        ),
+    )
+    seen = {}
+    native = _native_table()
+
+    def build(features, locations, **kwargs):
+        seen.update(features=features, locations=locations, **kwargs)
+        return SimpleNamespace(source_native=native.data)
+
+    monkeypatch.setattr(generator, "build_modern_catalogue", build)
+    output = tmp_path / "native.parquet"
+    assert generator.main([*args, "--native-out", str(output)]) == 0
+    assert reads == [tmp_path / "metadata", tmp_path / "historical", tmp_path / "october"]
+    assert seen == {
+        "baseline_locations": {},
+        "features": [{"id": "metadata"}],
+        "locations": [{"id": "USGS-001"}],
+        "historical_features": [{"id": "old-series"}, {"id": "additional-series"}],
+        "retained_series_ids": ("old-series", "additional-series"),
+        "retained_locations": ("USGS-001",),
+        "retrieved_at": RetrievedAt(datetime(2026, 10, 31, 12, tzinfo=UTC)),
+    }
+    pl_testing.assert_frame_equal(read_native_table(output).data, native.data)
+
+
+def test_missing_legacy_enrichment_leaves_publication_destination_untouched(tmp_path):
+    from types import SimpleNamespace
+
+    catalogue = SimpleNamespace(source_descriptions=object(), retained_series_ids=())
+    output = tmp_path / "catalogue"
+    with pytest.raises(FatalContractError, match="explicit legacy enrichment"):
+        generator.write_catalogue(
+            catalogue, output, build_inputs=object(), native_table=_native_table(), acquisition_provenance=object()
+        )
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("corrupt", ["modern", "legacy", "baseline", "missing_legacy", "ambiguous_legacy"])
+def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_path, monkeypatch, corrupt):
+    from types import SimpleNamespace
+
+    from rivretrieve._internal.providers.usgs_nwis.origins import build_acquisition_provenance
+
+    original = build_acquisition_provenance()
+    provenance = original.model_copy(
+        update={
+            "native_table": original.native_table.model_copy(update={"sha256": "a" * 64, "byte_size": 123}),
+        }
+    )
+    native_path = tmp_path / "native.parquet"
+    legacy_path = tmp_path / "legacy.parquet"
+    _native_table().data.write_parquet(native_path)
+    _native_table().data.write_parquet(legacy_path)
+    if corrupt == "modern":
+        native_path.write_bytes(b"changed adopted bytes")
+    else:
+        provenance = provenance.model_copy(
+            update={
+                "native_table": provenance.native_table.model_copy(
+                    update={
+                        "sha256": hashlib.sha256(native_path.read_bytes()).hexdigest(),
+                        "byte_size": native_path.stat().st_size,
+                    }
+                )
+            }
+        )
+        legacy_path.write_bytes(b"changed legacy bytes")
+    source = tmp_path / "provenance.json"
+    source.write_text(provenance.model_dump_json())
+    build = tmp_path / "build.json"
+    build.write_text("{}")
+    build_inputs = SimpleNamespace(
+        inputs=[
+            SimpleNamespace(
+                facts=("source.station.legacy_sitefile_attributes",),
+                reference=SimpleNamespace(sha256="b" * 64, byte_size=123, role="derived_input"),
+                usage="reviewed_support",
+            ),
+            SimpleNamespace(
+                facts=("source.station.baseline_identity",),
+                reference=SimpleNamespace(sha256=hashlib.sha256(b"{}").hexdigest(), byte_size=2),
+            ),
+        ]
+    )
+    if corrupt == "baseline":
+        build_inputs.inputs.pop()
+    elif corrupt == "missing_legacy":
+        build_inputs.inputs.pop(0)
+    elif corrupt == "ambiguous_legacy":
+        build_inputs.inputs.append(build_inputs.inputs[0])
+    build_inputs.inputs.append(
+        SimpleNamespace(
+            facts=("source.station.baseline_identity",),
+            usage="reviewed_support",
+            reference=SimpleNamespace(sha256="f" * 64, byte_size=900, role="acquisition_receipt"),
+        )
+    )
+    build_inputs.inputs.extend(
+        SimpleNamespace(
+            facts=("source.station.legacy_sitefile_attributes",),
+            usage="recording",
+            reference=SimpleNamespace(role="response_recording", sha256=str(index) * 64, byte_size=10),
+        )
+        for index in (1, 2)
+    )
+    monkeypatch.setattr(generator.CatalogueBuildInputs, "model_validate_json", lambda _: build_inputs)
+    monkeypatch.setattr(
+        __import__("rivretrieve._internal.providers.usgs_nwis.origins", fromlist=["selected_role_inputs"]),
+        "selected_role_inputs",
+        lambda provenance, role: ("source.station.legacy_sitefile_attributes",),
+    )
+    verified = []
+    monkeypatch.setattr(generator, "verify_provenance_recordings", lambda value, root: verified.append(value))
+    monkeypatch.setattr(
+        generator,
+        "read_modern_metadata",
+        lambda _: (
+            [],
+            [{"retrieved_at": "2026-10-31T12:00:00+00:00"}],
+        ),
+    )
+    monkeypatch.setattr(generator, "read_monitoring_locations", lambda _: ([], []))
+    monkeypatch.setattr(
+        generator,
+        "build_modern_catalogue",
+        lambda *args, **kwargs: SimpleNamespace(
+            source_native=_native_table().data,
+        ),
+    )
+    monkeypatch.setattr(generator, "write_catalogue", lambda *args, **kwargs: pytest.fail("invalid native published"))
+    output = tmp_path / "catalogue"
+    with pytest.raises(
+        FatalContractError,
+        match=(
+            "baseline identity input"
+            if corrupt == "baseline"
+            else "one adopted legacy"
+            if corrupt in {"missing_legacy", "ambiguous_legacy"}
+            else "native table digest mismatch"
+        ),
+    ):
+        generator.main(
+            [
+                *_modern_cli_arguments(tmp_path),
+                "--out",
+                str(output),
+                "--native",
+                str(native_path),
+                "--legacy-native",
+                str(tmp_path / "legacy.parquet"),
+                "--build-inputs",
+                str(build),
+                "--acquisition-provenance",
+                str(source),
+                "--evidence-root",
+                str(tmp_path),
+            ]
+        )
+    assert verified == [provenance]
+    assert not output.exists()
+
+
+def test_legacy_native_keeps_agencies_distinct_at_shared_number():
+    expanded, series = [], []
+    for agency, area, claim in (("CA574", "12.5", "other-claim"), ("USGS", "34.5", "usgs-claim")):
+        row = dict.fromkeys(EXPANDED_HEADER, "")
+        row.update(agency_cd=agency, site_no="001", station_nm=agency, drain_area_va=area)
+        expanded.append(row)
+        record = {key: row.get(key, "") for key in SERIES_HEADER}
+        record.update(data_type_cd="uv", parm_cd="00065", stat_cd="00011", ts_id=claim)
+        series.append(record)
+    result = generator.refresh_native_table(series, expanded, retrieved_at=ATTESTED_RETRIEVED_AT)
+    assert not result.issues
+    assert result.value.data.select("agency_cd", "site_no", "drain_area_va", "ts_id").rows() == [
+        ("CA574", "001", "12.5", ["other-claim"]),
+        ("USGS", "001", "34.5", ["usgs-claim"]),
+    ]
+    duplicated = generator.refresh_native_table(series, [*expanded, expanded[0]], retrieved_at=ATTESTED_RETRIEVED_AT)
+    assert duplicated.value.data["agency_cd"].to_list() == ["CA574", "CA574", "USGS"]

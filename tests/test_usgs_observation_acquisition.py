@@ -935,3 +935,39 @@ def test_incomplete_cursor_links_actual_http_retry_attempts():
     unresolved = next(item for item in result.outcomes if item.status is OutcomeStatus.UNRESOLVED)
     assert unresolved.calls == expected
     assert len(expected) == 4
+
+
+def test_colliding_public_ids_route_to_distinct_source_locations(tmp_path):
+    import hashlib
+
+    from rivretrieve._internal.providers.usgs_nwis.declaration import _load_monitoring_locations
+
+    mapping = {"001": "CA574-001", "USGS-001": "USGS-001"}
+    raw = json.dumps(mapping).encode()
+    (tmp_path / "monitoring_locations.json").write_bytes(raw)
+    (tmp_path / "croissant.json").write_text(
+        json.dumps(
+            {"distribution": [{"contentUrl": "monitoring_locations.json", "sha256": hashlib.sha256(raw).hexdigest()}]}
+        )
+    )
+    resolved = _load_monitoring_locations(tmp_path)
+    transport = Transport(page(), page())
+    window = engine._make_fetch_window(
+        engine.WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+        engine.WindowEndpoint.from_datetime(datetime(2000, 1, 7)),
+    )
+    for station, product in (
+        ("001", ProductId("discharge_daily_mean")),
+        ("USGS-001", ProductId("stage_instantaneous")),
+    ):
+        fetch(
+            (station,),
+            (product,),
+            {product: (engine.RenderedWindow("2000-01-01", "2000-01-07"),)},
+            window,
+            config(),
+            transport,
+            monitoring_locations=resolved,
+        )
+    assert [request.params["monitoring_location_id"] for request in transport.requests] == ["CA574-001", "USGS-001"]
+    assert [request.params["parameter_code"] for request in transport.requests] == ["00060", "00065"]

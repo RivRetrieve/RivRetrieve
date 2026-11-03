@@ -42,6 +42,8 @@
       "name": "Environment and Climate Change Canada, Water Survey of Canada"
     }
   ],
+  "license": "Use of any Information indicates your acceptance of the terms below. The Information Provider grants you a worldwide, royalty-free, perpetual, non-exclusive licence to use the Information, including for commercial purposes, subject to the terms below.",
+  "citation": "For real-time data retrieved from the Wateroffice web site:“Extracted from the Environment and Climate Change Canada Real-time Hydrometric Data web site (https://wateroffice.ec.gc.ca/mainmenu/real_time_data_index_e.html) on [DATE]” For historical data retrieved from the Wateroffice web site:“Extracted from the Environment and Climate Change Canada Historical Hydrometric Data web site (https://wateroffice.ec.gc.ca/mainmenu/historical_data_index_e.html) on [DATE]” For historical data retrieved from the MDB file:“Extracted from Environment and Climate Change Canada’s HYDAT.mdb, released on [DATE]”",
   "distribution": [
     {
       "@id": "provider.json",

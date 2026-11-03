@@ -289,13 +289,20 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
                 from datetime import date
 
                 from rivretrieve._internal.store.reader import ExecutedStoreQuery
+                from rivretrieve._internal.store.remote import RemoteStoreRoot
                 from rivretrieve._internal.store.validation import StoreRoot
 
+                raw_store_path = item["store_path"]
+                parsed_store_path = (
+                    RemoteStoreRoot.from_uri(raw_store_path)
+                    if isinstance(raw_store_path, str) and raw_store_path.startswith("s3://")
+                    else Path(raw_store_path)
+                )
                 receipt = StoreExcerptReceipt(
                     content=archive.read(item["file"]),
                     origin=origin,
                     authorship=authorship,
-                    store_path=StoreRoot(Path(item["store_path"])),
+                    store_path=StoreRoot(parsed_store_path),
                     executed_query=TypeAdapter(ExecutedStoreQuery).validate_json(_json(item["executed_query"])),
                     format_version=item["format_version"],
                     source_vintage=date.fromisoformat(item["source_vintage"])

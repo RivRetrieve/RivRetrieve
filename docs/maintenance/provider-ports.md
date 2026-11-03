@@ -188,6 +188,21 @@ Use genuine retained responses for distinct supported routes and independently
 established expected results. Check identities, timestamps and values together.
 Verify relevant cache/store behavior, catalogue lineage and distribution contents.
 
+When a suitable published observational dataset is available, usually a regional
+CAMELS dataset, require a bounded comparison with values retrieved through
+RivRetrieve's public API. Match stations confidently and select overlapping dates.
+Use a reproducible random sample without selecting for agreement; ten gauges is a
+useful default, not a rigid requirement. Plot both hydrographs with explicit unit
+conversion and preserved gaps. Inspect for obvious errors and investigate meaningful
+discrepancies without filtering, shifting or fitting values to force agreement.
+
+Retain the dataset version, station and date selection, comparison method, figures,
+findings and limitations through the existing evidence process. If no suitable
+dataset is available, record why; that absence alone does not block the port.
+This is a sanity check alongside source verification, not proof of identical source
+definitions or independent measurement accuracy. Unresolved semantics remain
+caveats unless they make the comparison misleading.
+
 Follow the [testing](testing.md) and
 [evidence](evidence.md) guides. The private archive
 owns intake, retained inputs and source-certification tooling. Review exact code

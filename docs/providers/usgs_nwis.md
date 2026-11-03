@@ -8,11 +8,17 @@
 | Country | United States, 50 states and District of Columbia |
 | Published by | U.S. Geological Survey, through Water Data for the Nation |
 | Quantities | Discharge and stage |
-| Selectable stations | 26,201 in the packaged catalogue. Availability depends on quantity and period |
+| Selectable stations | 27,679 in the packaged catalogue. Availability depends on quantity and period |
 | Station metadata | Station name, drainage area and elevation. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | No personal credentials required for modest public requests; optional `USGS_API_KEY` |
 | Terms stated by USGS | USGS-produced data are in the U.S. Public Domain |
 | Agency documentation | [Water Data APIs](https://api.waterdata.usgs.gov/), [Water Data for the Nation](https://waterdata.usgs.gov/) |
+
+The catalogue includes supported daily discharge across site types, rather than
+only streams. It also preserves previously registered stations, including 11
+Canadian stations with daily discharge. Series retained from historical metadata
+keep their published IDs; their presence does not establish current observations.
+Stations without coordinates remain selectable by ID but do not appear on maps.
 
 Retrieve one week of published daily mean discharge at station `07374000`,
 Mississippi River at Baton Rouge, Louisiana:
@@ -104,9 +110,9 @@ retrieval. These IDs identify individual published time series. They are not a
 provider-wide menu of processing categories or measurement methods.
 
 Most stations have one matching series for a given quantity, frequency and
-statistic. In the packaged catalogue, 575 of 26,201 selectable stations (about
-2.2%) have multiple matching series for at least one such combination. For daily
-mean discharge, this occurs at 134 of 24,495 stations (about 0.55%). These counts
+statistic. In the packaged catalogue, 638 of 27,679 selectable stations (about
+2.3%) have multiple matching series for at least one such combination. For daily
+mean discharge, this occurs at 147 of 25,342 stations (about 0.58%). These counts
 do not establish overlapping observations or current availability. A populated
 `variant` field alone does not mean that alternatives exist.
 

@@ -750,7 +750,9 @@ def test_usgs_elevation_scope_keeps_non_usgs_gauges_without_exposing_their_altit
 
     from rivretrieve._internal.catalogue_origins import Field, NativeColumn
     from rivretrieve._internal.catalogues.native import RetrievedAt, stamp_native_table
-    from rivretrieve._internal.providers.usgs_nwis.origins import STATION_METADATA_FIELDS
+    from rivretrieve._internal.providers.usgs_nwis.origins import (
+        LEGACY_STATION_METADATA_FIELDS as STATION_METADATA_FIELDS,
+    )
     from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
 
     native = stamp_native_table(

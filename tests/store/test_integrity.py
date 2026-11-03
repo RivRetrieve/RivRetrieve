@@ -13,6 +13,7 @@ import pytest
 
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.store import StoreRoot, compile_store, integrity, validate_store
+from rivretrieve._internal.store.lifecycle import StoreLifecycleError, store_lease
 from rivretrieve._internal.store.validation import ObservationStoreRefusedError
 from tests.store.certification_support import artifact_and_request, rows
 
@@ -87,7 +88,8 @@ def test_closed_generation_refuses_mutation(tmp_path, defect):
         # The old semantic validator accepts this validly encoded numeric change.
         validate_store(root, provider)
     elif defect == "replacement":
-        content = part.read_bytes()
+        content = bytearray(part.read_bytes())
+        content[len(content) // 2] ^= 1
         part.unlink()
         part.write_bytes(content)
     elif defect == "extra":
@@ -580,3 +582,78 @@ def test_storage_issue_context_marker_requires_known_state(tmp_path, state):
     _resign(root)
     with pytest.raises(ObservationStoreRefusedError, match="issue.context"):
         integrity.audit_store(root, provider)
+
+
+def test_copied_store_validates_once_and_updates_local_witnesses(tmp_path, monkeypatch):
+    source_root, provider = _store_with_supporting_failure(tmp_path / "source")
+    original = integrity.inspect_integrity(source_root, provider)
+    relocated = StoreRoot(tmp_path / "relocated")
+    shutil.copytree(source_root, relocated)
+    for name, identity in original.files.items():
+        assert (relocated / name).stat().st_ino != identity.inode
+
+    restored = integrity.inspect_integrity(relocated, provider)
+    assert restored.generation_id == original.generation_id
+    assert restored.supporting_outcomes == original.supporting_outcomes
+    for name, identity in restored.files.items():
+        stat = (relocated / name).stat()
+        assert identity.sha256 == original.files[name].sha256
+        assert identity.size == original.files[name].size
+        assert identity.witness == (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+    real_digest = integrity._digest
+
+    def metadata_only(path):
+        assert path.name == "manifest.json"
+        return real_digest(path)
+
+    monkeypatch.setattr(integrity, "_digest", metadata_only)
+    monkeypatch.setattr(
+        "rivretrieve._internal.store.validation._open_parquet",
+        lambda path: pytest.fail("subsequent inspection decoded observations after witness restoration"),
+    )
+    second = integrity.inspect_integrity(relocated, provider)
+    assert second.generation_id == original.generation_id
+    assert second.files == restored.files
+
+
+@pytest.mark.parametrize(
+    "defect,error_type,match",
+    [
+        ("corrupt_bytes", ObservationStoreRefusedError, "digest"),
+        ("semantic_facts", ObservationStoreRefusedError, "coverage.row"),
+        ("pending_seal", ObservationStoreRefusedError, "unlisted_or_unsafe"),
+        ("transaction_residue", ObservationStoreRefusedError, "file_identity"),
+        ("staging_directory", ObservationStoreRefusedError, "file_identity"),
+        ("active_lease", StoreLifecycleError, "Store writer already active"),
+    ],
+)
+def test_copied_store_refuses_defect_or_unsafe_lifecycle_without_updating_witnesses(
+    tmp_path, defect, error_type, match
+):
+    source_root, provider = _store_with_supporting_failure(tmp_path / "source")
+    if defect == "semantic_facts":
+        part = next(source_root.rglob("*.parquet"))
+        pl.read_parquet(part).with_columns(pl.lit("missing-fact").alias("facts_id")).write_parquet(part)
+        _resign(source_root)
+    destination_name = ".store.stage-copy" if defect == "staging_directory" else "relocated"
+    relocated = StoreRoot(tmp_path / destination_name)
+    shutil.copytree(source_root, relocated)
+    if defect == "corrupt_bytes":
+        part = next(relocated.rglob("*.parquet"))
+        data = bytearray(part.read_bytes())
+        data[len(data) // 2] ^= 1
+        part.write_bytes(data)
+    elif defect == "pending_seal":
+        (relocated / ".integrity.pending").write_text("interrupted")
+    elif defect == "transaction_residue":
+        (tmp_path / ".relocated.transaction.json").write_text("{}")
+
+    before_seal = (relocated / "integrity.json").read_text()
+    if defect == "active_lease":
+        with store_lease(relocated), pytest.raises(error_type, match=match):
+            integrity.inspect_integrity(relocated, provider)
+    else:
+        with pytest.raises(error_type, match=match):
+            integrity.inspect_integrity(relocated, provider)
+    assert (relocated / "integrity.json").read_text() == before_seal

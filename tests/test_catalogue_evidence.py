@@ -27,9 +27,34 @@ from rivretrieve._internal.catalogues.evidence_encoding import (
     reconstruct_provenance,
 )
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
-from tests._provenance import historical_source_provenance
+from tests._provenance import historical_source_provenance, registered_usgs_baseline
 
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
+
+
+# Exact origins.py declarations at e845c58362bf1b3905612604ce10dd9d4c21b450.
+_USGS_PRE_ADOPTION_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_NOTICE"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py", "project_station_metadata"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "modern_source_descriptions"),
+)
+
+
+def _historical_metadata_extension_input(provider):
+    """Use the fixed USGS graph to test its historical metadata-source extension."""
+    if provider == "usgs_nwis":
+        from rivretrieve._internal.providers.usgs_nwis.origins import build_acquisition_provenance
+
+        return build_acquisition_provenance()
+    return _legacy(provider)
 
 
 def _legacy(provider, path=None):
@@ -709,8 +734,11 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
 
 @pytest.mark.parametrize("provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen"}))
 def test_historical_projection_preserves_sources_and_validates_metadata(provider):
-    original = _legacy(provider)
-    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    if provider == "usgs_nwis":
+        original, metadata = registered_usgs_baseline()
+    else:
+        original = _legacy(provider)
+        metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     assert projected.source_records == original.source_records
     assert not any(fact.startswith("metadata.") for fact in projected.fact_universe)
@@ -718,8 +746,11 @@ def test_historical_projection_preserves_sources_and_validates_metadata(provider
 
 @pytest.mark.parametrize("provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen"}))
 def test_historical_projection_rejects_changed_current_producer(provider):
-    original = _legacy(provider)
-    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    if provider == "usgs_nwis":
+        original, metadata = registered_usgs_baseline()
+    else:
+        original = _legacy(provider)
+        metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     payload = original.model_dump(mode="json")
     # Even metadata-empty forms must validate their declared current producers.
     transformations = [
@@ -818,7 +849,7 @@ def test_polish_historical_restoration_preserves_unexpected_source_facts():
 
 @pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_removes_only_declared_metadata_source_closure(provider):
-    original = _legacy(provider)
+    original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     restored = _assert_metadata_source_extensions_and_restore_original(projected)
@@ -852,7 +883,7 @@ def test_historical_restoration_removes_only_declared_metadata_source_closure(pr
 
 @pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_preserves_changes_outside_the_extension(provider):
-    original = _legacy(provider)
+    original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     expected = _assert_metadata_source_extensions_and_restore_original(projected).model_dump(mode="json")
@@ -886,7 +917,7 @@ def test_historical_restoration_preserves_changes_outside_the_extension(provider
     ],
 )
 def test_historical_restoration_rejects_changed_complete_source_closure(provider, mutation):
-    original = _legacy(provider)
+    original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     payload = projected.model_dump(mode="json")
@@ -1493,9 +1524,12 @@ def _assert_bulk_source_history_preserved(retained_evidence_root: Path, provider
         "th_thaiwater",
         pytest.param(
             "usgs_nwis",
-            marks=pytest.mark.recorded(
-                "research/usgs-modern-coverage",
-                "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+            marks=(
+                pytest.mark.recorded(
+                    "research/usgs-modern-coverage",
+                    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+                ),
+                pytest.mark.derived("tests/test_data/usgs_nwis_historical/catalogue"),
             ),
         ),
         pytest.param(
@@ -1514,14 +1548,24 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(request: p
     # This expected digest comes from original v2 Git bytes, not a v3 self-roundtrip.
     # The French oracle names the historical combined publication. Its exact
     # authenticated evidence remains readable for research, never as a current catalogue.
-    restored = _legacy(
-        provider,
-        retained_evidence_root / "tests/test_data/french_combined_catalogue" if provider == "fr_hubeau" else None,
-    )
+    historical_path = None
+    declaration_locations = None
+    metadata_path = ROOT / provider / "catalogue/station_metadata.parquet"
+    if provider == "fr_hubeau":
+        historical_path = retained_evidence_root / "tests/test_data/french_combined_catalogue"
+    elif provider == "usgs_nwis":
+        historical_path = retained_evidence_root / "tests/test_data/usgs_nwis_historical/catalogue"
+        metadata_path = historical_path / "station_metadata.parquet"
+        declaration_locations = _USGS_PRE_ADOPTION_BUILD_DECLARATIONS
+    restored = _legacy(provider, historical_path)
     if restored.build_inputs is not None:
-        restored = historical_source_provenance(
-            restored, pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
-        )
+        metadata = pl.read_parquet(metadata_path)
+        if provider == "usgs_nwis":
+            with pytest.raises(AssertionError):
+                historical_source_provenance(
+                    restored, metadata, declaration_locations=_USGS_PRE_ADOPTION_BUILD_DECLARATIONS[:-1]
+                )
+        restored = historical_source_provenance(restored, metadata, declaration_locations=declaration_locations)
     restored = _assert_metadata_source_extensions_and_restore_original(restored)
     if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
         restored = _assert_field_source_lineage_repair_and_restore_original(retained_evidence_root, restored)
@@ -1608,3 +1652,12 @@ def test_evidence_rejects_indirect_cycles_after_valid_relation_shapes() -> None:
     )
     with pytest.raises(ValidationError, match="cycle"):
         CatalogueEvidence.model_validate(_change(chain, "external_inputs", cyclic))
+
+
+def test_registered_usgs_baseline_rejects_changed_historical_declaration():
+    original, metadata = registered_usgs_baseline()
+    historical_source_provenance(original, metadata)
+    payload = original.model_dump(mode="json")
+    payload["build_inputs"]["declarations"][-1]["symbol"] = "unreviewed_projection"
+    with pytest.raises(AssertionError):
+        historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
