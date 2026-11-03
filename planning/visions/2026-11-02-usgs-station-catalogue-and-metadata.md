@@ -25,7 +25,7 @@ This Effort refactors that pipeline into a clean multi-source model:
 - **Elimination of Patch Functions**: Fully remove `supplement_native_stations`, fake legacy RDB row synthesis, and product-specific filters. Unify station discovery and enrichment into a clean join.
 - **Single-Pass Modern Build**: Generate [`station_products.parquet`](../../src/rivretrieve/_internal/catalogues/schemas.py) and [`source_series.json`](../../src/rivretrieve/_internal/catalogues/source_series.py) directly from modern metadata and retained historical series in a single pass. Remove the intermediate legacy catalogue build step and its arbitrary legacy threshold assertions (`_validate_national_products`).
 - **Decoupled Legacy Claims**: Retain historical NWIS `ts_id` claims in [`series_claims.parquet`](../../src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py) for backward traceability, decoupled from runtime station availability.
-- **Declarative Historical Retention**: Consolidate retained historical inputs (the 22 explicitly selected historical series and 11 Canadian daily stations) into a declarative manifest under `declarations/usgs_nwis/` in `verification-evidence`, eliminating disjoint CLI flags.
+- **Declarative Historical Retention**: Consolidate retained historical inputs (the 26 explicitly selected historical series and 11 Canadian daily stations) into a declarative manifest under `declarations/usgs_nwis/` in `verification-evidence`, eliminating disjoint CLI flags.
 
 ## Station metadata and unknowns
 
@@ -42,7 +42,7 @@ Follow the established station metadata contract in [`docs/station-metadata.md`]
 Catalogue verification requires strict reconciliation against genuine source discovery:
 
 1. **Complete Modern Feature Reconciliation**: 100% of modern OGC API `time-series-metadata` features for parameters `00060` and `00065` within the 50 states + DC matching any of the six supported products must resolve to a registered, selectable station in `stations.parquet`. Zero unexplained eligible omissions are permitted.
-2. **Historical Retention Reconciliation**: The 22 explicitly selected historical series absent from current modern metadata must reconcile exactly against the retained series manifest.
+2. **Historical Retention Reconciliation**: The 26 explicitly selected historical series absent from current modern metadata must reconcile exactly against the retained series manifest. Preserve 22 series from the September 2026 metadata and four additional baseline series from the October 2026 metadata, with their separate original acquisition identities. The four additional series were identified as absent during reconciliation with current metadata. Their retention adds no products and makes no claim that USGS has withdrawn them or that observations are currently unavailable.
 3. **Zero Regression**: Every previously registered station (27,934) and all previously selectable series must remain selectable.
 4. **Reproducible Offline Build**: The approved catalogue artifacts (`stations.parquet`, `products.parquet`, `station_products.parquet`, `station_metadata.parquet`, `source_series.json`, `monitoring_locations.json`, `series_claims.parquet`, `provenance.json`) must reproduce identically from selected genuine inputs without network access.
 
