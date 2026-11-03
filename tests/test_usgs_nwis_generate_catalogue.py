@@ -352,23 +352,6 @@ def test_refresh_rejects_absent_or_blank_site_no(retained_evidence_root, site_no
     "tests/test_data/usgs_nwis_metadata_expanded.json",
     "tests/test_data/usgs_nwis_metadata_series.json",
 )
-def test_refresh_rejects_duplicate_expanded_site(
-    retained_evidence_root,
-) -> None:
-    expanded = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
-
-    with pytest.raises(FatalContractError, match="duplicate"):
-        generator.refresh_native_table(
-            _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH),
-            [expanded[0], dict(expanded[0])],
-            retrieved_at=ATTESTED_RETRIEVED_AT,
-        )
-
-
-@pytest.mark.derived(
-    "tests/test_data/usgs_nwis_metadata_expanded.json",
-    "tests/test_data/usgs_nwis_metadata_series.json",
-)
 def test_refresh_rejects_series_without_expanded_site(retained_evidence_root) -> None:
     series = _fixture_rows(retained_evidence_root / SERIES_FIXTURE_PATH)
     expanded = _fixture_rows(retained_evidence_root / EXPANDED_FIXTURE_PATH)
@@ -974,3 +957,22 @@ def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_pat
         )
     assert verified == [provenance]
     assert not output.exists()
+
+
+def test_legacy_native_keeps_agencies_distinct_at_shared_number():
+    expanded, series = [], []
+    for agency, area, claim in (("CA574", "12.5", "other-claim"), ("USGS", "34.5", "usgs-claim")):
+        row = dict.fromkeys(EXPANDED_HEADER, "")
+        row.update(agency_cd=agency, site_no="001", station_nm=agency, drain_area_va=area)
+        expanded.append(row)
+        record = {key: row.get(key, "") for key in SERIES_HEADER}
+        record.update(data_type_cd="uv", parm_cd="00065", stat_cd="00011", ts_id=claim)
+        series.append(record)
+    result = generator.refresh_native_table(series, expanded, retrieved_at=ATTESTED_RETRIEVED_AT)
+    assert not result.issues
+    assert result.value.data.select("agency_cd", "site_no", "drain_area_va", "ts_id").rows() == [
+        ("CA574", "001", "12.5", ["other-claim"]),
+        ("USGS", "001", "34.5", ["usgs-claim"]),
+    ]
+    duplicated = generator.refresh_native_table(series, [*expanded, expanded[0]], retrieved_at=ATTESTED_RETRIEVED_AT)
+    assert duplicated.value.data["agency_cd"].to_list() == ["CA574", "CA574", "USGS"]

@@ -29,7 +29,8 @@ STATION_METADATA_NOTICE = (
     "(https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits); this statement "
     "does not extend to third-party content. RivRetrieve selected the declared source fields and encoded "
     "their values and absence states; source names remain unchanged. Processing and publication of this "
-    "projection: RivRetrieve."
+    "projection: RivRetrieve. Fields with conflicting legacy values are omitted; "
+    "provenance_facts.parquet records their reasons as usgs_sitefile_conflict.<station_id>.<source_field>."
 )
 
 LEGACY_STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
@@ -838,3 +839,28 @@ def station_metadata_supporting_inputs(provenance: AcquisitionProvenance) -> dic
                 if fact.startswith("source.station.selected_input_"):
                     supporting[fact] = ("tests/test_data/usgs_nwis_historical/native.parquet",)
     return supporting
+
+
+def bind_legacy_metadata_conflicts(
+    provenance: AcquisitionProvenance, conflicts: tuple[tuple[str, str], ...]
+) -> AcquisitionProvenance:
+    """Retain omitted field identities and their original source lineage."""
+    inputs = tuple(
+        ExternalFactReference(source_id="usgs_nwis", fact=fact)
+        for fact in selected_role_inputs(provenance, "legacy_sitefile_attributes")
+    )
+    facts = tuple(f"usgs_sitefile_conflict.{station}.{field}" for station, field in conflicts)
+    bindings = tuple(
+        FactBinding(
+            fact_group=fact,
+            facts=(fact,),
+            source_id=None,
+            acquisition_id=None,
+            transformation=Transformation(name="omit_conflicting_legacy_sitefile_field", external_inputs=inputs),
+        )
+        for fact in facts
+    )
+    payload = provenance.model_dump(mode="python")
+    payload["fact_universe"] = (*provenance.fact_universe, *facts)
+    payload["fact_bindings"] = (*provenance.fact_bindings, *bindings)
+    return AcquisitionProvenance.model_validate(payload)

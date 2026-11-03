@@ -466,49 +466,46 @@ def refresh_native_table(
     *,
     retrieved_at: RetrievedAt,
 ) -> WithIssues[NativeTable]:
-    expanded_by_site: dict[str, dict[str, str]] = {}
+    expanded_by_site: dict[tuple[str, str], list[dict[str, str]]] = {}
     for item in expanded_rows:
         row = _validated_source_row(item, EXPANDED_HEADER, row_kind="expanded")
-        site_no = _required_site_no(row, row_kind="expanded")
-        if site_no in expanded_by_site:
-            raise FatalContractError(f"USGS expanded input contains duplicate site_no {site_no!r}")
-        expanded_by_site[site_no] = row
+        site_no = (_required_site_no(row, row_kind="expanded"), row["agency_cd"])
+        expanded_by_site.setdefault(site_no, []).append(row)
     if not expanded_by_site:
         raise FatalContractError("USGS expanded input is empty")
 
-    series_records: dict[str, list[tuple[str, ...]]] = {}
-    series_shared: dict[str, tuple[str, ...]] = {}
+    series_records: dict[tuple[str, ...], list[tuple[str, ...]]] = {}
+    expanded_shared = {
+        tuple(row[name] for name in SHARED_STATION_FIELDS) for rows in expanded_by_site.values() for row in rows
+    }
     for item in series_rows:
         row = _validated_source_row(item, SERIES_HEADER, row_kind="series")
-        site_no = _required_site_no(row, row_kind="series")
+        site_no = (_required_site_no(row, row_kind="series"), row["agency_cd"])
+        if site_no not in expanded_by_site:
+            raise FatalContractError("USGS legacy series identities have no expanded site record")
         shared = tuple(row[name] for name in SHARED_STATION_FIELDS)
-        previous_shared = series_shared.setdefault(site_no, shared)
-        if shared != previous_shared:
-            differing = next(
-                name
-                for name, previous, current in zip(SHARED_STATION_FIELDS, previous_shared, shared, strict=True)
-                if previous != current
+        if shared not in expanded_shared:
+            differing = sorted(
+                {
+                    name
+                    for expanded in expanded_by_site[site_no]
+                    for name in SHARED_STATION_FIELDS
+                    if expanded[name] != row[name]
+                }
             )
-            raise FatalContractError(f"USGS series rows conflict on {differing} for site_no {site_no!r}")
-        series_records.setdefault(site_no, []).append(tuple(row[name] for name in SERIES_ONLY_FIELDS))
-    series_sites = set(series_records)
-    expanded_sites = set(expanded_by_site)
-    if series_sites - expanded_sites:
-        raise FatalContractError("USGS legacy series identities have no expanded site record")
+            raise FatalContractError(f"USGS passes conflict on {', '.join(differing)} for site_no {site_no!r}")
+        series_records.setdefault(shared, []).append(tuple(row[name] for name in SERIES_ONLY_FIELDS))
 
     native_rows: list[dict[str, object]] = []
     for site_no in sorted(expanded_by_site):
-        expanded = expanded_by_site[site_no]
-        shared = series_shared.get(site_no, tuple(expanded[name] for name in SHARED_STATION_FIELDS))
-        for name, series_value in zip(SHARED_STATION_FIELDS, shared, strict=True):
-            if expanded[name] != series_value:
-                raise FatalContractError(f"USGS passes conflict on {name} for site_no {site_no!r}")
-        records = sorted(series_records.get(site_no, []))
-        native_row: dict[str, object] = dict(expanded)
-        native_row.update(
-            {name: [record[index] for record in records] for index, name in enumerate(SERIES_ONLY_FIELDS)}
-        )
-        native_rows.append(native_row)
+        for expanded in expanded_by_site[site_no]:
+            shared = tuple(expanded[name] for name in SHARED_STATION_FIELDS)
+            records = sorted(series_records.get(shared, []))
+            native_row: dict[str, object] = dict(expanded)
+            native_row.update(
+                {name: [record[index] for record in records] for index, name in enumerate(SERIES_ONLY_FIELDS)}
+            )
+            native_rows.append(native_row)
 
     source = pl.DataFrame(native_rows, schema=pl.Schema(dict(list(NATIVE_SCHEMA.items())[:-1])))
     native = stamp_native_table(source, retrieved_at)
@@ -622,15 +619,50 @@ def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> WithIssues[N
 
 def read_modern_metadata(directory: Path):
     """Verify exact publisher bytes and every link in both saved metadata chains."""
+    from urllib.parse import parse_qs, urlsplit
+
     features = []
     receipts = []
     for parameter in ("00060", "00065"):
         completion = json.loads((directory / f"metadata-{parameter}-completion.json").read_text())
-        if completion["status"] != "complete" or completion["active_filter"] is not None or completion["sorting"]:
+        required = {"status", "pages", "features"}
+        optional = {"parameter_code", "reason", "active_filter", "sorting", "last_url"}
+        if (
+            not isinstance(completion, dict)
+            or not required <= completion.keys()
+            or completion.keys() - required - optional
+            or completion["status"] != "complete"
+            or type(completion["pages"]) is not int
+            or completion["pages"] < 1
+            or type(completion["features"]) is not int
+            or completion["features"] < 0
+            or ("active_filter" in completion and completion["active_filter"] is not None)
+            or ("sorting" in completion and completion["sorting"] is not False)
+            or ("parameter_code" in completion and completion["parameter_code"] != parameter)
+            or ("reason" in completion and not isinstance(completion["reason"], str))
+        ):
             raise FatalContractError("Modern metadata must include complete unsorted discontinued records")
         expected = f"https://api.waterdata.usgs.gov/ogcapi/v1/collections/time-series-metadata/items?f=json&parameter_code={parameter}&limit=10000"
         count = 0
+        seen = set()
         for index in range(completion["pages"]):
+            if expected is None or expected in seen:
+                raise FatalContractError("Modern metadata pagination terminates early or repeats a request")
+            parsed = urlsplit(expected)
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            if (
+                parsed.scheme != "https"
+                or parsed.netloc != "api.waterdata.usgs.gov"
+                or parsed.path != "/ogcapi/v1/collections/time-series-metadata/items"
+                or parsed.fragment
+                or query.get("f") != ["json"]
+                or query.get("parameter_code") != [parameter]
+                or query.get("limit") != ["10000"]
+                or set(query) - {"f", "parameter_code", "limit", "cursor"}
+                or ("cursor" in query and (len(query["cursor"]) != 1 or not query["cursor"][0]))
+            ):
+                raise FatalContractError("Modern metadata pagination changes requested scope")
+            seen.add(expected)
             stem = f"metadata-{parameter}-{index:04d}"
             receipt = json.loads((directory / f"{stem}.receipt.json").read_text())
             raw = gzip.decompress((directory / f"{stem}.json.gz").read_bytes())
@@ -652,7 +684,11 @@ def read_modern_metadata(directory: Path):
                 features.append(properties)
             count += len(page["features"])
             receipts.append(receipt)
-        if expected is not None or count != completion["features"] or receipts[-1]["url"] != completion["last_url"]:
+        if (
+            expected is not None
+            or count != completion["features"]
+            or ("last_url" in completion and receipts[-1]["url"] != completion["last_url"])
+        ):
             raise FatalContractError("Modern metadata chain is incomplete")
     return features, receipts
 
@@ -951,7 +987,7 @@ def build_modern_stations(
 
     rows = []
     seen = set()
-    selected = series_locations | set(retained_locations)
+    selected = series_locations | set(retained_locations) | set(baseline_locations.values())
     for feature in features:
         location = feature.get("id")
         properties = cast("dict[str, Any]", feature.get("properties"))
@@ -1121,6 +1157,7 @@ def write_catalogue(
     from rivretrieve._internal.providers.usgs_nwis.origins import (
         SELECTED_SOURCE_ROLES,
         STATION_METADATA_NOTICE,
+        bind_legacy_metadata_conflicts,
         selected_role_inputs,
         selected_station_metadata_fields,
     )
@@ -1152,13 +1189,21 @@ def write_catalogue(
     descriptions = catalogue.source_descriptions
     provenance = acquisition_provenance
     from rivretrieve._internal.providers.usgs_nwis.catalogue_series import catalogue_claims
-    from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_modern_station_metadata
+    from rivretrieve._internal.providers.usgs_nwis.station_metadata import (
+        legacy_metadata_conflicts,
+        project_modern_station_metadata,
+    )
 
     station_origin = STATION_CATALOGUE_ORIGINS["station_id"]
     if not isinstance(station_origin, Field):
         raise FatalContractError("USGS metadata requires a native station identity field")
     metadata_fields = selected_station_metadata_fields(provenance)
     station_metadata = project_modern_station_metadata(native_table, legacy_table, catalogue.stations, metadata_fields)
+    conflicts = legacy_metadata_conflicts(native_table, legacy_table, metadata_fields)
+    provenance = bind_legacy_metadata_conflicts(provenance, conflicts)
+    exposed_fields = set(station_metadata["source_field"].drop_nulls())
+    metadata_fields = tuple(field for field in metadata_fields if field.source_field in exposed_fields)
+
     metadata = build_catalogue_metadata(
         provenance,
         (STATION_CATALOGUE_ORIGINS,),
@@ -1182,11 +1227,20 @@ def write_catalogue(
         ),
         station_metadata_notice=STATION_METADATA_NOTICE,
         transformation_implementations={
-            f"selected_{role}": (
-                "src/rivretrieve/_internal/providers/usgs_nwis/origins.py",
-                "build_modern_acquisition_provenance",
-            )
-            for role in SELECTED_SOURCE_ROLES
+            **{
+                f"selected_{role}": (
+                    "src/rivretrieve/_internal/providers/usgs_nwis/origins.py",
+                    "build_modern_acquisition_provenance",
+                )
+                for role in SELECTED_SOURCE_ROLES
+            },
+            **{
+                f"usgs_sitefile_conflict.{station}.{field}": (
+                    "src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py",
+                    "project_modern_station_metadata",
+                )
+                for station, field in conflicts
+            },
         },
     )
     from rivretrieve._internal.catalogues.source_series import decode_source_descriptions, encode_source_descriptions

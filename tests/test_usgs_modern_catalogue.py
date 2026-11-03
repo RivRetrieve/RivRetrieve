@@ -605,3 +605,140 @@ def test_modern_collision_preserves_explicit_baseline(baseline, expected):
     assert dict(native.data.select("station_id", "monitoring_location_id").iter_rows()) == dict(
         zip(expected, ["CA574-001", "USGS-001"], strict=True)
     )
+
+
+def test_baseline_station_without_supported_series_remains_registered():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_catalogue
+
+    location = {
+        "type": "Feature",
+        "id": "USGS-001",
+        "geometry": None,
+        "properties": {
+            "agency_code": "USGS",
+            "monitoring_location_number": "001",
+            "country_code": "US",
+            "state_code": "55",
+        },
+    }
+    result = build_modern_catalogue(
+        [],
+        [location],
+        baseline_locations={"001": "USGS-001"},
+        retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+    )
+    assert result.stations["station_id"].to_list() == ["001"]
+    assert result.station_products.height == 6
+    assert result.station_products["availability"].to_list() == ["unavailable"] * 6
+    with pytest.raises(FatalContractError, match="missing"):
+        build_modern_catalogue(
+            [], [], baseline_locations={"001": "USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC))
+        )
+
+
+def test_legacy_alternative_rows_preserve_exact_fields_and_matching_series():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as generator
+
+    first = dict.fromkeys(generator.EXPANDED_HEADER, "")
+    first.update(agency_cd="USGS", site_no="09372200", drain_area_va="720.00", dec_lat_va="1")
+    second = {**first, "drain_area_va": "720.0", "dec_lat_va": "2"}
+    series = dict.fromkeys(generator.SERIES_HEADER, "")
+    series.update({name: second[name] for name in generator.SHARED_STATION_FIELDS})
+    series.update(data_type_cd="dv", parm_cd="00060", stat_cd="00003", ts_id="claim")
+    other_series = {**series, "dec_lat_va": "1", "ts_id": "other"}
+    result = generator.refresh_native_table(
+        [series, other_series], [first, second], retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC))
+    ).value.data
+    assert result.select("drain_area_va", "dec_lat_va", "ts_id").rows() == [
+        ("720.00", "1", ["other"]),
+        ("720.0", "2", ["claim"]),
+    ]
+    with pytest.raises(FatalContractError, match="passes conflict"):
+        generator.refresh_native_table(
+            [{**series, "dec_lat_va": "3"}],
+            [first, second],
+            retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+        )
+
+
+@pytest.mark.parametrize("historical", [False, True])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        None,
+        "filtered",
+        "sorted",
+        "cycle",
+        "count",
+        "last_url",
+        "pages",
+        "unknown",
+        "active_claim",
+        "sort_claim",
+        "unterminated",
+    ],
+)
+def test_metadata_completion_uses_verified_request_scope(tmp_path, historical, mutation):
+    import hashlib
+
+    for parameter in ("00060", "00065"):
+        first = f"https://api.waterdata.usgs.gov/ogcapi/v1/collections/time-series-metadata/items?f=json&parameter_code={parameter}&limit=10000"
+        second = first + "&cursor=next"
+        if mutation == "filtered":
+            second += "&active=true"
+        if mutation == "sorted":
+            second += "&sortby=id"
+        if mutation == "cycle":
+            second = first
+        for index, url in enumerate((first, second)):
+            page = {
+                "type": "FeatureCollection",
+                "features": [],
+                "numberReturned": 0,
+                "links": [{"rel": "next", "href": second}] if index == 0 or mutation == "unterminated" else [],
+            }
+            raw = json.dumps(page).encode()
+            stem = f"metadata-{parameter}-{index:04d}"
+            (tmp_path / f"{stem}.json.gz").write_bytes(gzip.compress(raw))
+            (tmp_path / f"{stem}.receipt.json").write_text(
+                json.dumps(
+                    {
+                        "url": url,
+                        "final_url": url,
+                        "status": 200,
+                        "bytes": len(raw),
+                        "sha256": hashlib.sha256(raw).hexdigest(),
+                    }
+                )
+            )
+        completion = {"status": "complete", "pages": 2, "features": 0}
+        if historical:
+            completion.update(
+                parameter_code=parameter, active_filter=None, sorting=False, last_url=second, reason="terminated"
+            )
+        if mutation == "count":
+            completion["features"] = 1
+        if mutation == "last_url":
+            completion["last_url"] = first
+        if mutation == "pages":
+            completion["pages"] = True
+        if mutation == "unknown":
+            completion["unexpected"] = "value"
+        if mutation == "active_claim":
+            completion["active_filter"] = True
+        if mutation == "sort_claim":
+            completion["sorting"] = True
+        (tmp_path / f"metadata-{parameter}-completion.json").write_text(json.dumps(completion))
+    if mutation:
+        with pytest.raises(FatalContractError):
+            read_modern_metadata(tmp_path)
+    else:
+        features, receipts = read_modern_metadata(tmp_path)
+        assert features == []
+        assert len(receipts) == 4

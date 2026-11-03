@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime
 
+import pytest
+
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionRecord,
     MaterialIdentity,
@@ -83,7 +85,8 @@ def test_two_original_events_support_stable_roles_and_direct_metadata_leaves():
     assert "source.station.nwis_identity_location_datum" not in graph.fact_universe
 
 
-def test_two_event_graph_publishes_and_loads_legacy_claims(tmp_path):
+@pytest.mark.parametrize("agreeing_station", [False, True])
+def test_two_event_graph_publishes_and_loads_legacy_claims(tmp_path, monkeypatch, agreeing_station):
     import polars as pl
 
     from rivretrieve._internal.acquisition_provenance import (
@@ -135,6 +138,31 @@ def test_two_event_graph_publishes_and_loads_legacy_claims(tmp_path):
             }
         )
     )
+
+    legacy = NativeTable(
+        pl.concat(
+            [
+                legacy.data.with_columns(pl.lit("720.00").alias("drain_area_va")),
+                legacy.data.with_columns(pl.lit("720.0").alias("drain_area_va")),
+            ]
+        )
+    )
+
+    if agreeing_station:
+        stations = pl.concat([stations, stations.with_columns(pl.lit("002").alias("station_id"))])
+        modern = NativeTable(
+            pl.concat(
+                [
+                    modern.data,
+                    modern.data.with_columns(
+                        pl.lit("002").alias("station_id"),
+                        pl.lit("002").alias("monitoring_location_number"),
+                        pl.lit("USGS-002").alias("monitoring_location_id"),
+                    ),
+                ]
+            )
+        )
+        legacy = NativeTable(pl.concat([legacy.data, legacy.data.head(1).with_columns(pl.lit("002").alias("site_no"))]))
 
     def code(path, symbol):
         return CodeReference(
@@ -215,14 +243,60 @@ def test_two_event_graph_publishes_and_loads_legacy_claims(tmp_path):
     )
     loaded = load_packaged_catalogue_artifact(tmp_path)
     claims = pl.read_parquet(tmp_path / "series_claims.parquet")
-    assert claims["published_id"].to_list() == ["legacy-17"]
-    assert claims["evidence"].to_list() == [
+    assert claims["published_id"].to_list() == ["legacy-17"] * (2 if agreeing_station else 1)
+    assert claims.filter(pl.col("station_id") == "001")["evidence"].to_list() == [
         [
             "catalogue:usgs_nwis:source.legacy_series_claims.input_0",
             "catalogue:usgs_nwis:source.legacy_series_claims.input_1",
         ]
     ]
     assert loaded.provider_info["provider_id"] == "usgs_nwis"
+    metadata = pl.read_parquet(tmp_path / "station_metadata.parquet")
+    assert metadata.filter((pl.col("station_id") == "001") & (pl.col("attribute_role") == "drainage_area")).select(
+        "source_field", "source_value"
+    ).rows() == [("contrib_drain_area_va", '""')]
+    from rivretrieve._internal.catalogues.evidence_graph import FactSelection, resolve_evidence
+
+    fact = "usgs_sitefile_conflict.001.drain_area_va"
+    resolved = resolve_evidence(loaded.acquisition_provenance, FactSelection(names=(fact,)))
+    assert any(node.get("identifier") == fact for node in resolved["@graph"])
+    assert any(node.get("description") == "omit_conflicting_legacy_sitefile_field" for node in resolved["@graph"])
+    assert {node["identifier"] for node in resolved["@graph"] if str(node.get("@id", "")).startswith("fact/")} == {
+        fact,
+        "source.legacy_sitefile_attributes.input_0",
+        "source.legacy_sitefile_attributes.input_1",
+    }
+    import rivretrieve as rr
+    import rivretrieve._internal.discovery as discovery
+    from rivretrieve._internal.selection import _Selection
+    from rivretrieve._internal.source_series import SeriesScope
+
+    class PackagedRoot:
+        def joinpath(self, *parts):
+            assert parts[:2] == ("usgs_nwis", "catalogue")
+            return tmp_path.joinpath(*parts[2:])
+
+    monkeypatch.setattr(discovery, "files", lambda package: PackagedRoot())
+    from rivretrieve._internal.source_series import SourceSeries
+
+    description = catalogue.source_descriptions.descriptions[0]
+    series = SourceSeries(
+        provider_id="usgs_nwis",
+        station_id="001",
+        product_id=description.product_id,
+        series_id=description.series_id,
+        identity=description.identity,
+        facts=description.facts,
+    )
+    selection = _Selection(scope=SeriesScope(provider_ids=("usgs_nwis",)), known_series=(series,))
+    source = rr.metadata(selection, view="source")
+    assert source.filter(pl.col("source_field") == "drain_area_va").is_empty()
+    summary = rr.metadata(selection)
+    assert summary.select("latitude", "longitude").rows() == [(40.0, -75.0)]
+    assert summary["drainage_area_field"].to_list() == [["contrib_drain_area_va"]]
+    assert summary["elevation_value"].to_list() == [['"3"']]
+    descriptor = rr.describe("usgs_nwis")
+    assert any(item["contentUrl"] == "provenance_facts.parquet" for item in descriptor["distribution"])
 
 
 def test_selected_graph_keeps_historical_and_current_observation_routes_independent():

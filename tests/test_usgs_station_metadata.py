@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 import polars as pl
 import polars.testing as pl_testing
+import pytest
 
 from rivretrieve._internal.catalogues.native import RetrievedAt, stamp_native_table
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
@@ -142,3 +143,46 @@ def test_colliding_agency_metadata_stays_with_canonical_identity():
         ].item()
         == '"56"'
     )
+
+
+@pytest.mark.parametrize("datum", ["NAVD88", "NGVD29"])
+def test_conflicting_quantity_spelling_is_omitted_without_losing_exact_agreement(datum):
+    modern = native(
+        {
+            "agency_code": ["USGS"],
+            "monitoring_location_number": ["09372200"],
+            "station_id": ["09372200"],
+            "monitoring_location_name": ["Modern"],
+        }
+    )
+    legacy = native(
+        {
+            "agency_cd": ["USGS", "USGS"],
+            "site_no": ["09372200", "09372200"],
+            "drain_area_va": ["720.00", "720.0"],
+            "contrib_drain_area_va": ["700", "700"],
+            "alt_va": ["100", "100"],
+            "alt_datum_cd": ["NAVD88", datum],
+            "dec_lat_va": ["1", "2"],
+        }
+    )
+    fields = (
+        *FIELDS[:2],
+        MetadataField(
+            "elevation", "alt_va", source_unit="ft", datum_field="alt_datum_cd", datum_support=("source.datum",)
+        ),
+        MetadataField("drainage_area", "contrib_drain_area_va", source_unit="mi2"),
+    )
+    result = project_modern_station_metadata(modern, legacy, pl.DataFrame({"station_id": ["09372200"]}), fields)
+    expected = [("contrib_drain_area_va", '"700"'), ("monitoring_location_name", '"Modern"')]
+    if datum == "NAVD88":
+        expected.insert(0, ("alt_va", '"100"'))
+        assert result.filter(pl.col("source_field") == "alt_va")["source_datum"].item() == "NAVD88"
+    assert (
+        result.filter(pl.col("state") != "no_metadata")
+        .select("source_field", "source_value")
+        .sort("source_field")
+        .rows()
+        == expected
+    )
+    assert legacy.data["drain_area_va"].to_list() == ["720.00", "720.0"]
