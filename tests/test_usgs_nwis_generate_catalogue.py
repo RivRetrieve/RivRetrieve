@@ -742,8 +742,8 @@ def _modern_cli_arguments(tmp_path):
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": 1,
-                "historical_series_ids": [],
+                "schema_version": 2,
+                "historical_sources": [],
                 "retained_station_ids": [],
             }
         )
@@ -759,8 +759,8 @@ def _modern_cli_arguments(tmp_path):
         str(tmp_path / "locations.json"),
         "--retention-manifest",
         str(manifest),
-        "--retained-metadata",
-        str(tmp_path / "historical"),
+        "--evidence-root",
+        str(tmp_path),
     ]
 
 
@@ -805,8 +805,11 @@ def test_modern_cli_passes_manifest_selection_and_uses_source_retrieval_time(tmp
     (tmp_path / "retention.json").write_text(
         json.dumps(
             {
-                "schema_version": 1,
-                "historical_series_ids": ["old-series"],
+                "schema_version": 2,
+                "historical_sources": [
+                    {"consumer_directory": "historical", "series_ids": ["old-series"]},
+                    {"consumer_directory": "october", "series_ids": ["additional-series"]},
+                ],
                 "retained_station_ids": ["USGS-001"],
             }
         )
@@ -815,7 +818,10 @@ def test_modern_cli_passes_manifest_selection_and_uses_source_retrieval_time(tmp
 
     def read(path):
         reads.append(path)
-        return ([{"id": path.name}], [{"retrieved_at": "2026-10-30T00:00:00+00:00"}])
+        return (
+            [{"id": {"historical": "old-series", "october": "additional-series"}.get(path.name, path.name)}],
+            [{"retrieved_at": "2026-10-30T00:00:00+00:00"}],
+        )
 
     monkeypatch.setattr(generator, "read_modern_metadata", read)
     monkeypatch.setattr(
@@ -836,13 +842,13 @@ def test_modern_cli_passes_manifest_selection_and_uses_source_retrieval_time(tmp
     monkeypatch.setattr(generator, "build_modern_catalogue", build)
     output = tmp_path / "native.parquet"
     assert generator.main([*args, "--native-out", str(output)]) == 0
-    assert reads == [tmp_path / "metadata", tmp_path / "historical"]
+    assert reads == [tmp_path / "metadata", tmp_path / "historical", tmp_path / "october"]
     assert seen == {
         "baseline_locations": {},
         "features": [{"id": "metadata"}],
         "locations": [{"id": "USGS-001"}],
-        "historical_features": [{"id": "historical"}],
-        "retained_series_ids": ("old-series",),
+        "historical_features": [{"id": "old-series"}, {"id": "additional-series"}],
+        "retained_series_ids": ("old-series", "additional-series"),
         "retained_locations": ("USGS-001",),
         "retrieved_at": RetrievedAt(datetime(2026, 10, 31, 12, tzinfo=UTC)),
     }

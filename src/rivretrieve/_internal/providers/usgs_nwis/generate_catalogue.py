@@ -1304,7 +1304,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--retention-manifest", type=Path, required=True)
     parser.add_argument("--baseline-locations", type=Path, required=True)
     parser.add_argument("--baseline-sha256", required=True)
-    parser.add_argument("--retained-metadata", type=Path, required=True)
     parser.add_argument("--native", type=Path, help="Adopted modern station projection.")
     parser.add_argument("--legacy-native", type=Path, help="Verified legacy enrichment and historical claims table.")
     parser.add_argument(
@@ -1313,7 +1312,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--build-inputs", type=Path)
     parser.add_argument("--acquisition-provenance", type=Path)
-    parser.add_argument("--evidence-root", type=Path)
+    parser.add_argument("--evidence-root", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.native_out is None and args.out is None:
         parser.error("select --native-out or --out")
@@ -1330,24 +1329,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--out requires --build-inputs, --acquisition-provenance, --evidence-root and --legacy-native")
     if args.native_out is not None and args.out is not None:
         parser.error("--native-out preparation and --out publication are separate stages")
-    selection = json.loads(args.retention_manifest.read_text())
-    if (
-        not isinstance(selection, dict)
-        or set(selection) != {"schema_version", "historical_series_ids", "retained_station_ids"}
-        or selection["schema_version"] != 1
-    ):
-        raise FatalContractError("Invalid USGS retention manifest schema")
-    for key in ("historical_series_ids", "retained_station_ids"):
-        values = selection[key]
-        if (
-            not isinstance(values, list)
-            or any(not isinstance(item, str) or not item for item in values)
-            or len(set(values)) != len(values)
-        ):
-            raise FatalContractError("USGS retention manifest requires distinct nonblank identities")
+    from rivretrieve._internal.providers.usgs_nwis.retention import load_historical_features, read_retention
+
+    selection = read_retention(args.retention_manifest)
     features, receipts = read_modern_metadata(args.modern_metadata)
     locations, location_receipts = read_monitoring_locations(args.monitoring_locations)
-    historical, _ = read_modern_metadata(args.retained_metadata)
+    historical = load_historical_features(selection, args.evidence_root)
     retrieved_at = RetrievedAt(
         max(datetime.fromisoformat(item["retrieved_at"]) for item in receipts + location_receipts)
     )
@@ -1360,8 +1347,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         baseline_locations=json.loads(baseline_bytes),
         retrieved_at=retrieved_at,
         historical_features=historical,
-        retained_series_ids=tuple(selection["historical_series_ids"]),
-        retained_locations=tuple(selection["retained_station_ids"]),
+        retained_series_ids=selection.historical_series_ids,
+        retained_locations=selection.retained_station_ids,
     )
     native = NativeTable(catalogue.source_native)
     if args.native_out is not None:

@@ -200,9 +200,11 @@ for the runtime and catalogue boundaries.
 USGS discovery builds from complete modern time-series metadata and explicitly
 selected monitoring-location recordings. Supply `--modern-metadata`,
 `--monitoring-locations` (the archive's `locations.json`), `--retention-manifest`
-and `--retained-metadata`. The retention declaration has `schema_version: 1`,
-`historical_series_ids` and agency-qualified `retained_station_ids`. Historical
-series must resolve exactly without overlapping current metadata.
+and `--evidence-root`. The retention declaration has `schema_version: 2`,
+`historical_sources` and agency-qualified `retained_station_ids`. Each historical
+source names a `consumer_directory` relative to the evidence root and its exact
+`series_ids`. Each series must resolve in its assigned source without overlapping
+current metadata. Original source acquisitions remain distinct.
 
 Use `--native-out` to prepare the derived modern station table for archive
 adoption. It preserves modern names and WGS84 geometry; null geometry remains

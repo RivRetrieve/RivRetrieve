@@ -1205,8 +1205,6 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 str(handoff / "modern-metadata"),
                 "--monitoring-locations",
                 str(handoff / "monitoring-locations/locations.json"),
-                "--retained-metadata",
-                str(handoff / "retained-metadata"),
                 "--retention-manifest",
                 str(handoff / "retention.json"),
                 "--legacy-native",
