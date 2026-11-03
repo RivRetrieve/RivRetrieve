@@ -94,7 +94,6 @@ def test_two_event_graph_publishes_and_loads_legacy_claims(tmp_path, monkeypatch
         CatalogueBuildInputs,
         CodeReference,
         RetainedInputUse,
-        verified_provider_terms,
     )
     from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
     from rivretrieve._internal.catalogues.native import NativeTable
@@ -213,7 +212,8 @@ def test_two_event_graph_publishes_and_loads_legacy_claims(tmp_path, monkeypatch
         "live_station_products": False,
         "bulk_observations": "none",
         "catalogue_version": None,
-        **verified_provider_terms(graph.source_records, graph.fact_bindings, graph.withheld_facts),
+        "license": None,
+        "citation": None,
     }
     catalogue = generator.GeneratedUsgsNwisCatalogue(
         provider_info=provider,
@@ -296,13 +296,16 @@ def test_two_event_graph_publishes_and_loads_legacy_claims(tmp_path, monkeypatch
     assert summary["drainage_area_field"].to_list() == [["contrib_drain_area_va"]]
     assert summary["elevation_value"].to_list() == [['"3"']]
     descriptor = rr.describe("usgs_nwis")
+    from rivretrieve._internal.catalogues.terms import verified_catalogue_terms
+
     expected_terms = {
         statement.kind: statement.exact_text
         for statement in graph.source_records[0].statements
         if statement.kind in {"license", "citation"}
     }
+    assert verified_catalogue_terms(loaded.acquisition_provenance) == expected_terms
     for kind, exact_text in expected_terms.items():
-        assert loaded.provider_info[kind] == exact_text
+        assert loaded.provider_info[kind] is None
         assert descriptor[kind] == exact_text
     assert any(item["contentUrl"] == "provenance_facts.parquet" for item in descriptor["distribution"])
 
