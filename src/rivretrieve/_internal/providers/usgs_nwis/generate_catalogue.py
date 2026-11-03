@@ -951,7 +951,7 @@ def build_modern_stations(
 
     rows = []
     seen = set()
-    selected = series_locations | set(retained_locations)
+    selected = series_locations | set(retained_locations) | set(baseline_locations.values())
     for feature in features:
         location = feature.get("id")
         properties = cast("dict[str, Any]", feature.get("properties"))

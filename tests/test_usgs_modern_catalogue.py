@@ -605,3 +605,34 @@ def test_modern_collision_preserves_explicit_baseline(baseline, expected):
     assert dict(native.data.select("station_id", "monitoring_location_id").iter_rows()) == dict(
         zip(expected, ["CA574-001", "USGS-001"], strict=True)
     )
+
+
+def test_baseline_station_without_supported_series_remains_registered():
+    from datetime import UTC, datetime
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_catalogue
+
+    location = {
+        "type": "Feature",
+        "id": "USGS-001",
+        "geometry": None,
+        "properties": {
+            "agency_code": "USGS",
+            "monitoring_location_number": "001",
+            "country_code": "US",
+            "state_code": "55",
+        },
+    }
+    result = build_modern_catalogue(
+        [],
+        [location],
+        baseline_locations={"001": "USGS-001"},
+        retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+    )
+    assert result.stations["station_id"].to_list() == ["001"]
+    assert result.station_products.height == 6
+    assert result.station_products["availability"].to_list() == ["unavailable"] * 6
+    with pytest.raises(FatalContractError, match="missing"):
+        build_modern_catalogue(
+            [], [], baseline_locations={"001": "USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC))
+        )
