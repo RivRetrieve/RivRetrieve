@@ -405,7 +405,12 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
             for statement in provenance.header.source_records[0].statements
             if statement.kind == kind
         )
-    for provider in ("ca_eccc", "pl_imgw", "fr_hydroportail", "th_thaiwater"):
+    canadian, _, _ = _inputs("ca_eccc")
+    for source in canadian.header.source_records:
+        for statement in source.statements:
+            if statement.kind in {"license", "citation"}:
+                assert _descriptor("ca_eccc")[statement.kind] == statement.exact_text
+    for provider in ("pl_imgw", "fr_hydroportail", "th_thaiwater"):
         assert "license" not in _descriptor(provider) and "citation" not in _descriptor(provider)
     assert _descriptor("ch_foen")["license"] == "Freie Nutzung. Quellenangabe ist Pflicht."
     hubeau = _descriptor("fr_hubeau")
