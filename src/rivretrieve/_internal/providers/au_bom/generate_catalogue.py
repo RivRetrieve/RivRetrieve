@@ -476,7 +476,11 @@ def write_catalogue(
     from io import BytesIO
 
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
-    from rivretrieve._internal.providers.au_bom.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+    from rivretrieve._internal.providers.au_bom.origins import (
+        STATION_CATALOGUE_ORIGINS,
+        STATION_METADATA_FIELDS,
+        STATION_METADATA_NOTICE,
+    )
 
     files = {
         "provider.json": (json.dumps(catalogue.provider_info, sort_keys=True, separators=(",", ":")) + "\n").encode()
@@ -496,6 +500,7 @@ def write_catalogue(
         build_inputs=build_inputs,
         native_table=native_table,
         metadata_fields=STATION_METADATA_FIELDS,
+        station_metadata_notice=STATION_METADATA_NOTICE,
         source_descriptions=catalogue.source_descriptions,
     )
     output = Path(out_dir)
