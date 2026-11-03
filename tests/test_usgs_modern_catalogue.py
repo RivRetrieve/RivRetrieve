@@ -637,3 +637,31 @@ def test_baseline_station_without_supported_series_remains_registered():
         build_modern_catalogue(
             [], [], baseline_locations={"001": "USGS-001"}, retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC))
         )
+
+
+def test_legacy_alternative_rows_preserve_exact_fields_and_matching_series():
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis import generate_catalogue as generator
+
+    first = dict.fromkeys(generator.EXPANDED_HEADER, "")
+    first.update(agency_cd="USGS", site_no="09372200", drain_area_va="720.00", dec_lat_va="1")
+    second = {**first, "drain_area_va": "720.0", "dec_lat_va": "2"}
+    series = dict.fromkeys(generator.SERIES_HEADER, "")
+    series.update({name: second[name] for name in generator.SHARED_STATION_FIELDS})
+    series.update(data_type_cd="dv", parm_cd="00060", stat_cd="00003", ts_id="claim")
+    other_series = {**series, "dec_lat_va": "1", "ts_id": "other"}
+    result = generator.refresh_native_table(
+        [series, other_series], [first, second], retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC))
+    ).value.data
+    assert result.select("drain_area_va", "dec_lat_va", "ts_id").rows() == [
+        ("720.00", "1", ["other"]),
+        ("720.0", "2", ["claim"]),
+    ]
+    with pytest.raises(FatalContractError, match="passes conflict"):
+        generator.refresh_native_table(
+            [{**series, "dec_lat_va": "3"}],
+            [first, second],
+            retrieved_at=RetrievedAt(datetime(2026, 11, 1, tzinfo=UTC)),
+        )

@@ -26,7 +26,7 @@ def catalogue_claims(
         left_on=["agency_cd", "site_no"],
         right_on=["agency_code", "monitoring_location_number"],
         how="inner",
-        validate="1:1",
+        validate="m:1",
     )
     columns = ("data_type_cd", "parm_cd", "stat_cd", "ts_id", "loc_web_ds")
     source = native.select("station_id", *columns).explode(columns)
