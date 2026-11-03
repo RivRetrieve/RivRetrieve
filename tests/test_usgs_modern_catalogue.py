@@ -742,3 +742,37 @@ def test_metadata_completion_uses_verified_request_scope(tmp_path, historical, m
         features, receipts = read_modern_metadata(tmp_path)
         assert features == []
         assert len(receipts) == 4
+
+
+@pytest.mark.parametrize("computation,expected", [("Unknown", "stage_instantaneous"), ("Max At Event Time", None)])
+def test_published_event_maximum_is_not_instantaneous(computation, expected):
+    from rivretrieve._internal.providers.usgs_nwis.catalogue_series import modern_product
+
+    properties = {
+        "parameter_code": "00065",
+        "computation_period_identifier": "Points",
+        "statistic_id": None,
+        "computation_identifier": computation,
+    }
+    assert modern_product(properties) == expected
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.catalogues.native import RetrievedAt
+    from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_catalogue
+
+    if expected is None:
+        catalogue = build_modern_catalogue(
+            [{**properties, "id": "event", "monitoring_location_id": "USGS-001"}],
+            [],
+            baseline_locations={},
+            retrieved_at=RetrievedAt(datetime(2026, 1, 1, tzinfo=UTC)),
+        )
+        assert catalogue.stations.is_empty()
+        assert catalogue.source_descriptions.descriptions == ()
+    malformed = dict(properties)
+    del malformed["statistic_id"]
+    with pytest.raises(ValueError):
+        modern_product(malformed)
+    properties["computation_identifier"] = "Unreviewed computation"
+    with pytest.raises(ValueError):
+        modern_product(properties)

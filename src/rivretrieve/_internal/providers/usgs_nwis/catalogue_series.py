@@ -107,6 +107,37 @@ MODERN_PRODUCT_ROUTES = {
 }
 
 
+def modern_product(properties: Mapping[str, object]) -> str | None:
+    """Select supported computations without treating event maxima as instantaneous."""
+    parameter = properties.get("parameter_code")
+    period = properties.get("computation_period_identifier")
+    statistic = properties.get("statistic_id")
+    if "statistic_id" not in properties or not isinstance(properties.get("computation_identifier"), str):
+        raise ValueError("Missing or malformed modern metadata computation coordinates")
+    if (
+        not isinstance(parameter, str)
+        or not isinstance(period, str)
+        or (statistic is not None and not isinstance(statistic, str))
+    ):
+        raise ValueError("Malformed modern metadata product coordinates")
+    product = MODERN_PRODUCT_ROUTES.get((parameter, period, statistic))
+    if product is None:
+        return None
+    computation = properties.get("computation_identifier")
+    if period == "Points" and statistic is None and computation == "Max At Event Time":
+        return None
+    expected = (
+        {"00003": "Mean", "00001": "Max", "00002": "Min"}.get(statistic or "")
+        if period == "Daily"
+        else "Instantaneous"
+        if statistic == "00011"
+        else "Unknown"
+    )
+    if computation != expected:
+        raise ValueError("Unresolved modern metadata computation for supported route")
+    return product
+
+
 def modern_source_descriptions(
     features: Iterable[Mapping[str, object]],
     monitoring_locations: Mapping[str, str],
@@ -134,7 +165,7 @@ def modern_source_descriptions(
             or (statistic is not None and not isinstance(statistic, str))
         ):
             raise ValueError("Malformed modern metadata product coordinates")
-        product = MODERN_PRODUCT_ROUTES.get((parameter, period, statistic))
+        product = modern_product(properties)
         if product is None:
             continue
         coordinates = UsgsNwisSourceCoordinates(
