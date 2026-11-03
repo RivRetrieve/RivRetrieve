@@ -142,7 +142,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 
 | Provider | Observation kind | Required credential variables | Stations | Available pairs | Unknown pairs | Unavailable pairs |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| `at_ehyd` | catalogue-only | none | 746 | 4837 | 3369 | 0 |
+| `at_ehyd` | live | none | 746 | 4837 | 3369 | 0 |
 | `ba_fhmzbih` | live | none | 60 | 132 | 48 | 0 |
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |

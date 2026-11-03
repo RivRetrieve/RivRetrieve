@@ -32,7 +32,7 @@ from rivretrieve._internal.providers.at_ehyd.config import (
 )
 from rivretrieve._internal.providers.at_ehyd.fetch import fetch, resolve_messstellen_info_files
 from rivretrieve._internal.providers.at_ehyd.parse import parse
-from rivretrieve._internal.source_series import InventoryCompleteness, OutcomeStatus
+from rivretrieve._internal.source_series import InventoryCompleteness, OutcomeStatus, admission
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
 from tests.test_internal_driver import _provenance
@@ -384,8 +384,22 @@ def test_recorded_pegel_aktuell_rolling_accumulation_null_preservation_and_outco
     ):
         body, rcpt = _capture(retained_evidence_root, group, name)
         parsed = parse(
-            Payload(cfg.products[prod].coordinates, (("210120", prod),), win, body, _origin_from_receipt(rcpt), ()),
+            Payload(
+                cfg.products[prod].coordinates,
+                (("210120", prod),),
+                _make_fetch_window(
+                    WindowEndpoint.from_datetime(datetime(2026, 1, 1)),
+                    WindowEndpoint.from_datetime(datetime(2026, 12, 31)),
+                ),
+                body,
+                _origin_from_receipt(rcpt),
+                (),
+            ),
             cfg,
         )
-        assert [item.status for item in parsed.outcomes] == [OutcomeStatus.UNSUPPORTED], name
-        assert parsed.rows.is_empty()
+        assert any(item.status is OutcomeStatus.SUCCESS for item in parsed.outcomes), name
+        assert not parsed.rows.is_empty(), name
+        assert set(parsed.rows["source_unit"].to_list()) == {"m ü.A"}
+        assert parsed.series[0].facts[0].vertical_reference.value == "above_sea_level"
+        assert admission(parsed.series[0].facts[0]).target_unit == "m"
+        assert admission(parsed.series[0].facts[0]).factor == 1.0

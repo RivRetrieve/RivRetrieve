@@ -40,7 +40,7 @@ from rivretrieve._internal.providers.at_ehyd.declaration import declaration
 from rivretrieve._internal.providers.at_ehyd.fetch import fetch, resolve_messstellen_info_files
 from rivretrieve._internal.providers.at_ehyd.parse import parse
 from rivretrieve._internal.providers.at_ehyd.series import OWF_INTERVAL_RULE_TEXT, source_series
-from rivretrieve._internal.providers.registration import CatalogueOnly
+from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.source_series import (
     ClippingAxis,
     EvidenceState,
@@ -49,6 +49,7 @@ from rivretrieve._internal.source_series import (
     PhysicalPredicate,
     RestrictionKind,
     SeriesScope,
+    admission,
 )
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import (
@@ -65,7 +66,7 @@ _RETRIEVED_AT = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
 
 @dataclass(frozen=True)
 class _AtEhydStages:
-    """Internal stage bundle for exercising eHYD retrieval while declaration stays CatalogueOnly."""
+    """Explicit stage bundle matching the live declaration contract."""
 
     config: ProviderConfig = config()
     window_declarations: ProductWindowDeclarations = window_declarations()
@@ -148,8 +149,10 @@ def _owf_csv(
     return "\r\n".join(header).encode("cp1252")
 
 
-def test_declaration_stays_catalogue_only_in_step4_and_config_declares_11_source_fixed_products() -> None:
-    assert isinstance(declaration.observations, CatalogueOnly)
+def test_declaration_wires_live_stages_and_config_declares_11_source_fixed_products() -> None:
+    assert isinstance(declaration.observations, LiveStages)
+    assert declaration.observations.stages.observation_source == "live"
+    assert declaration.observations.stages.shared_acquisition_products == SHARED_ACQUISITION_PRODUCTS
 
     cfg = config()
     decls = window_declarations()
@@ -836,7 +839,8 @@ def test_outcome_boundaries_distinguish_no_match_unresolved_unsupported_and_fail
     )
     assert [item.status for item in finite_empty_owf.outcomes] == [OutcomeStatus.EMPTY]
 
-    # 3. UNSUPPORTED: cleared owf unit [] (station 203539 W-Monatsminima); cleared pegelLongterm ""; "m ü.A" stage.
+    # 3. UNSUPPORTED: cleared owf unit [] (station 203539 W-Monatsminima), cleared pegelLongterm "", unrecognized unit;
+    #    meanwhile "m ü.A" (Meter über Adria) stage is admitted with factor=1.0 and vertical_reference="above_sea_level".
     cleared_owf = parse(
         Payload(
             SourceCoordinates(AtEhydOwfCoordinates("owf_wasserst_monatsminima", "W-Monatsminima")),
@@ -897,7 +901,34 @@ def test_outcome_boundaries_distinguish_no_match_unresolved_unsupported_and_fail
         ),
         cfg,
     )
-    assert [item.status for item in mua_bgis.outcomes] == [OutcomeStatus.UNSUPPORTED]
+    assert OutcomeStatus.SUCCESS in {item.status for item in mua_bgis.outcomes}
+    assert mua_bgis.rows["source_unit"].to_list() == ["m ü.A"]
+    assert mua_bgis.rows["value"].to_list() == [pytest.approx(402.15)]
+    assert mua_bgis.series[0].facts[0].vertical_reference.value == "above_sea_level"
+    assert admission(mua_bgis.series[0].facts[0]).target_unit == "m"
+    assert admission(mua_bgis.series[0].facts[0]).factor == 1.0
+
+    unrecognized_bgis = parse(
+        Payload(
+            SourceCoordinates(AtEhydPegelCoordinates("pegel_bgis", "Wasserstand")),
+            (("210120", ProductId("pegel_bgis_wasserstand")),),
+            win,
+            json.dumps(
+                {
+                    "hzbnr": 210120,
+                    "parameter": "Wasserstand",
+                    "einheit": "‰",
+                    "valCount": 1,
+                    "categories": ["2026-10-31 10:00:00"],
+                    "data": [402.15],
+                }
+            ).encode("utf-8"),
+            _origin(),
+            (),
+        ),
+        cfg,
+    )
+    assert [item.status for item in unrecognized_bgis.outcomes] == [OutcomeStatus.UNSUPPORTED]
 
     # 4. FAILED: 0-byte owf, HZB-Nummer mismatch, pegelBgis hzbnr mismatch, Exportzeitreihe mismatch, malformed Lücke timestamp.
     failed_cases = [

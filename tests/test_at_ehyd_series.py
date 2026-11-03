@@ -111,8 +111,10 @@ def test_quality_and_excluded_field_vocabularies_preserve_publisher_boundaries()
         ("owf", "owf_wassertemp_monatsmittel", "°C", "temperature", "degC", 1.0, None),
         ("pegel_bgis", "Abfluss", "m³/s", "discharge", "m3/s", 1.0, None),
         ("pegel_bgis", "Wasserstand", "cm", "stage", "m", 0.01, "gauge_zero"),
+        ("pegel_bgis", "Wasserstand", "m ü.A", "stage", "m", 1.0, "above_sea_level"),
         ("pegel_longterm", "Abfluss", "m³/s", "discharge", "m3/s", 1.0, None),
         ("pegel_longterm", "Wasserstand", "cm", "stage", "m", 0.01, "gauge_zero"),
+        ("pegel_longterm", "Wasserstand", "m ü.A.", "stage", "m", 1.0, "above_sea_level"),
     ],
 )
 def test_dimensional_admission_and_gauge_zero_stage_without_datum_rewrite(
@@ -136,13 +138,15 @@ def test_dimensional_admission_and_gauge_zero_stage_without_datum_rewrite(
         assert -2.8 * decision.factor == pytest.approx(-2.8)
 
 
-@pytest.mark.parametrize("bad_unit", [None, "t", "m ü.A", "°C"])
+@pytest.mark.parametrize("bad_unit", [None, "t", "°C"])
 def test_missing_or_incompatible_units_remain_unsupported_for_discharge_and_stage(bad_unit):
     q_facts = source_series("209486", "owf", "owf_abfl_tagesmittel", units=(bad_unit,)).facts[0]
     w_facts = source_series("209486", "pegel_bgis", "Wasserstand", units=(bad_unit,)).facts[0]
     assert admission(q_facts).status == "unsupported"
     assert admission(w_facts).status == "unsupported"
     assert w_facts.vertical_reference.value is None
+    q_sea_level = source_series("209486", "owf", "owf_abfl_tagesmittel", units=("m ü.A",)).facts[0]
+    assert admission(q_sea_level).status == "unsupported"
 
 
 def test_owf_header_parser_covers_witnessed_variants_and_rejects_contradictions():

@@ -83,6 +83,8 @@ UNITS: dict[str, str] = {
     "m3/s": "m3/s",
     "cm": "cm",
     "m": "m",
+    "m ü.A": "m",
+    "m ü.A.": "m",
     "°C": "degC",
 }
 
@@ -328,9 +330,12 @@ def _build_facts(
         raise FatalContractError("eHYD source series requires at least one unit state")
     segments: list[PhysicalFacts] = []
     for unit in sorted(set(units), key=lambda item: item or ""):
-        vertical_reference = (
-            known("gauge_zero", stage_reference_evidence) if quantity == "stage" and unit == "cm" else EvidenceFact()
-        )
+        if quantity == "stage" and unit == "cm":
+            vertical_reference = known("gauge_zero", stage_reference_evidence)
+        elif quantity == "stage" and unit in {"m ü.A", "m ü.A."}:
+            vertical_reference = known("above_sea_level", unit_evidence)
+        else:
+            vertical_reference = EvidenceFact()
         fact = PhysicalFacts(
             facts_id="unidentified",
             quantity=known(quantity, unit_evidence),
