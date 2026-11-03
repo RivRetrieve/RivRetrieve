@@ -13,15 +13,24 @@ from rivretrieve._internal.engine import ProviderConfig
 from rivretrieve._internal.primitives import ProductId
 
 
-def catalogue_claims(native: pl.DataFrame, products: Mapping[tuple[str, str, str], str]) -> pl.DataFrame:
-    """Project parallel publisher catalogue arrays at their established source coordinates."""
+def catalogue_claims(
+    native: pl.DataFrame,
+    products: Mapping[tuple[str, str, str], str],
+    modern_stations: pl.DataFrame,
+    *,
+    evidence: tuple[str, ...],
+) -> pl.DataFrame:
+    """Project legacy claims only for matching modern agency-qualified stations."""
+    native = native.join(
+        modern_stations.select("agency_code", "monitoring_location_number", "station_id"),
+        left_on=["agency_cd", "site_no"],
+        right_on=["agency_code", "monitoring_location_number"],
+        how="inner",
+        validate="m:1",
+    )
     columns = ("data_type_cd", "parm_cd", "stat_cd", "ts_id", "loc_web_ds")
-    source = native.select("site_no", *columns).explode(columns)
+    source = native.select("station_id", *columns).explode(columns)
     rows = []
-    evidence = [
-        "catalogue:usgs_nwis:source.station_product.nwis_series_availability_and_coverage",
-        "catalogue:usgs_nwis:source.product.nwis_parameter_statistic_data_type_codes",
-    ]
     for station, data_type, parameter, statistic, ts_id, description in source.iter_rows():
         product = products.get((data_type, parameter, statistic))
         if product is None:
@@ -85,27 +94,60 @@ def describe_catalogue(artifact: PackagedCatalogArtifact, *, config: ProviderCon
     return descriptions.model_copy(update={"descriptions": tuple(result)})
 
 
+MODERN_PRODUCT_ROUTES = {
+    ("00060", "Daily", "00003"): "discharge_daily_mean",
+    ("00065", "Daily", "00003"): "stage_daily_mean",
+    ("00065", "Daily", "00001"): "stage_daily_max",
+    ("00065", "Daily", "00002"): "stage_daily_min",
+    **{
+        (parameter, "Points", statistic): product
+        for parameter, product in (("00060", "discharge_instantaneous"), ("00065", "stage_instantaneous"))
+        for statistic in ("00011", None)
+    },
+}
+
+
+def modern_product(properties: Mapping[str, object]) -> str | None:
+    """Select supported computations without treating event maxima as instantaneous."""
+    parameter = properties.get("parameter_code")
+    period = properties.get("computation_period_identifier")
+    statistic = properties.get("statistic_id")
+    if "statistic_id" not in properties or not isinstance(properties.get("computation_identifier"), str):
+        raise ValueError("Missing or malformed modern metadata computation coordinates")
+    if (
+        not isinstance(parameter, str)
+        or not isinstance(period, str)
+        or (statistic is not None and not isinstance(statistic, str))
+    ):
+        raise ValueError("Malformed modern metadata product coordinates")
+    product = MODERN_PRODUCT_ROUTES.get((parameter, period, statistic))
+    if product is None:
+        return None
+    computation = properties.get("computation_identifier")
+    if period == "Points" and statistic is None and computation == "Max At Event Time":
+        return None
+    expected = (
+        {"00003": "Mean", "00001": "Max", "00002": "Min"}.get(statistic or "")
+        if period == "Daily"
+        else "Instantaneous"
+        if statistic == "00011"
+        else "Unknown"
+    )
+    if computation != expected:
+        raise ValueError("Unresolved modern metadata computation for supported route")
+    return product
+
+
 def modern_source_descriptions(
     features: Iterable[Mapping[str, object]],
     monitoring_locations: Mapping[str, str],
 ) -> SourceDescriptions:
-    """Match supported metadata records inside the retained native station scope."""
+    """Describe supported published series at selected modern monitoring locations."""
     from rivretrieve._internal.catalogues.source_series import SourceDescription
     from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
     from rivretrieve._internal.providers.usgs_nwis.metadata import source_series
 
     stations = {location: station for station, location in monitoring_locations.items()}
-    routes = {
-        ("00060", "Daily", "00003"): "discharge_daily_mean",
-        ("00065", "Daily", "00003"): "stage_daily_mean",
-        ("00065", "Daily", "00001"): "stage_daily_max",
-        ("00065", "Daily", "00002"): "stage_daily_min",
-        **{
-            (parameter, "Points", statistic): product
-            for parameter, product in (("00060", "discharge_instantaneous"), ("00065", "stage_instantaneous"))
-            for statistic in ("00011", None)
-        },
-    }
     result = {}
     for properties in features:
         location = properties.get("monitoring_location_id")
@@ -123,7 +165,7 @@ def modern_source_descriptions(
             or (statistic is not None and not isinstance(statistic, str))
         ):
             raise ValueError("Malformed modern metadata product coordinates")
-        product = routes.get((parameter, period, statistic))
+        product = modern_product(properties)
         if product is None:
             continue
         coordinates = UsgsNwisSourceCoordinates(

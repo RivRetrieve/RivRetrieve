@@ -86,6 +86,43 @@ def remove_external_inputs(directory: Path, groups: tuple[str, ...]) -> None:
     )
 
 
+# Exact registered-baseline declarations at public revision 7dd47d9ec899eec2b2b91a111e7372222073c031.
+_USGS_REGISTERED_BASELINE_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
+    ("maintenance/catalogue/usgs_nwis/selected-acquisitions.json", None),
+    ("maintenance/catalogue/usgs_nwis/retained-series.json", None),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "retain_source_descriptions"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "selected_native_provenance"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "station_metadata_supporting_inputs"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_NOTICE"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py", "project_station_metadata"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "modern_source_descriptions"),
+)
+
+
+def registered_usgs_baseline():
+    """Read the public ef92fc04 graph and one gauge's exact metadata rows.
+
+    The fixture retains the 7dd47d9e build's complete lineage and declarations.
+    Its five metadata rows cover every adopted field and datum association;
+    full catalogue/source verification remains in the retained-evidence suite.
+    Original public Git revision and artifact digests accompany the projection.
+    """
+    from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA
+
+    document = json.loads((Path(__file__).parent / "fixtures/usgs_registered_baseline.json").read_text())
+    provenance = AcquisitionProvenance.model_validate(document["provenance"])
+    assert provenance.build_inputs.build.revision == "7dd47d9ec899eec2b2b91a111e7372222073c031"
+    return provenance, pl.DataFrame(document["metadata"], schema=SOURCE_METADATA_SCHEMA)
+
+
 def historical_source_provenance(provenance, metadata, *, declaration_locations=None):
     """Validate publication-only additions before projecting an immutable old oracle.
 
@@ -106,6 +143,7 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
     provider = provenance.provider_id
     origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
     private_declarations = {
+        "declarations/usgs_nwis/retention.json": "declarations/usgs_nwis/retention.json",
         "maintenance/catalogue/usgs_nwis/selected-acquisitions.json": "declarations/usgs_nwis/selected-acquisitions.json",
         "maintenance/catalogue/usgs_nwis/retained-series.json": "declarations/usgs_nwis/retained-series.json",
         "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json": "declarations/ba_fhmzbih/baseline_workbook_access.json",
@@ -115,7 +153,11 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
         "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv": "declarations/th_thaiwater/governing_station_product_evidence.csv",
     }
     if declaration_locations is None:
-        declaration_locations = origins.CATALOGUE_BUILD_DECLARATIONS
+        declaration_locations = (
+            _USGS_REGISTERED_BASELINE_DECLARATIONS
+            if provider == "usgs_nwis" and build.build.revision == "7dd47d9ec899eec2b2b91a111e7372222073c031"
+            else origins.CATALOGUE_BUILD_DECLARATIONS
+        )
     expected_declarations = tuple(
         (
             "https://github.com/RivRetrieve/verification-evidence"
@@ -182,7 +224,11 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
 
     source_metadata_frame(metadata.select("provider_id", "station_id").unique(), metadata)
     assert set(metadata["provider_id"]) == {provider}
-    fields = origins.STATION_METADATA_FIELDS
+    fields = (
+        origins.LEGACY_STATION_METADATA_FIELDS
+        if provider == "usgs_nwis" and declaration_locations != origins.CATALOGUE_BUILD_DECLARATIONS
+        else origins.STATION_METADATA_FIELDS
+    )
     if provider == "fr_hubeau":
         recording_ids = tuple(
             entry.recording.recording_id
@@ -218,6 +264,11 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
                 if provider in {"ch_foen", "fr_hubeau", "usgs_nwis"}
                 else ("src/rivretrieve/_internal/catalogues/station_metadata.py", "build_station_metadata")
             )
+            if provider == "usgs_nwis" and declaration_locations == origins.CATALOGUE_BUILD_DECLARATIONS:
+                expected_location = (
+                    "src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py",
+                    "project_modern_station_metadata",
+                )
             if provider == "pl_imgw":
                 expected_location = (
                     "src/rivretrieve/_internal/providers/pl_imgw/station_metadata.py",
