@@ -304,3 +304,350 @@ def test_public_recorded_unresolved_boundaries_and_telemetry_only_discovery(
         res = rr.fetch(sel, start="2026-10-01", end="2026-10-31T23:59:59", cache="bypass", on_issue="raise")
         assert res.data.is_empty(), capture_name
         assert [item.status for item in res.outcomes] == [OutcomeStatus.UNRESOLVED]
+
+
+@pytest.mark.recorded(_SCOPE)
+def test_public_recorded_verification_supplement_routes_and_owf_source_boundaries(
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+
+    # 1. 11th public route (owf_wassertemp_monatsmittel) on 201350 + cache reuse, plus negative °C on 200352.
+    class _WaterTemp201350:
+        calls = 0
+
+        def send(self, req: TransportRequest) -> TransportResponse:
+            self.calls += 1
+            if req.url.endswith("/Messstellen/info"):
+                return _response_matching_request(
+                    retained_evidence_root, "verification", "messstellen-info-201350", req
+                )
+            return _response_matching_request(retained_evidence_root, "access", "owf-201350-file8-wt-monatsmittel", req)
+
+    wt_201350 = _WaterTemp201350()
+    monkeypatch.setattr(discovery, "HttpClient", lambda: wt_201350)
+    sel_wt_201350 = rr.find(
+        provider="at_ehyd", station="201350", quantity="temperature", frequency="monthly", statistic="mean"
+    )
+    assert [item.product_id for item in sel_wt_201350.series] == ["owf_wassertemp_monatsmittel"]
+    wt_start, wt_end = "2018-01-01", "2023-12-31T23:59:59"
+    res_wt_201350 = rr.fetch(sel_wt_201350, start=wt_start, end=wt_end, cache="reuse", receipts=True)
+    assert wt_201350.calls == 2
+    assert res_wt_201350.receipts is not None and len(res_wt_201350.receipts.entries) == 2
+    wt_bytes_201350, _ = _load_capture(retained_evidence_root, "access", "owf-201350-file8-wt-monatsmittel")
+    exp_wt_201350 = _decode_owf_slice(
+        wt_bytes_201350, datetime.fromisoformat(wt_start), datetime.fromisoformat(wt_end), scale=1.0
+    )
+    assert res_wt_201350.data["source_unit"].unique().to_list() == ["°C"]
+    assert res_wt_201350.data["unit"].unique().to_list() == ["degC"]
+    assert res_wt_201350.data.sort("time")["time"].to_list() == [ts for ts, _ in exp_wt_201350]
+    assert res_wt_201350.data.sort("time")["value"].to_list() == pytest.approx([val for _, val in exp_wt_201350])
+
+    def _assert_owf_slice_equal(
+        frame: pl.DataFrame,
+        group: str,
+        capture_name: str,
+        start: datetime,
+        end: datetime,
+        *,
+        scale: float = 1.0,
+    ) -> list[tuple[datetime, float]]:
+        raw_bytes, _ = _load_capture(retained_evidence_root, group, capture_name)
+        expected = _decode_owf_slice(raw_bytes, start, end, scale=scale)
+        ordered = frame.sort("time")
+        assert ordered.height == len(expected) > 0
+        assert ordered["time"].to_list() == [ts for ts, _ in expected]
+        assert ordered["value"].to_list() == pytest.approx([val for _, val in expected])
+        return expected
+
+    # Cached sub-window query on 201350 water temperature issues 0 network requests.
+    reused_wt = rr.fetch(sel_wt_201350, start="2020-01-01", end="2021-12-31T23:59:59", cache="reuse")
+    assert wt_201350.calls == 2
+    _assert_owf_slice_equal(
+        reused_wt.data,
+        "access",
+        "owf-201350-file8-wt-monatsmittel",
+        datetime(2020, 1, 1),
+        datetime(2021, 12, 31, 23, 59, 59),
+        scale=1.0,
+    )
+
+    # Genuine negative water temperature (-2.8 °C -> -2.8 degC) on river gauge 200352.
+    monkeypatch.setattr(
+        discovery,
+        "HttpClient",
+        lambda: type(
+            "_WT200352",
+            (),
+            {
+                "send": lambda self, req: _response_matching_request(
+                    retained_evidence_root,
+                    "verification",
+                    "messstellen-info-200352"
+                    if req.url.endswith("/Messstellen/info")
+                    else "owf-200352-file8-wt-monatsmittel",
+                    req,
+                )
+            },
+        )(),
+    )
+    sel_wt_200352 = rr.find(
+        provider="at_ehyd", station="200352", quantity="temperature", frequency="monthly", statistic="mean"
+    )
+    res_wt_200352 = rr.fetch(sel_wt_200352, start="1970-01-01", end="2023-12-31T23:59:59", cache="bypass")
+    assert res_wt_200352.data["unit"].unique().to_list() == ["degC"]
+    _assert_owf_slice_equal(
+        res_wt_200352.data,
+        "verification",
+        "owf-200352-file8-wt-monatsmittel",
+        datetime(1970, 1, 1),
+        datetime(2023, 12, 31, 23, 59, 59),
+        scale=1.0,
+    )
+    min_wt_row = res_wt_200352.data.sort("value", "time").row(0, named=True)
+    assert min_wt_row["time"] == datetime(2023, 12, 1, 0, 0)
+    assert min_wt_row["value"] == pytest.approx(-2.8)
+
+    # 2. Negative gauge-zero stage scaling (-227.0 cm -> -2.27 m) on 207068 (Linz / Donau).
+    monkeypatch.setattr(
+        discovery,
+        "HttpClient",
+        lambda: type(
+            "_Stage207068",
+            (),
+            {
+                "send": lambda self, req: _response_matching_request(
+                    retained_evidence_root,
+                    "verification",
+                    "messstellen-info-207068"
+                    if req.url.endswith("/Messstellen/info")
+                    else "owf-207068-file3-w-monatsminima",
+                    req,
+                )
+            },
+        )(),
+    )
+    sel_207068 = rr.find(provider="at_ehyd", station="207068", quantity="stage", frequency="monthly", statistic="min")
+    res_207068 = rr.fetch(sel_207068, start="1901-01-01", end="2023-12-31T23:59:59", cache="bypass")
+    assert res_207068.data["source_unit"].unique().to_list() == ["cm"]
+    assert res_207068.data["unit"].unique().to_list() == ["m"]
+    _assert_owf_slice_equal(
+        res_207068.data,
+        "verification",
+        "owf-207068-file3-w-monatsminima",
+        datetime(1901, 1, 1),
+        datetime(2023, 12, 31, 23, 59, 59),
+        scale=0.01,
+    )
+    min_stage_row = res_207068.data.sort("value", "time").row(0, named=True)
+    assert min_stage_row["time"] == datetime(1933, 1, 28, 0, 0)
+    assert min_stage_row["value"] == pytest.approx(-2.27)
+
+    # 3. Sparse multi-year 'Lücke' gap markers on 201806 omit gap lines and emit info source.gap_marker.
+    monkeypatch.setattr(
+        discovery,
+        "HttpClient",
+        lambda: type(
+            "_Gap201806",
+            (),
+            {
+                "send": lambda self, req: _response_matching_request(
+                    retained_evidence_root,
+                    "verification",
+                    "messstellen-info-201806"
+                    if req.url.endswith("/Messstellen/info")
+                    else "owf-201806-file2-w-tagesmittel",
+                    req,
+                )
+            },
+        )(),
+    )
+    sel_201806 = rr.find(provider="at_ehyd", station="201806", quantity="stage", frequency="daily", statistic="mean")
+    res_201806 = rr.fetch(sel_201806, start="1975-01-01", end="2023-12-31T23:59:59", cache="bypass", on_issue="raise")
+    assert res_201806.data["value"].null_count() == 0
+    _assert_owf_slice_equal(
+        res_201806.data,
+        "verification",
+        "owf-201806-file2-w-tagesmittel",
+        datetime(1975, 1, 1),
+        datetime(2023, 12, 31, 23, 59, 59),
+        scale=0.01,
+    )
+    gap_issues = [item for item in res_201806.issues if item.code == "source.gap_marker"]
+    assert len(gap_issues) == 1
+    assert gap_issues[0].severity == "info"
+    # 1,098 total 'Lücke' lines: 1,097 interior transitions + 1 closing-boundary t_end sentinel.
+    assert gap_issues[0].details["count"] == 1097
+
+    # 4. Werfen 204032: unbracketed Einheit, '; bis ;' Exportzeitraum, and 00:00:00 pre-header row cached offline.
+    class _Werfen204032:
+        calls = 0
+
+        def send(self, req: TransportRequest) -> TransportResponse:
+            self.calls += 1
+            name = (
+                "messstellen-info-204032" if req.url.endswith("/Messstellen/info") else "owf-204032-file5-q-tagesmittel"
+            )
+            return _response_matching_request(retained_evidence_root, "verification", name, req)
+
+    werfen = _Werfen204032()
+    monkeypatch.setattr(discovery, "HttpClient", lambda: werfen)
+    sel_204032 = rr.find(
+        provider="at_ehyd", station="204032", quantity="discharge", frequency="daily", statistic="mean"
+    )
+    res_204032 = rr.fetch(sel_204032, start="1995-01-01", end="1995-01-10T23:59:59", cache="reuse")
+    assert werfen.calls == 2
+    assert res_204032.data.sort("time")["time"][0] == datetime(1995, 1, 1, 0, 0)
+    _assert_owf_slice_equal(
+        res_204032.data,
+        "verification",
+        "owf-204032-file5-q-tagesmittel",
+        datetime(1995, 1, 1),
+        datetime(1995, 1, 10, 23, 59, 59),
+        scale=1.0,
+    )
+    reused_204032 = rr.fetch(sel_204032, start="1995-01-01", end="1995-01-05T23:59:59", cache="reuse")
+    assert werfen.calls == 2
+    assert reused_204032.data.sort("time")["time"][0] == datetime(1995, 1, 1, 0, 0)
+    _assert_owf_slice_equal(
+        reused_204032.data,
+        "verification",
+        "owf-204032-file5-q-tagesmittel",
+        datetime(1995, 1, 1),
+        datetime(1995, 1, 5, 23, 59, 59),
+        scale=1.0,
+    )
+
+    # 5. Station 207340 W-Monatsminima (T,1 daily step): withheld from frequency="monthly", selectable by statistic="min".
+    monthly_207340 = rr.find(provider="at_ehyd", station="207340", frequency="monthly")
+    assert [item.product_id for item in monthly_207340.series] == ["owf_wasserst_monatsmaxima"]
+    min_207340 = rr.find(provider="at_ehyd", station="207340", statistic="min")
+    assert [item.product_id for item in min_207340.series] == ["owf_wasserst_monatsminima"]
+    monkeypatch.setattr(
+        discovery,
+        "HttpClient",
+        lambda: type(
+            "_Min207340",
+            (),
+            {
+                "send": lambda self, req: _response_matching_request(
+                    retained_evidence_root,
+                    "verification",
+                    "messstellen-info-207340"
+                    if req.url.endswith("/Messstellen/info")
+                    else "owf-207340-file3-w-monatsminima",
+                    req,
+                )
+            },
+        )(),
+    )
+    res_207340 = rr.fetch(min_207340, start="2023-01-01", end="2023-01-10T23:59:59", cache="bypass")
+    assert res_207340.data["unit"].unique().to_list() == ["m"]
+    _assert_owf_slice_equal(
+        res_207340.data,
+        "verification",
+        "owf-207340-file3-w-monatsminima",
+        datetime(2023, 1, 1),
+        datetime(2023, 1, 10, 23, 59, 59),
+        scale=0.01,
+    )
+    series_207340 = rr.series(res_207340).row(0, named=True)
+    assert series_207340["frequency"] is None
+    assert series_207340["frequency_state"] == "not_established"
+    assert series_207340["temporal_support"] is None
+    assert series_207340["temporal_support_state"] == "not_established"
+    assert series_207340["statistic"] == "min"
+
+    # 6. Cleared-unit W-Tagesmittel on 211078 is withheld from offline rr.find discovery while valid siblings remain selectable.
+    sel_211078 = rr.find(provider="at_ehyd", station="211078")
+    assert sorted(item.product_id for item in sel_211078.series) == [
+        "owf_abfl_monatsmaxima",
+        "owf_abfl_monatsminima",
+        "owf_abfl_tagesmittel",
+        "owf_wasserst_monatsmaxima",
+        "owf_wasserst_monatsminima",
+    ]
+
+    # 7. Multi-series sibling survival across UNRESOLVED (208058 Invalid; Lücke) and FAILED (209486 0-byte owf).
+    monkeypatch.setattr(
+        discovery,
+        "HttpClient",
+        lambda: type(
+            "_Sibling208058",
+            (),
+            {
+                "send": lambda self, req: _response_matching_request(
+                    retained_evidence_root,
+                    "verification",
+                    "messstellen-info-208058"
+                    if req.url.endswith("/Messstellen/info")
+                    else (
+                        "owf-208058-file8-wt-monatsmittel"
+                        if str((req.params or {})["file"]) == "8"
+                        else "owf-208058-file5-q-tagesmittel"
+                    ),
+                    req,
+                )
+            },
+        )(),
+    )
+    sel_208058 = _select_products("208058", "owf_wassertemp_monatsmittel", "owf_abfl_tagesmittel")
+    res_208058 = rr.fetch(sel_208058, start="2023-01-01", end="2023-01-10T23:59:59", cache="bypass", on_issue="ignore")
+    assert res_208058.data["product_id"].unique().to_list() == ["owf_abfl_tagesmittel"]
+    _assert_owf_slice_equal(
+        res_208058.data,
+        "verification",
+        "owf-208058-file5-q-tagesmittel",
+        datetime(2023, 1, 1),
+        datetime(2023, 1, 10, 23, 59, 59),
+        scale=1.0,
+    )
+    assert [item.status for item in res_208058.outcomes if item.product_id == "owf_wassertemp_monatsmittel"] == [
+        OutcomeStatus.UNRESOLVED
+    ]
+
+    class _PartialFail209486:
+        def send(self, req: TransportRequest) -> TransportResponse:
+            if req.url.endswith("/Messstellen/info"):
+                return _response_matching_request(retained_evidence_root, "access", "messstellen-info-209486", req)
+            file_nr = str((req.params or {})["file"])
+            if file_nr == "5":
+                return _response_matching_request(
+                    retained_evidence_root, "access", "owf-209486-file5-q-tagesmittel", req
+                )
+            # Parameter-remapped fault-isolation check: serve retained 0-byte file=99 body on sibling file=2.
+            empty_body, empty_rcpt = _load_capture(retained_evidence_root, "access", "owf-209486-invalid-file99")
+            assert empty_body == b""
+            return TransportResponse(
+                content=empty_body,
+                status_code=int(str(empty_rcpt["http_status"])),
+                retrieved_at=datetime.fromisoformat(str(empty_rcpt["acquired_at"]).replace("Z", "+00:00")),
+                content_type="text/plain",
+                url="https://ehyd.gv.at/services/MessstellenExtraData/owf",
+                request_parameters={"id": "209486", "file": file_nr},
+            )
+
+    monkeypatch.setattr(discovery, "HttpClient", _PartialFail209486)
+    sel_partial = _select_products("209486", "owf_abfl_tagesmittel", "owf_wasserst_tagesmittel")
+    res_partial = rr.fetch(
+        sel_partial, start="2023-01-01", end="2023-01-10T23:59:59", cache="bypass", on_issue="ignore"
+    )
+    assert res_partial.data["product_id"].unique().to_list() == ["owf_abfl_tagesmittel"]
+    _assert_owf_slice_equal(
+        res_partial.data,
+        "access",
+        "owf-209486-file5-q-tagesmittel",
+        datetime(2023, 1, 1),
+        datetime(2023, 1, 10, 23, 59, 59),
+        scale=1.0,
+    )
+    assert [item.status for item in res_partial.outcomes if item.product_id == "owf_abfl_tagesmittel"] == [
+        OutcomeStatus.SUCCESS
+    ]
+    assert [item.status for item in res_partial.outcomes if item.product_id == "owf_wasserst_tagesmittel"] == [
+        OutcomeStatus.FAILED,
+        OutcomeStatus.UNRESOLVED,
+    ]
+    assert [item.details["product_id"] for item in res_partial.issues if item.severity == "error"] == [
+        "owf_wasserst_tagesmittel"
+    ]
