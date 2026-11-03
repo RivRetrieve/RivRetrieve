@@ -20,8 +20,8 @@ def test_usgs_provenance_names_nwis_and_verified_source_words() -> None:
     source = provenance.header.source_records[0]
     assert source.issuer == "U.S. Geological Survey"
     assert {statement.kind for statement in source.statements} == {"license", "citation"}
-    assert provenance.header.native_table.sha256 == "caaf72c18a6a499b04fe886d8b4b871c066bed0870a7049ff6d6c48c26e966f8"
-    assert provenance.header.native_table.byte_size == 14_520_274
+    assert provenance.header.native_table.sha256 == "677e418d89c603207429f5999585120bcc2290d48bfadfd5b68efa30f741048a"
+    assert provenance.header.native_table.byte_size == 1_046_088
     assert provenance.header.withheld_facts == ()
 
 

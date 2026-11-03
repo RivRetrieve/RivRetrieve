@@ -17,9 +17,9 @@ CATALOGUE = Path("src/rivretrieve/_internal/providers/usgs_nwis/catalogue")
 def test_modern_concrete_snapshot_retains_siblings_unknowns_and_selected_station_scope():
     descriptions = decode_source_descriptions((CATALOGUE / "source_series.json").read_bytes())
     locations = json.loads((CATALOGUE / "monitoring_locations.json").read_text())
-    assert len(locations) == 27934
-    # Independently reconciled current source metadata plus 22 unchanged historical series.
-    assert len(descriptions.descriptions) == 62046
+    assert len(locations) == 29642
+    # Independently reconciled current source metadata plus 26 unchanged historical series.
+    assert len(descriptions.descriptions) == 64439
     assert len({id(fact) for item in descriptions.descriptions for fact in item.facts}) == 8
     assert {item.station_id for item in descriptions.descriptions} <= locations.keys()
     siblings = [
@@ -33,7 +33,7 @@ def test_modern_concrete_snapshot_retains_siblings_unknowns_and_selected_station
     }
     assert all(item.identity.description is None for item in siblings)
     unknowns = [item for item in descriptions.descriptions if item.facts[0].statistic.value is None]
-    assert len(unknowns) == 6
+    assert len(unknowns) == 7
     assert all(item.facts[0].temporal_support.value is None for item in unknowns)
     assert (CATALOGUE / "source_series.json").stat().st_size < 100_000_000
 
