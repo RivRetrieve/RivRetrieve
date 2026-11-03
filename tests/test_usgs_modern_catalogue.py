@@ -609,6 +609,7 @@ def test_modern_collision_preserves_explicit_baseline(baseline, expected):
 
 def test_baseline_station_without_supported_series_remains_registered():
     from datetime import UTC, datetime
+
     from rivretrieve._internal.catalogues.native import RetrievedAt
     from rivretrieve._internal.providers.usgs_nwis.generate_catalogue import build_modern_catalogue
 
