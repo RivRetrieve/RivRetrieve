@@ -1370,11 +1370,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         provenance = AcquisitionProvenance.model_validate_json(args.acquisition_provenance.read_bytes())
         verify_provenance_recordings(provenance, args.evidence_root)
         build_inputs = CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes())
-        baseline_inputs = [item for item in build_inputs.inputs if "source.station.baseline_identity" in item.facts]
-        if len(baseline_inputs) != 1 or (
-            baseline_inputs[0].reference.sha256 != args.baseline_sha256
-            or baseline_inputs[0].reference.byte_size != len(baseline_bytes)
-        ):
+        baseline_inputs = [
+            item
+            for item in build_inputs.inputs
+            if "source.station.baseline_identity" in item.facts
+            and item.reference.sha256 == args.baseline_sha256
+            and item.reference.byte_size == len(baseline_bytes)
+        ]
+        if len(baseline_inputs) != 1:
             raise FatalContractError("Publication requires the adopted baseline identity input")
         if provenance.provider_id != PROVIDER_ID or provenance.native_table is None:
             raise FatalContractError("Modern publication requires explicit matching native identity")
