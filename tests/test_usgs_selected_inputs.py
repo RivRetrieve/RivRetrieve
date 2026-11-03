@@ -64,8 +64,8 @@ def test_receipt_selection_keeps_legacy_derived_table_distinct_from_same_event_r
                 ref(
                     path,
                     "support-" + str(len(refs)),
-                    "d" * 64,
-                    1,
+                    ("f" * 64 if path.endswith("baseline-monitoring-locations.json") else "d" * 64),
+                    2 if path.endswith("baseline-monitoring-locations.json") else 1,
                     "derived_input" if path.endswith(".parquet") else "research_context",
                 )
                 paths.add(path)
@@ -95,4 +95,11 @@ def test_receipt_selection_keeps_legacy_derived_table_distinct_from_same_event_r
         item.artifact_id
         for item in refs
         if item.consumer_path == "maintenance/catalogue/usgs_nwis/legacy-native.parquet"
+    )
+
+    baseline_support = [item for item in adopted.inputs if "source.station.baseline_identity" in item.facts]
+    assert len(baseline_support) == 2
+    assert (
+        len([item for item in baseline_support if item.reference.sha256 == "f" * 64 and item.reference.byte_size == 2])
+        == 1
     )

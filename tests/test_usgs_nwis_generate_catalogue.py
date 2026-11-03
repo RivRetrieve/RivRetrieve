@@ -914,6 +914,13 @@ def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_pat
         build_inputs.inputs.pop(0)
     elif corrupt == "ambiguous_legacy":
         build_inputs.inputs.append(build_inputs.inputs[0])
+    build_inputs.inputs.append(
+        SimpleNamespace(
+            facts=("source.station.baseline_identity",),
+            usage="reviewed_support",
+            reference=SimpleNamespace(sha256="f" * 64, byte_size=900, role="acquisition_receipt"),
+        )
+    )
     build_inputs.inputs.extend(
         SimpleNamespace(
             facts=("source.station.legacy_sitefile_attributes",),
