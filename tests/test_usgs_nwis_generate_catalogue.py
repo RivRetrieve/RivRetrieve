@@ -861,7 +861,7 @@ def test_missing_legacy_enrichment_leaves_publication_destination_untouched(tmp_
     assert not output.exists()
 
 
-@pytest.mark.parametrize("corrupt", ["modern", "legacy", "baseline"])
+@pytest.mark.parametrize("corrupt", ["modern", "legacy", "baseline", "missing_legacy", "ambiguous_legacy"])
 def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_path, monkeypatch, corrupt):
     from types import SimpleNamespace
 
@@ -899,7 +899,8 @@ def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_pat
         inputs=[
             SimpleNamespace(
                 facts=("source.station.legacy_sitefile_attributes",),
-                reference=SimpleNamespace(sha256="b" * 64, byte_size=123),
+                reference=SimpleNamespace(sha256="b" * 64, byte_size=123, role="derived_input"),
+                usage="reviewed_support",
             ),
             SimpleNamespace(
                 facts=("source.station.baseline_identity",),
@@ -909,6 +910,18 @@ def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_pat
     )
     if corrupt == "baseline":
         build_inputs.inputs.pop()
+    elif corrupt == "missing_legacy":
+        build_inputs.inputs.pop(0)
+    elif corrupt == "ambiguous_legacy":
+        build_inputs.inputs.append(build_inputs.inputs[0])
+    build_inputs.inputs.extend(
+        SimpleNamespace(
+            facts=("source.station.legacy_sitefile_attributes",),
+            usage="recording",
+            reference=SimpleNamespace(role="response_recording", sha256=str(index) * 64, byte_size=10),
+        )
+        for index in (1, 2)
+    )
     monkeypatch.setattr(generator.CatalogueBuildInputs, "model_validate_json", lambda _: build_inputs)
     monkeypatch.setattr(
         __import__("rivretrieve._internal.providers.usgs_nwis.origins", fromlist=["selected_role_inputs"]),
@@ -936,7 +949,14 @@ def test_modern_publication_verifies_adopted_native_bytes_before_writing(tmp_pat
     monkeypatch.setattr(generator, "write_catalogue", lambda *args, **kwargs: pytest.fail("invalid native published"))
     output = tmp_path / "catalogue"
     with pytest.raises(
-        FatalContractError, match="baseline identity input" if corrupt == "baseline" else "native table digest mismatch"
+        FatalContractError,
+        match=(
+            "baseline identity input"
+            if corrupt == "baseline"
+            else "one adopted legacy"
+            if corrupt in {"missing_legacy", "ambiguous_legacy"}
+            else "native table digest mismatch"
+        ),
     ):
         generator.main(
             [
