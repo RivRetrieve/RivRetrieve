@@ -626,6 +626,21 @@ def build_modern_acquisition_provenance(
             acquisition_id=baseline.acquisition_id,
         )
     )
+    for kind in ("license", "citation"):
+        bindings.append(
+            FactBinding(
+                fact_group=f"provider_{kind}",
+                facts=(f"provider.{kind}",),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name=f"Preserve USGS {kind} statement",
+                    external_inputs=(
+                        ExternalFactReference(source_id="usgs_nwis", fact=f"source.usgs.{kind}_statement"),
+                    ),
+                ),
+            )
+        )
     provenance = AcquisitionProvenance(
         schema_version=2,
         provider_id="usgs_nwis",
