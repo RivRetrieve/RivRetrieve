@@ -54,6 +54,7 @@ for how to supply them.
 
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
 Austria's `at_ehyd` catalogue retains 746 river station identities; 744 have selectable series in this snapshot.
+See the [Austrian provider guide](https://rivretrieve.github.io/providers/at_ehyd/) for catalogue coverage and limitations.
 Switzerland's `ch_foen` catalogue retains 1,341 stations; 558 have selectable official series in this snapshot.
 See the [Swiss provider guide](https://rivretrieve.github.io/providers/ch_foen/) for catalogue coverage and limitations.
 The USGS catalogue retains 26,258 station identities; 26,201 have selectable modern series in this snapshot.
