@@ -37,7 +37,7 @@ from rivretrieve._internal.providers.au_bom.config import (
 from rivretrieve._internal.providers.au_bom.declaration import declaration
 from rivretrieve._internal.providers.au_bom.fetch import fetch, resolve_timeseries_list
 from rivretrieve._internal.providers.au_bom.parse import parse
-from rivretrieve._internal.providers.registration import CatalogueOnly
+from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.source_series import OutcomeStatus
 from rivretrieve._internal.transport import (
     TransportFailure,
@@ -54,7 +54,7 @@ _STAGE_DAILY = ProductId("stage_daily_mean")
 
 @dataclass(frozen=True)
 class _AuBomStages:
-    """Internal stage bundle for exercising BoM retrieval while declaration stays CatalogueOnly."""
+    """Internal stage bundle for exercising BoM retrieval independent of the real declaration."""
 
     config: ProviderConfig = config()
     window_declarations: ProductWindowDeclarations = window_declarations()
@@ -107,7 +107,7 @@ def _rendered_windows(fetch_win, product: ProductId):
 
 
 def test_config_declares_18_products_with_iso_instant_shared_acquisition() -> None:
-    assert isinstance(declaration.observations, CatalogueOnly)
+    assert isinstance(declaration.observations, LiveStages)
     cfg = config()
     decls = window_declarations()
     assert len(cfg.products) == 18
