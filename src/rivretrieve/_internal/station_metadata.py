@@ -71,6 +71,15 @@ _NUMBER_TEXT = r"[ \t\u00a0]*[+-]?(?:(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-
 _NUMBER_TEXT_RE = re.compile(_NUMBER_TEXT)
 _SEPARATOR = r"[ \t\u00a0]*"
 _SPLIT_INLINE_RE_CACHE: dict[str, re.Pattern[str]] = {}
+_PLAIN_QUOTED_JSON_STR_FULLMATCH = re.compile(r'"[^"\\\x00-\x1f]*"').fullmatch
+_SIMPLE_JSON_FLOAT_FULLMATCH = re.compile(r"-?(?:0|[1-9][0-9]*)\.[0-9]+").fullmatch
+_SIMPLE_JSON_INT_FULLMATCH = re.compile(r"0|-?[1-9][0-9]*").fullmatch
+
+
+def _unquote_json_str(encoded: str) -> str:
+    if _PLAIN_QUOTED_JSON_STR_FULLMATCH(encoded) is not None:
+        return encoded[1:-1]
+    return cast("str", json.loads(encoded))
 
 
 def split_inline_quantity(value: object, suffix: str) -> str | None:
@@ -103,14 +112,14 @@ def _summary_quantity_value_fields(
         return encoded
     key = (provider_id, attribute_role, source_scope, source_field)
     if key in _PADDED_QUANTITY_FIELDS:
-        value = json.loads(encoded)
+        value = _unquote_json_str(encoded)
         if _NUMBER_TEXT_RE.fullmatch(value) is not None:
             return json.dumps(value.lstrip(" \t\u00a0"), ensure_ascii=False)
     rule = _INLINE_QUANTITY_FIELDS.get(key)
     if rule is not None:
         unit, suffix = rule
         if source_unit == unit:
-            numeric = split_inline_quantity(json.loads(encoded), suffix)
+            numeric = split_inline_quantity(_unquote_json_str(encoded), suffix)
             if numeric is not None:
                 return json.dumps(numeric, ensure_ascii=False)
     return encoded
@@ -129,6 +138,18 @@ def _summary_quantity_value(item: dict) -> str | None:
 
 
 def _scalar(text: str, dtype: str) -> object:
+    if type(text) is str:
+        if dtype == "String" and _PLAIN_QUOTED_JSON_STR_FULLMATCH(text) is not None:
+            return text[1:-1]
+        if dtype in ("Float64", "Float32") and _SIMPLE_JSON_FLOAT_FULLMATCH(text) is not None:
+            f_val = float(text)
+            if math.isfinite(f_val):
+                return f_val
+        elif dtype in _INTEGER_BOUNDS and _SIMPLE_JSON_INT_FULLMATCH(text) is not None:
+            i_val = int(text)
+            lower, upper = _INTEGER_BOUNDS[dtype]
+            if lower <= i_val <= upper:
+                return i_val
     try:
         value = json.loads(text)
     except (ValueError, TypeError) as error:
@@ -362,7 +383,7 @@ def station_metadata_frame(stations: pl.DataFrame, source: pl.DataFrame, locatio
             names: set[str] = set()
             for item in name_items:
                 if item[5] == "value" and item[2] is not None:
-                    parsed_name = json.loads(item[2])
+                    parsed_name = _unquote_json_str(item[2])
                     if parsed_name.strip():
                         names.add(parsed_name)
             out_names.append(next(iter(names)) if len(names) == 1 else None)
@@ -372,7 +393,7 @@ def station_metadata_frame(stations: pl.DataFrame, source: pl.DataFrame, locatio
         wb_items = attributes.get((provider, station, "water_body_name"))
         if wb_items:
             out_wb_field.append([item[0] for item in wb_items])
-            out_wb_val.append([json.loads(item[2]) if item[2] is not None else None for item in wb_items])
+            out_wb_val.append([_unquote_json_str(item[2]) if item[2] is not None else None for item in wb_items])
         else:
             out_wb_field.append(None)
             out_wb_val.append(None)

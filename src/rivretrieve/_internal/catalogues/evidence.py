@@ -357,6 +357,57 @@ class EvidenceHeader(_EvidenceModel):
         return self
 
 
+def _frame_from_json_columns(name: str, value: object) -> pl.DataFrame:
+    import pyarrow as pa
+
+    schema = EVIDENCE_SCHEMAS[name]
+    nullable_cols = _NULLABLE[name]
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} requires exact ordered column arrays")
+    raw_map = cast("dict[str, object]", value)
+    if list(raw_map) != list(schema) or any(not isinstance(column, list) for column in raw_map.values()):
+        raise ValueError(f"{name} requires exact ordered column arrays")
+    columns = cast("dict[str, list]", raw_map)
+    if len({len(column) for column in columns.values()}) != 1:
+        raise ValueError(f"{name} columns have unequal lengths")
+    pa_str_list = pa.list_(pa.string())
+    series_list: list[pl.Series] = []
+    # Polars accepts booleans as integers; the JSON boundary must not.
+    for column, dtype in schema.items():
+        col_items = columns[column]
+        is_nullable = column in nullable_cols
+        if dtype in (pl.UInt32, pl.Int64):
+            ok = (
+                all(item is None or type(item) is int for item in col_items)
+                if is_nullable
+                else all(type(item) is int for item in col_items)
+            )
+            if not ok:
+                raise ValueError(f"{name}.{column} requires integer keys/counts")
+            try:
+                series_list.append(pl.Series(column, col_items, dtype=dtype, strict=True))
+            except (TypeError, ValueError, pl.exceptions.PolarsError) as error:
+                raise ValueError(f"invalid {name} column arrays: {error}") from error
+        elif dtype == pl.String:
+            ok = (
+                all(item is None or isinstance(item, str) for item in col_items)
+                if is_nullable
+                else all(isinstance(item, str) for item in col_items)
+            )
+            if not ok:
+                raise ValueError(f"{name}.{column} requires strings")
+            series_list.append(pl.Series(column, col_items, dtype=pl.String, strict=True))
+        elif dtype == pl.List(pl.String):
+            for item in col_items:
+                if item is None:
+                    continue
+                if not isinstance(item, list) or not all(isinstance(x, str) for x in item):
+                    raise ValueError(f"{name}.{column} requires string arrays")
+            s = cast("pl.Series", pl.from_arrow(pa.array(col_items, type=pa_str_list))).rename(column)
+            series_list.append(s)
+    return pl.DataFrame(series_list)
+
+
 class CatalogueEvidence(_EvidenceModel):
     """Validated catalogue evidence in normalized Polars relations.
 
@@ -403,41 +454,7 @@ class CatalogueEvidence(_EvidenceModel):
         if isinstance(value, pl.DataFrame):
             frame = value
         elif info.mode == "json" and isinstance(value, dict):
-            if list(value) != list(schema) or any(not isinstance(column, list) for column in value.values()):
-                raise ValueError(f"{name} requires exact ordered column arrays")
-            columns = cast(dict[str, list], value)
-            if len({len(column) for column in columns.values()}) != 1:
-                raise ValueError(f"{name} columns have unequal lengths")
-            # Polars accepts booleans as integers; the JSON boundary must not.
-            for column, dtype in schema.items():
-                col_items = columns[column]
-                is_nullable = column in nullable_cols
-                if dtype in (pl.UInt32, pl.Int64):
-                    ok = (
-                        all(item is None or type(item) is int for item in col_items)
-                        if is_nullable
-                        else all(type(item) is int for item in col_items)
-                    )
-                    if not ok:
-                        raise ValueError(f"{name}.{column} requires integer keys/counts")
-                elif dtype == pl.String:
-                    ok = (
-                        all(item is None or isinstance(item, str) for item in col_items)
-                        if is_nullable
-                        else all(isinstance(item, str) for item in col_items)
-                    )
-                    if not ok:
-                        raise ValueError(f"{name}.{column} requires strings")
-                elif dtype == pl.List(pl.String):
-                    for item in col_items:
-                        if item is None:
-                            continue
-                        if not isinstance(item, list) or not all(isinstance(x, str) for x in item):
-                            raise ValueError(f"{name}.{column} requires string arrays")
-            try:
-                frame = pl.DataFrame(value, schema=schema, strict=True)
-            except (TypeError, ValueError, pl.exceptions.PolarsError) as error:
-                raise ValueError(f"invalid {name} column arrays: {error}") from error
+            frame = _frame_from_json_columns(name, value)
         else:
             raise ValueError(f"{name} requires an exact-schema DataFrame")
         if frame.schema != schema or frame.columns != list(schema):
@@ -449,6 +466,38 @@ class CatalogueEvidence(_EvidenceModel):
     @field_serializer(*EVIDENCE_SCHEMAS, when_used="json")
     def _serialize_columns(self, frame: pl.DataFrame) -> dict[str, list]:
         return frame.to_dict(as_series=False)
+
+    def to_json_dict(self) -> dict[str, object]:
+        return {
+            "header": self.header.model_dump(mode="json"),
+            **{name: getattr(self, name).to_dict(as_series=False) for name in EVIDENCE_SCHEMAS},
+        }
+
+    @classmethod
+    def from_parsed_json(cls, data: object) -> Self:
+        import json as _json_mod
+
+        if not isinstance(data, dict):
+            raw = _json_mod.dumps(data, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+            return cls.model_validate_json(raw)
+        parsed = cast("dict[str, object]", data)
+        if set(parsed) != {"header", *EVIDENCE_SCHEMAS} or any(
+            not isinstance(parsed[name], dict) for name in EVIDENCE_SCHEMAS
+        ):
+            raw = _json_mod.dumps(data, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+            return cls.model_validate_json(raw)
+        raw_header = _json_mod.dumps(
+            parsed["header"], ensure_ascii=False, allow_nan=False, separators=(",", ":")
+        ).encode("utf-8")
+        header = EvidenceHeader.model_validate_json(raw_header)
+        return cls(
+            header=header,
+            facts=_frame_from_json_columns("facts", parsed["facts"]),
+            acquisitions=_frame_from_json_columns("acquisitions", parsed["acquisitions"]),
+            bindings=_frame_from_json_columns("bindings", parsed["bindings"]),
+            binding_facts=_frame_from_json_columns("binding_facts", parsed["binding_facts"]),
+            external_inputs=_frame_from_json_columns("external_inputs", parsed["external_inputs"]),
+        )
 
     @model_validator(mode="after")
     def _closed(self) -> Self:
@@ -881,13 +930,17 @@ _AUTHORED = {
 def _validate_transformation(t: TransformationDeclaration, facts: list[str], withheld: bool) -> None:
     if t.kind == "authored_constant" and not set(facts) <= _AUTHORED:
         raise ValueError("authored-constant transformations may produce only explicit canonical code-defined outputs")
-    if withheld and (
-        t.kind != "absence_marker"
-        or not all(any(absence_marker_accepts_fact(marker, fact) for marker in AbsenceMarkerValue) for fact in facts)
-    ):
+    if withheld and t.kind != "absence_marker":
         raise ValueError("withheld external inputs may only produce absence markers")
-    if t.kind == "absence_marker" and not all(absence_marker_accepts_fact(t.marker_value, fact) for fact in facts):
-        raise ValueError("absence-marker value is incompatible with its output facts")
+    if t.kind == "absence_marker":
+        marker = t.marker_value
+        for fact in facts:
+            if not absence_marker_accepts_fact(marker, fact):
+                if withheld and not all(
+                    any(absence_marker_accepts_fact(other, item) for other in AbsenceMarkerValue) for item in facts
+                ):
+                    raise ValueError("withheld external inputs may only produce absence markers")
+                raise ValueError("absence-marker value is incompatible with its output facts")
 
 
 def _locator_names(carrier: str, station: str, product: str | None, role: str) -> tuple[str, str]:

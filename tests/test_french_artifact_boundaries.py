@@ -159,47 +159,67 @@ def test_context_only_empty_bundle_has_no_direct_french_identity(artifacts):
     assert any(item["header"]["provider_id"] == "fr_hubeau" for item in manifest["catalogue_evidence"])
 
 
+@pytest.fixture(scope="module")
+def _current_carrier_bundle_cache():
+    cache: dict[str, tuple[object, bytes, object]] = {}
+
+    def get_carrier(carrier: str):
+        cached = cache.get(carrier)
+        if cached is not None:
+            return cached
+        from dataclasses import replace
+
+        import polars as pl
+
+        from rivretrieve._internal.observations import (
+            ObservationDataSchema,
+            ObservationProvenance,
+            ObservationResult,
+            Receipts,
+        )
+
+        # Author valid current carriers, not rewritten historical exports.
+        selection = rr.find(
+            provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily", statistic="mean"
+        )
+        if carrier == "context-only-selection":
+            value = rr.find(station="07374000", quantity="temperature", statistic="max")
+            assert not value.scope.provider_ids
+            assert not value.series
+            assert all(item.provider_id != "fr_hubeau" for item in value.known_series)
+            assert any(item.header.provider_id == "fr_hubeau" for item in value.acquisition_provenance)
+        elif carrier == "empty-selection":
+            value = replace(selection, known_series=(), inventories=(), locations=())
+        elif carrier == "result":
+            value = ObservationResult(
+                data=pl.DataFrame(schema=ObservationDataSchema.polars_schema),
+                provenance=ObservationProvenance(source="synthetic", provider_id=ProviderId("fr_hubeau")),
+                receipts=Receipts(provider_id=ProviderId("fr_hubeau"), entries=()),
+                scope=selection.scope,
+            )
+        else:
+            value = selection
+        content = rr.to_bundle(value)
+        restored = rr.from_bundle(content)
+        entry = (value, content, restored)
+        cache[carrier] = entry
+        return entry
+
+    return get_carrier
+
+
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 @pytest.mark.parametrize("carrier", ("selection", "empty-selection", "context-only-selection", "result"))
 @pytest.mark.parametrize("service", (None, "retired-combined-service"))
-def test_current_bundle_refuses_retired_publication_service_before_values(carrier, service, monkeypatch):
-    from dataclasses import replace
+def test_current_bundle_refuses_retired_publication_service_before_values(
+    carrier, service, monkeypatch, _current_carrier_bundle_cache
+):
     from io import BytesIO
     from zipfile import ZipFile
 
-    import polars as pl
     from polars.testing import assert_frame_equal
 
-    from rivretrieve._internal.observations import (
-        ObservationDataSchema,
-        ObservationProvenance,
-        ObservationResult,
-        Receipts,
-    )
-
-    # Author valid current carriers, not rewritten historical exports.
-    selection = rr.find(
-        provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily", statistic="mean"
-    )
-    if carrier == "context-only-selection":
-        value = rr.find(station="07374000", quantity="temperature", statistic="max")
-        assert not value.scope.provider_ids
-        assert not value.series
-        assert all(item.provider_id != "fr_hubeau" for item in value.known_series)
-        assert any(item.header.provider_id == "fr_hubeau" for item in value.acquisition_provenance)
-    elif carrier == "empty-selection":
-        value = replace(selection, known_series=(), inventories=(), locations=())
-    elif carrier == "result":
-        value = ObservationResult(
-            data=pl.DataFrame(schema=ObservationDataSchema.polars_schema),
-            provenance=ObservationProvenance(source="synthetic", provider_id=ProviderId("fr_hubeau")),
-            receipts=Receipts(provider_id=ProviderId("fr_hubeau"), entries=()),
-            scope=selection.scope,
-        )
-    else:
-        value = selection
-    content = rr.to_bundle(value)
-    restored = rr.from_bundle(content)
+    value, content, restored = _current_carrier_bundle_cache(carrier)
     assert restored.scope == value.scope
     assert_frame_equal(rr.series(restored), rr.series(value))
     if carrier == "result":
@@ -224,6 +244,7 @@ def test_current_bundle_refuses_retired_publication_service_before_values(carrie
         rr.from_bundle(destination.getvalue())
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_current_context_only_empty_bundle_round_trip():
     selection = rr.find(station="07374000", quantity="temperature", statistic="max")
     assert not selection.scope.provider_ids
@@ -238,6 +259,7 @@ def test_current_context_only_empty_bundle_round_trip():
     )
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 @pytest.mark.parametrize("operation", ("status", "reuse", "refresh"))
 def test_current_store_revision_still_refuses_retired_publication_service(operation, tmp_path, monkeypatch):
     # Author a current generation, then change only its publication identity.

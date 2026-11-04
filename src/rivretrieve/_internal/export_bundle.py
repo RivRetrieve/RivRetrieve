@@ -494,7 +494,7 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
                         }
                         for item in value.locations
                     ],
-                    "catalogue_evidence": [item.model_dump(mode="json") for item in value.acquisition_provenance],
+                    "catalogue_evidence": [item.to_json_dict() for item in value.acquisition_provenance],
                     "empty_reason": asdict(value.empty_reason) if value.empty_reason is not None else None,
                 }
             )
@@ -638,7 +638,7 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
                 if type(raw_locations) is list
                 else tuple(_STATION_LOCATION_ADAPTER.validate_json(_json(item)) for item in raw_locations),
                 acquisition_provenance=tuple(
-                    CatalogueEvidence.model_validate_json(_json(item)) for item in manifest["catalogue_evidence"]
+                    CatalogueEvidence.from_parsed_json(item) for item in manifest["catalogue_evidence"]
                 ),
                 empty_reason=reason,
             )

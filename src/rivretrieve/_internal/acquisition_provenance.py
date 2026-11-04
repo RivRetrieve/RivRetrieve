@@ -669,15 +669,20 @@ class AbsenceMarkerValue(StrEnum):
     UNKNOWN = "unknown"
 
 
-_STATION_PRODUCT_AVAILABILITY_RE = re.compile(r"station_product:([^:\s]+):([^:\s]+)\.availability")
+_HAS_WHITESPACE_SEARCH = re.compile(r"\s").search
 
 
 def station_product_availability_key(fact: str) -> tuple[str, str] | None:
     """Exact row-scoped canonical availability name → station/product key, or no key."""
     if not (fact.startswith("station_product:") and fact.endswith(".availability")):
         return None
-    match = _STATION_PRODUCT_AVAILABILITY_RE.fullmatch(fact)
-    return (match.group(1), match.group(2)) if match is not None else None
+    middle = fact[16:-13]
+    colon_idx = middle.find(":")
+    if colon_idx <= 0 or colon_idx >= len(middle) - 1:
+        return None
+    if ":" in middle[colon_idx + 1 :] or _HAS_WHITESPACE_SEARCH(middle) is not None:
+        return None
+    return middle[:colon_idx], middle[colon_idx + 1 :]
 
 
 def absence_marker_accepts_fact(marker: AbsenceMarkerValue | None, fact: str) -> bool:

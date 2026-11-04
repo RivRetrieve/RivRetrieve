@@ -61,7 +61,15 @@ def encode_catalogue(providers: list[dict], stations: pl.DataFrame, series: Iter
     records = []
     station_indexes: dict[tuple[str, str], int] = {}
     if stations.height:
-        s_cols = stations.to_dict(as_series=False)
+        s_cols = stations.select(
+            "provider_id",
+            "station_id",
+            "station_name",
+            "latitude",
+            "longitude",
+            "crs",
+            "water_body_name_value",
+        ).to_dict(as_series=False)
         for prov, sid, s_name, lat, lon, crs, wb_names in zip(
             s_cols["provider_id"],
             s_cols["station_id"],
@@ -89,13 +97,14 @@ def encode_catalogue(providers: list[dict], stations: pl.DataFrame, series: Iter
             )
     facts = []
     fact_indexes: dict[str, int] = {}
-    segment_index_cache: dict[object, int] = {}
+    segment_index_cache: dict[int, tuple[object, int]] = {}
     series_records = []
     for item in series:
         references = []
         for segment in item.facts:
-            idx = segment_index_cache.get(segment)
-            if idx is None:
+            seg_key = id(segment)
+            cached_seg = segment_index_cache.get(seg_key)
+            if cached_seg is None:
                 profile = {
                     field: {"value": getattr(segment, field).value, "state": getattr(segment, field).state.value}
                     for field in FACT_FIELDS
@@ -108,7 +117,9 @@ def encode_catalogue(providers: list[dict], stations: pl.DataFrame, series: Iter
                     idx = len(facts)
                     fact_indexes[key] = idx
                     facts.append(profile)
-                segment_index_cache[segment] = idx
+                segment_index_cache[seg_key] = (segment, idx)
+            else:
+                idx = cached_seg[1]
             references.append(idx)
         series_records.append(
             [

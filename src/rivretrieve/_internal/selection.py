@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from operator import attrgetter
 from typing import Literal, Protocol, cast
 
 import polars as pl
@@ -15,6 +16,7 @@ from rivretrieve._internal.issues import FatalContractError, Issue, apply_on_iss
 from rivretrieve._internal.primitives import OnIssue, ProviderId
 from rivretrieve._internal.registry import UnknownProviderError
 from rivretrieve._internal.source_series import (
+    _PLAIN_JSON_ASCII_FULLMATCH,
     InventoryCompleteness,
     InventorySnapshot,
     PhysicalFacts,
@@ -23,6 +25,7 @@ from rivretrieve._internal.source_series import (
     RetrievalOutcome,
     ScopeState,
     SeriesScope,
+    SourceIdentity,
     SourceSeries,
     admission,
 )
@@ -527,8 +530,12 @@ _SCOPE_P2, _SCOPE_P3 = _SCOPE_R2.split("__PROD__")
 del _SCOPE_PROBE, _SCOPE_R1, _SCOPE_R2
 
 
+_SERIES_SORT_KEY = attrgetter("provider_id", "station_id", "product_id", "series_id")
+_FACTS_SORT_KEY = attrgetter("facts_id")
+
+
 def _is_plain_json_ascii(value: str) -> bool:
-    return value.isascii() and '"' not in value and "\\" not in value and (not value or min(value) >= " ")
+    return _PLAIN_JSON_ASCII_FULLMATCH(value) is not None
 
 
 def _fast_scope_json(scope_obj: SeriesScope) -> str:
@@ -603,192 +610,200 @@ def _series_frame(
         if not definitions or scope.state is ScopeState.EMPTY:
             return pl.DataFrame(schema=schema)
 
-        # Cache per-PhysicalFacts extracted fields across shared catalogue segments.
-        # Entry layout: (matches, facts_id, adm_status, adm_reason, target_unit,
-        #                su_val, su_state, su_ev, norm_unit, phys_vals, phys_states, phys_evs)
-        facts_cache: dict[
-            int,
-            tuple[
-                bool,
-                str,
-                str,
-                str | None,
-                str | None,
-                str | None,
-                str,
-                list[str],
-                str | None,
-                tuple[str | None, ...],
-                tuple[str, ...],
-                tuple[list[str], ...],
-            ],
-        ] = {}
+        unrestricted_scope = (
+            scope.state is ScopeState.ACTIVE
+            and not scope.provider_ids
+            and not scope.station_ids
+            and not scope.product_ids
+            and scope.restriction is RestrictionKind.ALL
+            and not scope.predicates
+        )
 
-        def _extract_facts(facts: PhysicalFacts):
-            fid_key = id(facts)
-            cached = facts_cache.get(fid_key)
-            if cached is not None:
-                return cached
-            matches = scope.matches_facts(facts)
-            if not matches:
-                entry = (False, facts.facts_id, "", None, None, None, "", [], None, (), (), ())
-            else:
-                decision = admission(facts)
-                phys_objs = tuple(getattr(facts, field) for field in _PHYSICAL_FIELDS)
-                entry = (
-                    True,
-                    facts.facts_id,
-                    decision.status,
-                    decision.reason,
-                    decision.target_unit,
-                    facts.source_unit.value,
-                    facts.source_unit.state.value,
-                    list(facts.source_unit.evidence),
-                    facts.normalized_unit,
-                    tuple(obj.value for obj in phys_objs),
-                    tuple(obj.state.value for obj in phys_objs),
-                    tuple(list(obj.evidence) for obj in phys_objs),
-                )
-            facts_cache[fid_key] = entry
-            return entry
+        # Deduplicate shared PhysicalFacts and SourceIdentity instances to compact indices
+        # and expand in native Polars via .gather() after scanning definitions.
+        unique_facts: list[PhysicalFacts] = []
+        facts_idx_cache: dict[int, tuple[PhysicalFacts, int, str]] = {}
+        unique_idents: list[SourceIdentity] = []
+        ident_idx_cache: dict[int, tuple[SourceIdentity, int]] = {}
+        inv_meta_cache: dict[int, tuple[InventorySnapshot, str, str | None, str | None]] = {}
 
         c_prov: list[str] = []
         c_stat: list[str] = []
         c_prod: list[str] = []
         c_sid: list[str] = []
-        c_fid: list[str] = []
-        c_ns: list[str] = []
-        c_pub: list[str | None] = []
-        c_desc: list[str | None] = []
-        c_orig: list[str] = []
         c_var: list[str | None] = []
-        c_adm: list[str] = []
-        c_adm_reason: list[str | None] = []
-        c_su: list[str | None] = []
-        c_su_state: list[str] = []
-        c_su_ev: list[list[str]] = []
-        c_norm_u: list[str | None] = []
-        c_id_ev: list[list[str]] = []
-        c_unit: list[str | None] = []
-        c_phys_val: tuple[list[str | None], ...] = tuple([] for _ in _PHYSICAL_FIELDS)
-        c_phys_state: tuple[list[str], ...] = tuple([] for _ in _PHYSICAL_FIELDS)
-        c_phys_ev: tuple[list[list[str]], ...] = tuple([] for _ in _PHYSICAL_FIELDS)
-        c_inv_ids: list[list[str]] = []
-        c_inv_scope: list[list[str]] = []
-        c_inv_win: list[list[str]] = []
-        c_inv_vint: list[list[str]] = []
-        c_inv_stat: list[list[str]] = []
+        c_ident_idx: list[int] = []
+        c_fact_idx: list[int] = []
 
-        sorted_defs = sorted(
-            definitions, key=lambda item: (item.provider_id, item.station_id, item.product_id, item.series_id)
-        )
+        inv_offsets: list[int] = [0]
+        flat_inv_ids: list[str] = []
+        flat_inv_scope: list[str] = []
+        win_offsets: list[int] = [0]
+        flat_inv_win: list[str] = []
+        vint_offsets: list[int] = [0]
+        flat_inv_vint: list[str] = []
+        stat_offsets: list[int] = [0]
+        flat_inv_stat: list[str] = []
+
+        sorted_defs = sorted(definitions, key=_SERIES_SORT_KEY)
         for definition in sorted_defs:
-            if not scope.matches(definition):
+            if unrestricted_scope:
+                if not definition.facts:
+                    continue
+            elif not scope.matches(definition):
                 continue
             series_inventory = inventory_by_series.get(definition.series_id)
             ident = definition.identity
-            id_ev = list(ident.evidence)
+            ident_key = id(ident)
+            cached_ident = ident_idx_cache.get(ident_key)
+            if cached_ident is None:
+                ident_idx = len(unique_idents)
+                unique_idents.append(ident)
+                ident_idx_cache[ident_key] = (ident, ident_idx)
+            else:
+                ident_idx = cached_ident[1]
+
             def_facts = (
-                definition.facts
-                if len(definition.facts) == 1
-                else sorted(definition.facts, key=lambda item: item.facts_id)
+                definition.facts if len(definition.facts) == 1 else sorted(definition.facts, key=_FACTS_SORT_KEY)
             )
             for facts in def_facts:
-                extracted = _extract_facts(facts)
-                if not extracted[0]:
-                    continue
-                (
-                    _,
-                    fid_str,
-                    adm_status,
-                    adm_reason,
-                    target_unit,
-                    su_val,
-                    su_state,
-                    su_ev,
-                    norm_unit,
-                    phys_vals,
-                    phys_states,
-                    phys_evs,
-                ) = extracted
+                fid_key = id(facts)
+                cached_fact = facts_idx_cache.get(fid_key)
+                if cached_fact is None:
+                    if unrestricted_scope or scope.matches_facts(facts):
+                        f_idx = len(unique_facts)
+                        unique_facts.append(facts)
+                        fid_str = facts.facts_id
+                        facts_idx_cache[fid_key] = (facts, f_idx, fid_str)
+                    else:
+                        facts_idx_cache[fid_key] = (facts, -1, "")
+                        continue
+                else:
+                    f_idx = cached_fact[1]
+                    if f_idx < 0:
+                        continue
+                    fid_str = cached_fact[2]
+
                 c_prov.append(definition.provider_id)
                 c_stat.append(definition.station_id)
                 c_prod.append(definition.product_id)
                 c_sid.append(definition.series_id)
-                c_fid.append(fid_str)
-                c_ns.append(ident.namespace)
-                c_pub.append(ident.published_id)
-                c_desc.append(ident.description)
-                c_orig.append(ident.origin)
                 c_var.append(definition.variant)
-                c_adm.append(adm_status)
-                c_adm_reason.append(adm_reason)
-                c_su.append(su_val)
-                c_su_state.append(su_state)
-                c_su_ev.append(su_ev)
-                c_norm_u.append(norm_unit)
-                c_id_ev.append(id_ev)
-                c_unit.append(target_unit)
-                for i in range(9):
-                    c_phys_val[i].append(phys_vals[i])
-                    c_phys_state[i].append(phys_states[i])
-                    c_phys_ev[i].append(phys_evs[i])
+                c_ident_idx.append(ident_idx)
+                c_fact_idx.append(f_idx)
 
                 if not series_inventory:
-                    c_inv_ids.append([])
-                    c_inv_scope.append([])
-                    c_inv_win.append([])
-                    c_inv_vint.append([])
-                    c_inv_stat.append([])
+                    inv_offsets.append(len(flat_inv_ids))
+                    win_offsets.append(len(flat_inv_win))
+                    vint_offsets.append(len(flat_inv_vint))
+                    stat_offsets.append(len(flat_inv_stat))
                 elif len(series_inventory) == 1:
                     inv = series_inventory[0]
                     if not inv.member_facts or _inventory_contains_facts(inv, definition.series_id, fid_str):
-                        c_inv_ids.append([inv.snapshot_id])
-                        c_inv_scope.append([_fast_scope_json(inv.scope)])
-                        c_inv_win.append([inv.window.model_dump_json()] if inv.window is not None else [])
-                        vint = _inventory_vintage(inv)
-                        c_inv_vint.append([vint] if vint is not None else [])
-                        c_inv_stat.append([inv.completeness.value])
+                        inv_key = id(inv)
+                        cached_inv = inv_meta_cache.get(inv_key)
+                        if cached_inv is None:
+                            s_json = _fast_scope_json(inv.scope)
+                            w_json = inv.window.model_dump_json() if inv.window is not None else None
+                            v_str = _inventory_vintage(inv)
+                            inv_meta_cache[inv_key] = (inv, s_json, w_json, v_str)
+                        else:
+                            _, s_json, w_json, v_str = cached_inv
+                        flat_inv_ids.append(inv.snapshot_id)
+                        flat_inv_scope.append(s_json)
+                        inv_offsets.append(len(flat_inv_ids))
+                        if w_json is not None:
+                            flat_inv_win.append(w_json)
+                        win_offsets.append(len(flat_inv_win))
+                        if v_str is not None:
+                            flat_inv_vint.append(v_str)
+                        vint_offsets.append(len(flat_inv_vint))
+                        flat_inv_stat.append(inv.completeness.value)
+                        stat_offsets.append(len(flat_inv_stat))
                     else:
-                        c_inv_ids.append([])
-                        c_inv_scope.append([])
-                        c_inv_win.append([])
-                        c_inv_vint.append([])
-                        c_inv_stat.append([])
+                        inv_offsets.append(len(flat_inv_ids))
+                        win_offsets.append(len(flat_inv_win))
+                        vint_offsets.append(len(flat_inv_vint))
+                        stat_offsets.append(len(flat_inv_stat))
                 else:
                     matched_inv = [
                         item
                         for item in series_inventory
                         if not item.member_facts or _inventory_contains_facts(item, definition.series_id, fid_str)
                     ]
-                    c_inv_ids.append([item.snapshot_id for item in matched_inv])
-                    c_inv_scope.append([_fast_scope_json(item.scope) for item in matched_inv])
-                    c_inv_win.append([item.window.model_dump_json() for item in matched_inv if item.window is not None])
-                    c_inv_vint.append([vint for item in matched_inv if (vint := _inventory_vintage(item)) is not None])
-                    c_inv_stat.append(sorted({item.completeness.value for item in matched_inv}))
+                    for item in matched_inv:
+                        flat_inv_ids.append(item.snapshot_id)
+                        flat_inv_scope.append(_fast_scope_json(item.scope))
+                        if item.window is not None:
+                            flat_inv_win.append(item.window.model_dump_json())
+                        vint = _inventory_vintage(item)
+                        if vint is not None:
+                            flat_inv_vint.append(vint)
+                    inv_offsets.append(len(flat_inv_ids))
+                    win_offsets.append(len(flat_inv_win))
+                    vint_offsets.append(len(flat_inv_vint))
+                    if matched_inv:
+                        flat_inv_stat.extend(sorted({item.completeness.value for item in matched_inv}))
+                    stat_offsets.append(len(flat_inv_stat))
 
         n_rows = len(c_prov)
         if not n_rows:
             return pl.DataFrame(schema=schema)
         import pyarrow as pa
 
-        pa_str_list = pa.list_(pa.string())
+        pa_str = pa.string()
+        pa_i32 = pa.int32()
+        pa_str_list = pa.list_(pa_str)
 
         def _list_series(name: str, values: list[list[str]]) -> pl.Series:
             return cast("pl.Series", pl.from_arrow(pa.array(values, type=pa_str_list))).rename(name)
 
+        def _flat_list_series(name: str, offsets_arr: pa.Array, flat_values: list[str]) -> pl.Series:
+            arr = pa.ListArray.from_arrays(offsets_arr, pa.array(flat_values, type=pa_str))
+            return cast("pl.Series", pl.from_arrow(arr)).rename(name)
+
         empty_str_series = pl.repeat(None, n_rows, dtype=pl.String, eager=True)
         empty_list_series = pl.repeat([], n_rows, dtype=pl.List(pl.String), eager=True)
+
+        # Build compact K-row PhysicalFacts table and gather to n_rows in Rust.
+        f_decisions = [admission(f) for f in unique_facts]
+        fact_cols: list[pl.Series] = [
+            pl.Series("facts_id", [f.facts_id for f in unique_facts], dtype=pl.String),
+            pl.Series("admission", [d.status for d in f_decisions], dtype=pl.String),
+            pl.Series("admission_reason", [d.reason for d in f_decisions], dtype=pl.String),
+            pl.Series("source_unit", [f.source_unit.value for f in unique_facts], dtype=pl.String),
+            pl.Series("source_unit_state", [f.source_unit.state.value for f in unique_facts], dtype=pl.String),
+            _list_series("source_unit_evidence", [list(f.source_unit.evidence) for f in unique_facts]),
+            pl.Series("normalized_unit", [f.normalized_unit for f in unique_facts], dtype=pl.String),
+            pl.Series("unit", [d.target_unit for d in f_decisions], dtype=pl.String),
+        ]
+        for field in _PHYSICAL_FIELDS:
+            objs = [getattr(f, field) for f in unique_facts]
+            fact_cols.append(pl.Series(field, [o.value for o in objs], dtype=pl.String))
+            fact_cols.append(pl.Series(f"{field}_state", [o.state.value for o in objs], dtype=pl.String))
+            fact_cols.append(_list_series(f"{field}_evidence", [list(o.evidence) for o in objs]))
+        fact_idx_s = pl.Series("_f_idx", c_fact_idx, dtype=pl.UInt32)
+        expanded_facts = pl.DataFrame(fact_cols).select(pl.all().gather(fact_idx_s))
+
+        # Build compact M-row SourceIdentity table and gather to n_rows in Rust.
+        ident_df = pl.DataFrame(
+            [
+                pl.Series("identity_namespace", [i.namespace for i in unique_idents], dtype=pl.String),
+                pl.Series("published_id", [i.published_id for i in unique_idents], dtype=pl.String),
+                pl.Series("description", [i.description for i in unique_idents], dtype=pl.String),
+                pl.Series("identity_origin", [i.origin for i in unique_idents], dtype=pl.String),
+                _list_series("identity_evidence", [list(i.evidence) for i in unique_idents]),
+            ]
+        )
+        ident_idx_s = pl.Series("_i_idx", c_ident_idx, dtype=pl.UInt32)
+        expanded_idents = ident_df.select(pl.all().gather(ident_idx_s))
+
+        inv_offsets_pa = pa.array(inv_offsets, type=pa_i32)
         columns_map: dict[str, pl.Series] = {
             "provider_id": pl.Series("provider_id", c_prov, dtype=pl.String),
             "station_id": pl.Series("station_id", c_stat, dtype=pl.String),
             "product_id": pl.Series("product_id", c_prod, dtype=pl.String),
             "series_id": pl.Series("series_id", c_sid, dtype=pl.String),
-            "facts_id": pl.Series("facts_id", c_fid, dtype=pl.String),
-            "identity_namespace": pl.Series("identity_namespace", c_ns, dtype=pl.String),
-            "published_id": pl.Series("published_id", c_pub, dtype=pl.String),
-            "description": pl.Series("description", c_desc, dtype=pl.String),
-            "identity_origin": pl.Series("identity_origin", c_orig, dtype=pl.String),
             "variant": pl.Series("variant", c_var, dtype=pl.String),
             "requested_variants": pl.repeat(list(scope.variants), n_rows, dtype=pl.List(pl.String), eager=True).alias(
                 "requested_variants"
@@ -799,31 +814,39 @@ def _series_frame(
             "requested_selector_kind": empty_str_series.alias("requested_selector_kind"),
             "requested_selector_value": empty_str_series.alias("requested_selector_value"),
             "physical_match": pl.repeat("matched", n_rows, dtype=pl.String, eager=True).alias("physical_match"),
-            "admission": pl.Series("admission", c_adm, dtype=pl.String),
-            "admission_reason": pl.Series("admission_reason", c_adm_reason, dtype=pl.String),
-            "source_unit": pl.Series("source_unit", c_su, dtype=pl.String),
-            "source_unit_state": pl.Series("source_unit_state", c_su_state, dtype=pl.String),
-            "source_unit_evidence": _list_series("source_unit_evidence", c_su_ev),
-            "normalized_unit": pl.Series("normalized_unit", c_norm_u, dtype=pl.String),
-            "identity_evidence": _list_series("identity_evidence", c_id_ev),
-            "unit": pl.Series("unit", c_unit, dtype=pl.String),
+            "inventory_ids": (
+                _flat_list_series("inventory_ids", inv_offsets_pa, flat_inv_ids)
+                if flat_inv_ids
+                else empty_list_series.alias("inventory_ids")
+            ),
+            "inventory_scope": (
+                _flat_list_series("inventory_scope", inv_offsets_pa, flat_inv_scope)
+                if flat_inv_scope
+                else empty_list_series.alias("inventory_scope")
+            ),
+            "inventory_windows": (
+                _flat_list_series("inventory_windows", pa.array(win_offsets, type=pa_i32), flat_inv_win)
+                if flat_inv_win
+                else empty_list_series.alias("inventory_windows")
+            ),
+            "outcome_windows": empty_list_series.alias("outcome_windows"),
+            "inventory_vintage": (
+                _flat_list_series("inventory_vintage", pa.array(vint_offsets, type=pa_i32), flat_inv_vint)
+                if flat_inv_vint
+                else empty_list_series.alias("inventory_vintage")
+            ),
+            "inventory_status": (
+                _flat_list_series("inventory_status", pa.array(stat_offsets, type=pa_i32), flat_inv_stat)
+                if flat_inv_stat
+                else empty_list_series.alias("inventory_status")
+            ),
+            "outcomes": empty_list_series.alias("outcomes"),
+            "outcome_reasons": empty_list_series.alias("outcome_reasons"),
         }
-        for i, field in enumerate(_PHYSICAL_FIELDS):
-            columns_map[field] = pl.Series(field, c_phys_val[i], dtype=pl.String)
-        for i, field in enumerate(_PHYSICAL_FIELDS):
-            state_col = f"{field}_state"
-            columns_map[state_col] = pl.Series(state_col, c_phys_state[i], dtype=pl.String)
-        for i, field in enumerate(_PHYSICAL_FIELDS):
-            ev_col = f"{field}_evidence"
-            columns_map[ev_col] = _list_series(ev_col, c_phys_ev[i])
-        columns_map["inventory_ids"] = _list_series("inventory_ids", c_inv_ids)
-        columns_map["inventory_scope"] = _list_series("inventory_scope", c_inv_scope)
-        columns_map["inventory_windows"] = _list_series("inventory_windows", c_inv_win)
-        columns_map["outcome_windows"] = empty_list_series.alias("outcome_windows")
-        columns_map["inventory_vintage"] = _list_series("inventory_vintage", c_inv_vint)
-        columns_map["inventory_status"] = _list_series("inventory_status", c_inv_stat)
-        columns_map["outcomes"] = empty_list_series.alias("outcomes")
-        columns_map["outcome_reasons"] = empty_list_series.alias("outcome_reasons")
+        for col in expanded_facts.get_columns():
+            columns_map[col.name] = col
+        for col in expanded_idents.get_columns():
+            columns_map[col.name] = col
         return pl.DataFrame([columns_map[col_name] for col_name in schema])
 
     outcomes_by_series: dict[str, list[RetrievalOutcome]] = {}

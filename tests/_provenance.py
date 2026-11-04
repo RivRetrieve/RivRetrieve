@@ -13,8 +13,12 @@ import polars as pl
 import polars.testing as pl_testing
 
 from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
-from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+from rivretrieve._internal.catalogues.artifact import (
+    ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS,
+    load_packaged_catalogue_artifact,
+)
 from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
+from tests._catalogue_inputs import Fingerprint, _detach_evidence, _fingerprint
 
 EVIDENCE_FILES = (
     "provenance_facts.parquet",
@@ -23,6 +27,12 @@ EVIDENCE_FILES = (
     "provenance_binding_facts.parquet",
     "provenance_external_inputs.parquet",
 )
+_CANONICAL_PROVIDERS_ROOT = (Path(__file__).resolve().parents[1] / "src/rivretrieve/_internal/providers").resolve()
+_CANONICAL_CATALOGUE_DIRS = frozenset(
+    (_CANONICAL_PROVIDERS_ROOT / provider / "catalogue").resolve()
+    for provider in ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS
+)
+_CANONICAL_LEGACY_CACHE: dict[Path, tuple[Fingerprint, CatalogueEvidence, AcquisitionProvenance, bytes]] = {}
 
 
 def legacy_provenance(evidence: CatalogueEvidence) -> AcquisitionProvenance:
@@ -32,8 +42,53 @@ def legacy_provenance(evidence: CatalogueEvidence) -> AcquisitionProvenance:
     return reconstruct_provenance(evidence)
 
 
+def _cached_canonical_entry(directory: Path) -> tuple[CatalogueEvidence, AcquisitionProvenance, bytes] | None:
+    resolved_dir = directory.absolute()
+    if resolved_dir not in _CANONICAL_CATALOGUE_DIRS:
+        return None
+    fp = _fingerprint(resolved_dir)
+    if fp is None:
+        return None
+    cached = _CANONICAL_LEGACY_CACHE.get(resolved_dir)
+    if cached is not None and cached[0] == fp:
+        return cached[1], cached[2], cached[3]
+    evidence = load_packaged_catalogue_artifact(resolved_dir, on_issue="raise").acquisition_provenance
+    assert evidence is not None
+    reconstructed = legacy_provenance(evidence)
+    json_bytes = reconstructed.model_dump_json().encode("utf-8")
+    if _fingerprint(resolved_dir) == fp:
+        _CANONICAL_LEGACY_CACHE[resolved_dir] = (fp, evidence, reconstructed, json_bytes)
+    return evidence, reconstructed, json_bytes
+
+
+def canonical_legacy_provenance(provider: str) -> AcquisitionProvenance:
+    """Return frozen reconstructed v2 provenance for an unchanged canonical provider catalogue."""
+    directory = _CANONICAL_PROVIDERS_ROOT / provider / "catalogue"
+    entry = _cached_canonical_entry(directory)
+    if entry is not None:
+        return entry[1]
+    evidence = load_packaged_catalogue_artifact(directory, on_issue="raise").acquisition_provenance
+    assert evidence is not None
+    return legacy_provenance(evidence)
+
+
+def canonical_normalized_evidence(provider: str) -> CatalogueEvidence:
+    """Return detached normalized v3 evidence for an unchanged canonical provider catalogue."""
+    directory = _CANONICAL_PROVIDERS_ROOT / provider / "catalogue"
+    entry = _cached_canonical_entry(directory)
+    if entry is not None:
+        return _detach_evidence(entry[0])
+    evidence = load_packaged_catalogue_artifact(directory, on_issue="raise").acquisition_provenance
+    assert evidence is not None
+    return _detach_evidence(evidence)
+
+
 def legacy_document(path: Path) -> dict[str, Any]:
     """Read genuine packaged evidence, then explicitly reconstruct its v2 value."""
+    if not path.is_symlink() and path.name == "provenance.json":
+        entry = _cached_canonical_entry(path.parent)
+        if entry is not None:
+            return json.loads(entry[2])
     evidence = load_packaged_catalogue_artifact(path.parent, on_issue="raise").acquisition_provenance
     assert evidence is not None
     return legacy_provenance(evidence).model_dump(mode="json")

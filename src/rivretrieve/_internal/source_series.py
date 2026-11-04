@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
@@ -253,18 +254,15 @@ class SourceIdentity(BaseModel):
         return self
 
 
+_PLAIN_JSON_ASCII_FULLMATCH = re.compile(r"[ !#-\[\]-\x7f]*").fullmatch
+
+
 def stable_id(*components: str | None) -> str:
     parts: list[str] = []
     for component in components:
         if component is None:
             parts.append("null")
-        elif (
-            type(component) is str
-            and component.isascii()
-            and '"' not in component
-            and "\\" not in component
-            and (not component or min(component) >= " ")
-        ):
+        elif type(component) is str and _PLAIN_JSON_ASCII_FULLMATCH(component) is not None:
             parts.append(f'"{component}"')
         else:
             encoded = json.dumps(components, ensure_ascii=False, separators=(",", ":")).encode()
