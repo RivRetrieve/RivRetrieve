@@ -85,7 +85,7 @@ def test_provider_terms_do_not_promote_an_explicit_absence_or_unbound_statement(
     }
 
 
-def test_deferred_south_africa_remains_catalogue_only(registered_dws_catalogue) -> None:
+def test_deferred_south_africa_remains_catalogue_only(reuse_packaged_catalogues, registered_dws_catalogue) -> None:
     from rivretrieve._internal.issues import ObservationsUnavailableError
 
     candidates = rr.find(provider="za_dws")

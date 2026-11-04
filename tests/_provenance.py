@@ -107,6 +107,9 @@ _USGS_REGISTERED_BASELINE_DECLARATIONS = (
 )
 
 
+_CACHED_USGS_BASELINE: tuple[AcquisitionProvenance, pl.DataFrame] | None = None
+
+
 def registered_usgs_baseline():
     """Read the public ef92fc04 graph and one gauge's exact metadata rows.
 
@@ -115,12 +118,16 @@ def registered_usgs_baseline():
     full catalogue/source verification remains in the retained-evidence suite.
     Original public Git revision and artifact digests accompany the projection.
     """
-    from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA
+    global _CACHED_USGS_BASELINE
+    if _CACHED_USGS_BASELINE is None:
+        from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA
 
-    document = json.loads((Path(__file__).parent / "fixtures/usgs_registered_baseline.json").read_text())
-    provenance = AcquisitionProvenance.model_validate(document["provenance"])
-    assert provenance.build_inputs.build.revision == "7dd47d9ec899eec2b2b91a111e7372222073c031"
-    return provenance, pl.DataFrame(document["metadata"], schema=SOURCE_METADATA_SCHEMA)
+        document = json.loads((Path(__file__).parent / "fixtures/usgs_registered_baseline.json").read_text())
+        provenance = AcquisitionProvenance.model_validate(document["provenance"])
+        assert provenance.build_inputs.build.revision == "7dd47d9ec899eec2b2b91a111e7372222073c031"
+        _CACHED_USGS_BASELINE = (provenance, pl.DataFrame(document["metadata"], schema=SOURCE_METADATA_SCHEMA))
+    provenance, metadata = _CACHED_USGS_BASELINE
+    return provenance, metadata.clone()
 
 
 def historical_source_provenance(provenance, metadata, *, declaration_locations=None):
@@ -132,11 +139,18 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
     """
     from importlib import import_module
 
-    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance, CodeReference, ExternalFactReference
+    from rivretrieve._internal.acquisition_provenance import (
+        AcquisitionProvenance,
+        CodeReference,
+        ExternalFactReference,
+        FactBinding,
+        Transformation,
+    )
     from rivretrieve._internal.catalogues.station_metadata import validate_metadata_fields
     from rivretrieve._internal.station_metadata import metadata_support_fact, source_metadata_frame
 
-    provenance = AcquisitionProvenance.model_validate(provenance.model_dump(mode="python"))
+    if not isinstance(provenance, AcquisitionProvenance):
+        provenance = AcquisitionProvenance.model_validate(provenance)
     build = provenance.build_inputs
     if build is None:
         return provenance
@@ -247,14 +261,19 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
     assert set(value_facts) == set(fields_by_fact)
     assert set(datum_facts) == {f"{fact}.datum" for fact, field in fields_by_fact.items() if field.datum_support}
     metadata_facts = (*value_facts, *datum_facts)
+    metadata_fact_set = set(metadata_facts)
+    datum_fact_set = set(datum_facts)
+    transform_impls = getattr(origins, "TRANSFORMATION_IMPLEMENTATIONS", {})
+    default_impl = (catalogue_declaration.repository_path, catalogue_declaration.symbol)
+    code_ref_cache: dict[tuple[str, str | None], CodeReference] = {}
     expected_metadata = []
     for binding in provenance.fact_bindings:
         transform = binding.transformation
         if transform is None:
             continue
-        if binding.fact_group in metadata_facts:
+        if binding.fact_group in metadata_fact_set:
             assert binding.facts == (binding.fact_group,)
-            is_datum = binding.fact_group in datum_facts
+            is_datum = binding.fact_group in datum_fact_set
             field = fields_by_fact[binding.fact_group.removesuffix(".datum") if is_datum else binding.fact_group]
             assert transform.name == ("associate_elevation_datum" if is_datum else "project_station_metadata")
             assert transform.kind == "derived_value" and transform.marker_value is None
@@ -279,40 +298,74 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
             ]
             expected_metadata.append(binding.fact_group)
         else:
-            assert not set(binding.facts) & set(metadata_facts)
-            assert not any(reference.fact in metadata_facts for reference in transform.external_inputs)
-            expected_location = getattr(origins, "TRANSFORMATION_IMPLEMENTATIONS", {}).get(
-                binding.fact_group, (catalogue_declaration.repository_path, catalogue_declaration.symbol)
-            )
+            if metadata_fact_set:
+                assert metadata_fact_set.isdisjoint(binding.facts)
+                assert not any(reference.fact in metadata_fact_set for reference in transform.external_inputs)
+            expected_location = transform_impls.get(binding.fact_group, default_impl)
             expected_declaration = (
                 catalogue_declaration if transform.kind == "authored_constant" else origins_declaration
             )
         assert transform.declaration == expected_declaration
-        assert transform.executable == (
-            None
-            if transform.kind == "authored_constant"
-            else CodeReference(
-                repository=build.build.repository,
-                revision=build.build.revision,
-                repository_path=expected_location[0],
-                symbol=expected_location[1],
-            )
-        )
+        if transform.kind == "authored_constant":
+            expected_exec = None
+        else:
+            expected_exec = code_ref_cache.get(expected_location)
+            if expected_exec is None:
+                expected_exec = CodeReference(
+                    repository=build.build.repository,
+                    revision=build.build.revision,
+                    repository_path=expected_location[0],
+                    symbol=expected_location[1],
+                )
+                code_ref_cache[expected_location] = expected_exec
+        assert transform.executable == expected_exec
     assert tuple(expected_metadata) == metadata_facts
-    payload = provenance.model_dump(mode="json")
+    kept_universe = provenance.fact_universe
+    kept_bindings = provenance.fact_bindings
     if metadata_facts:
         count = len(metadata_facts)
-        assert tuple(payload["fact_universe"][-count:]) == metadata_facts
-        assert tuple(binding["fact_group"] for binding in payload["fact_bindings"][-count:]) == metadata_facts
-        del payload["fact_universe"][-count:]
-        del payload["fact_bindings"][-count:]
-    assert not any(fact.startswith("metadata.") for fact in payload["fact_universe"])
-    payload.pop("build_inputs")
-    for binding in payload["fact_bindings"]:
-        if transform := binding.get("transformation"):
-            transform.pop("executable", None)
-            transform.pop("declaration", None)
-    projected = AcquisitionProvenance.model_validate(payload)
+        assert kept_universe[-count:] == metadata_facts
+        assert tuple(binding.fact_group for binding in kept_bindings[-count:]) == metadata_facts
+        kept_universe = kept_universe[:-count]
+        kept_bindings = kept_bindings[:-count]
+    assert not any(fact.startswith("metadata.") for fact in kept_universe)
+    stripped_transforms: dict[int, Transformation] = {}
+    projected_bindings = []
+    for binding in kept_bindings:
+        transform = binding.transformation
+        if transform is None or (transform.executable is None and transform.declaration is None):
+            projected_bindings.append(binding)
+        else:
+            tid = id(transform)
+            stripped = stripped_transforms.get(tid)
+            if stripped is None:
+                stripped = Transformation(
+                    name=transform.name,
+                    kind=transform.kind,
+                    marker_value=transform.marker_value,
+                    external_inputs=transform.external_inputs,
+                )
+                stripped_transforms[tid] = stripped
+            projected_bindings.append(
+                FactBinding.model_construct(
+                    _fields_set={"fact_group", "facts", "transformation"},
+                    fact_group=binding.fact_group,
+                    facts=binding.facts,
+                    source_id=binding.source_id,
+                    acquisition_id=binding.acquisition_id,
+                    transformation=stripped,
+                )
+            )
+    projected = AcquisitionProvenance(
+        schema_version=provenance.schema_version,
+        provider_id=provenance.provider_id,
+        native_table=provenance.native_table,
+        build_inputs=None,
+        source_records=provenance.source_records,
+        fact_universe=kept_universe,
+        fact_bindings=tuple(projected_bindings),
+        withheld_facts=provenance.withheld_facts,
+    )
     assert projected.source_records == provenance.source_records
     assert projected.native_table == provenance.native_table
     assert projected.withheld_facts == provenance.withheld_facts

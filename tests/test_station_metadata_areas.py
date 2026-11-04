@@ -14,6 +14,8 @@ import rivretrieve as rr
 from rivretrieve._internal import discovery
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 AREA_SCHEMA = pl.Schema(
     {
         "provider_id": pl.String,

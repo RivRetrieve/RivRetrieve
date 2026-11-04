@@ -11,7 +11,7 @@ Use `uv` exclusively for project dependencies and execution.
 - Add dependencies: `uv add <package>`; development dependencies: `uv add --dev <package>`.
 - Sync the environment: `uv sync`.
 - Run commands: `uv run <command>`.
-- Run source-independent tests: `uv run pytest --logic-only`.
+- Run source-independent tests: `uv run pytest --logic-only` (or in parallel with `uv run pytest --logic-only -n auto --dist worksteal`).
 - Format: `uv run ruff format`.
 - Lint: `uv run ruff check --fix`.
 - Type-check: `uv run ty check src`.

@@ -13,7 +13,7 @@ from zipfile import ZipFile
 
 import pytest
 
-from tests._distribution import InstalledDistribution
+from tests._distribution import InstalledDistribution, _uv_executable
 
 _FORBIDDEN_PARTS = {
     "web",
@@ -142,7 +142,7 @@ def test_distributions_exclude_local_files(distribution: str) -> None:
         # exclusion assertions below still inspect the actual PEP 517 artifact.
         _run(
             [
-                "uv",
+                _uv_executable(),
                 "build",
                 "--offline",
                 "--force-pep517",

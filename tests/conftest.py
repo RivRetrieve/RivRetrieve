@@ -24,9 +24,9 @@ from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _r
 @pytest.fixture
 def registered_dws_catalogue():
     """Opt in to the deferred DWS catalogue without offering it by default."""
-    from rivretrieve._internal.providers.registration import register_manifest
+    from rivretrieve._internal.providers import registration
 
-    register_manifest(_registry, ("za_dws",))
+    registration.register_manifest(_registry, ("za_dws",))
 
 
 @pytest.fixture(autouse=True)
@@ -415,8 +415,12 @@ def packaged_catalogue_inputs():
     from tests._catalogue_inputs import PackagedCatalogueInputs
 
     providers = Path(artifact_module.__file__).parents[1] / "providers"
+    provider_ids = (
+        *BUILTIN_PROVIDER_IDS,
+        *sorted(ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS - set(BUILTIN_PROVIDER_IDS)),
+    )
     return PackagedCatalogueInputs(
-        (providers / provider / "catalogue" for provider in BUILTIN_PROVIDER_IDS),
+        (providers / provider / "catalogue" for provider in provider_ids),
         lambda path: artifact_module.load_packaged_catalogue_artifact(path, on_issue="raise"),
     )
 

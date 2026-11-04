@@ -17,6 +17,8 @@ from rivretrieve._internal.source_series import (
 from rivretrieve._internal.store.authority import compact_evidence, compact_inventories
 from rivretrieve._internal.time_axis import TimeAxis
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _START = datetime(2020, 1, 1)
 _END = datetime(2020, 1, 31)
 

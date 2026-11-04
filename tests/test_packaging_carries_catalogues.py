@@ -421,12 +421,30 @@ for provider, oracle in closure_oracles.items():
     records = {record["@id"]: record for record in descriptor["recordSet"]}
     extracted = {}
     for relation, schema in EVIDENCE_SCHEMAS.items():
-        record = records[f"provenance_{relation}"]
-        assert record["key"] == [{"@id": f"provenance_{relation}/{column}"} for column in keys[relation]]
+        prefix = f"provenance_{relation}"
+        record = records[prefix]
+        assert record["key"] == [{"@id": f"{prefix}/{column}"} for column in keys[relation]]
         assert [field["@id"].partition("/")[2] for field in record["field"]] == list(schema)
-        rows = [{key.partition("/")[2]: decode(value) for key, value in row.items()}
-                for row in dataset.records(f"provenance_{relation}")]
-        actual = pl.DataFrame(rows, schema=schema)
+        col_specs = [
+            (col, f"{prefix}/{col}", dtype == pl.String, isinstance(dtype, pl.List))
+            for col, dtype in schema.items()
+        ]
+        columns = {col: [] for col in schema}
+        expected_len = len(col_specs)
+        for row in dataset.records(prefix):
+            assert len(row) == expected_len
+            for col, full_key, is_str, is_list in col_specs:
+                val = row[full_key]
+                if val is None:
+                    columns[col].append(None)
+                elif is_str:
+                    columns[col].append(val.decode() if isinstance(val, bytes) else val)
+                elif is_list:
+                    seq = val.tolist() if hasattr(val, "tolist") else val
+                    columns[col].append([item.decode() if isinstance(item, bytes) else item for item in seq])
+                else:
+                    columns[col].append(val)
+        actual = pl.DataFrame(columns, schema=schema)
         expected = pl.read_parquet(catalogue.joinpath(EVIDENCE_FILENAMES[relation]))
         assert expected.schema == schema
         plt.assert_frame_equal(actual, expected)

@@ -506,21 +506,26 @@ def test_reference_loader_extracts_all_five_evidence_relations(provider, monkeyp
     monkeypatch.setattr(socket.socket, "connect", _deny_network)
     dataset = mlc.Dataset(_path(provider) / "croissant.json")
     for relation, schema in EVIDENCE_SCHEMAS.items():
-
-        def decode(value):
-            if isinstance(value, bytes):
-                return value.decode()
-            if hasattr(value, "tolist"):
-                return [decode(item) for item in value.tolist()]
-            if isinstance(value, list):
-                return [decode(item) for item in value]
-            return value
-
-        rows = [
-            {key.partition("/")[2]: decode(value) for key, value in row.items()}
-            for row in dataset.records(f"provenance_{relation}")
+        prefix = f"provenance_{relation}"
+        col_specs = [
+            (col, f"{prefix}/{col}", dtype == pl.String, isinstance(dtype, pl.List)) for col, dtype in schema.items()
         ]
-        actual = pl.DataFrame(rows, schema=schema)
+        columns: dict[str, list[object]] = {col: [] for col in schema}
+        expected_len = len(col_specs)
+        for row in dataset.records(prefix):
+            assert len(row) == expected_len
+            for col, full_key, is_str, is_list in col_specs:
+                val = row[full_key]
+                if val is None:
+                    columns[col].append(None)
+                elif is_str:
+                    columns[col].append(val.decode() if isinstance(val, bytes) else val)
+                elif is_list:
+                    seq = val.tolist() if hasattr(val, "tolist") else val
+                    columns[col].append([item.decode() if isinstance(item, bytes) else item for item in seq])
+                else:
+                    columns[col].append(val)
+        actual = pl.DataFrame(columns, schema=schema)
         expected = pl.read_parquet(_path(provider) / EVIDENCE_FILENAMES[relation])
         pl_testing.assert_frame_equal(actual, expected)
 

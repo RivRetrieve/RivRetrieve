@@ -6,9 +6,10 @@ import base64
 import json
 from collections.abc import Mapping
 from dataclasses import asdict
-from datetime import datetime
+from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
+from typing import TypeIs
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile, ZipInfo
 
 import polars as pl
@@ -28,11 +29,49 @@ from rivretrieve._internal.observations import (
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.publication_identity import publication_identity_fields
 from rivretrieve._internal.selection import StationLocation, _EmptyReason, _Selection
-from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
+from rivretrieve._internal.source_series import (
+    InventoryCompleteness,
+    InventorySnapshot,
+    PhysicalFacts,
+    RestrictionKind,
+    RetrievalOutcome,
+    ScopeState,
+    SeriesScope,
+    SourceIdentity,
+    SourceSeries,
+)
 
 _FORMAT = "rivretrieve-source-series"
 _VERSION = 3
 _PROVENANCE_VALUES = ("request", "calls_made", "time_windows", "query")
+_EMPTY_REASON_ADAPTER = TypeAdapter(_EmptyReason)
+_STATION_LOCATION_ADAPTER = TypeAdapter(StationLocation)
+_LOCATION_KEYS = frozenset({"provider_id", "station_id", "latitude", "longitude", "crs"})
+_IDENTITY_ORIGINS = frozenset({"catalogue", "response", "mapping"})
+_SERIES_KEYS = frozenset({"series_id", "provider_id", "station_id", "product_id", "identity", "variant", "facts"})
+_IDENTITY_KEYS = frozenset({"namespace", "published_id", "description", "origin", "evidence"})
+_SCOPE_KEYS = frozenset(
+    {"state", "provider_ids", "station_ids", "product_ids", "predicates", "restriction", "variants", "series_ids"}
+)
+_INVENTORY_KEYS = frozenset(
+    {
+        "snapshot_id",
+        "scope",
+        "members",
+        "member_facts",
+        "completeness",
+        "access",
+        "origin",
+        "acquired_at",
+        "catalogue_check_date",
+        "catalogue_claims",
+        "window",
+        "evidence",
+        "reason",
+    }
+)
+_INVENTORY_ORIGINS = frozenset({"catalogue", "response", "compiled"})
+_COMPLETENESS_MAP = {item.value: item for item in InventoryCompleteness}
 
 
 def _json(data: object) -> bytes:
@@ -40,11 +79,14 @@ def _json(data: object) -> bytes:
 
 
 def _unique_object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
+    result = dict(pairs)
+    if len(result) == len(pairs):
+        return result
+    seen = set()
+    for key, _ in pairs:
+        if key in seen:
             raise ValueError(f"Duplicate bundle field: {key}")
-        result[key] = value
+        seen.add(key)
     return result
 
 
@@ -118,6 +160,310 @@ def _publication_identity(manifest: dict) -> dict[str, str]:
     return publication_identity_fields(provider for provider in providers if isinstance(provider, str))
 
 
+def _dump_series(definitions: tuple[SourceSeries, ...]) -> list[dict[str, object]]:
+    facts_cache: dict[int, dict[str, object]] = {}
+    out: list[dict[str, object]] = []
+    for item in definitions:
+        ident = item.identity
+        dumped_facts: list[dict[str, object]] = []
+        for f in item.facts:
+            fid_key = id(f)
+            dumped = facts_cache.get(fid_key)
+            if dumped is None:
+                dumped = f.model_dump(mode="json")
+                facts_cache[fid_key] = dumped
+            dumped_facts.append(dumped)
+        out.append(
+            {
+                "series_id": item.series_id,
+                "provider_id": item.provider_id,
+                "station_id": item.station_id,
+                "product_id": item.product_id,
+                "identity": {
+                    "namespace": ident.namespace,
+                    "published_id": ident.published_id,
+                    "description": ident.description,
+                    "origin": ident.origin,
+                    "evidence": list(ident.evidence),
+                },
+                "variant": item.variant,
+                "facts": dumped_facts,
+            }
+        )
+    return out
+
+
+def _dump_inventories(inventories: tuple[InventorySnapshot, ...]) -> list[dict[str, object]]:
+    date_cache: dict[date, str] = {}
+    out: list[dict[str, object]] = []
+    for item in inventories:
+        s = item.scope
+        if not s.predicates and not item.catalogue_claims and item.window is None and not item.member_facts:
+            chk = item.catalogue_check_date
+            if chk is None:
+                chk_str = None
+            else:
+                chk_str = date_cache.get(chk)
+                if chk_str is None:
+                    chk_str = chk.isoformat()
+                    date_cache[chk] = chk_str
+            out.append(
+                {
+                    "snapshot_id": item.snapshot_id,
+                    "scope": {
+                        "state": s.state.value,
+                        "provider_ids": list(s.provider_ids),
+                        "station_ids": list(s.station_ids),
+                        "product_ids": list(s.product_ids),
+                        "predicates": [],
+                        "restriction": s.restriction.value,
+                        "variants": list(s.variants),
+                        "series_ids": list(s.series_ids),
+                    },
+                    "members": list(item.members),
+                    "member_facts": [],
+                    "completeness": item.completeness.value,
+                    "access": item.access,
+                    "origin": item.origin,
+                    "acquired_at": item.acquired_at.isoformat() if item.acquired_at is not None else None,
+                    "catalogue_check_date": chk_str,
+                    "catalogue_claims": [],
+                    "window": None,
+                    "evidence": list(item.evidence),
+                    "reason": item.reason,
+                }
+            )
+        else:
+            out.append(item.model_dump(mode="json"))
+    return out
+
+
+def _is_plain_dict(val: object) -> TypeIs[dict[str, object]]:
+    return type(val) is dict
+
+
+def _is_str_list(val: object) -> TypeIs[list[str]]:
+    return type(val) is list and all(type(x) is str for x in val)
+
+
+def _is_json_number(val: object) -> TypeIs[int | float]:
+    return type(val) in (float, int)
+
+
+def _decode_series_list(raw_series: list[object]) -> tuple[SourceSeries, ...]:
+    facts_by_id: dict[str, tuple[dict[str, object], PhysicalFacts]] = {}
+    out: list[SourceSeries] = []
+    for item in raw_series:
+        if _is_plain_dict(item) and len(item) == 7 and _SERIES_KEYS.issuperset(item):
+            sid = item["series_id"]
+            prov = item["provider_id"]
+            stat = item["station_id"]
+            prod = item["product_id"]
+            ident_raw = item["identity"]
+            variant = item["variant"]
+            facts_raw = item["facts"]
+            if (
+                type(sid) is str
+                and sid
+                and type(prov) is str
+                and prov
+                and type(stat) is str
+                and stat
+                and type(prod) is str
+                and prod
+                and (variant is None or type(variant) is str)
+                and _is_plain_dict(ident_raw)
+                and len(ident_raw) == 5
+                and _IDENTITY_KEYS.issuperset(ident_raw)
+                and type(facts_raw) is list
+                and len(facts_raw) >= 1
+            ):
+                ns = ident_raw["namespace"]
+                pub_id = ident_raw["published_id"]
+                desc = ident_raw["description"]
+                orig = ident_raw["origin"]
+                ev = ident_raw["evidence"]
+                if (
+                    type(ns) is str
+                    and ns
+                    and (pub_id is None or type(pub_id) is str)
+                    and (desc is None or type(desc) is str)
+                    and orig in _IDENTITY_ORIGINS
+                    and _is_str_list(ev)
+                    and len(ev) >= 1
+                ):
+                    parsed_facts: list[PhysicalFacts] = []
+                    fast_ok = True
+                    for f_raw in facts_raw:
+                        if not _is_plain_dict(f_raw):
+                            fast_ok = False
+                            break
+                        fid = f_raw.get("facts_id")
+                        if type(fid) is not str:
+                            fast_ok = False
+                            break
+                        cached = facts_by_id.get(fid)
+                        if cached is not None and cached[0] == f_raw:
+                            pf = cached[1]
+                        else:
+                            pf = PhysicalFacts.model_validate(f_raw)
+                            if cached is None:
+                                facts_by_id[fid] = (f_raw, pf)
+                        u_def = pf.source_unit_definition
+                        if u_def is not None and (u_def.provider_id != prov or u_def.namespace != ns):
+                            fast_ok = False
+                            break
+                        parsed_facts.append(pf)
+                    if fast_ok and (
+                        len(parsed_facts) == 1 or len({f.facts_id for f in parsed_facts}) == len(parsed_facts)
+                    ):
+                        identity_obj = SourceIdentity.model_construct(
+                            namespace=ns,
+                            published_id=pub_id,
+                            description=desc,
+                            origin=orig,
+                            evidence=tuple(ev),
+                        )
+                        out.append(
+                            SourceSeries.model_construct(
+                                series_id=sid,
+                                provider_id=prov,
+                                station_id=stat,
+                                product_id=prod,
+                                identity=identity_obj,
+                                variant=variant,
+                                facts=tuple(parsed_facts),
+                            )
+                        )
+                        continue
+        out.append(SourceSeries.model_validate(item))
+    return tuple(out)
+
+
+def _decode_inventories_list(raw_inventories: list[object]) -> tuple[InventorySnapshot, ...]:
+    date_cache: dict[str, date] = {}
+    out: list[InventorySnapshot] = []
+    for item in raw_inventories:
+        if _is_plain_dict(item) and len(item) == 13 and _INVENTORY_KEYS.issuperset(item):
+            snap_id = item["snapshot_id"]
+            s_raw = item["scope"]
+            members = item["members"]
+            m_facts = item["member_facts"]
+            comp_raw = item["completeness"]
+            access = item["access"]
+            orig = item["origin"]
+            acq_at = item["acquired_at"]
+            chk_raw = item["catalogue_check_date"]
+            claims = item["catalogue_claims"]
+            win = item["window"]
+            ev = item["evidence"]
+            reason = item["reason"]
+            comp = _COMPLETENESS_MAP.get(comp_raw) if type(comp_raw) is str else None
+            if (
+                type(snap_id) is str
+                and snap_id
+                and type(access) is str
+                and access
+                and orig in _INVENTORY_ORIGINS
+                and comp is not None
+                and (comp is InventoryCompleteness.COMPLETE or (type(reason) is str and bool(reason)))
+                and (reason is None or type(reason) is str)
+                and acq_at is None
+                and win is None
+                and m_facts == []
+                and claims == []
+                and _is_str_list(members)
+                and (len(members) <= 1 or len(set(members)) == len(members))
+                and _is_str_list(ev)
+                and len(ev) >= 1
+                and (chk_raw is None or type(chk_raw) is str)
+                and _is_plain_dict(s_raw)
+                and len(s_raw) == 8
+                and _SCOPE_KEYS.issuperset(s_raw)
+                and s_raw["state"] == "active"
+                and s_raw["restriction"] == "all"
+                and s_raw["predicates"] == []
+                and s_raw["variants"] == []
+                and s_raw["series_ids"] == []
+            ):
+                s_provs = s_raw["provider_ids"]
+                s_stats = s_raw["station_ids"]
+                s_prods = s_raw["product_ids"]
+                if _is_str_list(s_provs) and _is_str_list(s_stats) and _is_str_list(s_prods):
+                    chk_date: date | None = None
+                    date_ok = True
+                    if chk_raw is not None:
+                        chk_date = date_cache.get(chk_raw)
+                        if chk_date is None:
+                            try:
+                                chk_date = date.fromisoformat(chk_raw)
+                            except ValueError:
+                                date_ok = False
+                            else:
+                                date_cache[chk_raw] = chk_date
+                    if date_ok:
+                        scope_obj = SeriesScope.model_construct(
+                            state=ScopeState.ACTIVE,
+                            provider_ids=tuple(s_provs),
+                            station_ids=tuple(s_stats),
+                            product_ids=tuple(s_prods),
+                            predicates=(),
+                            restriction=RestrictionKind.ALL,
+                            variants=(),
+                            series_ids=(),
+                        )
+                        out.append(
+                            InventorySnapshot.model_construct(
+                                snapshot_id=snap_id,
+                                scope=scope_obj,
+                                members=tuple(members),
+                                member_facts=(),
+                                completeness=comp,
+                                access=access,
+                                origin=orig,
+                                acquired_at=None,
+                                catalogue_check_date=chk_date,
+                                catalogue_claims=(),
+                                window=None,
+                                evidence=tuple(ev),
+                                reason=reason,
+                            )
+                        )
+                        continue
+        out.append(InventorySnapshot.model_validate(item))
+    return tuple(out)
+
+
+def _decode_locations_list(raw_locations: list[object]) -> tuple[StationLocation, ...]:
+    out: list[StationLocation] = []
+    for item in raw_locations:
+        if _is_plain_dict(item) and len(item) == 5 and _LOCATION_KEYS.issuperset(item):
+            prov = item["provider_id"]
+            sid = item["station_id"]
+            lat = item["latitude"]
+            lon = item["longitude"]
+            crs = item["crs"]
+            if (
+                type(prov) is str
+                and type(sid) is str
+                and (lat is None or _is_json_number(lat))
+                and (lon is None or _is_json_number(lon))
+                and type(crs) is str
+            ):
+                out.append(
+                    StationLocation(
+                        prov,
+                        sid,
+                        float(lat) if lat is not None else None,
+                        float(lon) if lon is not None else None,
+                        crs,
+                    )
+                )
+                continue
+        out.append(_STATION_LOCATION_ADAPTER.validate_json(_json(item)))
+    return tuple(out)
+
+
 def encode_bundle(value: _Selection | ObservationResult) -> bytes:
     """Encode exact metadata and receipt bytes; observation arrays retain their Parquet schema."""
     if not isinstance(value, (_Selection, ObservationResult)):
@@ -129,8 +475,8 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
         "version": _VERSION,
         "kind": "selection" if selected else "result",
         "scope": value.scope.model_dump(mode="json"),
-        "series": [item.model_dump(mode="json") for item in definitions],
-        "inventories": [item.model_dump(mode="json") for item in value.inventories],
+        "series": _dump_series(definitions),
+        "inventories": _dump_inventories(value.inventories),
         "issues": [item.model_dump(mode="json") for item in value.issues],
     }
     destination = BytesIO()
@@ -138,8 +484,17 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
         if isinstance(value, _Selection):
             manifest.update(
                 {
-                    "locations": [asdict(item) for item in value.locations],
-                    "catalogue_evidence": [json.loads(item.model_dump_json()) for item in value.acquisition_provenance],
+                    "locations": [
+                        {
+                            "provider_id": item.provider_id,
+                            "station_id": item.station_id,
+                            "latitude": item.latitude,
+                            "longitude": item.longitude,
+                            "crs": item.crs,
+                        }
+                        for item in value.locations
+                    ],
+                    "catalogue_evidence": [item.model_dump(mode="json") for item in value.acquisition_provenance],
                     "empty_reason": asdict(value.empty_reason) if value.empty_reason is not None else None,
                 }
             )
@@ -233,7 +588,12 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
         fields.update(identity)
         if set(manifest) != fields:
             raise ValueError("Bundle manifest does not match its declared format schema")
-        definitions = tuple(SourceSeries.model_validate(item) for item in manifest["series"])
+        raw_series = manifest["series"]
+        definitions = (
+            _decode_series_list(raw_series)
+            if type(raw_series) is list
+            else tuple(SourceSeries.model_validate(item) for item in raw_series)
+        )
         definition_ids = {item.series_id for item in definitions}
         physical_facts = {}
         for definition in definitions:
@@ -245,7 +605,12 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
         if len(definition_ids) != len(definitions):
             raise ValueError("Bundle contains duplicate source-series identities")
         scope = SeriesScope.model_validate(manifest["scope"])
-        inventories = tuple(InventorySnapshot.model_validate(item) for item in manifest["inventories"])
+        raw_inventories = manifest["inventories"]
+        inventories = (
+            _decode_inventories_list(raw_inventories)
+            if type(raw_inventories) is list
+            else tuple(InventorySnapshot.model_validate(item) for item in raw_inventories)
+        )
         if any(member not in definition_ids for inventory in inventories for member in inventory.members):
             raise ValueError("Bundle inventory references a missing source-series definition")
         definitions_by_id = {item.series_id: item for item in definitions}
@@ -259,18 +624,19 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
             if set(archive.namelist()) != {"manifest.json"}:
                 raise ValueError("Selection bundle contains unexpected files")
             reason = (
-                TypeAdapter(_EmptyReason).validate_json(_json(manifest["empty_reason"]))
+                _EMPTY_REASON_ADAPTER.validate_json(_json(manifest["empty_reason"]))
                 if manifest["empty_reason"] is not None
                 else None
             )
+            raw_locations = manifest["locations"]
             return _Selection(
                 scope=scope,
                 known_series=definitions,
                 inventories=inventories,
                 issues=issues,
-                locations=tuple(
-                    TypeAdapter(StationLocation).validate_json(_json(item)) for item in manifest["locations"]
-                ),
+                locations=_decode_locations_list(raw_locations)
+                if type(raw_locations) is list
+                else tuple(_STATION_LOCATION_ADAPTER.validate_json(_json(item)) for item in raw_locations),
                 acquisition_provenance=tuple(
                     CatalogueEvidence.model_validate_json(_json(item)) for item in manifest["catalogue_evidence"]
                 ),

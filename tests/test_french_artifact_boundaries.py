@@ -13,6 +13,8 @@ from rivretrieve._internal.store import ObservationStoreRefusedError, StoreRoot,
 from rivretrieve._internal.store.accumulation import StoreUpdate, accumulate
 from tests.store.test_integrity import _resign
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _ARTIFACT_ARCHIVE = Path("tests/test_data/french_combined_artifacts.tar.xz")
 _BUNDLES = (
     "combined-station-selection.bundle",

@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
+from functools import lru_cache
 from typing import Literal
 
 import polars as pl
@@ -209,6 +210,7 @@ class Admission(BaseModel):
     factor: float | None = None
 
 
+@lru_cache(maxsize=4096)
 def admission(facts: PhysicalFacts) -> Admission:
     if facts.quantity.state is not EvidenceState.KNOWN:
         return Admission(status="unsupported", reason="physical quantity is not established")
@@ -252,8 +254,22 @@ class SourceIdentity(BaseModel):
 
 
 def stable_id(*components: str | None) -> str:
-    encoded = json.dumps(components, ensure_ascii=False, separators=(",", ":")).encode()
-    return hashlib.sha256(encoded).hexdigest()
+    parts: list[str] = []
+    for component in components:
+        if component is None:
+            parts.append("null")
+        elif (
+            type(component) is str
+            and component.isascii()
+            and '"' not in component
+            and "\\" not in component
+            and (not component or min(component) >= " ")
+        ):
+            parts.append(f'"{component}"')
+        else:
+            encoded = json.dumps(components, ensure_ascii=False, separators=(",", ":")).encode()
+            return hashlib.sha256(encoded).hexdigest()
+    return hashlib.sha256(f"[{','.join(parts)}]".encode("ascii")).hexdigest()
 
 
 class SourceSeries(BaseModel):
@@ -276,11 +292,22 @@ class SourceSeries(BaseModel):
 
     @model_validator(mode="after")
     def check(self) -> SourceSeries:
-        if not all((self.series_id, self.provider_id, self.station_id, self.product_id)):
+        if not (self.series_id and self.provider_id and self.station_id and self.product_id):
             raise ValueError("Source series requires nonempty identifiers")
-        if not self.facts or len({fact.facts_id for fact in self.facts}) != len(self.facts):
+        facts = self.facts
+        n_facts = len(facts)
+        if n_facts == 0:
             raise ValueError("Source series requires unique physical-fact segments")
-        for fact in self.facts:
+        if n_facts == 1:
+            definition = facts[0].source_unit_definition
+            if definition is not None and (
+                definition.provider_id != self.provider_id or definition.namespace != self.identity.namespace
+            ):
+                raise ValueError("Source-unit code definition does not apply to this provider and source namespace")
+            return self
+        if len({fact.facts_id for fact in facts}) != n_facts:
+            raise ValueError("Source series requires unique physical-fact segments")
+        for fact in facts:
             definition = fact.source_unit_definition
             if definition is not None and (
                 definition.provider_id != self.provider_id or definition.namespace != self.identity.namespace
@@ -357,14 +384,11 @@ class SeriesScope(BaseModel):
     def matches(self, series: SourceSeries) -> bool:
         if self.state is ScopeState.EMPTY:
             return False
-        if any(
-            allowed and value not in allowed
-            for allowed, value in (
-                (self.provider_ids, series.provider_id),
-                (self.station_ids, series.station_id),
-                (self.product_ids, series.product_id),
-            )
-        ):
+        if self.provider_ids and series.provider_id not in self.provider_ids:
+            return False
+        if self.station_ids and series.station_id not in self.station_ids:
+            return False
+        if self.product_ids and series.product_id not in self.product_ids:
             return False
         if self.restriction is RestrictionKind.EXPLICIT:
             if self.series_ids and series.series_id not in self.series_ids:
@@ -375,14 +399,16 @@ class SeriesScope(BaseModel):
                 and series.identity.published_id not in self.variants
             ):
                 return False
+        if not self.predicates:
+            return bool(series.facts)
         return any(self.matches_facts(facts) for facts in series.facts)
 
     def matches_facts(self, facts: PhysicalFacts) -> bool:
-        return all(
-            getattr(facts, predicate.field).state is EvidenceState.KNOWN
-            and getattr(facts, predicate.field).value == predicate.value
-            for predicate in self.predicates
-        )
+        for predicate in self.predicates:
+            fact = getattr(facts, predicate.field)
+            if fact.state is not EvidenceState.KNOWN or fact.value != predicate.value:
+                return False
+        return True
 
 
 class SeriesWindow(BaseModel):
@@ -447,18 +473,20 @@ class InventorySnapshot(BaseModel):
 
     @model_validator(mode="after")
     def check(self) -> InventorySnapshot:
-        if not self.snapshot_id or not self.access or not self.evidence:
+        if not (self.snapshot_id and self.access and self.evidence):
             raise ValueError("Inventory requires identity, supported access and evidence")
-        keys = [key for key, _ in self.member_facts]
-        if len(set(self.members)) != len(self.members):
+        members = self.members
+        if len(members) > 1 and len(set(members)) != len(members):
             raise ValueError("Inventory members must be unique")
-        if len(set(keys)) != len(keys) or any(key not in self.members for key in keys):
-            raise ValueError("Inventory fact membership must reference unique inventory members")
-        if any(
-            not facts or len(set(facts)) != len(facts) or any(not fact for fact in facts)
-            for _, facts in self.member_facts
-        ):
-            raise ValueError("Inventory fact membership requires unique nonempty physical fact identities")
+        if self.member_facts:
+            keys = [key for key, _ in self.member_facts]
+            if len(set(keys)) != len(keys) or any(key not in members for key in keys):
+                raise ValueError("Inventory fact membership must reference unique inventory members")
+            if any(
+                not facts or len(set(facts)) != len(facts) or any(not fact for fact in facts)
+                for _, facts in self.member_facts
+            ):
+                raise ValueError("Inventory fact membership requires unique nonempty physical fact identities")
         if self.completeness is not InventoryCompleteness.COMPLETE and not self.reason:
             raise ValueError("Incomplete inventory requires a reason")
         return self
