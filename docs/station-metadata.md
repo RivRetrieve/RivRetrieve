@@ -56,10 +56,11 @@ of the source view.
 <!-- fields-by-provider:start -->
 | Provider | Station name | Water body | Drainage area | Elevation |
 |---|---|---|---|---|
+| [`au_bom`](providers/au_bom.md) | `station_name` | — | — | — |
 | [`ba_fhmzbih`](providers/ba_fhmzbih.md) | — | — | `metadata_CATCHMENT_SIZE` (km²) | — |
 | [`br_ana`](providers/br_ana.md) | `Estacao_Nome` | `Rio_Nome` | `Area_Drenagem` | `Altitude` |
 | [`ca_eccc`](providers/ca_eccc.md) | `STATION_NAME` | — | `DRAINAGE_AREA_EFFECT`, `DRAINAGE_AREA_GROSS` (km2) | — |
-| [`ch_foen`](providers/ch_foen.md) | `name`, `data-name` | `riverName`, `data-hydro-body` | `Catchment size` (km2) | `Station altitude` (m) |
+| [`ch_foen`](providers/ch_foen.md) | `data-name`, `name` | `data-hydro-body`, `riverName` | `Catchment size` (km2) | `Station altitude` (m) |
 | [`cz_chmi`](providers/cz_chmi.md) | `STATION_NAME` | `STREAM_NAME` | `PLO_STA` (km²) | — |
 | [`fr_hubeau`](providers/fr_hubeau.md) | `libelle_station` | `libelle_cours_eau`, `libelle_masse_eau` | `superficie_reelle`, `superficie_topo`; `surface_bv` (km²) | `altitude`, `altitude_site`; `altitude_ref_alti_station` (m) |
 | [`fr_hydroportail`](providers/fr_hydroportail.md) | — | — | — | — |

@@ -103,6 +103,7 @@ nav:
   - Station Metadata: station-metadata.md
   - Station Map: map.md
   - Providers:
+      - Australia (BoM): providers/au_bom.md
       - Bosnia and Herzegovina (AVP Sava): providers/ba_fhmzbih.md
       - Brazil (ANA): providers/br_ana.md
       - Canada (ECCC): providers/ca_eccc.md

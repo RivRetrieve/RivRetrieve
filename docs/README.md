@@ -13,6 +13,7 @@
 
 Provider pages explain their agencies and source-specific conditions:
 
+- [Australia: Bureau of Meteorology (BoM)](providers/au_bom.md)
 - [Bosnia and Herzegovina: AVP Sava](providers/ba_fhmzbih.md)
 - [Brazil: ANA](providers/br_ana.md)
 - [Canada: Environment and Climate Change Canada](providers/ca_eccc.md)
