@@ -11,6 +11,8 @@ from rivretrieve._internal import discovery
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason, TransportResponse
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 @pytest.fixture
 def authored_cache(monkeypatch, tmp_path):

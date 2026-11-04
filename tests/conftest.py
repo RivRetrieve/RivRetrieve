@@ -24,9 +24,9 @@ from rivretrieve._internal.registry import ProviderRegistry, _ProviderHandle, _r
 @pytest.fixture
 def registered_dws_catalogue():
     """Opt in to the deferred DWS catalogue without offering it by default."""
-    from rivretrieve._internal.providers.registration import register_manifest
+    from rivretrieve._internal.providers import registration
 
-    register_manifest(_registry, ("za_dws",))
+    registration.register_manifest(_registry, ("za_dws",))
 
 
 @pytest.fixture(autouse=True)
@@ -332,8 +332,21 @@ def _station_products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
     )
 
 
+_ORIGINAL_PACKAGED_PROVENANCE = _packaged_provenance
+
+
+def _resolve_stub_provenance(provider_id: str, packaged_catalogue_inputs) -> CatalogueEvidence | None:
+    if _packaged_provenance is not _ORIGINAL_PACKAGED_PROVENANCE:
+        return _packaged_provenance(provider_id)
+    if provider_id not in ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS:
+        return None
+    from tests._catalogue import catalogue_path
+
+    return packaged_catalogue_inputs.load(catalogue_path(provider_id)).acquisition_provenance
+
+
 @pytest.fixture
-def stub_packaged_catalogue_artifact() -> Callable[..., PackagedCatalogArtifact]:
+def stub_packaged_catalogue_artifact(packaged_catalogue_inputs) -> Callable[..., PackagedCatalogArtifact]:
     def build(
         provider_id: str = "stub_provider",
         *,
@@ -353,7 +366,7 @@ def stub_packaged_catalogue_artifact() -> Callable[..., PackagedCatalogArtifact]
             _products(provider_id),
             _stations(provider_id),
             _station_products(provider_id),
-            acquisition_provenance=_packaged_provenance(provider_id),
+            acquisition_provenance=_resolve_stub_provenance(provider_id, packaged_catalogue_inputs),
             withheld_rows_already_applied=True,
             on_issue="raise",
         )
@@ -362,7 +375,7 @@ def stub_packaged_catalogue_artifact() -> Callable[..., PackagedCatalogArtifact]
 
 
 @pytest.fixture
-def stub_packaged_catalogue_artifact_rich() -> Callable[..., PackagedCatalogArtifact]:
+def stub_packaged_catalogue_artifact_rich(packaged_catalogue_inputs) -> Callable[..., PackagedCatalogArtifact]:
     def build(
         provider_id: str = "stub_provider",
         *,
@@ -382,7 +395,7 @@ def stub_packaged_catalogue_artifact_rich() -> Callable[..., PackagedCatalogArti
             _products(provider_id, rich=True),
             _stations(provider_id, rich=True),
             _station_products(provider_id, rich=True),
-            acquisition_provenance=_packaged_provenance(provider_id),
+            acquisition_provenance=_resolve_stub_provenance(provider_id, packaged_catalogue_inputs),
             withheld_rows_already_applied=True,
             on_issue="raise",
         )
@@ -415,8 +428,12 @@ def packaged_catalogue_inputs():
     from tests._catalogue_inputs import PackagedCatalogueInputs
 
     providers = Path(artifact_module.__file__).parents[1] / "providers"
+    provider_ids = (
+        *BUILTIN_PROVIDER_IDS,
+        *sorted(ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS - set(BUILTIN_PROVIDER_IDS)),
+    )
     return PackagedCatalogueInputs(
-        (providers / provider / "catalogue" for provider in BUILTIN_PROVIDER_IDS),
+        (providers / provider / "catalogue" for provider in provider_ids),
         lambda path: artifact_module.load_packaged_catalogue_artifact(path, on_issue="raise"),
     )
 
@@ -477,7 +494,7 @@ def registered_stub(
 
 
 @pytest.fixture
-def source_terms_catalogue_artifact() -> Callable[[str], PackagedCatalogArtifact]:
+def source_terms_catalogue_artifact(packaged_catalogue_inputs) -> Callable[[str], PackagedCatalogArtifact]:
     """Wire real verified source terms to synthetic engine rows, not certify a catalogue.
 
     Only registry source-terms unit tests use this direct contract carrier. Ordinary
@@ -491,7 +508,7 @@ def source_terms_catalogue_artifact() -> Callable[[str], PackagedCatalogArtifact
             products=_products(provider_id),
             stations=_stations(provider_id),
             station_products=_station_products(provider_id),
-            acquisition_provenance=_packaged_provenance(provider_id),
+            acquisition_provenance=_resolve_stub_provenance(provider_id, packaged_catalogue_inputs),
         )
 
     return build

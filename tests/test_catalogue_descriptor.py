@@ -27,10 +27,13 @@ from rivretrieve._internal.catalogues.evidence_graph import FactSelection, resol
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA
+from tests._catalogue_inputs import Fingerprint, _detach_evidence, _fingerprint
 
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 SC = Namespace("https://schema.org/")
 BASE = "https://example.org/catalogue/"
+_DESCRIPTOR_BYTES_CACHE: dict[Path, tuple[bytes, bytes]] = {}
+_INPUTS_CACHE: dict[Path, tuple[Fingerprint, object, tuple, dict[str, bytes]]] = {}
 
 
 def _path(provider: str) -> Path:
@@ -38,11 +41,21 @@ def _path(provider: str) -> Path:
 
 
 def _descriptor(provider: str) -> dict:
-    return json.loads((_path(provider) / "croissant.json").read_text())
+    file_path = (_path(provider) / "croissant.json").absolute()
+    raw = file_path.read_bytes()
+    digest = sha256(raw).digest()
+    cached = _DESCRIPTOR_BYTES_CACHE.get(file_path)
+    if cached is None or cached[0] != digest:
+        _DESCRIPTOR_BYTES_CACHE[file_path] = (digest, raw)
+    return json.loads(raw)
 
 
 def _inputs(provider: str):
-    directory = _path(provider)
+    directory = _path(provider).absolute()
+    fp = _fingerprint(directory)
+    cached = _INPUTS_CACHE.get(directory)
+    if fp is not None and cached is not None and cached[0] == fp:
+        return _detach_evidence(cached[1]), cached[2], dict(cached[3])
     payload = (directory / "provenance.json").read_bytes()
     canonical = {name: (directory / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES}
     if json.loads(payload)["schema_version"] == 2:
@@ -82,6 +95,9 @@ def _inputs(provider: str):
         files["station_metadata.parquet"] = (directory / "station_metadata.parquet").read_bytes()
     if provider == "usgs_nwis":
         files["monitoring_locations.json"] = (directory / "monitoring_locations.json").read_bytes()
+    if fp is not None and _fingerprint(directory) == fp:
+        _INPUTS_CACHE[directory] = (fp, provenance, origins, files)
+        return _detach_evidence(provenance), origins, dict(files)
     return provenance, origins, files
 
 
@@ -503,24 +519,40 @@ def test_descriptor_preserves_exact_bounded_contents(provider: str):
 
 @pytest.mark.parametrize("provider", ("br_ana", "pl_imgw", "fr_hubeau", "ba_fhmzbih", "th_thaiwater"))
 def test_reference_loader_extracts_all_five_evidence_relations(provider, monkeypatch):
+    import pyarrow as pa
+
     monkeypatch.setattr(socket.socket, "connect", _deny_network)
     dataset = mlc.Dataset(_path(provider) / "croissant.json")
+    pa_str_list = pa.list_(pa.string())
+    bytes_cls = bytes
     for relation, schema in EVIDENCE_SCHEMAS.items():
-
-        def decode(value):
-            if isinstance(value, bytes):
-                return value.decode()
-            if hasattr(value, "tolist"):
-                return [decode(item) for item in value.tolist()]
-            if isinstance(value, list):
-                return [decode(item) for item in value]
-            return value
-
-        rows = [
-            {key.partition("/")[2]: decode(value) for key, value in row.items()}
-            for row in dataset.records(f"provenance_{relation}")
+        prefix = f"provenance_{relation}"
+        columns: dict[str, list[object]] = {col: [] for col in schema}
+        col_specs = [
+            (columns[col].append, f"{prefix}/{col}", dtype == pl.String, isinstance(dtype, pl.List))
+            for col, dtype in schema.items()
         ]
-        actual = pl.DataFrame(rows, schema=schema)
+        expected_len = len(col_specs)
+        for row in dataset.records(prefix):
+            assert len(row) == expected_len
+            for append_fn, full_key, is_str, is_list in col_specs:
+                val = row[full_key]
+                if val is None:
+                    append_fn(None)
+                elif is_str:
+                    append_fn(val.decode() if isinstance(val, bytes_cls) else val)
+                elif is_list:
+                    seq = val.tolist() if hasattr(val, "tolist") else val
+                    append_fn([item.decode() if isinstance(item, bytes_cls) else item for item in seq])
+                else:
+                    append_fn(val)
+        series_list = [
+            pl.from_arrow(pa.array(columns[col], type=pa_str_list)).rename(col)
+            if isinstance(dtype, pl.List)
+            else pl.Series(col, columns[col], dtype=dtype)
+            for col, dtype in schema.items()
+        ]
+        actual = pl.DataFrame(series_list)
         expected = pl.read_parquet(_path(provider) / EVIDENCE_FILENAMES[relation])
         pl_testing.assert_frame_equal(actual, expected)
 

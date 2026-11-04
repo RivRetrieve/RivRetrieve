@@ -45,6 +45,7 @@ def test_poland_documentation_snippets_are_valid_current_python():
     assert 'rr.download("pl_imgw")' in snippets[0][0]
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_poland_documentation_selection_matches_packaged_catalogue():
     assert len(rr.find(provider="pl_imgw").locations) == 1301
     selection = rr.find(provider="pl_imgw", station="152140020", quantity="discharge")

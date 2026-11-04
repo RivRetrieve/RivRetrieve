@@ -417,6 +417,7 @@ def test_documentation_output_contracts(page):
         output_contracts(block)
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_usage_recovery_example_preserves_observation_status(monkeypatch, tmp_path):
     import rivretrieve as rr
     import rivretrieve._internal.discovery as discovery
