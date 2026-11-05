@@ -551,9 +551,11 @@ def test_copied_native_cache_audit_reuse_selective_subsequent_read_and_update(
     transport = _Spans(continuous.identity.published_id)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
+    # With two-day padding, Jan 5 starts on Jan 3; the 365-day boundary
+    # falls on Jan 3 of the next non-leap year, keeping both offset rows there.
     early = rr.fetch(
         selected,
-        start="1995-01-03",
+        start="1997-01-05",
         end="1998-02-01",
         cache="reuse",
         receipts=True,
@@ -561,7 +563,7 @@ def test_copied_native_cache_audit_reuse_selective_subsequent_read_and_update(
     )
     first = rr.fetch(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="reuse",
         receipts=True,
@@ -569,7 +571,7 @@ def test_copied_native_cache_audit_reuse_selective_subsequent_read_and_update(
     )
     expected_reuse = rr.fetch(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="reuse",
         receipts=True,
@@ -604,7 +606,7 @@ def test_copied_native_cache_audit_reuse_selective_subsequent_read_and_update(
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(reuse_cache_dir))
     reused = rr.fetch(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="reuse",
         receipts=True,
@@ -634,7 +636,7 @@ def test_copied_native_cache_audit_reuse_selective_subsequent_read_and_update(
         patch.setattr(validation, "_open_parquet", guard_1998(real_open))
         second_reuse = rr.fetch(
             selected,
-            start="2000-01-03",
+            start="2002-01-05",
             end="2003-02-01",
             cache="reuse",
             receipts=True,
@@ -651,7 +653,7 @@ def test_copied_native_cache_audit_reuse_selective_subsequent_read_and_update(
         patch.setattr(validation, "_open_parquet", guard_1998(real_open))
         refreshed = rr.fetch(
             selected,
-            start="2000-01-03",
+            start="2002-01-05",
             end="2003-02-01",
             cache="refresh",
             on_issue="raise",
@@ -665,7 +667,7 @@ def test_copied_native_cache_audit_reuse_selective_subsequent_read_and_update(
 
     reused_early = rr.fetch(
         selected,
-        start="1995-01-03",
+        start="1997-01-05",
         end="1998-02-01",
         cache="reuse",
         receipts=True,
@@ -703,8 +705,8 @@ def test_copied_native_cache_verifies_unselected_partitions_before_acceptance(
 
     transport = _Spans(continuous.identity.published_id)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
-    rr.fetch(selected, start="1996-01-03", end="1999-02-01", cache="reuse", on_issue="raise")
-    rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="reuse", on_issue="raise")
+    rr.fetch(selected, start="1998-01-05", end="1999-02-01", cache="reuse", on_issue="raise")
+    rr.fetch(selected, start="2002-01-05", end="2003-02-01", cache="reuse", on_issue="raise")
 
     origin_store = origin_cache / "usgs_nwis" / "store"
     if defect == "semantic_unselected_partition":
@@ -733,6 +735,6 @@ def test_copied_native_cache_verifies_unselected_partitions_before_acceptance(
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(copied_cache))
     monkeypatch.setattr(discovery, "HttpClient", DeniedHttp)
     with pytest.raises(ObservationStoreRefusedError, match=match):
-        # Request only 2000..2003; unselected 1999 partition must still be verified before acceptance.
-        rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="reuse", on_issue="raise")
+        # Request only 2002..2003; unselected 1999 partition must still be verified before acceptance.
+        rr.fetch(selected, start="2002-01-05", end="2003-02-01", cache="reuse", on_issue="raise")
     assert (relocated_store / "integrity.json").read_bytes() == before_seal

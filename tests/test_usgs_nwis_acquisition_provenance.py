@@ -25,7 +25,7 @@ def test_usgs_provenance_names_nwis_and_verified_source_words() -> None:
     assert provenance.header.withheld_facts == ()
 
 
-@pytest.mark.governing(*_catalogue_recording_paths("usgs_nwis"))
+@pytest.mark.governing(*_catalogue_recording_paths("usgs_nwis", scopes=("maintenance/catalogue/usgs_nwis",)))
 def test_usgs_build_rejects_changed_terms_recording(retained_evidence_root, tmp_path: Path) -> None:
     provenance = build_acquisition_provenance()
     for source in provenance.source_records:

@@ -688,10 +688,12 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
     transport = _Spans(continuous.identity.published_id)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
-    # 1. Initial fetch for 1996..1999 populates year=1999 in S3, and 2000..2003 adds year=2003.
+    # With two-day padding, Jan 5 starts on Jan 3; the 365-day boundary
+    # falls on Jan 3 of the next non-leap year, keeping both offset rows there.
+    # 1. Initial fetch for 1998..1999 populates year=1999 in S3, and 2002..2003 adds year=2003.
     early = rr.fetch(
         selected,
-        start="1996-01-03",
+        start="1998-01-05",
         end="1999-02-01",
         cache="reuse",
         receipts=True,
@@ -706,7 +708,7 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
 
     first = rr.fetch(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="reuse",
         receipts=True,
@@ -727,7 +729,7 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
     s3_server.requests.clear()
     reused = rr.fetch(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="reuse",
         receipts=True,
@@ -752,7 +754,7 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
     transport.value = 25
     by_provider = rr.fetch_by_provider(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="refresh",
         on_issue="raise",
@@ -764,7 +766,7 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
     transport.failed_second = True
     partial = rr.fetch(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="refresh",
         on_issue="ignore",
