@@ -109,8 +109,8 @@ values for the same date; neither is a less precise version of the other.
 
 Nothing in RivRetrieve's physical selection filters (`quantity`, `frequency`,
 `statistic`) distinguishes the two series, so a request without `variant` or
-`series_id` narrowing retrieves both. Check the catalogue first to see them,
-then fetch and keep only the variant you want:
+`series_id` narrowing retrieves both. Check the catalogue first to see the
+two `product_id` values, then fetch and keep only the one you want:
 
 ```python
 import rivretrieve as rr
@@ -142,12 +142,13 @@ time,value,unit
 2026-11-01T09:00:00.000000,34.559,m3/s
 ```
 
-The catalogue lists both variants before any request is made. The fetch
-itself still retrieves both (filtering by `product_id` after `fetch` works
-the same way for `discharge_daily_mean_24hr`), so decide which one you need
-before reading the values: on these same dates, the calendar-day mean gives
-103.069, 86.354, 52.289, 38.572 and 30.721 m3/s, a wide and genuine
-difference from the hydrological-day mean above, not a rounding variation.
+The catalogue lists both `product_id` values before any request is made.
+The fetch itself still retrieves both: filtering by `product_id` after
+`fetch` works the same way for `discharge_daily_mean_24hr`. Decide which one
+you need before reading the values. On these same dates, the calendar-day
+mean gives 103.069, 86.354, 52.289, 38.572 and 30.721 m3/s, a wide and
+genuine difference from the hydrological-day mean above, not a rounding
+variation.
 
 ## Two source identities can share one product at one station
 
