@@ -223,7 +223,7 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
                     dtype=pl.String,
                 )
             )
-            .select(schema)
+            .select(*schema)
             .cast(schema)
             .sort("station_id", "source_field")
         )

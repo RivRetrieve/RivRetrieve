@@ -129,7 +129,13 @@ def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_lega
     assert all(item.identity.description is None for item in restored.series)
     assert all(item.identity.namespace == "USGS.WaterData.time_series_id" for item in restored.series)
     assert restored.inventories == selection.inventories
-    retained_claims = [claim for inventory in restored.inventories for claim in inventory.catalogue_claims]
+    # Physical predicates select series without narrowing the acquired inventory.
+    retained_claims = [
+        claim
+        for inventory in restored.inventories
+        for claim in inventory.catalogue_claims
+        if claim.station_id == "02196000" and claim.product_id == "discharge_daily_mean"
+    ]
     assert {
         (claim.identity.namespace, claim.identity.published_id, claim.identity.description) for claim in retained_claims
     } == {("NWIS.ts_id", "126801", ""), ("NWIS.ts_id", "126805", "[(2)]")}
