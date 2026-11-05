@@ -194,7 +194,7 @@ def test_missing_monitoring_location_mapping_is_fatal():
 
 def test_continuous_inclusive_chunks_preserve_endpoints_without_gaps():
     start = datetime(2000, 1, 1, 12, 13, 14, 123456)
-    end = start + timedelta(days=2200, hours=4)
+    end = start + timedelta(days=730, hours=4)
     window = engine._make_fetch_window(
         engine.WindowEndpoint.from_datetime(start), engine.WindowEndpoint.from_datetime(end)
     )
@@ -205,7 +205,7 @@ def test_continuous_inclusive_chunks_preserve_endpoints_without_gaps():
         for w in rendered
     ]
     assert pairs[0][0] == start and pairs[-1][1] == end
-    assert all(stop - begin < timedelta(days=1100) for begin, stop in pairs)
+    assert all(stop - begin < timedelta(days=365) for begin, stop in pairs)
     assert all(left[1] + timedelta(microseconds=1) == right[0] for left, right in zip(pairs, pairs[1:], strict=False))
     assert config().products[ProductId("discharge_instantaneous")].coordinates.value.statistic_code is None
 
@@ -243,7 +243,7 @@ def test_internal_parser_error_is_never_isolated_as_source_failure(monkeypatch):
 def test_continuous_span_failure_does_not_block_independent_siblings(failed_span):
     product = ProductId("discharge_instantaneous")
     start = datetime(2000, 1, 1, 12)
-    stop = start + timedelta(days=2201)
+    stop = start + timedelta(days=731)
     window = engine._make_fetch_window(
         engine.WindowEndpoint.from_datetime(start), engine.WindowEndpoint.from_datetime(stop)
     )
@@ -881,7 +881,7 @@ def test_continuous_independent_success_persists_while_failed_span_retries(tmp_p
         (product,),
         engine.RequestedWindow(
             engine.WindowEndpoint.from_datetime(datetime(2000, 1, 3)),
-            engine.WindowEndpoint.from_datetime(datetime(2006, 1, 20)),
+            engine.WindowEndpoint.from_datetime(datetime(2002, 1, 20)),
         ),
     )
 
