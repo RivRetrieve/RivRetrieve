@@ -71,25 +71,36 @@ not identify, station by station, which agency originally collected a record.
 
 ## What you can retrieve
 
-| Quantity filter | Frequency | Statistic | Stations with this series | Source unit | Returned unit |
-|---|---|---|---:|---|---|
-| `discharge` | Hourly | Mean | 5,712 | cumec | m3/s |
-| `discharge` | Daily | Mean | 5,712 | cumec | m3/s |
-| `discharge` | Daily | Max | 5,712 | cumec | m3/s |
-| `discharge` | Daily | Min | 5,712 | cumec | m3/s |
-| `discharge` | Monthly | Mean | 5,712 | cumec | m3/s |
-| `discharge` | Yearly | Mean | 5,712 | cumec | m3/s |
-| `stage` | Hourly | Mean | 6,698 | m | m |
-| `stage` | Daily | Mean | 6,698 | m | m |
-| `stage` | Daily | Max | 6,698 | m | m |
-| `stage` | Daily | Min | 6,698 | m | m |
-| `stage` | Monthly | Mean | 6,698 | m | m |
-| `stage` | Yearly | Mean | 6,698 | m | m |
-| `temperature` | Daily | Mean | 2,848 | °C | degC |
-| `temperature` | Daily | Max | 2,848 | °C | degC |
-| `temperature` | Daily | Min | 2,848 | °C | degC |
-| `temperature` | Monthly | Mean | 2,848 | °C | degC |
-| `temperature` | Yearly | Mean | 2,848 | °C | degC |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | `DMQaQc.Merged.HourlyMean.HR` | Hourly | Mean | cumec | m3/s |
+| `discharge` | `DMQaQc.Merged.DailyMean.24HR` (`variant="24hr"`) | Daily | Mean | cumec | m3/s |
+| `discharge` | `DMQaQc.Merged.DailyMean.09HR` (`variant="09hr"`) | Daily | Mean | cumec | m3/s |
+| `discharge` | `DMQaQc.Merged.DailyMax.24HR` | Daily | Max | cumec | m3/s |
+| `discharge` | `DMQaQc.Merged.DailyMin.24HR` | Daily | Min | cumec | m3/s |
+| `discharge` | `DMQaQc.Merged.MonthlyMean.CalMonth` | Monthly | Mean | cumec | m3/s |
+| `discharge` | `DMQaQc.Merged.YearlyMean.CalYear` | Yearly | Mean | cumec | m3/s |
+| `stage` | `DMQaQc.Merged.HourlyMean.HR` | Hourly | Mean | m | m |
+| `stage` | `DMQaQc.Merged.DailyMean.24HR` | Daily | Mean | m | m |
+| `stage` | `DMQaQc.Merged.DailyMax.24HR` | Daily | Max | m | m |
+| `stage` | `DMQaQc.Merged.DailyMin.24HR` | Daily | Min | m | m |
+| `stage` | `DMQaQc.Merged.MonthlyMean.CalMonth` | Monthly | Mean | m | m |
+| `stage` | `DMQaQc.Merged.YearlyMean.CalYear` | Yearly | Mean | m | m |
+| `temperature` | `DMQaQc.Merged.DailyMean.24HR` | Daily | Mean | °C | degC |
+| `temperature` | `DMQaQc.Merged.DailyMax.24HR` | Daily | Max | °C | degC |
+| `temperature` | `DMQaQc.Merged.DailyMin.24HR` | Daily | Min | °C | degC |
+| `temperature` | `DMQaQc.Merged.MonthlyMean.CalMonth` | Monthly | Mean | °C | degC |
+| `temperature` | `DMQaQc.Merged.YearlyMean.CalYear` | Yearly | Mean | °C | degC |
+
+The source field is BoM's own `ts_name`. Only `DailyMean.24HR` and
+`DailyMean.09HR` share one quantity, frequency and statistic
+(`discharge`/Daily/Mean), so RivRetrieve names that one distinction with
+`variant` (see [Discharge has two daily
+means](#discharge-has-two-daily-means-selecting-by-quantity-alone-returns-both)
+below); every other row's `ts_name` is unique under its own quantity,
+frequency and statistic, so `variant` stays unset for it. Of the catalogue's
+8,120 stations, 5,712 have at least one discharge series, 6,698 a stage
+series and 2,848 a water-temperature series.
 
 These units require no numerical scaling. Stage is water level; BoM does not
 state a vertical datum for it, so RivRetrieve has not established one. Water
@@ -129,6 +140,7 @@ hydrological_day = rr.pick(selection, variant="09hr")
 result = rr.fetch(hydrological_day, start="2026-10-28", end="2026-11-01", cache="bypass")
 
 print(result.data["product_id"].unique().to_list())
+print(sorted(rr.series(result)["variant"].drop_nulls().to_list()))
 print(result.data.select("time", "value", "unit").write_csv(float_precision=3), end="")
 ```
 
@@ -137,6 +149,7 @@ Output:
 ```text
 ['discharge_daily_mean_09hr', 'discharge_daily_mean_24hr']
 ['discharge_daily_mean_09hr']
+['09hr', '09hr']
 time,value,unit
 2026-10-28T09:00:00.000000,162.815,m3/s
 2026-10-29T09:00:00.000000,105.281,m3/s
@@ -146,15 +159,17 @@ time,value,unit
 ```
 
 `result.data` already holds only the requested variant's rows; no filtering
-by `product_id` afterward is needed. Unlike `br_ana`'s `bruto`/`consistido`
-pair, `rr.series(selection)["variant"]` is not yet set at this point: BoM's
-own series identity, like its `series_id` (see below), is confirmed only
-once a response names a concrete source series, not from the offline
-catalogue alone. Restricting by `variant` before fetching still resolves
-correctly, as shown above, but raises `selection.unresolved_inventory` on the
-way, since the catalogue cannot settle the restriction by itself. Restricting
-an already-fetched result instead has no such warning, because the real
-identities are known by then:
+by `product_id` afterward is needed, though `result.data` itself has no
+`variant` column (`rr.series(result)` does). Unlike `br_ana`'s
+`bruto`/`consistido` pair, `rr.series(selection)["variant"]` is not yet set
+before the request: BoM's own series identity, like its `series_id` (see
+below), is confirmed only once a response names a concrete source series,
+not from the offline catalogue alone. `rr.series(result)["variant"]` resolves
+to `"09hr"` only once the response is back. Restricting by `variant` before
+fetching still resolves correctly, as shown above, but raises
+`selection.unresolved_inventory` on the way, since the catalogue cannot
+settle the restriction by itself. Restricting an already-fetched result
+instead has no such warning, because the real identities are known by then:
 
 ```python
 full_result = rr.fetch(selection, start="2026-10-28", end="2026-11-01", cache="bypass")
