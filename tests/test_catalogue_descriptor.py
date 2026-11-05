@@ -433,7 +433,7 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
             marks=pytest.mark.derived(
                 {
                     "usgs_nwis": "maintenance/catalogue/usgs_nwis",
-                    "ch_foen": "maintenance/catalogue/ch_foen/official",
+                    "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
                 }.get(provider, f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet")
             ),
         )
@@ -475,8 +475,11 @@ def test_retained_catalogue_tests_select_bound_consumer_scopes():
     from tests.test_coverage_map import test_usgs_station_inventory_preserves_selected_source_scope
     from tests.test_station_metadata_areas import test_projection_preserves_every_native_scalar
 
-    # The maintained archive binds these exact scopes, not arbitrary descendant paths.
-    scopes = {"usgs_nwis": "maintenance/catalogue/usgs_nwis", "ch_foen": "maintenance/catalogue/ch_foen/official"}
+    # The maintained archive binds these exact consumer paths, not arbitrary descendants.
+    scopes = {
+        "usgs_nwis": "maintenance/catalogue/usgs_nwis",
+        "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
+    }
     for test, providers in (
         (test_native_material_identity_matches_committed_provenance_and_bytes, scopes),
         (test_projection_preserves_every_native_scalar, {"usgs_nwis": scopes["usgs_nwis"]}),
