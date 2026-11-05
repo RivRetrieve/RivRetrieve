@@ -773,3 +773,26 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
     )
     assert partial.data.height == 2
     pl_testing.assert_frame_equal(partial.data, by_provider["usgs_nwis"].data)
+
+
+def test_usage_remote_cache_example(monkeypatch, tmp_path, s3_server):
+    """Execute the documented S3 block with authored data, not publisher evidence."""
+    from tests.test_documentation_examples import execute_block, remote_cache_example
+    from tests.test_usgs_observation_acquisition import STATION, Transport, feature, page
+
+    monkeypatch.chdir(tmp_path)
+    s3_server.configure_env(monkeypatch, bucket="hydro-archive", prefix="rivretrieve")
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge", frequency="daily", statistic="mean")
+    selected = rr.pick(selected, series_id=selected.series[0].series_id)
+    transport = Transport(page(feature(selected.series[0].identity.published_id, day="2023-01-15")))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    scope = {"rr": rr, "chosen_gauges": selected}
+    block = remote_cache_example()
+    assert execute_block(block, scope, "docs/usage.md:S3-compatible object storage")
+    first = scope["result"]
+    assert first.data["value"].item() == pytest.approx(12.25 * 0.028316846592)
+    assert s3_server.get_keys("hydro-archive")
+    assert len(transport.requests) == 1
+    execute_block(block, scope, "docs/usage.md:S3-compatible object storage")
+    assert len(transport.requests) == 1
+    pl_testing.assert_frame_equal(scope["result"].data, first.data)
