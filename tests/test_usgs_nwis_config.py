@@ -72,7 +72,7 @@ def test_usgs_window_declarations_match_each_modern_collection() -> None:
         coordinates = product.coordinates.value
         expected = daily if coordinates.endpoint == "daily" else continuous
         assert declarations.products[product_id] == expected
-        assert declarations.products[product_id].size == (None if coordinates.endpoint == "daily" else 1100)
+        assert declarations.products[product_id].size == (None if coordinates.endpoint == "daily" else 365)
     assert isinstance(declaration.observations, LiveStages)
     assert declaration.observations.stages.window_declarations is declarations
 
