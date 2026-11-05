@@ -229,9 +229,56 @@ _NORMALIZED_UNITS = {"cumec": "m3/s", "m": "m", "°C": "degC"}
 # Confirmed live 2026-11-03 (planning/visions/2026-11-03-au-bom-series-identity-and-physical-meaning.md):
 # every DailyMax/DailyMin/Monthly/Yearly timestamp checked is a period-start label
 # (00:00+10:00), never the clock time of the actual extreme -- unlike at_ehyd's
-# Monatsmaxima. day_definition and timestamp_anchor stay unestablished EvidenceFacts
-# here, matching every other provider in this codebase; none currently populates
-# either field, and this does not introduce a new, unreviewed vocabulary for them.
+# Monatsmaxima. timestamp_anchor stays an unestablished EvidenceFact, matching
+# every other provider in this codebase; none currently populates it.
+#
+# label_time and variant (below) correct #645's original choice to leave both
+# unestablished for discharge's two daily means. See
+# planning/visions/2026-11-05-au-bom-selection-ergonomics-correction.md for why.
+#
+# label_time IS populated below, following every other provider's own convention
+# for a daily-or-coarser product (br_ana, ca_eccc, fr_hubeau, cz_chmi, lt_lhmt,
+# jp_mlit, pl_imgw, usgs_nwis all set label_time="00:00"): BoM's own timestamps
+# are the evidence, confirmed live for every admitted series above, and this
+# also lets the shared engine's existing conversion.py check catch a future
+# source row that silently contradicts the established label. The one BoM
+# quirk this field actually exists for: DailyMean.09HR is label_time="09:00",
+# not "00:00" -- a different, genuinely distinct daily mean from DailyMean.24HR,
+# not a less precise version of it. day_definition (a DIFFERENT PhysicalFacts
+# field, consumed by physical_window.py as a *timezone* of the calendar-day
+# boundary) stays unestablished: it cannot correctly express a non-timezone,
+# same-zone 9am-anchored day at all, and forcing a fake offset string into it
+# to get the window math to line up would misrepresent the field to anyone
+# reading it later.
+
+
+def _label_time(definition: ProductDefinition) -> str | None:
+    """The wall-clock BoM labels every row of this product at, confirmed live.
+
+    Hourly products carry no daily label. Every daily-or-coarser product is
+    labelled at local midnight except DailyMean.09HR, confirmed labelled at
+    09:00 on every row checked.
+    """
+    if definition.frequency == "hourly":
+        return None
+    return "09:00" if definition.native_id.endswith(".09HR") else "00:00"
+
+
+def _variant(definition: ProductDefinition) -> str | None:
+    """"24hr"/"09hr" for discharge's two daily means, BoM's own named alternative.
+
+    Every other au_bom product is already unambiguous under quantity,
+    frequency and statistic alone and keeps variant unset, matching
+    br_ana's own precedent for exactly this situation (bruto/consistido):
+    a named alternative selectable via rr.pick(selection, variant=...),
+    documented generically in usage.md's "When an agency publishes more
+    than one version".
+    """
+    if definition.product_id == "discharge_daily_mean_24hr":
+        return "24hr"
+    if definition.product_id == "discharge_daily_mean_09hr":
+        return "09hr"
+    return None
 
 
 def describe_series(
@@ -250,7 +297,10 @@ def describe_series(
     distinguishing them). series_id is derived from ts_id, following
     usgs_nwis's precedent for the same situation, so both surface as separate
     series under the same product_id rather than one being picked. variant
-    stays None: BoM names no distinction between them.
+    stays None for this ts_id-level duplication: BoM names no distinction
+    between the two. Separately, _variant() above resolves discharge's two
+    daily-mean products (24hr/09hr) to a named variant, a different kind of
+    ambiguity BoM does name.
     """
     if product_id not in _BY_PRODUCT_ID:
         raise ValueError(f"au_bom series description requires an admitted product_id: {product_id!r}")
@@ -267,6 +317,7 @@ def describe_series(
         # CALENDAR_DATE clipping is only valid for established daily frequency
         # (enforced by PhysicalFacts itself); monthly/yearly use SOURCE_TIMESTAMP too.
         clipping_axis=ClippingAxis.CALENDAR_DATE if definition.frequency == "daily" else ClippingAxis.SOURCE_TIMESTAMP,
+        label_time=_label_time(definition),
     )
     return SourceSeries(
         series_id=series_id,
@@ -274,6 +325,6 @@ def describe_series(
         station_id=station_no,
         product_id=product_id,
         identity=SourceIdentity(namespace="KiWIS.ts_id", published_id=ts_id, origin=origin, evidence=(EVIDENCE,)),
-        variant=None,
+        variant=_variant(definition),
         facts=(facts,),
     )
