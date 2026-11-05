@@ -430,7 +430,12 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
     [
         pytest.param(
             provider,
-            marks=pytest.mark.derived(f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"),
+            marks=pytest.mark.derived(
+                {
+                    "usgs_nwis": "maintenance/catalogue/usgs_nwis",
+                    "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
+                }.get(provider, f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet")
+            ),
         )
         for provider in BUILTIN_PROVIDER_IDS
     ],
@@ -444,14 +449,50 @@ def test_native_material_identity_matches_committed_provenance_and_bytes(retaine
     if native is None:
         assert "isBasedOn" not in descriptor
         return
-    native_path = retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
+    native_path = retained_evidence_root / native.repository_path
     material = descriptor["isBasedOn"]
     assert material["sha256"] == native.sha256 == sha256(native_path.read_bytes()).hexdigest()
     assert material["contentSize"] == f"{native.byte_size} B" == f"{native_path.stat().st_size} B"
-    assert (
-        material["contentUrl"]
-        == f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}"
-    )
+    if native.location_kind == "retained":
+        assert "contentUrl" not in material
+        properties = {item["name"]: item["value"] for item in material["additionalProperty"]}
+        adopted = next(item for item in provenance.header.build_inputs.inputs if item.usage == "native_table")
+        assert properties == {
+            "archive_repository": adopted.reference.archive_repository,
+            "collection_id": adopted.reference.collection_id,
+            "manifest_sha256": adopted.reference.manifest_sha256,
+            "artifact_id": adopted.reference.artifact_id,
+            "role": adopted.reference.role,
+            "usage": "native_table",
+        }
+    else:
+        assert material["contentUrl"] == (
+            f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}"
+        )
+
+
+def test_retained_catalogue_tests_select_bound_consumer_scopes():
+    from tests.test_coverage_map import test_usgs_station_inventory_preserves_selected_source_scope
+    from tests.test_station_metadata_areas import test_projection_preserves_every_native_scalar
+
+    # The maintained archive binds these exact consumer paths, not arbitrary descendants.
+    scopes = {
+        "usgs_nwis": "maintenance/catalogue/usgs_nwis",
+        "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
+    }
+    for test, providers in (
+        (test_native_material_identity_matches_committed_provenance_and_bytes, scopes),
+        (test_projection_preserves_every_native_scalar, {"usgs_nwis": scopes["usgs_nwis"]}),
+    ):
+        cases = next(mark.args[1] for mark in test.pytestmark if mark.name == "parametrize")
+        for case in cases:
+            if case.values[0] in providers:
+                assert [mark.args for mark in case.marks if mark.name == "derived"] == [(providers[case.values[0]],)]
+    assert [
+        mark.args
+        for mark in test_usgs_station_inventory_preserves_selected_source_scope.pytestmark
+        if mark.name == "derived"
+    ] == [(scopes["usgs_nwis"],)]
 
 
 def test_reference_loader_extracts_actual_columns_from_all_four_record_sets(monkeypatch):

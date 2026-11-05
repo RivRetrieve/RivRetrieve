@@ -140,7 +140,9 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     [
         pytest.param(
             provider,
-            marks=pytest.mark.derived(f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"),
+            marks=pytest.mark.derived("maintenance/catalogue/usgs_nwis")
+            if provider == "usgs_nwis"
+            else pytest.mark.derived(f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"),
         )
         for provider in BUILTIN_PROVIDER_IDS
     ],
@@ -148,9 +150,12 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
 def test_projection_preserves_every_native_scalar(provider: str, retained_evidence_root: Path) -> None:
     repository = Path(__file__).parents[1]
     catalogue = repository / "src/rivretrieve/_internal/providers" / provider / "catalogue"
-    native = pl.read_parquet(
-        retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
+    native_path = (
+        retained_evidence_root / "maintenance/catalogue/usgs_nwis/legacy-native.parquet"
+        if provider == "usgs_nwis"
+        else retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     )
+    native = pl.read_parquet(native_path)
     stations = pl.read_parquet(catalogue / "stations.parquet").select("station_id")
     projection = pl.read_parquet(catalogue / "station_metadata.parquet")
     # The shared catalogue-origin contract rebuilds the full publication. This
@@ -175,6 +180,62 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         assert set(site["source_scope"]) == {"hydrometrie/referentiel/sites"}
         assert set(site["source_dtype"]) == {"Float64"}
         assert set(site["source_unit"]) == {"km²"}
+    if provider == "usgs_nwis":
+        modern = pl.read_parquet(retained_evidence_root / "maintenance/catalogue/usgs_nwis/modern-native.parquet")
+        # Independently compare exact native scalars under agency-qualified identities.
+        legacy_by_identity = {}
+        for row in native.select("agency_cd", "site_no", *fields).iter_rows(named=True):
+            legacy_by_identity.setdefault((row["agency_cd"], row["site_no"]), []).append(row)
+        expected = []
+        for agency, number, station in modern.select(
+            "agency_code", "monitoring_location_number", "station_id"
+        ).iter_rows():
+            candidates = legacy_by_identity.get((agency, number), [])
+            for field, unit in fields.items():
+                values = {row[field] for row in candidates}
+                if len(values) == 1:
+                    value = values.pop()
+                    expected.append(
+                        (
+                            station,
+                            field,
+                            value,
+                            str(native.schema[field]),
+                            unit,
+                            "source_null" if value is None else "value",
+                        )
+                    )
+        schema = {
+            "station_id": pl.String,
+            "source_field": pl.String,
+            "value": pl.String,
+            "source_dtype": pl.String,
+            "source_unit": pl.String,
+            "state": pl.String,
+        }
+        expected_frame = pl.DataFrame(expected, schema=schema, orient="row").sort("station_id", "source_field")
+        exposed = actual.filter(pl.col("state") != "no_metadata")
+        decoded = (
+            exposed.with_columns(
+                pl.Series(
+                    "value",
+                    [None if value is None else json.loads(value) for value in exposed["source_value"]],
+                    dtype=pl.String,
+                )
+            )
+            .select(*schema)
+            .cast(schema)
+            .sort("station_id", "source_field")
+        )
+        assert_frame_equal(decoded, expected_frame)
+        missing = actual.filter(pl.col("state") == "no_metadata")
+        expected_missing = set(modern["station_id"]) - {row[0] for row in expected}
+        assert set(missing["station_id"]) == expected_missing
+        assert (
+            missing.select("source_field", "source_value", "source_dtype", "source_unit").null_count().row(0)
+            == (missing.height,) * 4
+        )
+        return
     # Canonical scope excludes native-only gauges (notably Brazil).
     native = native.join(stations, left_on=identity, right_on="station_id", how="semi").sort(identity)
     for field, unit in fields.items():
