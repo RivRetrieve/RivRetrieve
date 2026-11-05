@@ -58,23 +58,16 @@ info: BoM reports quality code -1 (None) for 410730 stage_daily_mean at 2026-11-
 ```
 
 The request returned five daily means in metres, each labelled with BoM's
-stated `+10:00` offset. RivRetrieve requests a slightly wider period from BoM
-than the one selected, then clips the returned rows to the requested period,
-so the informational issues above can name dates just outside `2026-10-28`
-to `2026-11-01`. This output was checked on 2026-11-04. BoM can revise recent
-observations as sensors are recalibrated, so later retrievals of this same
-period may return different values. See [Usage](../usage.md) for general
-selection and result handling.
+stated `+10:00` offset. This output was checked on 2026-11-04. See
+[Usage](../usage.md) for general selection and result handling.
 
 ## Who measures, and who publishes
 
 BoM operates Australia's national water-data service, Water Data Online,
 which republishes discharge, stage and water temperature records collected
-by BoM and by state and territory water agencies across the country. BoM is
-the single point of access; it does not state, station by station, which
-original agency collected a given record. RivRetrieve reads Water Data
-Online's public web service (KiWIS); it does not contact state or territory
-agencies directly.
+by BoM and by state and territory water agencies across the country.
+RivRetrieve reads Water Data Online's public web service (KiWIS); it does
+not identify, station by station, which agency originally collected a record.
 
 ## What you can retrieve
 
@@ -108,19 +101,16 @@ not establish continuous historical coverage.
 ## Discharge has two daily means; selecting by quantity alone returns both
 
 BoM publishes two different daily-mean discharge series for many stations:
-one averaged over the calendar day (midnight to midnight, `discharge_daily_mean_24hr`)
-and one averaged over the hydrological day BoM's own Hydrologic Reference
-Stations programme and the independently published CAMELS-AUS streamflow
-archive use (9am to 9am, `discharge_daily_mean_09hr`). These are not two
-measurements of the same thing at different precision. Checked directly
-against CAMELS-AUS v2 for one station and date, the `09hr` series matched
-the reference value exactly while the `24hr` series gave a genuinely
-different number.
+one averaged over the calendar day, midnight to midnight
+(`discharge_daily_mean_24hr`), and one averaged over the hydrological day,
+9am to 9am (`discharge_daily_mean_09hr`), the convention used by the
+independently published CAMELS-AUS streamflow dataset. These give different
+values for the same date; neither is a less precise version of the other.
 
 Nothing in RivRetrieve's physical selection filters (`quantity`, `frequency`,
-`statistic`) distinguishes these two series: filtering for daily mean
-discharge selects both. A request without `variant` or `series_id` narrowing
-retrieves both, as the duplicate `series_id` in the following example shows:
+`statistic`) distinguishes the two series, so a request without `variant` or
+`series_id` narrowing retrieves both. Filter the returned rows by
+`product_id` to keep the one you need:
 
 ```python
 import rivretrieve as rr
@@ -135,34 +125,65 @@ selection = rr.find(
 
 result = rr.fetch(selection, start="2026-10-28", end="2026-11-01", cache="bypass")
 
-print(rr.series(result).select("product_id", "series_id").unique().sort("product_id").rows())
+for product in ("discharge_daily_mean_24hr", "discharge_daily_mean_09hr"):
+    rows = result.data.filter(result.data["product_id"] == product)
+    print(product)
+    print(rows.select("time", "value", "unit").write_csv(float_precision=3), end="")
 ```
 
 Output:
 
 ```text
-[('discharge_daily_mean_09hr', '28cf929e58599d9c089123f9dc07669cc723c773b862887f2dfb192a990fa93b'),
- ('discharge_daily_mean_09hr', '42687f9b8676c61f454bd6998835adc89578bb54792a91d720cf408f32a29cdf'),
- ('discharge_daily_mean_24hr', '74d8ea8c938349f8fb941c40cea5a031637df8e30b6e432bba2d5871d263852f'),
- ('discharge_daily_mean_24hr', 'ebf223503b5e04ccc59a003034e090aa476187965f1180d898a496e260f3b317')]
+discharge_daily_mean_24hr
+time,value,unit
+2026-10-28T00:00:00.000000,103.069,m3/s
+2026-10-29T00:00:00.000000,86.354,m3/s
+2026-10-30T00:00:00.000000,52.289,m3/s
+2026-10-31T00:00:00.000000,38.572,m3/s
+2026-11-01T00:00:00.000000,30.721,m3/s
+discharge_daily_mean_09hr
+time,value,unit
+2026-10-28T09:00:00.000000,162.815,m3/s
+2026-10-29T09:00:00.000000,105.281,m3/s
+2026-10-30T09:00:00.000000,68.452,m3/s
+2026-10-31T09:00:00.000000,45.926,m3/s
+2026-11-01T09:00:00.000000,34.559,m3/s
 ```
 
-Decide which daily mean you need before retrieving, and check `product_id`
-on the returned rows rather than assuming a single series.
+Decide which daily mean you need before retrieving, not after: the two
+series disagree by a wide margin on every one of these dates, so picking the
+wrong one silently changes the answer rather than just the label.
 
 ## Two source identities can share one product at one station
 
 Separately from the `24hr`/`09hr` distinction above, BoM's own internal
 catalogue sometimes carries two different source series identities
 (`ts_id`) for what is otherwise the same quantity, frequency, statistic and
-station, with no field in BoM's catalogue saying which one is current. The
-four `series_id` values in the example above are not two pairs of
-duplicates; at station `138020A`, each of `discharge_daily_mean_09hr` and
-`discharge_daily_mean_24hr` separately has this situation. RivRetrieve keeps
-both of a station's source identities as distinct `series_id` values rather
-than guessing which one to discard. In practice, one of a pair typically
-returns observations for a requested period and the other returns none;
-check which one has rows rather than assuming either in advance.
+station, with no field in BoM's catalogue saying which one is current. At
+station `138020A`, `discharge_daily_mean_24hr` is one such case. Continuing
+the example above:
+
+```python
+catalogued = rr.series(result).filter(rr.series(result)["product_id"] == "discharge_daily_mean_24hr")
+print(catalogued["series_id"].to_list())
+
+returned = result.data.filter(result.data["product_id"] == "discharge_daily_mean_24hr")
+print(returned["series_id"].unique().to_list())
+```
+
+Output:
+
+```text
+['74d8ea8c938349f8fb941c40cea5a031637df8e30b6e432bba2d5871d263852f', 'ebf223503b5e04ccc59a003034e090aa476187965f1180d898a496e260f3b317']
+['ebf223503b5e04ccc59a003034e090aa476187965f1180d898a496e260f3b317']
+```
+
+Two source identities are catalogued for this one product at this one
+station, but only one of them returned rows for this period; the other
+returned none. RivRetrieve keeps both as distinct `series_id` values rather
+than guessing which one to discard. Check which one has rows rather than
+assuming either in advance; the one that is empty today is not necessarily
+the one that will be empty for a different period.
 
 ## Time and data status
 
@@ -217,4 +238,4 @@ The station counts and series tables above describe the packaged catalogue.
 The [private verification archive](https://github.com/RivRetrieve/verification-evidence#readme)
 retains the commands, retained source responses and the limits of these
 checks, including a cross-check of the `24hr`/`09hr` distinction against the
-independently published CAMELS-AUS v2 streamflow archive.
+independently published CAMELS-AUS v2 streamflow dataset.
