@@ -16,6 +16,8 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
 class _Spans:
+    """Alternate offset labels at the boundary of two authored request spans."""
+
     def __init__(self, series_id):
         self.series_id = series_id
         self.second_series_id = series_id
