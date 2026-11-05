@@ -128,7 +128,11 @@ def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_lega
     }
     assert all(item.identity.description is None for item in restored.series)
     assert all(item.identity.namespace == "USGS.WaterData.time_series_id" for item in restored.series)
-    assert not any(inventory.catalogue_claims for inventory in restored.inventories)
+    assert restored.inventories == selection.inventories
+    retained_claims = [claim for inventory in restored.inventories for claim in inventory.catalogue_claims]
+    assert {
+        (claim.identity.namespace, claim.identity.published_id, claim.identity.description) for claim in retained_claims
+    } == {("NWIS.ts_id", "126801", ""), ("NWIS.ts_id", "126805", "[(2)]")}
     legacy = pl.read_parquet(
         retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet"
     )
@@ -137,22 +141,17 @@ def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_lega
     assert set(claims["namespace"]) == {"NWIS.ts_id"}
 
 
-@pytest.mark.derived("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
-def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary(retained_evidence_root: Path):
+def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary():
     import polars as pl
 
     from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 
     artifact = load_packaged_catalogue_artifact(BASE / "usgs_nwis/catalogue")
-    # Authored corruption of an independently retained historical claim carrier.
-    claims = (
-        pl.read_parquet(retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
-        .head(1)
-        .with_columns(
-            pl.lit(
-                [{"name": "", "value": "00060"}], dtype=pl.List(pl.Struct({"name": pl.String, "value": pl.String}))
-            ).alias("native_coordinates")
-        )
+    # The loaded artifact validates the claim before the single authored corruption.
+    claims = artifact.catalogue_claims.head(1).with_columns(
+        pl.lit(
+            [{"name": "", "value": "00060"}], dtype=pl.List(pl.Struct({"name": pl.String, "value": pl.String}))
+        ).alias("native_coordinates")
     )
     with pytest.raises(CorruptCatalogArtifactError, match="coordinate names"):
         packaged_catalogue_artifact_from_components(

@@ -155,7 +155,9 @@ def test_usgs_legacy_calendar_period_claims_remain_independent_evidence(retained
         retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/station_products.parquet"
     )
     modern = pl.read_parquet(root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/station_products.parquet")
-    assert legacy.height == modern.height == 157_548
+    assert legacy.height == 157_548
+    # Six supported products across the independently reconciled modern station scope.
+    assert modern.height == 6 * 29_642
     for column in ("published_record_start_date", "published_record_end_date"):
         assert legacy[column].count() == 57_450
         assert modern[column].count() == 0

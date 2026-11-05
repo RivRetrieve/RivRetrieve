@@ -430,7 +430,11 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
     [
         pytest.param(
             provider,
-            marks=pytest.mark.derived(f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"),
+            marks=pytest.mark.derived(
+                native["repository_path"]
+                if (native := json.loads((_path(provider) / "provenance.json").read_text())["native_table"])
+                else f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"
+            ),
         )
         for provider in BUILTIN_PROVIDER_IDS
     ],
@@ -444,14 +448,26 @@ def test_native_material_identity_matches_committed_provenance_and_bytes(retaine
     if native is None:
         assert "isBasedOn" not in descriptor
         return
-    native_path = retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
+    native_path = retained_evidence_root / native.repository_path
     material = descriptor["isBasedOn"]
     assert material["sha256"] == native.sha256 == sha256(native_path.read_bytes()).hexdigest()
     assert material["contentSize"] == f"{native.byte_size} B" == f"{native_path.stat().st_size} B"
-    assert (
-        material["contentUrl"]
-        == f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}"
-    )
+    if native.location_kind == "retained":
+        assert "contentUrl" not in material
+        properties = {item["name"]: item["value"] for item in material["additionalProperty"]}
+        adopted = next(item for item in provenance.header.build_inputs.inputs if item.usage == "native_table")
+        assert properties == {
+            "archive_repository": adopted.reference.archive_repository,
+            "collection_id": adopted.reference.collection_id,
+            "manifest_sha256": adopted.reference.manifest_sha256,
+            "artifact_id": adopted.reference.artifact_id,
+            "role": adopted.reference.role,
+            "usage": "native_table",
+        }
+    else:
+        assert material["contentUrl"] == (
+            f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}"
+        )
 
 
 def test_reference_loader_extracts_actual_columns_from_all_four_record_sets(monkeypatch):

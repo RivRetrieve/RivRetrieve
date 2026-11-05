@@ -82,19 +82,26 @@ def test_boundaries_must_match_country_not_sovereign_and_must_include_supported_
         module["draw"](world.loc[world["ADM0_A3"] != "USA"], stations, tmp_path / "missing.png")
 
 
-@pytest.mark.derived("src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet")
+@pytest.mark.derived("maintenance/catalogue/usgs_nwis/modern-native.parquet")
 def test_usgs_station_inventory_preserves_selected_source_scope(retained_evidence_root: Path):
+    from polars.testing import assert_frame_equal
+
     catalogue = ROOT / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue"
     stations = pl.read_parquet(catalogue / "stations.parquet")
-    native = pl.read_parquet(
-        retained_evidence_root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"
-    )
-    assert native.height == stations.height == 27_934
-    assert set(native["site_no"]) == set(stations["station_id"])
+    native = pl.read_parquet(retained_evidence_root / "maintenance/catalogue/usgs_nwis/modern-native.parquet")
+    # Independently reconciled modern scope includes non-stream and continuous-only locations.
+    assert native.height == stations.height == 29_642
+    columns = ["station_id", "latitude", "longitude", "crs"]
+    assert_frame_equal(native.select(columns).sort("station_id"), stations.select(columns).sort("station_id"))
     assert {"435444087462300", "0167889257", "08041945", "09385701"} <= set(stations["station_id"])
-    assert stations.filter(pl.col("latitude").is_null() & pl.col("longitude").is_null()).height == 2
+    # Availability follows concrete supported source identities, not historical calendar claims.
+    from rivretrieve._internal.catalogues.source_series import decode_source_descriptions
+
+    descriptions = decode_source_descriptions((catalogue / "source_series.json").read_bytes())
+    expected_daily = {
+        item.station_id for item in descriptions.descriptions if item.product_id == "discharge_daily_mean"
+    }
     daily = pl.read_parquet(catalogue / "station_products.parquet").filter(
         (pl.col("product_id") == "discharge_daily_mean") & (pl.col("availability") == "available")
     )
-    # Includes 11 previously registered Canadian stations; the US-only source set has 25,331.
-    assert daily["station_id"].n_unique() == 25_342
+    assert set(daily["station_id"]) == expected_daily
