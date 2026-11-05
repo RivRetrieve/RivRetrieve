@@ -65,7 +65,7 @@ def test_usgs_window_declarations_match_each_modern_collection() -> None:
         WindowGranularity("capped-span"),
         WindowRenderingVocabulary.ISO_INSTANT,
         StopConvention.INCLUSIVE,
-        size=1100,
+        size=365,
     )
     assert set(declarations.products) == set(config().products)
     for product_id, product in config().products.items():
