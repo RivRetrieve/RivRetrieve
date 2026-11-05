@@ -82,7 +82,7 @@ def test_boundaries_must_match_country_not_sovereign_and_must_include_supported_
         module["draw"](world.loc[world["ADM0_A3"] != "USA"], stations, tmp_path / "missing.png")
 
 
-@pytest.mark.derived("maintenance/catalogue/usgs_nwis/modern-native.parquet")
+@pytest.mark.derived("maintenance/catalogue/usgs_nwis")
 def test_usgs_station_inventory_preserves_selected_source_scope(retained_evidence_root: Path):
     from polars.testing import assert_frame_equal
 

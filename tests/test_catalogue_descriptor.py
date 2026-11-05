@@ -431,9 +431,10 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
         pytest.param(
             provider,
             marks=pytest.mark.derived(
-                native["repository_path"]
-                if (native := json.loads((_path(provider) / "provenance.json").read_text())["native_table"])
-                else f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"
+                {
+                    "usgs_nwis": "maintenance/catalogue/usgs_nwis",
+                    "ch_foen": "maintenance/catalogue/ch_foen/official",
+                }.get(provider, f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet")
             ),
         )
         for provider in BUILTIN_PROVIDER_IDS
@@ -468,6 +469,27 @@ def test_native_material_identity_matches_committed_provenance_and_bytes(retaine
         assert material["contentUrl"] == (
             f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}"
         )
+
+
+def test_retained_catalogue_tests_select_bound_consumer_scopes():
+    from tests.test_coverage_map import test_usgs_station_inventory_preserves_selected_source_scope
+    from tests.test_station_metadata_areas import test_projection_preserves_every_native_scalar
+
+    # The maintained archive binds these exact scopes, not arbitrary descendant paths.
+    scopes = {"usgs_nwis": "maintenance/catalogue/usgs_nwis", "ch_foen": "maintenance/catalogue/ch_foen/official"}
+    for test, providers in (
+        (test_native_material_identity_matches_committed_provenance_and_bytes, scopes),
+        (test_projection_preserves_every_native_scalar, {"usgs_nwis": scopes["usgs_nwis"]}),
+    ):
+        cases = next(mark.args[1] for mark in test.pytestmark if mark.name == "parametrize")
+        for case in cases:
+            if case.values[0] in providers:
+                assert [mark.args for mark in case.marks if mark.name == "derived"] == [(providers[case.values[0]],)]
+    assert [
+        mark.args
+        for mark in test_usgs_station_inventory_preserves_selected_source_scope.pytestmark
+        if mark.name == "derived"
+    ] == [(scopes["usgs_nwis"],)]
 
 
 def test_reference_loader_extracts_actual_columns_from_all_four_record_sets(monkeypatch):

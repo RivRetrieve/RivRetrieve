@@ -140,10 +140,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     [
         pytest.param(
             provider,
-            marks=pytest.mark.derived(
-                "maintenance/catalogue/usgs_nwis/modern-native.parquet",
-                "maintenance/catalogue/usgs_nwis/legacy-native.parquet",
-            )
+            marks=pytest.mark.derived("maintenance/catalogue/usgs_nwis")
             if provider == "usgs_nwis"
             else pytest.mark.derived(f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"),
         )
