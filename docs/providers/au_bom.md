@@ -108,9 +108,10 @@ independently published CAMELS-AUS streamflow dataset. These give different
 values for the same date; neither is a less precise version of the other.
 
 Nothing in RivRetrieve's physical selection filters (`quantity`, `frequency`,
-`statistic`) distinguishes the two series, so a request without `variant` or
-`series_id` narrowing retrieves both. Check the catalogue first to see the
-two `product_id` values, then fetch and keep only the one you want:
+`statistic`) distinguishes the two series, so a request without narrowing
+retrieves both. BoM names this distinction itself, so RivRetrieve carries it
+as a `variant` (`"24hr"` or `"09hr"`), the same mechanism used for
+[an agency publishing more than one version](../usage.md#when-an-agency-publishes-more-than-one-version):
 
 ```python
 import rivretrieve as rr
@@ -122,18 +123,20 @@ selection = rr.find(
     frequency="daily",
     statistic="mean",
 )
-print(rr.as_frame(selection)["product_id"].unique().sort().to_list())
+print(sorted(rr.series(selection)["product_id"].to_list()))
 
-result = rr.fetch(selection, start="2026-10-28", end="2026-11-01", cache="bypass")
+hydrological_day = rr.pick(selection, variant="09hr")
+result = rr.fetch(hydrological_day, start="2026-10-28", end="2026-11-01", cache="bypass")
 
-hydrological_day = result.data.filter(result.data["product_id"] == "discharge_daily_mean_09hr")
-print(hydrological_day.select("time", "value", "unit").write_csv(float_precision=3), end="")
+print(result.data["product_id"].unique().to_list())
+print(result.data.select("time", "value", "unit").write_csv(float_precision=3), end="")
 ```
 
 Output:
 
 ```text
 ['discharge_daily_mean_09hr', 'discharge_daily_mean_24hr']
+['discharge_daily_mean_09hr']
 time,value,unit
 2026-10-28T09:00:00.000000,162.815,m3/s
 2026-10-29T09:00:00.000000,105.281,m3/s
@@ -142,13 +145,33 @@ time,value,unit
 2026-11-01T09:00:00.000000,34.559,m3/s
 ```
 
-The catalogue lists both `product_id` values before any request is made.
-The fetch itself still retrieves both: filtering by `product_id` after
-`fetch` works the same way for `discharge_daily_mean_24hr`. Decide which one
-you need before reading the values. On these same dates, the calendar-day
-mean gives 103.069, 86.354, 52.289, 38.572 and 30.721 m3/s, a wide and
-genuine difference from the hydrological-day mean above, not a rounding
-variation.
+`result.data` already holds only the requested variant's rows; no filtering
+by `product_id` afterward is needed. Unlike `br_ana`'s `bruto`/`consistido`
+pair, `rr.series(selection)["variant"]` is not yet set at this point: BoM's
+own series identity, like its `series_id` (see below), is confirmed only
+once a response names a concrete source series, not from the offline
+catalogue alone. Restricting by `variant` before fetching still resolves
+correctly, as shown above, but raises `selection.unresolved_inventory` on the
+way, since the catalogue cannot settle the restriction by itself. Restricting
+an already-fetched result instead has no such warning, because the real
+identities are known by then:
+
+```python
+full_result = rr.fetch(selection, start="2026-10-28", end="2026-11-01", cache="bypass")
+narrowed = rr.pick(full_result, variant="09hr")
+print(narrowed.data["product_id"].unique().to_list())
+```
+
+Output:
+
+```text
+['discharge_daily_mean_09hr']
+```
+
+On these same dates, the calendar-day mean (`variant="24hr"`) gives 103.069,
+86.354, 52.289, 38.572 and 30.721 m3/s, a wide and genuine difference from
+the hydrological-day mean above, not a rounding variation. Decide which one
+you need before reading the values.
 
 ## Two source identities can share one product at one station
 
@@ -160,11 +183,13 @@ station `138020A`, `discharge_daily_mean_24hr` is one such case. Continuing
 the example above:
 
 ```python
-catalogued = rr.series(result).filter(rr.series(result)["product_id"] == "discharge_daily_mean_24hr")
+calendar_day = rr.pick(selection, variant="24hr")
+calendar_result = rr.fetch(calendar_day, start="2026-10-28", end="2026-11-01", cache="bypass")
+
+catalogued = rr.series(calendar_result).filter(rr.series(calendar_result)["product_id"] == "discharge_daily_mean_24hr")
 print(catalogued["series_id"].to_list())
 
-returned = result.data.filter(result.data["product_id"] == "discharge_daily_mean_24hr")
-print(returned["series_id"].unique().to_list())
+print(calendar_result.data["series_id"].unique().to_list())
 ```
 
 Output:
@@ -177,9 +202,11 @@ Output:
 Two source identities are catalogued for this one product at this one
 station, but only one of them returned rows for this period; the other
 returned none. RivRetrieve keeps both as distinct `series_id` values rather
-than guessing which one to discard. Check which one has rows rather than
-assuming either in advance; the one that is empty today is not necessarily
-the one that will be empty for a different period.
+than guessing which one to discard, and both carry the same `variant`
+(`"24hr"`): BoM names no distinction between the two, unlike the `24hr`/`09hr`
+pair above. Check which one has rows rather than assuming either in advance;
+the one that is empty today is not necessarily the one that will be empty for
+a different period.
 
 ## Time and data status
 
