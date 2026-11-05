@@ -22,10 +22,24 @@ ROOT = Path(__file__).resolve().parents[1]
 DAILY_RECORDING = "daily-07374000-docs-2023"
 
 
+def remote_cache_example():
+    text = (ROOT / "docs/usage.md").read_text()
+    section = text.split("### S3-compatible object storage\n", 1)[1].split("\n## ", 1)[0]
+    (block,) = re.findall(r"```python\n(.*?)```", section, re.DOTALL)
+    return block
+
+
 def blocks(page):
     snippets = re.findall(r"```python\n(.*?)```", (ROOT / page).read_text(), re.DOTALL)
     assert snippets, f"No Python examples in {page}"
+    if page == "docs/usage.md":
+        # This configuration-dependent block runs against the S3 fixture instead.
+        snippets.remove(remote_cache_example())
     return snippets
+
+
+def test_local_usage_blocks_exclude_remote_configuration_example():
+    assert remote_cache_example() not in blocks("docs/usage.md")
 
 
 def output_contracts(block):
