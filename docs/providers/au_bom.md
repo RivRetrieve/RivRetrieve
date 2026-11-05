@@ -109,8 +109,8 @@ values for the same date; neither is a less precise version of the other.
 
 Nothing in RivRetrieve's physical selection filters (`quantity`, `frequency`,
 `statistic`) distinguishes the two series, so a request without `variant` or
-`series_id` narrowing retrieves both. Filter the returned rows by
-`product_id` to keep the one you need:
+`series_id` narrowing retrieves both. Check the catalogue first to see them,
+then fetch and keep only the variant you want:
 
 ```python
 import rivretrieve as rr
@@ -122,26 +122,18 @@ selection = rr.find(
     frequency="daily",
     statistic="mean",
 )
+print(rr.as_frame(selection)["product_id"].unique().sort().to_list())
 
 result = rr.fetch(selection, start="2026-10-28", end="2026-11-01", cache="bypass")
 
-for product in ("discharge_daily_mean_24hr", "discharge_daily_mean_09hr"):
-    rows = result.data.filter(result.data["product_id"] == product)
-    print(product)
-    print(rows.select("time", "value", "unit").write_csv(float_precision=3), end="")
+hydrological_day = result.data.filter(result.data["product_id"] == "discharge_daily_mean_09hr")
+print(hydrological_day.select("time", "value", "unit").write_csv(float_precision=3), end="")
 ```
 
 Output:
 
 ```text
-discharge_daily_mean_24hr
-time,value,unit
-2026-10-28T00:00:00.000000,103.069,m3/s
-2026-10-29T00:00:00.000000,86.354,m3/s
-2026-10-30T00:00:00.000000,52.289,m3/s
-2026-10-31T00:00:00.000000,38.572,m3/s
-2026-11-01T00:00:00.000000,30.721,m3/s
-discharge_daily_mean_09hr
+['discharge_daily_mean_09hr', 'discharge_daily_mean_24hr']
 time,value,unit
 2026-10-28T09:00:00.000000,162.815,m3/s
 2026-10-29T09:00:00.000000,105.281,m3/s
@@ -150,9 +142,12 @@ time,value,unit
 2026-11-01T09:00:00.000000,34.559,m3/s
 ```
 
-Decide which daily mean you need before retrieving, not after: the two
-series disagree by a wide margin on every one of these dates, so picking the
-wrong one silently changes the answer rather than just the label.
+The catalogue lists both variants before any request is made. The fetch
+itself still retrieves both (filtering by `product_id` after `fetch` works
+the same way for `discharge_daily_mean_24hr`), so decide which one you need
+before reading the values: on these same dates, the calendar-day mean gives
+103.069, 86.354, 52.289, 38.572 and 30.721 m3/s, a wide and genuine
+difference from the hydrological-day mean above, not a rounding variation.
 
 ## Two source identities can share one product at one station
 
