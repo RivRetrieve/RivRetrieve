@@ -24,46 +24,46 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, st
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
-
-EXCLUDED_MAREOGRAPHIC_TABLES: frozenset[str] = frozenset({"estaciones_shn", "estaciones_pvnymm"})
-OBSERVATIONAL_PROCEDURES: frozenset[int] = frozenset({1, 2})
-
-
-@dataclass(frozen=True, slots=True)
-class SeriesProductSpec:
-    """Verified INA Alerta5 observational series coordinate and canonical unit mapping."""
-
-    var_id: int
-    proc_id: int
-    product_id: str
-    observed_property: str
-    expected_unit_id: int
-    expected_unit_abrev: str
-    canonical_unit: str
-
-    @property
-    def native_id(self) -> str:
-        return f"var_id={self.var_id};proc_id={self.proc_id}"
-
-
-IN_SCOPE_SERIES_SPECS: tuple[SeriesProductSpec, ...] = (
-    SeriesProductSpec(40, 1, "discharge_daily_mean", "discharge", 10, "m^3/s", "m3/s"),
-    SeriesProductSpec(4, 2, "discharge_instantaneous", "discharge", 10, "m^3/s", "m3/s"),
-    SeriesProductSpec(48, 1, "discharge_monthly_mean", "discharge", 10, "m^3/s", "m3/s"),
-    SeriesProductSpec(51, 1, "discharge_monthly_min", "discharge", 10, "m^3/s", "m3/s"),
-    SeriesProductSpec(52, 1, "discharge_monthly_max", "discharge", 10, "m^3/s", "m3/s"),
-    SeriesProductSpec(39, 1, "stage_daily_mean", "stage", 11, "m", "m"),
-    SeriesProductSpec(2, 1, "stage_instantaneous", "stage", 11, "m", "m"),
-    SeriesProductSpec(85, 1, "stage_hourly", "stage", 11, "m", "m"),
-    SeriesProductSpec(101, 1, "stage_4hourly", "stage", 11, "m", "m"),
-    SeriesProductSpec(67, 1, "stage_weekly_mean", "stage", 11, "m", "m"),
-    SeriesProductSpec(33, 1, "stage_monthly_mean", "stage", 11, "m", "m"),
-    SeriesProductSpec(49, 1, "stage_monthly_min", "stage", 11, "m", "m"),
-    SeriesProductSpec(50, 1, "stage_monthly_max", "stage", 11, "m", "m"),
+from rivretrieve._internal.providers.ar_ina.series import (
+    IN_SCOPE_SERIES_SPECS,
+    OBSERVATIONAL_PROCEDURES,
+    SPECS_BY_PRODUCT_ID,
+    SPECS_BY_VAR_ID,
+    SeriesProductSpec,
+    route_product_facts,
+    source_series,
+    validate_observation_row,
+    validate_procedimientos_dictionary,
+    validate_series_record_metadata,
+    validate_unidades_dictionary,
+    validate_variables_dictionary,
 )
 
-SPECS_BY_VAR_ID: dict[int, SeriesProductSpec] = {spec.var_id: spec for spec in IN_SCOPE_SERIES_SPECS}
-SPECS_BY_PRODUCT_ID: dict[str, SeriesProductSpec] = {spec.product_id: spec for spec in IN_SCOPE_SERIES_SPECS}
+__all__ = [
+    "ASSOCIATION_SCHEMA",
+    "EXCLUDED_MAREOGRAPHIC_TABLES",
+    "IN_SCOPE_SERIES_SPECS",
+    "OBSERVATIONAL_PROCEDURES",
+    "SPECS_BY_PRODUCT_ID",
+    "SPECS_BY_VAR_ID",
+    "STAMPED_STATION_SCHEMA",
+    "STATION_SOURCE_SCHEMA",
+    "CatalogueSources",
+    "GeneratedArInaCatalogue",
+    "SeriesProductSpec",
+    "build_catalogue",
+    "catalogue_tables",
+    "describe_associations",
+    "main",
+    "read_catalogue_sources",
+    "read_native_sources",
+    "read_original",
+    "selected_supporting_inputs",
+    "station_native_table_and_associations",
+    "write_catalogue",
+]
+
+EXCLUDED_MAREOGRAPHIC_TABLES: frozenset[str] = frozenset({"estaciones_shn", "estaciones_pvnymm"})
 
 STATION_SOURCE_SCHEMA = pl.Schema(
     {
@@ -248,7 +248,6 @@ def station_native_table_and_associations(
             series_id = _positive_int(raw_series.get("id"), "INA Serie.id must be a positive integer")
             var_obj = _as_json_object(raw_series.get("var"))
             proc_obj = _as_json_object(raw_series.get("procedimiento"))
-            unit_obj = _as_json_object(raw_series.get("unidades"))
             if var_obj is None or var_obj.get("id") != var_id:
                 raise FatalContractError(f"INA series {series_id} disagrees with requested var_id={var_id}")
             if proc_obj is None:
@@ -270,18 +269,12 @@ def station_native_table_and_associations(
             if _is_excluded_estacion(embedded):
                 continue
 
-            if proc_id != spec.proc_id:
-                raise FatalContractError(
-                    f"Unexpected observational procedure {proc_id} on INA var_id={var_id} (series {series_id})"
-                )
-            if unit_obj is None:
-                raise FatalContractError(f"INA series {series_id} lacks unidades object")
-            unit_id = unit_obj.get("id")
-            unit_abrev = unit_obj.get("abrev")
-            if unit_id != spec.expected_unit_id or unit_abrev != spec.expected_unit_abrev:
-                raise FatalContractError(
-                    f"Unsupported INA unit ({unit_id!r}, {unit_abrev!r}) on series {series_id} for var_id={var_id}"
-                )
+            unit_abrev = validate_series_record_metadata(
+                raw_series,
+                spec,
+                series_id=series_id,
+                proc_id=proc_id,
+            )
 
             sid = str(embedded["id"])
             if sid in estaciones_by_id:
@@ -310,7 +303,7 @@ def station_native_table_and_associations(
                     "var_id": var_id,
                     "proc_id": proc_id,
                     "series_id": series_id,
-                    "unit_abrev": str(unit_abrev),
+                    "unit_abrev": unit_abrev,
                 }
             )
 
@@ -330,6 +323,7 @@ def catalogue_tables(
     checked_on: date,
 ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     """Build offline INA Alerta5 tables while keeping unwitnessed pairs unknown."""
+    from rivretrieve._internal.catalogues.products import product_row
     from rivretrieve._internal.catalogues.schemas import (
         PRODUCT_CATALOG_SCHEMA,
         STATION_CATALOG_SCHEMA,
@@ -349,17 +343,7 @@ def catalogue_tables(
 
     products = pl.DataFrame(
         [
-            {
-                "provider_id": "ar_ina",
-                "product_id": spec.product_id,
-                "observed_property": spec.observed_property,
-                "frequency": "unknown",
-                "statistic": "unknown",
-                "period_type": "unknown",
-                "period_anchor": "unknown",
-                "unit": spec.canonical_unit,
-                "native_id": spec.native_id,
-            }
+            product_row("ar_ina", spec.product_id, spec.native_id, route_product_facts(spec.product_id))
             for spec in IN_SCOPE_SERIES_SPECS
         ],
         schema=PRODUCT_CATALOG_SCHEMA.polars_schema,
@@ -397,44 +381,45 @@ def catalogue_tables(
 
 
 def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
-    """Describe witnessed INA Alerta5 series coordinates with verified units and gauge-zero stage reference."""
+    """Describe every witnessed INA Alerta5 station-product association with its published Serie.id."""
     from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
-    from rivretrieve._internal.source_series import EvidenceFact, PhysicalFacts, SourceIdentity, known, stable_id
+    from rivretrieve._internal.source_series import PhysicalFacts
 
-    evidence = "catalogue:ar_ina:source.station_product.series_associations"
-    grouped: dict[str, list[str]] = {}
-    for station, product in associations.select("station_id", "product_id").unique().iter_rows():
-        grouped.setdefault(product, []).append(station)
+    ordered = associations.sort("station_id", "product_id")
+    seen_pairs: set[tuple[str, str]] = set()
+    shared_facts: dict[str, tuple[PhysicalFacts, ...]] = {}
+    descriptions: list[SourceDescription] = []
 
-    descriptions = []
-    for product_id in sorted(grouped):
-        spec = SPECS_BY_PRODUCT_ID[product_id]
-        vertical_ref = (
-            known("gauge_zero", "catalogue:ar_ina:source.station.cero_ign_definition")
-            if spec.observed_property == "stage"
-            else EvidenceFact()
+    for row in ordered.iter_rows(named=True):
+        station_id = str(row["station_id"])
+        product_id = str(row["product_id"])
+        pair = (station_id, product_id)
+        if pair in seen_pairs:
+            raise FatalContractError(f"Duplicate INA association for {pair!r}")
+        seen_pairs.add(pair)
+
+        spec = SPECS_BY_PRODUCT_ID.get(product_id)
+        if spec is None:
+            raise FatalContractError(f"Unsupported INA product_id in associations: {product_id!r}")
+        if row["var_id"] != spec.var_id or row["proc_id"] != spec.proc_id:
+            raise FatalContractError(f"INA association row coordinates contradict {product_id!r}: {row!r}")
+
+        series = source_series(
+            station_id,
+            product_id,
+            published_series_id=int(row["series_id"]),
+            source_unit=str(row["unit_abrev"]),
+            origin="catalogue",
         )
-        facts = PhysicalFacts(
-            facts_id="pending",
-            quantity=known(spec.observed_property, evidence),
-            source_unit=known(spec.expected_unit_abrev, evidence),
-            normalized_unit=spec.canonical_unit,
-            vertical_reference=vertical_ref,
-        )
-        facts = facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})
+        facts_tuple = shared_facts.setdefault(product_id, series.facts)
         descriptions.append(
             SourceDescription(
                 product_id=product_id,
-                station_ids=tuple(sorted(grouped[product_id])),
-                identity_key=(str(spec.var_id), str(spec.proc_id), spec.expected_unit_abrev),
+                station_id=station_id,
                 native_coordinate=spec.native_id,
-                identity=SourceIdentity(
-                    namespace="alerta.ina.gob.ar/a5/obs/puntual/series",
-                    published_id=spec.native_id,
-                    origin="catalogue",
-                    evidence=(evidence,),
-                ),
-                facts=(facts,),
+                identity=series.identity,
+                variant=series.variant,
+                facts=facts_tuple,
             )
         )
     return SourceDescriptions(provider_id="ar_ina", descriptions=tuple(descriptions))
@@ -522,7 +507,11 @@ def write_catalogue(
     metadata_fields: tuple[MetadataField, ...] | None = None,
 ) -> None:
     """Publish candidate runtime tables through the shared evidence-aware publication path."""
+    from rivretrieve._internal.catalogues.descriptor import build_catalogue_descriptor
+    from rivretrieve._internal.catalogues.evidence import EvidenceHeader
+    from rivretrieve._internal.catalogues.evidence_encoding import EVIDENCE_FILENAMES, parse_catalogue_evidence
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.catalogues.source_series import decode_source_descriptions, encode_source_descriptions
     from rivretrieve._internal.providers.ar_ina.origins import (
         STATION_CATALOGUE_ORIGINS,
         STATION_METADATA_FIELDS,
@@ -550,6 +539,28 @@ def write_catalogue(
         station_metadata_notice=STATION_METADATA_NOTICE,
         source_descriptions=catalogue.source_descriptions,
     )
+    metadata["source_series.json"] = encode_source_descriptions(catalogue.source_descriptions, schema_version=2)
+    if decode_source_descriptions(metadata["source_series.json"]) != catalogue.source_descriptions:
+        raise FatalContractError("INA source-description encoding changed source definitions")
+    evidence = parse_catalogue_evidence(
+        EvidenceHeader.model_validate_json(metadata["provenance.json"]),
+        {filename: metadata[filename] for filename in EVIDENCE_FILENAMES.values()},
+    )
+    metadata.pop("croissant.json")
+    metadata["croissant.json"] = (
+        json.dumps(
+            build_catalogue_descriptor(
+                evidence,
+                (STATION_CATALOGUE_ORIGINS,),
+                {**files, **metadata},
+                station_metadata_notice=STATION_METADATA_NOTICE,
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n"
+    ).encode("utf-8")
+
     output = Path(out_dir)
     output.mkdir(parents=True, exist_ok=True)
     for name, content in {**files, **metadata}.items():
@@ -583,6 +594,8 @@ def _read_selection_and_originals(
     estaciones_payload: object | None = None
     series_by_var: dict[int, object] = {}
     retrieval_instants = []
+    seen_reference_tables: set[str] = set()
+    observation_witness_count = 0
 
     for capture in selection["captures"]:
         reference = RecordingReference.model_validate(capture["recording"])
@@ -602,6 +615,35 @@ def _read_selection_and_originals(
                 raise FatalContractError(f"Duplicate INA series_var capture for var_id={var_id}")
             series_by_var[var_id] = json.loads(raw)
             retrieval_instants.append(reference.retrieved_at)
+        elif kind == "reference_table":
+            parsed_ref = json.loads(raw)
+            basename = Path(reference.repository_path).name
+            table_name = capture.get("table")
+            if table_name == "variables" or basename == "a5-variables.body":
+                validate_variables_dictionary(parsed_ref)
+                seen_reference_tables.add("variables")
+            elif table_name == "unidades" or basename == "a5-unidades.body":
+                validate_unidades_dictionary(parsed_ref)
+                seen_reference_tables.add("unidades")
+            elif table_name == "procedimientos" or basename == "a5-procedimientos.body":
+                validate_procedimientos_dictionary(parsed_ref)
+                seen_reference_tables.add("procedimientos")
+        elif kind == "observation_sample":
+            var_id = _positive_int(capture.get("var_id"), "INA observation_sample capture requires positive var_id")
+            expected_sid = _positive_int(
+                capture.get("series_id"), "INA observation_sample capture requires positive series_id"
+            )
+            spec = SPECS_BY_VAR_ID.get(var_id)
+            if spec is None:
+                raise FatalContractError(f"Unsupported INA observation_sample var_id={var_id}")
+            obs_rows = json.loads(raw)
+            if not isinstance(obs_rows, list) or not obs_rows:
+                raise FatalContractError(
+                    f"INA observation_sample {reference.recording_id} must contain a non-empty JSON array"
+                )
+            for row in obs_rows:
+                validate_observation_row(row, spec, expected_series_id=expected_sid)
+            observation_witness_count += 1
         elif kind == "portal_map":
             text = raw.decode("utf-8")
             if "projection: 'EPSG:4326'" not in text or "cero de escala" not in text:
@@ -614,13 +656,19 @@ def _read_selection_and_originals(
             text = raw.decode("utf-8")
             if "Creative Commons Atribución 4.0 Internacional" not in text:
                 raise FatalContractError("Argentina.gob.ar terms capture lacks CC BY 4.0 license statement")
-        elif kind in {"reference_table", "landing_html", "drainage_audit"}:
+        elif kind in {"landing_html", "drainage_audit"}:
             continue
         else:
             raise FatalContractError(f"Unsupported INA capture kind: {kind!r}")
 
     if estaciones_payload is None:
         raise FatalContractError("INA selection lacks an estaciones snapshot")
+    required_refs = {"variables", "unidades", "procedimientos"}
+    if missing_refs := required_refs - seen_reference_tables:
+        raise FatalContractError(f"INA selection lacks required reference dictionaries: {sorted(missing_refs)}")
+    if observation_witness_count == 0:
+        raise FatalContractError("INA selection lacks required observation_sample temporal witnesses")
+
     recomputed_native, associations = station_native_table_and_associations(
         estaciones_payload,
         series_by_var,

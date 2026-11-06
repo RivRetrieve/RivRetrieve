@@ -60,6 +60,8 @@ _CATALOGUE_SOURCE_FACTS = {
     ),
     "product": (
         "source.product.variables_unidades_procedimientos",
+        "source.product.observation_temporal_semantics",
+        "source.product.series_meaning_witnesses",
         "source.station_product.series_associations",
         "source.station.cero_ign_definition",
     ),
@@ -81,9 +83,10 @@ def build_acquisition_provenance(
 ) -> AcquisitionProvenance:
     """Bind selected official INA Alerta5 source evidence and derived native table to catalogue facts.
 
-    Acquisitions and exact statements come from the verified selection. Temporal
-    meanings, cutoff-hour anchors, and record bounds remain unknown in canonical
-    catalogue products in Step 2; unestablished citation wording remains null.
+    Acquisitions and exact statements come from the verified selection. Unestablished
+    temporal meanings (such as Continuous slotted stage statistics and pre-2009 DST
+    fixed day offsets) and record bounds remain unknown in canonical catalogue tables;
+    unestablished citation wording remains null.
     """
     if any(binding.source_id != "ar_ina" or binding.transformation is not None for binding in source_bindings):
         raise ValueError("INA source bindings must directly identify selected acquisitions")
@@ -159,4 +162,5 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/ar_ina/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/ar_ina/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/providers/ar_ina/generate_catalogue.py", "read_catalogue_sources"),
+    ("src/rivretrieve/_internal/providers/ar_ina/series.py", "source_series"),
 )
