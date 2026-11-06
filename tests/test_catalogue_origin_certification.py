@@ -128,19 +128,20 @@ def _adapter(
             return generated
     else:
         build = generator.build_catalogue
-    if provider == "ch_foen":
+    if provider in {"ar_ina", "ch_foen"}:
         sources = generator.read_catalogue_sources(
             retained_evidence_root,
-            selection_path="maintenance/catalogue/ch_foen/official/selection.json",
+            selection_path=f"maintenance/catalogue/{provider}/official/selection.json",
             input_receipt=input_receipt,
         )
-        native_path = retained_evidence_root / "maintenance/catalogue/ch_foen/official/native.parquet"
+        native_path = retained_evidence_root / f"maintenance/catalogue/{provider}/official/native.parquet"
+        extra = {"station_metadata": sources.station_metadata} if provider == "ch_foen" else {}
         build = partial(
             build,
             associations=sources.associations,
             checked_on=sources.checked_on,
             provenance=sources.provenance,
-            station_metadata=sources.station_metadata,
+            **extra,
         )
     if provider == "br_ana":
         from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence, read_capture_record
@@ -246,12 +247,13 @@ def _adapter(
     )
 
 
-def test_swiss_adapter_passes_explicit_source_selection(monkeypatch, tmp_path):
+@pytest.mark.parametrize("provider", ["ar_ina", "ch_foen"])
+def test_swiss_adapter_passes_explicit_source_selection(monkeypatch, tmp_path, provider):
     from types import SimpleNamespace
 
     def read_sources(evidence_root, *, selection_path, input_receipt):
         assert evidence_root == tmp_path
-        assert selection_path == "maintenance/catalogue/ch_foen/official/selection.json"
+        assert selection_path == f"maintenance/catalogue/{provider}/official/selection.json"
         assert input_receipt is receipt
         return SimpleNamespace(associations=(), checked_on=None, provenance=None, station_metadata=None)
 
@@ -260,8 +262,8 @@ def test_swiss_adapter_passes_explicit_source_selection(monkeypatch, tmp_path):
         read_catalogue_sources=read_sources, build_catalogue=lambda *args, **kwargs: None, main=lambda argv: 0
     )
     monkeypatch.setattr(__import__(__name__, fromlist=["_module"]), "_module", lambda *args: generator)
-    adapter = _adapter(tmp_path, "ch_foen", (), input_receipt=receipt)
-    assert adapter.native_path == tmp_path / "maintenance/catalogue/ch_foen/official/native.parquet"
+    adapter = _adapter(tmp_path, provider, (), input_receipt=receipt)
+    assert adapter.native_path == tmp_path / f"maintenance/catalogue/{provider}/official/native.parquet"
 
 
 def test_usgs_adapter_builds_modern_sources_with_explicit_origins(monkeypatch, tmp_path):
@@ -355,6 +357,7 @@ _france_origins = _module("fr_hubeau", "origins")
 DECLARATIONS = {
     ProviderId(provider): _stations_case(provider)
     for provider in (
+        "ar_ina",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
@@ -389,8 +392,8 @@ CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case i
 
 def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDecorator:
     paths = (
-        ["maintenance/catalogue/ch_foen/official"]
-        if provider == "ch_foen"
+        [f"maintenance/catalogue/{provider}/official"]
+        if provider in {"ar_ina", "ch_foen"}
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
     if provider == "usgs_nwis":
@@ -419,7 +422,11 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
 
 @pytest.fixture(scope="module")
 def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> ProviderAdapter:
-    receipt = request.getfixturevalue("catalogue_input_receipt") if request.param in {"ch_foen", "usgs_nwis"} else None
+    receipt = (
+        request.getfixturevalue("catalogue_input_receipt")
+        if request.param in {"ar_ina", "ch_foen", "usgs_nwis"}
+        else None
+    )
     return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param], input_receipt=receipt)
 
 
@@ -459,6 +466,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
         return Withheld()
 
     return {
+        (ProviderId("ar_ina"), "stations"): {
+            "provider_id": authored("ar_ina"),
+            "station_id": field("id"),
+            "latitude": field("latitude"),
+            "longitude": field("longitude"),
+            "crs": documented("https://alerta.ina.gob.ar/a5/secciones/mapa/puntual"),
+        },
         (ProviderId("br_ana"), "stations"): {
             "provider_id": authored("br_ana"),
             "station_id": field("codigoestacao"),
@@ -578,7 +592,7 @@ def test_provider_declarations_preserve_reviewed_identity_and_coordinate_fields(
     registered = frozenset(ProviderId(value) for value in discovery._registry.list_provider_ids())
 
     assert frozenset(DECLARATIONS) == ORIGIN_GATE_ENROLLED_PROVIDERS
-    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("ar_ina"), ProviderId("za_dws")}
     assert {(provider, case.identity): case.declarations for provider, case in CASES} == _expected_declarations()
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
@@ -770,6 +784,7 @@ def test_receipt_provider_specific_url_bindings_and_attested_exceptions(retained
 
 
 EXPECTED_CRS_COUNTS = {
+    (ProviderId("ar_ina"), "stations"): (829, "EPSG:4326"),
     (ProviderId("ba_fhmzbih"), "stations"): (60, "unknown"),
     (ProviderId("ca_eccc"), "stations"): (8_057, "EPSG:4326"),
     (ProviderId("cz_chmi"), "stations"): (831, "unknown"),
