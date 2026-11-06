@@ -226,5 +226,24 @@ Follow [documentation guidance](../AGENTS.md) and use existing
 [provider pages](../providers/) for scope. Link general usage rather
 than repeat it. Do not present a successful example as proof of continuous coverage.
 
+Reuse shared layout verbatim rather than inventing a new shape per provider.
+In particular, the "What you can retrieve" table uses this exact header, in
+every provider page that has one, whether or not the data needs every column:
+
+```
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+```
+
+Before writing a new provider page, grep the other pages in `../providers/`
+for the section headers and table shapes you are about to use, and try hard
+to follow them. Existing pages already show how to handle a column that does
+not obviously apply: `ba_fhmzbih` fills `Frequency`/`Statistic` with
+`Unknown` rather than dropping the column. Difficulty fitting one provider's
+data into the shared shape is not by itself evidence that the shape is
+wrong; look for how another page handled a similar gap before concluding the
+table itself needs to change. If you still think it does, raise that for
+review rather than quietly adding, removing, or renaming a column on just
+the new page.
+
 **Outcome:** users can understand the result and its limits without reconstructing
 the investigation. Documentation and implemented behavior agree.
