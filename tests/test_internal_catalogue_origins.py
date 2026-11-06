@@ -289,6 +289,7 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
             ProviderId("no_nve"),
             ProviderId("pl_imgw"),
             ProviderId("th_thaiwater"),
+            ProviderId("uk_nrfa"),
             ProviderId("usgs_nwis"),
             ProviderId("za_dws"),
         }
