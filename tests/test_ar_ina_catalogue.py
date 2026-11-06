@@ -650,7 +650,7 @@ def test_selected_inputs_publish_deterministic_catalogue(
     receipt_path.write_text(catalogue_input_receipt.model_dump_json())
     build_path = tmp_path / "build-inputs.json"
     build_path.write_text(build_inputs.model_dump_json())
-    outputs = [product_root / "ar_ina", product_root / "ar_ina-repeat"]
+    outputs = [product_root / "ar_ina-candidate", product_root / "ar_ina-candidate-repeat"]
     for output in outputs:
         assert (
             main(

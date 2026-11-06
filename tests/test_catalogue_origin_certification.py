@@ -592,7 +592,7 @@ def test_provider_declarations_preserve_reviewed_identity_and_coordinate_fields(
     registered = frozenset(ProviderId(value) for value in discovery._registry.list_provider_ids())
 
     assert frozenset(DECLARATIONS) == ORIGIN_GATE_ENROLLED_PROVIDERS
-    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("ar_ina"), ProviderId("za_dws")}
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
     assert {(provider, case.identity): case.declarations for provider, case in CASES} == _expected_declarations()
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
@@ -1085,6 +1085,14 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
                 full_verification=("fr_hubeau",),
             ),
         ),
+        pytest.param(
+            "ar_ina",
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/ar_ina/official",
+                "maintenance/catalogue/ar_ina/official/selection.json",
+                "maintenance/catalogue/station_metadata/review.json",
+            ),
+        ),
     ],
     indirect=True,
 )
@@ -1127,13 +1135,13 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     if product_root.is_relative_to(ROOT.resolve()) or product_root.is_relative_to(retained_evidence_root.resolve()):
         pytest.fail("Catalogue products must stay outside the checkout and retained inputs.", pytrace=False)
     output = product_root / str(adapter.provider_id)
-    if adapter.provider_id != "ch_foen":
+    if adapter.provider_id not in {"ar_ina", "ch_foen"}:
         output.mkdir(mode=0o700)
     if adapter.provider_id == "br_ana":
         from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
 
         *_, provenance, generated = read_catalogue_inputs(retained_evidence_root)
-    elif adapter.provider_id == "ch_foen":
+    elif adapter.provider_id in {"ar_ina", "ch_foen"}:
         generated = _build(adapter)
         provenance = generated.acquisition_provenance
         source_inputs_before = {
@@ -1184,9 +1192,10 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     with input_selection.open("x", encoding="utf-8") as stream:
         stream.write(adopted.model_dump_json())
     arguments = ["--out", str(output), "--build-inputs", str(input_selection)]
-    if adapter.provider_id != "ch_foen":
+    if adapter.provider_id not in {"ar_ina", "ch_foen"}:
         arguments.extend(("--native", str(adapter.native_path)))
     if adapter.provider_id in {
+        "ar_ina",
         "ba_fhmzbih",
         "ca_eccc",
         "ch_foen",
@@ -1197,7 +1206,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "za_dws",
     }:
         arguments.extend(("--evidence-root", str(retained_evidence_root)))
-    if adapter.provider_id in {"ch_foen", "fr_hubeau"}:
+    if adapter.provider_id in {"ar_ina", "ch_foen", "fr_hubeau"}:
         selected_receipt = product_root / f"{adapter.provider_id}.input-receipt.json"
         selected_receipt.write_text(catalogue_input_receipt.model_dump_json())
         arguments.extend(("--input-receipt", str(selected_receipt)))
