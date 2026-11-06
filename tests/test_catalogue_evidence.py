@@ -27,7 +27,13 @@ from rivretrieve._internal.catalogues.evidence_encoding import (
     reconstruct_provenance,
 )
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
-from tests._provenance import historical_source_provenance, registered_usgs_baseline
+from tests._provenance import (
+    canonical_legacy_provenance,
+    canonical_normalized_evidence,
+    historical_source_provenance,
+    legacy_document,
+    registered_usgs_baseline,
+)
 
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 
@@ -58,7 +64,8 @@ def _historical_metadata_extension_input(provider):
 
 
 def _legacy(provider, path=None):
-    path = ROOT / provider / "catalogue" if path is None else path
+    if path is None:
+        return canonical_legacy_provenance(provider)
     content = (path / "provenance.json").read_bytes()
     import json
 
@@ -70,12 +77,7 @@ def _legacy(provider, path=None):
 
 
 def _normalized(provider):
-    path = ROOT / provider / "catalogue"
-    return normalize_provenance(
-        _legacy(provider),
-        stations=pl.read_parquet(path / "stations.parquet"),
-        station_products=pl.read_parquet(path / "station_products.parquet"),
-    )
+    return canonical_normalized_evidence(provider)
 
 
 def _small_evidence():
@@ -682,10 +684,10 @@ def test_historical_projection_preserves_sources_and_validates_metadata(provider
 def test_historical_projection_rejects_changed_current_producer(provider):
     if provider == "usgs_nwis":
         original, metadata = registered_usgs_baseline()
+        payload = original.model_dump(mode="json")
     else:
-        original = _legacy(provider)
         metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
-    payload = original.model_dump(mode="json")
+        payload = legacy_document(ROOT / provider / "catalogue/provenance.json")
     # Even metadata-empty forms must validate their declared current producers.
     transformations = [
         item["transformation"]
@@ -703,9 +705,8 @@ def test_historical_projection_rejects_changed_current_producer(provider):
     ["producer", "declaration", "support", "review_owner", "review_path", "review_revision", "review_symbol"],
 )
 def test_historical_projection_rejects_changed_metadata_lineage(mutation):
-    original = _legacy("no_nve")
     metadata = pl.read_parquet(ROOT / "no_nve/catalogue/station_metadata.parquet")
-    payload = original.model_dump(mode="json")
+    payload = legacy_document(ROOT / "no_nve/catalogue/provenance.json")
     transformation = next(
         item["transformation"] for item in payload["fact_bindings"] if item["fact_group"] == "metadata.elevation.masl"
     )

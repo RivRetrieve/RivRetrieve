@@ -215,3 +215,33 @@ def test_every_loader_input_change_invalidates_a_warm_template(inputs, monkeypat
     # Restoring the exact validated bytes can safely borrow the original again.
     pool.load(path)
     assert len(reloaded) == len(filenames)
+
+
+@pytest.mark.parametrize("filename", ["station_metadata.parquet", "monitoring_locations.json"])
+@pytest.mark.parametrize("operation", ["change", "remove"])
+def test_descriptor_inputs_do_not_reuse_changed_support_files(tmp_path, monkeypatch, filename, operation):
+    from tests import test_catalogue_descriptor as descriptor
+
+    path = copytree(descriptor._path("usgs_nwis"), tmp_path / "catalogue")
+    monkeypatch.setattr(descriptor, "_path", lambda _: path)
+    monkeypatch.setattr(descriptor, "_INPUTS_CACHE", {})
+    original = descriptor._inputs("usgs_nwis")[2][filename]
+    file = path / filename
+    if operation == "remove":
+        file.unlink()
+        with pytest.raises(FileNotFoundError):
+            descriptor._inputs("usgs_nwis")
+    else:
+        changed = original + b"changed"
+        file.write_bytes(changed)
+        assert descriptor._inputs("usgs_nwis")[2][filename] == changed
+
+
+def test_installed_verification_preserves_worker_thread_partition(tmp_path, monkeypatch):
+    import sys
+
+    from tests._distribution import InstalledDistribution
+
+    monkeypatch.setenv("POLARS_MAX_THREADS", "2")
+    distribution = InstalledDistribution(tmp_path / "unused.whl", None, Path(sys.executable), tmp_path)
+    distribution.verify("import os; assert os.environ.get('POLARS_MAX_THREADS') == '2'")

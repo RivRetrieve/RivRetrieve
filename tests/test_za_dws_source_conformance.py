@@ -62,7 +62,7 @@ def test_variable_claims_are_scoped_to_recorded_station_and_route() -> None:
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 @pytest.mark.parametrize("cache", ["bypass", "reuse", "refresh"])
 def test_explicit_discovery_pick_and_fetch_refusal_are_offline(
-    policy, cache, monkeypatch, registered_dws_catalogue
+    policy, cache, monkeypatch, reuse_packaged_catalogues, registered_dws_catalogue
 ) -> None:
     import socket
 

@@ -10,6 +10,8 @@ import rivretrieve as rr
 from rivretrieve._internal.issues import FatalContractError, IssuePolicyError, MissingOptionalDependencyError
 from rivretrieve._internal.station_map import StationMap
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 class FakeMap:
     def __init__(self, *, location: list[float], zoom_start: int, control_scale: bool) -> None:
