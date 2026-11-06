@@ -271,10 +271,13 @@ class InstalledDistribution:
         # Each verifier gets a new process, working directory and HOME, while the
         # installed distribution remains a read-only input shared by the session.
         with TemporaryDirectory(prefix="verify-", dir=self.execution) as temporary:
+            env = {"PATH": os.environ["PATH"], "HOME": temporary}
+            if "POLARS_MAX_THREADS" in os.environ:
+                env["POLARS_MAX_THREADS"] = os.environ["POLARS_MAX_THREADS"]
             run(
                 [str(self.python), "-I", "-B", "-c", source],
                 cwd=Path(temporary),
-                env={"PATH": os.environ["PATH"], "HOME": temporary},
+                env=env,
             )
 
 

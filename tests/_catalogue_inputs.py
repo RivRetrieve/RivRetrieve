@@ -35,12 +35,12 @@ _INPUT_FILES = (
 type Fingerprint = tuple[tuple[str, bytes], ...]
 
 
-def _fingerprint(path: Path) -> Fingerprint | None:
+def _fingerprint(path: Path, *, extra_files: tuple[str, ...] = ()) -> Fingerprint | None:
     try:
         if path.is_symlink():
             return None
         values = []
-        for name in _INPUT_FILES:
+        for name in (*_INPUT_FILES, *extra_files):
             file = path / name
             if file.is_symlink():
                 return None

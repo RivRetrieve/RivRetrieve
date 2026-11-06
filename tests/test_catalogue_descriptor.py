@@ -32,7 +32,6 @@ from tests._catalogue_inputs import Fingerprint, _detach_evidence, _fingerprint
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 SC = Namespace("https://schema.org/")
 BASE = "https://example.org/catalogue/"
-_DESCRIPTOR_BYTES_CACHE: dict[Path, tuple[bytes, bytes]] = {}
 _INPUTS_CACHE: dict[Path, tuple[Fingerprint, object, tuple, dict[str, bytes]]] = {}
 
 
@@ -41,18 +40,13 @@ def _path(provider: str) -> Path:
 
 
 def _descriptor(provider: str) -> dict:
-    file_path = (_path(provider) / "croissant.json").absolute()
-    raw = file_path.read_bytes()
-    digest = sha256(raw).digest()
-    cached = _DESCRIPTOR_BYTES_CACHE.get(file_path)
-    if cached is None or cached[0] != digest:
-        _DESCRIPTOR_BYTES_CACHE[file_path] = (digest, raw)
-    return json.loads(raw)
+    return json.loads((_path(provider) / "croissant.json").read_bytes())
 
 
 def _inputs(provider: str):
     directory = _path(provider).absolute()
-    fp = _fingerprint(directory)
+    extra_files = ("station_metadata.parquet",) + (("monitoring_locations.json",) if provider == "usgs_nwis" else ())
+    fp = _fingerprint(directory, extra_files=extra_files)
     cached = _INPUTS_CACHE.get(directory)
     if fp is not None and cached is not None and cached[0] == fp:
         return _detach_evidence(cached[1]), cached[2], dict(cached[3])
@@ -95,7 +89,7 @@ def _inputs(provider: str):
         files["station_metadata.parquet"] = (directory / "station_metadata.parquet").read_bytes()
     if provider == "usgs_nwis":
         files["monitoring_locations.json"] = (directory / "monitoring_locations.json").read_bytes()
-    if fp is not None and _fingerprint(directory) == fp:
+    if fp is not None and _fingerprint(directory, extra_files=extra_files) == fp:
         _INPUTS_CACHE[directory] = (fp, provenance, origins, files)
         return _detach_evidence(provenance), origins, dict(files)
     return provenance, origins, files
