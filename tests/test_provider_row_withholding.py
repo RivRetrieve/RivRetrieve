@@ -13,6 +13,7 @@ from rivretrieve._internal.providers.fr_hubeau.declaration import declaration as
 from rivretrieve._internal.providers.th_thaiwater.declaration import declaration as thailand
 
 _CERTIFIED_PROVIDER_IDS = (
+    "ar_ina",
     "ba_fhmzbih",
     "ca_eccc",
     "ch_foen",

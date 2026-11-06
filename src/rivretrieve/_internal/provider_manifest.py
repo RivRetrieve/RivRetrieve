@@ -1,6 +1,7 @@
 """built-in provider manifest : tuple[ProviderId, ...]."""
 
 BUILTIN_PROVIDER_IDS = (
+    "ar_ina",
     "ba_fhmzbih",
     "br_ana",
     "ca_eccc",
