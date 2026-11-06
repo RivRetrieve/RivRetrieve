@@ -299,6 +299,22 @@ def test_publication_encodes_catalogue_only_descriptions_and_crs_support(tmp_pat
         "pot-flow",
         "pot-stage",
     }
+    from rivretrieve._internal.catalogues.source_series import materialize_series
+    from rivretrieve._internal.selection import _Selection
+    from rivretrieve._internal.source_series import SeriesScope
+
+    # Exercise the shared selection contract with several products at one gauge.
+    from dataclasses import replace
+
+    all_products = pl.concat(
+        [
+            loaded.station_products.with_columns(pl.lit(product).alias("product_id"))
+            for product in loaded.products["product_id"]
+        ]
+    )
+    series, inventories = materialize_series(replace(loaded, station_products=all_products))
+    selection = _Selection(scope=SeriesScope(provider_ids=("uk_nrfa",)), known_series=series, inventories=inventories)
+    assert len(selection.known_series) == 10
     assert "source.station.documented_crs" in generated.acquisition_provenance.fact_universe
     metadata = pl.read_parquet(tmp_path / "station_metadata.parquet")
     assert metadata.filter(pl.col("attribute_role") == "elevation")["source_datum"].item() == "Ordnance Datum"
