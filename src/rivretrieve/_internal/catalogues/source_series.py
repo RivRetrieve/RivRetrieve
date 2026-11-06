@@ -391,7 +391,7 @@ def materialize_series(
             unit_def = fact.source_unit_definition
             if unit_def is not None and (unit_def.provider_id != provider_id or unit_def.namespace != item_ns):
                 raise ValueError("Source-unit code definition does not apply to this provider and source namespace")
-        if item.series_id is not None:
+        if item.series_id:
             fixed_sid_plain = _PLAIN_JSON_ASCII_FULLMATCH(item.series_id) is not None
             suffix_json: str | None = None
         else:
@@ -510,7 +510,7 @@ def materialize_series(
         if matched_items is None:
             matched_items = by_product.get(product, empty_descriptions)
         for item, fixed_sid_plain, suffix_json in matched_items:
-            if item.series_id is not None:
+            if item.series_id:
                 identity = item.series_id
                 if not fixed_sid_plain:
                     all_members_plain = False

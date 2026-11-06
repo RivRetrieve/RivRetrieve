@@ -201,3 +201,51 @@ def test_usgs_instantaneous_support_does_not_establish_sampling_frequency():
     assert series[0].facts[0].frequency.value is None
     assert series[0].facts[0].frequency.state.value == "source_silent"
     assert series[0].facts[0].temporal_support.value == "instantaneous"
+
+
+@pytest.mark.parametrize("series_id", [None, "", "published-series"])
+@pytest.mark.parametrize("station", ["station", 'station"\\é'])
+def test_materialization_preserves_generated_and_explicit_series_identity(series_id, station):
+    import hashlib
+    import json
+    from datetime import date
+
+    from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
+    from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
+    from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, SourceSeries
+
+    description = SourceDescription(
+        product_id="product",
+        station_id=station,
+        series_id=series_id,
+        identity=SourceIdentity(namespace="native", published_id="published", origin="catalogue", evidence=("source",)),
+        facts=(PhysicalFacts(facts_id="facts"),),
+    )
+    artifact = PackagedCatalogArtifact(
+        provider_info={"provider_id": "provider"},
+        products=pl.DataFrame(),
+        stations=pl.DataFrame(),
+        station_products=pl.DataFrame(
+            {
+                "station_id": [station],
+                "product_id": ["product"],
+                "availability": ["available"],
+                "last_catalogue_check": [date(2026, 1, 1)],
+            }
+        ),
+        source_descriptions=SourceDescriptions(provider_id="provider", descriptions=(description,)),
+    )
+    series, inventories = catalogue_series(artifact)
+    generated = hashlib.sha256(
+        json.dumps(["provider", station, "native", "published"], ensure_ascii=False, separators=(",", ":")).encode()
+    ).hexdigest()
+    expected_id = series_id or generated
+    assert series[0].series_id == expected_id
+    assert SourceSeries.model_validate(series[0].model_dump()) == series[0]
+    assert inventories[0].members == (expected_id,)
+    expected_snapshot = hashlib.sha256(
+        json.dumps(
+            ["provider", station, "product", "2026-01-01", expected_id], ensure_ascii=False, separators=(",", ":")
+        ).encode()
+    ).hexdigest()
+    assert inventories[0].snapshot_id == expected_snapshot
