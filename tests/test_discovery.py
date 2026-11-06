@@ -120,6 +120,18 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "discharge_reported",
         "stage_reported",
     ],
+    "uk_nrfa": [
+        "amax-flow",
+        "amax-stage",
+        "gauging-flow",
+        "gauging-stage",
+        "gdf",
+        "gmf",
+        "ndf",
+        "nmf",
+        "pot-flow",
+        "pot-stage",
+    ],
     "usgs_nwis": [
         "discharge_daily_mean",
         "discharge_instantaneous",
@@ -131,7 +143,11 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
 }
 
 
-EXPECTED_PRODUCT_IDS = sorted(set(EXPECTED_PRODUCT_IDS) | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"]))
+EXPECTED_PRODUCT_IDS = sorted(
+    set(EXPECTED_PRODUCT_IDS)
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["uk_nrfa"])
+)
 
 
 def _issue_policy_error_chain(exc: BaseException) -> list[IssuePolicyError]:
@@ -172,6 +188,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "no_nve",
         "pl_imgw",
         "th_thaiwater",
+        "uk_nrfa",
         "usgs_nwis",
     ]
     credentials = dict(result.select("provider_id", "credentials").iter_rows())

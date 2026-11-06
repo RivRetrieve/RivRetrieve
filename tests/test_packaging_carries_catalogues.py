@@ -42,6 +42,7 @@ _PROVENANCE_PROVIDER_IDS = {
     "no_nve",
     "pl_imgw",
     "th_thaiwater",
+    "uk_nrfa",
     "usgs_nwis",
     "za_dws",
 }
