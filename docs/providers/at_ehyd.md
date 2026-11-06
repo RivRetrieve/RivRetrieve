@@ -98,37 +98,43 @@ RivRetrieve's current quantity scope.
 
 eHYD publishes river observations through two separate streams:
 
-1. **Validated historical archive (*Geprüfte Daten*, `owf_*`):** Quality-checked
-   CSV series reviewed for Austria's Hydrographic Yearbook (*Hydrographisches
+1. **Validated historical archive (*Geprüfte Daten*):** Quality-checked CSV
+   series reviewed for Austria's Hydrographic Yearbook (*Hydrographisches
    Jahrbuch*).
-2. **Operational telemetry (*Pegel Aktuell*, `pegel_bgis_*` and
-   `pegel_longterm_*`):** Unchecked near-real-time sub-hourly series
-   (`pegel_bgis_*`) and current-year daily comparison series
-   (`pegel_longterm_*`) published at telemetered gauges.
+2. **Operational telemetry (*Pegel Aktuell*):** Unchecked near-real-time
+   sub-hourly telemetry (`variant="data"`) and current-year daily comparison
+   series (`variant="current_value"`) published at telemetered gauges.
 
-| Quantity filter | Product (`product_id`) | Stream | Frequency | Statistic | Source unit | Returned unit |
-|---|---|---|---|---|---|---|
-| `discharge` | `owf_abfl_tagesmittel` | Validated archive | Daily | Mean | m³/s | m³/s (`m3/s`) |
-| `discharge` | `owf_abfl_monatsminima` | Validated archive | Monthly | Min | m³/s | m³/s (`m3/s`) |
-| `discharge` | `owf_abfl_monatsmaxima` | Validated archive | Monthly | Max | m³/s | m³/s (`m3/s`) |
-| `stage` | `owf_wasserst_tagesmittel` | Validated archive | Daily | Mean | cm | m (`m`) |
-| `stage` | `owf_wasserst_monatsminima` | Validated archive | Monthly (Unknown at `207340`) | Min | cm | m (`m`) |
-| `stage` | `owf_wasserst_monatsmaxima` | Validated archive | Monthly | Max | cm | m (`m`) |
-| `temperature` | `owf_wassertemp_monatsmittel` | Validated archive | Monthly | Mean | °C | °C (`degC`) |
-| `discharge` | `pegel_bgis_abfluss` | Operational telemetry | Unknown | Unknown | m³/s | m³/s (`m3/s`) |
-| `stage` | `pegel_bgis_wasserstand` | Operational telemetry | Unknown | Unknown | cm or m ü.A | m (`m`) |
-| `discharge` | `pegel_longterm_abfluss` | Operational telemetry | Daily | Unknown | m³/s | m³/s (`m3/s`) |
-| `stage` | `pegel_longterm_wasserstand` | Operational telemetry | Daily | Unknown | cm or m ü.A | m (`m`) |
+**Validated historical archive (*Geprüfte Daten*):**
 
-A station may publish only a subset of these eleven products. Federal eHYD
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | `owf_abfl_tagesmittel` (`Q-Tagesmittel`) | Daily | Mean | m³/s | m³/s |
+| `discharge` | `owf_abfl_monatsminima` (`Q-Monatsminima`) | Monthly | Minimum | m³/s | m³/s |
+| `discharge` | `owf_abfl_monatsmaxima` (`Q-Monatsmaxima`) | Monthly | Maximum | m³/s | m³/s |
+| `stage` | `owf_wasserst_tagesmittel` (`W-Tagesmittel`) | Daily | Mean | cm | m |
+| `stage` | `owf_wasserst_monatsminima` (`W-Monatsminima`) | Monthly (Unknown at `207340`) | Minimum | cm | m |
+| `stage` | `owf_wasserst_monatsmaxima` (`W-Monatsmaxima`) | Monthly | Maximum | cm | m |
+| `temperature` | `owf_wassertemp_monatsmittel` (`WT-Monatsmittel`) | Monthly | Mean | °C | °C |
+
+**Operational telemetry (*Pegel Aktuell*):**
+
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | `data` (sub-hourly telemetry) | Unknown | Unknown | m³/s | m³/s |
+| `stage` | `data` (sub-hourly telemetry) | Unknown | Unknown | cm, m ü.A | m |
+| `discharge` | `current_value` (current-year daily) | Daily | Unknown | m³/s | m³/s |
+| `stage` | `current_value` (current-year daily) | Daily | Unknown | cm, m ü.A | m |
+
+A station may publish only a subset of these eleven series. Federal eHYD
 publishes validated river water temperature only as monthly means
 (`owf_wassertemp_monatsmittel`); daily and near-real-time river water
 temperature are not published on this federal service.
 
-In the validated archive, monthly minimum and maximum products
-(`*_monatsminima`, `*_monatsmaxima`) report the lowest or highest instantaneous
-measurement recorded within each calendar month, stamped with its exact
-occurrence date and time, rather than the lowest or highest daily mean.
+In the validated archive, monthly minimum and maximum series report the lowest
+or highest instantaneous measurement recorded within each calendar month,
+stamped with its exact occurrence date and time, rather than the lowest or
+highest daily mean.
 
 RivRetrieve keeps validated archive series and operational telemetry strictly
 separate. It does not append unchecked telemetry onto validated yearbook records
@@ -142,19 +148,29 @@ metadata = rr.metadata(all_discharge)
 ```
 
 Filtering with `frequency="daily"` and `statistic="mean"` selects only the
-validated `owf_abfl_tagesmittel` series because `pegel_longterm_abfluss` has no
-established statistic and `pegel_bgis_abfluss` has no established frequency or
-statistic. To retrieve an operational telemetry series without also requesting
-archive products, pass its `series_id` from `candidates` to `rr.pick(all_discharge,
-series_id=...)`.
+validated daily-mean archive series (`owf_abfl_tagesmittel`) because the
+current-year daily comparison series (`variant="current_value"`) has no
+established statistic and the sub-hourly telemetry series (`variant="data"`) has
+no established frequency or statistic. Select either operational telemetry
+stream directly with `variant`:
 
-In `pegel_bgis_*` responses, RivRetrieve reads only the observation time series
-and omits static warning-level lines (*Niedrigwasser*, *Mittelwasser*, and
-*Hochwasser* thresholds). In `pegel_longterm_*` responses, RivRetrieve reads
-only the current calendar year's `current_value` series; it omits the prior-year
-overlay (`last_year_value`, which is aligned onto the current year's 365- or
-366-day axis without its own calendar dates) and the 30-year climatological
-summary curves (`min_data`, `max_data`, `mit_data`, `p5_data`, `p95_data`).
+- Sub-hourly telemetry (*Pegel Aktuell*): `rr.pick(all_discharge, variant="data")`
+  (or `rr.pick(all_discharge, time_zone="UTC+01:00")`)
+- Current-year daily comparison (*Pegel Aktuell*):
+  `rr.pick(all_discharge, variant="current_value")`
+
+You can also pass a specific `series_id` from `candidates` to `rr.pick(...)`
+when targeting an individual series row.
+
+In sub-hourly telemetry (*Pegel Aktuell*, `variant="data"`) responses,
+RivRetrieve reads only the `data` observation series and omits static
+warning-level lines (*Niedrigwasser*, *Mittelwasser*, and *Hochwasser*
+thresholds). In current-year daily comparison (*Pegel Aktuell*,
+`variant="current_value"`) responses, RivRetrieve reads only the current
+calendar year's `current_value` series; it omits the prior-year overlay
+(`last_year_value`, which is aligned onto the current year's 365- or 366-day
+axis without its own calendar dates) and the 30-year climatological summary
+curves (`min_data`, `max_data`, `mit_data`, `p5_data`, `p95_data`).
 
 ## Stage references and moving gauge zeros
 
@@ -201,68 +217,71 @@ decimal comma as JSON text, such as `'"55,3"'` at station `209486`; see
 
 ## Archive vintage and recent coverage
 
-The three endpoint families cover separate periods and leave an unpublished gap
+The three series streams cover separate periods and leave an unpublished gap
 between the latest yearbook and the current calendar year:
 
-- **Validated historical archive (`owf_*`):** Covers multi-decade histories up
-  to the close of the latest published Hydrographic Yearbook. In the catalogue
-  snapshot (2026-10-31) and live checks on 2026-11-03, validated river exports
-  end at `2023-12-31` (marked by a closing boundary at `2024-01-01 00:00`). Start
-  years vary widely by gauge and quantity, and decommissioned gauges end earlier.
-- **Current-year daily comparison (`pegel_longterm_*`):** Covers only the
-  current calendar year (`2026` during 2026) up to the latest reported day.
-  Trailing `null` padding for future dates later in the year is trimmed. The
-  endpoint ignores query parameters requesting earlier calendar years.
-- **Near-real-time sub-hourly telemetry (`pegel_bgis_*`):** Covers a rolling
-  window of roughly seven to eight days at variable sub-hourly intervals
-  (commonly 5, 10, 15, or 30 minutes, sometimes varying within a single week).
-  Older readings age out as new telemetry arrives. Local caching (`cache="reuse"`)
-  accumulates readings already fetched across repeated runs, while readings that
-  left the rolling window before being fetched cannot be recovered from this
-  service.
+- **Validated historical archive (*Geprüfte Daten*):** Covers multi-decade
+  histories up to the close of the latest published Hydrographic Yearbook. In
+  the catalogue snapshot (2026-10-31) and live checks on 2026-11-03, validated
+  river exports end at `2023-12-31` (marked by a closing boundary at
+  `2024-01-01 00:00`). Start years vary widely by gauge and quantity, and
+  decommissioned gauges end earlier.
+- **Current-year daily comparison (*Pegel Aktuell*, `variant="current_value"`):**
+  Covers only the current calendar year (`2026` during 2026) up to the latest
+  reported day. Trailing `null` padding for future dates later in the year is
+  trimmed. The service ignores query parameters requesting earlier calendar
+  years.
+- **Near-real-time sub-hourly telemetry (*Pegel Aktuell*, `variant="data"`):**
+  Covers a rolling window of roughly seven to eight days at variable sub-hourly
+  intervals (commonly 5, 10, 15, or 30 minutes, sometimes varying within a
+  single week). Older readings age out as new telemetry arrives. Local caching
+  (`cache="reuse"`) accumulates readings already fetched across repeated runs,
+  while readings that left the rolling window before being fetched cannot be
+  recovered from this service.
 
-Because validated `owf_*` files end at the latest published yearbook (`2023`)
-and `pegel_longterm_*` serves only the current year's `current_value` series,
-intermediate post-yearbook years (such as `2024` and `2025` before their
-yearbook release) are not yet available through federal `ehyd.gv.at` exports.
-When a request on `owf_*` spans into those unpublished years, `result.outcomes`
-marks the post-yearbook span as `unresolved` rather than `empty`, reflecting
-that the yearbook export has not yet reached those dates rather than confirming
-an absence of river measurements.
+Because the validated archive ends at the latest published yearbook (`2023`) and
+the current-year daily comparison stream (`variant="current_value"`) serves only
+the current calendar year, intermediate post-yearbook years (such as `2024` and
+`2025` before their yearbook release) are not yet available through federal
+`ehyd.gv.at` downloads. A validated archive request for dates after `2023-12-31`
+returns no rows for those unpublished years because the yearbook export has not
+yet reached them, rather than because no river measurements were taken.
 
 ## Time and data status
 
 Time-zone handling differs between sub-hourly telemetry and the daily or monthly
-files:
+series:
 
-- **Sub-hourly telemetry (`pegel_bgis_*`):** eHYD documents these timestamps as
-  fixed Central European Time (*Mitteleuropäische Zeit*, `MEZ`, `UTC+01:00`
-  throughout the year without daylight-saving transitions). `rr.fetch` preserves
-  the published `MEZ` wall-clock timestamps with `time_zone="+01:00"`
-  (`time_zone="UTC+01:00"` in `rr.series(...)`), and `rr.to_utc(result)` shifts
-  them to UTC (`time_zone="+00:00"`). Whether each sub-hourly value represents
-  an instantaneous reading or a short interval average is not established.
-- **Validated archive (`owf_*`) and current-year daily series
-  (`pegel_longterm_*`):** Neither format states an explicit UTC offset in its
-  machine-readable header or payload. Although BMLUK's [*Pegelordnung
+- **Sub-hourly telemetry (*Pegel Aktuell*, `variant="data"`):** eHYD documents
+  these timestamps as fixed Central European Time (*Mitteleuropäische Zeit*,
+  `MEZ`, `UTC+01:00` throughout the year without daylight-saving transitions).
+  `rr.fetch` preserves the published `MEZ` wall-clock timestamps with
+  `time_zone="+01:00"` (`time_zone="UTC+01:00"` in `rr.series(...)`), and
+  `rr.to_utc(result)` shifts them to UTC (`time_zone="+00:00"`). Whether each
+  sub-hourly value represents an instantaneous reading or a short interval
+  average is not established.
+- **Validated archive (*Geprüfte Daten*) and current-year daily comparison
+  (*Pegel Aktuell*, `variant="current_value"`):** Neither format states an
+  explicit UTC offset in its machine-readable header or payload. Although
+  BMLUK's [*Pegelordnung
   2014*](https://data.hydrographie.gv.at/Vorschriften_und_Anleitungen/30b%20Pegelordnung-2014.pdf)
   recommends `MEZ` (`UTC+01:00`), it also notes historical `SOZ/MEZ` summer-time
-  practices, and older epochs in `owf_*` CSV files contain daily timestamps at
-  `07:00` or `01:00` before shifting to `00:00` (at historical manual staff
-  gauges, *Lattenpegel*, a scheduled morning reading counted as the daily
-  value). RivRetrieve therefore keeps `time_zone="unknown"` and leaves
-  `day_definition` unknown on `owf_*` and `pegel_longterm_*`; `rr.to_utc()`
-  refuses `unknown` time zones rather than assuming `UTC+01:00` across all
-  historical years.
+  practices, and older epochs in validated archive CSV files contain daily
+  timestamps at `07:00` or `01:00` before shifting to `00:00` (at historical
+  manual staff gauges, *Lattenpegel*, a scheduled morning reading counted as the
+  daily value). RivRetrieve therefore keeps `time_zone="unknown"` and leaves
+  `day_definition` unknown on both streams; `rr.to_utc()` refuses `unknown` time
+  zones rather than assuming `UTC+01:00` across all historical years.
 
-On validated interval-mean products (`owf_*_tagesmittel` and
-`owf_wassertemp_monatsmittel`), each timestamp marks the start of its validity
-interval (`timestamp_anchor="start"`), in accordance with the CSV preamble rule
-(*"Der Intervallwert gilt bis zum nächsten Zeitpunkt mit einem Wert oder
-Lücke"*). At Danube station `207340` (Wilhering), the `W-Monatsminima` CSV file
-declares and contains daily (`T,1`) stage minima rather than monthly minima;
-RivRetrieve withholds `frequency="monthly"` on that station's
-`owf_wasserst_monatsminima` series so monthly filters do not return daily rows.
+On validated interval-mean archive series (`owf_abfl_tagesmittel`,
+`owf_wasserst_tagesmittel`, and `owf_wassertemp_monatsmittel`), each timestamp
+marks the start of its validity interval (`timestamp_anchor="start"`), in
+accordance with the CSV preamble rule (*"Der Intervallwert gilt bis zum
+nächsten Zeitpunkt mit einem Wert oder Lücke"*). At Danube station `207340`
+(Wilhering), the `W-Monatsminima` CSV file declares and contains daily (`T,1`)
+stage minima rather than monthly minima; RivRetrieve withholds
+`frequency="monthly"` on that station's `owf_wasserst_monatsminima` series so
+monthly filters do not return daily rows.
 
 eHYD labels its historical CSV downloads *Geprüfte Daten* (checked data) and
 displays `"ungeprüfte Rohdaten!"` (unchecked raw data) on *Pegel Aktuell*
@@ -273,21 +292,22 @@ its own.
 
 Keep missing-data representations distinct when inspecting results:
 
-- In `owf_*` CSV files, missing spans are encoded as timestamped `Lücke` (gap)
-  transition lines rather than one null row per missing day, and interval files
-  end with a closing `Lücke` boundary line at the end of the export window.
-  RivRetrieve omits `Lücke` lines without fabricating rows, suppresses the
-  closing-boundary marker, and records an informational `source.gap_marker`
-  issue in `result.issues` when interior gaps occur.
-- In `pegel_bgis_*` and `pegel_longterm_*` JSON responses, interior missing
-  entries published as `null` remain rows with `value=null`.
-- Empty `0`-byte HTTP `200` responses or empty JSON payloads on *Pegel Aktuell*
-  for stations currently offline report `unresolved` outcomes in
-  `result.outcomes` (and when a specific telemetry series is requested by
-  `series_id`, also record a `source.inventory_unresolved` warning in
-  `result.issues`). By contrast, `0`-byte or malformed responses on advertised
-  `owf_*` files report `failed` outcomes and error or warning issues in
-  `result.issues`.
+- In validated archive (*Geprüfte Daten*) CSV files, missing spans are encoded
+  as timestamped `Lücke` (gap) transition lines rather than one null row per
+  missing day, and interval files end with a closing `Lücke` boundary line at
+  the end of the export window. RivRetrieve omits `Lücke` lines without
+  fabricating rows, suppresses the closing-boundary marker, and records an
+  informational `source.gap_marker` issue in `result.issues` when interior gaps
+  occur.
+- In *Pegel Aktuell* telemetry responses (`variant="data"` and
+  `variant="current_value"`), interior missing entries published as `null`
+  remain rows with `value=null`.
+- When a *Pegel Aktuell* gauge is currently offline and returns an empty
+  response, `rr.fetch` returns no rows (and emits a
+  `source.inventory_unresolved` warning in `result.issues` when that telemetry
+  series was requested explicitly). Empty or malformed validated archive files
+  report an error or warning in `result.issues`; check
+  [issues](../usage.md#issues) before interpreting an empty result.
 
 ## Terms and citation
 
@@ -334,6 +354,5 @@ Publisher documents and metadata checked on 2026-10-31 and verified reachable on
 - [INSPIRE Austria metadata: hydrographic station network](https://data.inspire.gv.at/55e494dd-e0af-4806-95d6-86e30dde0504) and [*Pegel Aktuell* service](https://geoportal.inspire.gv.at/metadatensuche/srv/api/records/6a67faa7-3ad7-4faf-91e9-17a518d10685/formatters/xml): CC BY 4.0 licensing and mandatory `Datenquelle: ehyd.gv.at` attribution.
 
 The station counts describe the packaged catalogue snapshot (2026-10-31). The
-example observations were checked live on 2026-11-03. The [private verification
-archive](https://github.com/RivRetrieve/verification-evidence#readme) retains
-source captures, verification commands, exact outputs, and scope checks.
+example observations were retrieved on 2026-11-03. This live example does not
+establish continuous coverage.
