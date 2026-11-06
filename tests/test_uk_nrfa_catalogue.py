@@ -287,6 +287,18 @@ def test_publication_encodes_catalogue_only_descriptions_and_crs_support(tmp_pat
     assert loaded.products.height == 10
     assert loaded.station_products.height == 1
     assert loaded.source_descriptions.provider_id == "uk_nrfa"
+    assert {item.identity.published_id for item in loaded.source_descriptions.descriptions} == {
+        "gdf",
+        "ndf",
+        "gmf",
+        "nmf",
+        "gauging-flow",
+        "gauging-stage",
+        "amax-flow",
+        "amax-stage",
+        "pot-flow",
+        "pot-stage",
+    }
     assert "source.station.documented_crs" in generated.acquisition_provenance.fact_universe
     metadata = pl.read_parquet(tmp_path / "station_metadata.parquet")
     assert metadata.filter(pl.col("attribute_role") == "elevation")["source_datum"].item() == "Ordnance Datum"

@@ -41,6 +41,7 @@ def describe_catalogue(artifact: PackagedCatalogArtifact) -> SourceDescriptions:
                 native_coordinate=product,
                 identity=SourceIdentity(
                     namespace="uk_nrfa/data-type",
+                    published_id=product,
                     origin="mapping",
                     description="NRFA API data-type; station associations are advertised in data-summary",
                     evidence=(API_HELP,),
