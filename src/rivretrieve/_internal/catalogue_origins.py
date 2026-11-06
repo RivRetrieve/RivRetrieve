@@ -30,7 +30,11 @@ class NativeColumn(str):
 
 
 class Evidence(str):
-    """An absolute HTTP(S) link to a provider's own documentation."""
+    """An absolute HTTP(S) reference to source documentation or retained source support.
+
+    A retained reference identifies evidence; the acquisition provenance records
+    the original source and the facts it supports.
+    """
 
     def __new__(cls, value: str) -> Evidence:
         if not isinstance(value, str):
@@ -237,6 +241,7 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("pl_imgw"),
         ProviderId("th_thaiwater"),
         ProviderId("usgs_nwis"),
+        ProviderId("uk_nrfa"),
         ProviderId("za_dws"),
     }
 )

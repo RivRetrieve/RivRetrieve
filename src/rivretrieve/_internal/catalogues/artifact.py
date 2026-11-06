@@ -58,6 +58,7 @@ ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
         "pl_imgw",
         "th_thaiwater",
         "usgs_nwis",
+        "uk_nrfa",
         "za_dws",
     }
 )

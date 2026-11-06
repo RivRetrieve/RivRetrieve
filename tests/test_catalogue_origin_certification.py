@@ -367,6 +367,7 @@ DECLARATIONS = {
         "pl_imgw",
         "th_thaiwater",
         "usgs_nwis",
+        "uk_nrfa",
         "za_dws",
     )
 }
@@ -530,6 +531,15 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "latitude": field("coordinates", StructMemberConversion()),
             "longitude": field("coordinates", StructMemberConversion()),
             "crs": documented("https://api.meteo.lt/"),
+        },
+        (ProviderId("uk_nrfa"), "stations"): {
+            "provider_id": authored("uk_nrfa"),
+            "station_id": field("station_id"),
+            "latitude": field("latitude"),
+            "longitude": field("longitude"),
+            "crs": documented(
+                "https://github.com/RivRetrieve/verification-evidence/blob/fd15877bab32fe6bdd20e60dce3cccaf6e0014a2/inventory/collections.json"
+            ),
         },
         (ProviderId("no_nve"), "stations"): {
             "provider_id": authored("no_nve"),
@@ -779,6 +789,7 @@ EXPECTED_CRS_COUNTS = {
     (ProviderId("fr_hydroportail"), "stations"): (6_409, "EPSG:4326"),
     (ProviderId("jp_mlit"), "stations"): (1_023, "unknown"),
     (ProviderId("lt_lhmt"), "stations"): (97, "EPSG:4326"),
+    (ProviderId("uk_nrfa"), "stations"): (1_604, "EPSG:4326"),
     (ProviderId("no_nve"), "stations"): (4_902, "unknown"),
     (ProviderId("pl_imgw"), "stations"): (1_301, "unknown"),
     (ProviderId("th_thaiwater"), "stations"): (825, "unknown"),
@@ -998,6 +1009,14 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             ),
         ),
         pytest.param(
+            "uk_nrfa",
+            marks=pytest.mark.governing(
+                "src/rivretrieve/_internal/providers/uk_nrfa/catalogue/native.parquet",
+                "maintenance/catalogue/uk_nrfa/inputs",
+                "maintenance/catalogue/station_metadata/review.json",
+            ),
+        ),
+        pytest.param(
             "lt_lhmt",
             marks=pytest.mark.governing(
                 *_catalogue_recording_paths("lt_lhmt"),
@@ -1177,6 +1196,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ch_foen",
         "cz_chmi",
         "lt_lhmt",
+        "uk_nrfa",
         "no_nve",
         "th_thaiwater",
         "za_dws",

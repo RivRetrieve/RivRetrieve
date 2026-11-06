@@ -193,3 +193,100 @@ def test_native_preparation_refuses_lossy_scalar_inference():
     native = prepare_native_table({"data": rows}, {"station-ids": [12345, 12346, 12347]}, retrieved_at=instant)
     assert native.data["station-level"].dtype == pl.Int64
     assert native.data["station-level"].to_list() == [10, 11, None]
+
+
+def test_catalogue_composition_enforces_declared_station_origins():
+    import pytest
+
+    from rivretrieve._internal.catalogue_origins import Authored, AuthoredValue
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.providers.uk_nrfa.generate_catalogue import build_catalogue
+    from rivretrieve._internal.providers.uk_nrfa.origins import STATION_CATALOGUE_ORIGINS
+
+    native = stamp_native_table(
+        pl.DataFrame(
+            {
+                "station_id": ["12345"],
+                "latitude": [51.25],
+                "longitude": [-1.5],
+                "data-summary": [{"data-types": [{"data-type": "gdf", "first": "2000-01-01", "last": "2020-01-01"}]}],
+            }
+        ),
+        RetrievedAt(datetime(2026, 11, 6, tzinfo=UTC)),
+    )
+    with pytest.raises(FatalContractError):
+        build_catalogue(native, {**STATION_CATALOGUE_ORIGINS, "provider_id": Authored(AuthoredValue("wrong_provider"))})
+    result = build_catalogue(native, STATION_CATALOGUE_ORIGINS)
+    assert result.products.height == 10
+    assert result.station_products.height == 1
+    assert result.provider_info["citation"] == "Data from the UK National River Flow Archive"
+
+
+def test_publication_encodes_catalogue_only_descriptions_and_crs_support(tmp_path):
+    from rivretrieve._internal.acquisition_provenance import (
+        ArchiveMemberReference,
+        CatalogueBuildInputs,
+        CodeReference,
+        RetainedInputUse,
+    )
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.uk_nrfa import origins
+    from rivretrieve._internal.providers.uk_nrfa.generate_catalogue import build_catalogue, write_catalogue
+
+    native = stamp_native_table(
+        pl.DataFrame(
+            {
+                "station_id": ["12345"],
+                "latitude": [51.25],
+                "longitude": [-1.5],
+                "name": ["Example"],
+                "river": ["River"],
+                "catchment-area": [12.0],
+                "station-level": [3.0],
+                "station_altitude_datum": ["Ordnance Datum"],
+                "data-summary": [{"data-types": [{"data-type": "gdf", "first": "2000-01-01", "last": "2020-01-01"}]}],
+            }
+        ),
+        RetrievedAt(datetime(2026, 11, 6, tzinfo=UTC)),
+    )
+    generated = build_catalogue(native, origins.STATION_CATALOGUE_ORIGINS)
+
+    def code(path, symbol):
+        return CodeReference(
+            repository="https://github.com/RivRetrieve/RivRetrieve",
+            revision="a" * 40,
+            repository_path=path,
+            symbol=symbol,
+        )
+
+    uses = tuple(
+        RetainedInputUse(
+            reference=ArchiveMemberReference(
+                archive_repository="https://github.com/RivRetrieve/verification-evidence",
+                archive_revision="b" * 40,
+                collection_id="synthetic",
+                manifest_sha256="c" * 64,
+                artifact_id=str(index),
+                sha256=origins.NATIVE_TABLE_SHA256 if index == 0 else "d" * 64,
+                byte_size=origins.NATIVE_TABLE_BYTE_SIZE if index == 0 else 1,
+                role="derived_input" if index == 0 else "publisher_original",
+            ),
+            usage="native_table" if index == 0 else "recording",
+            facts=binding.facts,
+        )
+        for index, binding in enumerate(generated.acquisition_provenance.fact_bindings)
+        if binding.transformation is None
+    )
+    build = CatalogueBuildInputs(
+        build=code("src/rivretrieve/_internal/providers/uk_nrfa/generate_catalogue.py", "main"),
+        declarations=tuple(code(path, symbol) for path, symbol in origins.CATALOGUE_BUILD_DECLARATIONS),
+        inputs=uses,
+    )
+    write_catalogue(generated, tmp_path, build_inputs=build, native_table=native)
+    loaded = load_packaged_catalogue_artifact(tmp_path, on_issue="raise")
+    assert loaded.products.height == 10
+    assert loaded.station_products.height == 1
+    assert loaded.source_descriptions.provider_id == "uk_nrfa"
+    assert "source.station.documented_crs" in generated.acquisition_provenance.fact_universe
+    metadata = pl.read_parquet(tmp_path / "station_metadata.parquet")
+    assert metadata.filter(pl.col("attribute_role") == "elevation")["source_datum"].item() == "Ordnance Datum"
