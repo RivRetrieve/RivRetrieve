@@ -146,6 +146,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
 | `ch_foen` | live | none | 1341 | 7008 | 41268 | 0 |
+| `co_ideam` | catalogue-only | none | 1372 | 19690 | 0 | 7750 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
@@ -209,6 +210,26 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `ch_foen` | `water_temperature_1year_mean` | `degC` |
 | `ch_foen` | `water_temperature_1year_min` | `degC` |
 | `ch_foen` | `water_temperature_recent` | `degC` |
+| `co_ideam` | `caudal_h` | `m3/s` |
+| `co_ideam` | `nivel_h` | `m` |
+| `co_ideam` | `nv_media_a` | `m` |
+| `co_ideam` | `nv_media_d` | `m` |
+| `co_ideam` | `nv_media_m` | `m` |
+| `co_ideam` | `nv_mn_a` | `m` |
+| `co_ideam` | `nv_mn_d` | `m` |
+| `co_ideam` | `nv_mn_m` | `m` |
+| `co_ideam` | `nv_mx_a` | `m` |
+| `co_ideam` | `nv_mx_d` | `m` |
+| `co_ideam` | `nv_mx_m` | `m` |
+| `co_ideam` | `q_media_a` | `m3/s` |
+| `co_ideam` | `q_media_d` | `m3/s` |
+| `co_ideam` | `q_media_m` | `m3/s` |
+| `co_ideam` | `q_mn_a` | `m3/s` |
+| `co_ideam` | `q_mn_d` | `m3/s` |
+| `co_ideam` | `q_mn_m` | `m3/s` |
+| `co_ideam` | `q_mx_a` | `m3/s` |
+| `co_ideam` | `q_mx_d` | `m3/s` |
+| `co_ideam` | `q_mx_m` | `m3/s` |
 | `cz_chmi` | `discharge_daily_mean` | `m3/s` |
 | `cz_chmi` | `discharge_hourly_mean` | `m3/s` |
 | `cz_chmi` | `stage_daily_mean` | `m` |

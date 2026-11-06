@@ -34,6 +34,7 @@ _PROVENANCE_PROVIDER_IDS = {
     "br_ana",
     "ca_eccc",
     "ch_foen",
+    "co_ideam",
     "cz_chmi",
     "fr_hubeau",
     "fr_hydroportail",
