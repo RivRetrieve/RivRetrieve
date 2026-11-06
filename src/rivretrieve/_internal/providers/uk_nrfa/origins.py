@@ -47,7 +47,7 @@ STATION_METADATA_FIELDS = (
         "station-level",
         "m",
         datum_field="station_altitude_datum",
-        support_facts=("source.station.metadata_definitions",),
+        support_facts=("source.station.metadata_definitions", "source.station.altitude_location"),
         datum_support=(
             "source.station.metadata_definitions",
             "source.station.regional_numbering",
