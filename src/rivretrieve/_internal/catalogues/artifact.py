@@ -258,27 +258,36 @@ def _validate_absence_marker_values(
     tables = {"provider": provider_info, "product": products, "station": stations, "station_product": station_products}
     outputs: list[tuple[AbsenceMarkerValue | None, str]] = []
     if isinstance(provenance, CatalogueEvidence):
-        for transformation_id, transformation in enumerate(provenance.header.transformations):
-            if transformation.kind == "absence_marker":
-                names = (
-                    provenance.bindings.filter(pl.col("transformation_id") == transformation_id)
-                    .select("binding_id")
-                    .join(provenance.binding_facts, on="binding_id")
-                    .join(provenance.facts.select("fact_id", "name"), on="fact_id")["name"]
+        marker_by_tid = {
+            tid: transformation.marker_value
+            for tid, transformation in enumerate(provenance.header.transformations)
+            if transformation.kind == "absence_marker"
+        }
+        if marker_by_tid:
+            matched_bindings = provenance.bindings.filter(
+                pl.col("transformation_id").is_in(list(marker_by_tid))
+            ).select("binding_id", "transformation_id")
+            if matched_bindings.height:
+                joined = (
+                    matched_bindings.join(provenance.binding_facts, on="binding_id")
+                    .join(provenance.facts.select("fact_id", "name"), on="fact_id")
+                    .sort("binding_id", "position")
                 )
-                outputs.extend((transformation.marker_value, name) for name in names)
+                for tid, name in zip(joined["transformation_id"].to_list(), joined["name"].to_list(), strict=True):
+                    outputs.append((marker_by_tid[tid], name))
     else:
         for binding in provenance.fact_bindings:
             transformation = binding.transformation
             if transformation is not None and transformation.kind == "absence_marker":
                 outputs.extend((transformation.marker_value, fact) for fact in binding.facts)
     availability = (
-        {
-            (station, product): value
-            for station, product, value in station_products.select(
-                "station_id", "product_id", "availability"
-            ).iter_rows()
-        }
+        dict(
+            zip(
+                zip(station_products["station_id"].to_list(), station_products["product_id"].to_list(), strict=True),
+                station_products["availability"].to_list(),
+                strict=True,
+            )
+        )
         if any(station_product_availability_key(fact) is not None for _, fact in outputs)
         else {}
     )
@@ -321,10 +330,21 @@ def _apply_withheld_facts(
     schemas = dict(_CATALOGUE_FACT_SCHEMAS)
     station_row_ids: list[str] = []
     station_product_row_keys: list[tuple[str, str]] = []
-    for withheld_group in _provenance_header(provenance).withheld_facts:
+    withheld_facts = _provenance_header(provenance).withheld_facts
+    station_counts: dict[str, int] | None = None
+    sp_counts: dict[tuple[str, str], int] | None = None
+    if any(group.catalogue_rows for group in withheld_facts):
+        from collections import Counter
+
+        station_counts = Counter(stations["station_id"].to_list())
+        sp_counts = Counter(
+            zip(station_products["station_id"].to_list(), station_products["product_id"].to_list(), strict=True)
+        )
+    for withheld_group in withheld_facts:
         for locator in withheld_group.catalogue_rows:
             if locator.carrier == "station":
-                matches = stations.filter(pl.col("station_id") == locator.station_id).height
+                assert station_counts is not None
+                matches = station_counts.get(locator.station_id, 0)
                 if matches != 1 and not (allow_missing_rows and matches == 0):
                     raise FatalContractError(
                         f"{_provenance_header(provenance).provider_id} withheld station row {locator.station_id!r} "
@@ -332,16 +352,15 @@ def _apply_withheld_facts(
                     )
                 station_row_ids.append(locator.station_id)
             else:
-                matches = station_products.filter(
-                    (pl.col("station_id") == locator.station_id) & (pl.col("product_id") == locator.product_id)
-                ).height
+                if locator.product_id is None:  # pragma: no cover - rejected by the model
+                    raise AssertionError("station-product locator has no product id")
+                assert sp_counts is not None
+                matches = sp_counts.get((locator.station_id, locator.product_id), 0)
                 if matches != 1 and not (allow_missing_rows and matches == 0):
                     raise FatalContractError(
                         f"{_provenance_header(provenance).provider_id} withheld station-product row "
                         f"{locator.station_id!r}/{locator.product_id!r} matched {matches} catalogue rows"
                     )
-                if locator.product_id is None:  # pragma: no cover - rejected by the model
-                    raise AssertionError("station-product locator has no product id")
                 station_product_row_keys.append((locator.station_id, locator.product_id))
     for withheld_group in _provenance_header(provenance).withheld_facts:
         for withheld_fact in withheld_group.facts:
@@ -394,7 +413,8 @@ def _read_provenance_json(path: Path) -> AcquisitionProvenance | CatalogueEviden
     if not path.exists():
         return None
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        content = path.read_text(encoding="utf-8")
+        value = json.loads(content)
         if not isinstance(value, dict):
             raise CorruptCatalogArtifactError(f"Acquisition provenance file must contain an object: {path}")
         version = value.get("schema_version")
@@ -405,7 +425,7 @@ def _read_provenance_json(path: Path) -> AcquisitionProvenance | CatalogueEviden
                 f"Unsupported acquisition provenance schema_version {version!r}: {path}; "
                 "install a compatible RivRetrieve catalogue or rebuild it with the current catalogue generator"
             )
-        header = EvidenceHeader.model_validate(value)
+        header = EvidenceHeader.model_validate_json(content)
         # The strict header permits only the five fixed relative evidence basenames.
         table_bytes = {}
         for filename in header.files:
@@ -517,23 +537,19 @@ def _validate_station_product_references(
     stations: pl.DataFrame,
     station_products: pl.DataFrame,
 ) -> None:
-    station_keys = set(stations.select("provider_id", "station_id").iter_rows())
-    product_keys = set(products.select("provider_id", "product_id").iter_rows())
-
-    missing_station_keys = [
-        (provider_id, station_id)
-        for provider_id, station_id in station_products.select("provider_id", "station_id").iter_rows()
-        if (provider_id, station_id) not in station_keys
-    ]
-    if missing_station_keys:
+    if station_products.is_empty():
+        return
+    if (
+        station_products.select("provider_id", "station_id")
+        .join(stations.select("provider_id", "station_id"), on=["provider_id", "station_id"], how="anti")
+        .height
+    ):
         raise FatalContractError("station_products references stations absent from stations")
-
-    missing_product_keys = [
-        (provider_id, product_id)
-        for provider_id, product_id in station_products.select("provider_id", "product_id").iter_rows()
-        if (provider_id, product_id) not in product_keys
-    ]
-    if missing_product_keys:
+    if (
+        station_products.select("provider_id", "product_id")
+        .join(products.select("provider_id", "product_id"), on=["provider_id", "product_id"], how="anti")
+        .height
+    ):
         raise FatalContractError("station_products references products absent from products")
 
 
@@ -550,14 +566,28 @@ def _validate_source_descriptions(
 ) -> None:
     if descriptions.provider_id != provider_id:
         raise CorruptCatalogArtifactError("Source descriptions provider does not match catalogue")
-    product_ids = set(products["product_id"])
-    station_ids = set(stations["station_id"])
-    declared_facts = set(evidence.facts["name"]) if evidence is not None else set()
+    product_ids = set(products["product_id"].to_list())
+    station_ids = set(stations["station_id"].to_list())
+    declared_facts = set(evidence.facts["name"].to_list()) if evidence is not None else set()
     keys = set()
+    checked_refs: set[str] = set()
+    checked_facts_ids: set[int] = set()
+
+    def _check_ref(ref: str) -> None:
+        if ref in checked_refs:
+            return
+        if ref.startswith("catalogue:"):
+            _, ref_provider, fact_name = ref.split(":", 2)
+            if ref_provider != provider_id or fact_name not in declared_facts:
+                raise CorruptCatalogArtifactError(f"Source description references undeclared catalogue evidence: {ref}")
+        checked_refs.add(ref)
+
     for item in descriptions.descriptions:
         if item.product_id not in product_ids or (item.station_id is not None and item.station_id not in station_ids):
             raise CorruptCatalogArtifactError("Source description references absent catalogue coordinates")
-        if len(set(item.station_ids)) != len(item.station_ids) or set(item.station_ids) - station_ids:
+        if item.station_ids and (
+            len(set(item.station_ids)) != len(item.station_ids) or not set(item.station_ids).issubset(station_ids)
+        ):
             raise CorruptCatalogArtifactError("Source description references invalid catalogue station scope")
         if item.station_ids and item.station_id is not None:
             raise CorruptCatalogArtifactError("Source description has conflicting station scopes")
@@ -575,19 +605,18 @@ def _validate_source_descriptions(
         if key in keys:
             raise CorruptCatalogArtifactError("Duplicate catalogue source description")
         keys.add(key)
-        refs = list(item.identity.evidence)
+        for ref in item.identity.evidence:
+            _check_ref(ref)
         for facts in item.facts:
+            fid = id(facts)
+            if fid in checked_facts_ids:
+                continue
             for name in type(facts).model_fields:
-                fact = getattr(facts, name)
-                if hasattr(fact, "evidence"):
-                    refs.extend(fact.evidence)
-        for ref in refs:
-            if ref.startswith("catalogue:"):
-                _, ref_provider, fact_name = ref.split(":", 2)
-                if ref_provider != provider_id or fact_name not in declared_facts:
-                    raise CorruptCatalogArtifactError(
-                        f"Source description references undeclared catalogue evidence: {ref}"
-                    )
+                field_val = getattr(facts, name)
+                if hasattr(field_val, "evidence"):
+                    for ref in field_val.evidence:
+                        _check_ref(ref)
+            checked_facts_ids.add(fid)
 
 
 def _validate_catalogue_claims(

@@ -222,6 +222,7 @@ def test_blank_process_environment_shadows_dotenv_and_remains_missing(
         rr.fetch(selection, start="2024-01-02", end="2024-01-02")
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_committed_environment_template_stays_unresolved_when_copied_unchanged(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -297,6 +298,7 @@ def test_credential_echo_preserves_safe_status_and_exposes_no_secret(
     assert result.receipts.entries == ()
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_providers_reloads_the_working_dotenv_each_call(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -764,6 +766,8 @@ def test_public_exchange_real_redirect_refusal(
     targets = []
 
     class Target(BaseHTTPRequestHandler):
+        disable_nagle_algorithm = True
+
         def do_GET(self):
             targets.append(dict(self.headers))
             self.send_response(200)
@@ -773,10 +777,12 @@ def test_public_exchange_real_redirect_refusal(
             pass
 
     target = ThreadingHTTPServer(("127.0.0.1", 0), Target)
-    target_thread = Thread(target=target.serve_forever, daemon=True)
+    target_thread = Thread(target=target.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     target_thread.start()
 
     class Source(BaseHTTPRequestHandler):
+        disable_nagle_algorithm = True
+
         def do_GET(self):
             if (redirected_call == "exchange" and self.path == "/token") or (
                 redirected_call == "data" and self.path.startswith("/data")
@@ -794,7 +800,7 @@ def test_public_exchange_real_redirect_refusal(
             pass
 
     source = ThreadingHTTPServer(("127.0.0.1", 0), Source)
-    source_thread = Thread(target=source.serve_forever, daemon=True)
+    source_thread = Thread(target=source.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     source_thread.start()
     origin = f"http://127.0.0.1:{source.server_port}"
     try:

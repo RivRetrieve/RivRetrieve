@@ -25,7 +25,7 @@ def test_usgs_provenance_names_nwis_and_verified_source_words() -> None:
     assert provenance.header.withheld_facts == ()
 
 
-@pytest.mark.governing(*_catalogue_recording_paths("usgs_nwis"))
+@pytest.mark.governing(*_catalogue_recording_paths("usgs_nwis", scopes=("maintenance/catalogue/usgs_nwis",)))
 def test_usgs_build_rejects_changed_terms_recording(retained_evidence_root, tmp_path: Path) -> None:
     provenance = build_acquisition_provenance()
     for source in provenance.source_records:
@@ -41,111 +41,65 @@ def test_usgs_build_rejects_changed_terms_recording(retained_evidence_root, tmp_
         verify_provenance_recordings(provenance, tmp_path)
 
 
-@pytest.mark.governing(
-    "research/usgs-modern-coverage",
-    "research/usgs-modern-coverage/metadata-00060-0000.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0001.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0002.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0003.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0004.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0005.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0006.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0007.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0000.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0001.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0002.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0003.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0004.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0005.json.gz",
-    "tests/test_data/usgs_nwis_historical/native.parquet",
-    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
-    "tests/test_data/usgs_nwis_terms_citation-1.html",
-    "tests/test_data/usgs_nwis_terms_licence-1.html",
-)
-def test_usgs_cli_rejects_native_byte_substitution(retained_evidence_root, tmp_path: Path) -> None:
-    from tests.test_catalogue_build_provenance import _build
+@pytest.fixture
+def modern_publication_arguments(retained_evidence_root, catalogue_input_receipt, catalogue_build_inputs, tmp_path):
+    from rivretrieve._internal.acquisition_provenance import AcquisitionProvenance
 
-    # Synthetic selection reaches only the intended failing verification boundary.
-    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
-    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
-    selected_provenance = tmp_path / "historical-provenance.json"
-    selected_provenance.write_text(build_acquisition_provenance().model_dump_json())
-    native = tmp_path / "native.parquet"
-    native.write_bytes(
-        (retained_evidence_root / "tests/test_data/usgs_nwis_historical/native.parquet").read_bytes() + b"changed"
+    handoff = retained_evidence_root / "maintenance/catalogue/usgs_nwis"
+    selected = handoff / "selected-acquisitions.json"
+    provenance = AcquisitionProvenance.model_validate_json(selected.read_bytes())
+    build_inputs = tmp_path / "build-inputs.json"
+    build_inputs.write_text(catalogue_build_inputs(provenance).model_dump_json())
+    baseline_digest = next(
+        item.sha256
+        for item in catalogue_input_receipt.inputs
+        if item.consumer_path == "maintenance/catalogue/usgs_nwis/baseline-monitoring-locations.json"
     )
+    return [
+        "--build-inputs",
+        str(build_inputs),
+        "--acquisition-provenance",
+        str(selected),
+        "--native",
+        str(handoff / "modern-native.parquet"),
+        "--legacy-native",
+        str(handoff / "legacy-native.parquet"),
+        "--evidence-root",
+        str(retained_evidence_root),
+        "--modern-metadata",
+        str(handoff / "modern-metadata"),
+        "--monitoring-locations",
+        str(handoff / "monitoring-locations/locations.json"),
+        "--retention-manifest",
+        str(handoff / "retention.json"),
+        "--baseline-locations",
+        str(handoff / "baseline-monitoring-locations.json"),
+        "--baseline-sha256",
+        baseline_digest,
+        "--out",
+        str(tmp_path / "out"),
+    ]
+
+
+@pytest.mark.governing(*_catalogue_recording_paths("usgs_nwis", scopes=("maintenance/catalogue/usgs_nwis",)))
+def test_usgs_cli_rejects_native_byte_substitution(modern_publication_arguments, tmp_path: Path) -> None:
+    arguments = modern_publication_arguments
+    index = arguments.index("--native") + 1
+    native = tmp_path / "changed-native.parquet"
+    native.write_bytes(Path(arguments[index]).read_bytes() + b"changed")
+    arguments[index] = str(native)
     with pytest.raises(FatalContractError, match="native table digest mismatch: expected .* observed"):
-        generate_catalogue.main(
-            [
-                "--build-inputs",
-                str(build_inputs_path),
-                "--acquisition-provenance",
-                str(selected_provenance),
-                "--native",
-                str(native),
-                "--evidence-root",
-                str(retained_evidence_root),
-                "--modern-metadata",
-                str(retained_evidence_root / "research/usgs-modern-coverage"),
-                "--out",
-                str(tmp_path / "out"),
-            ]
-        )
+        generate_catalogue.main(arguments)
 
 
-@pytest.mark.governing(
-    "research/usgs-modern-coverage",
-    "research/usgs-modern-coverage/metadata-00060-0000.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0001.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0002.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0003.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0004.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0005.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0006.json.gz",
-    "research/usgs-modern-coverage/metadata-00060-0007.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0000.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0001.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0002.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0003.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0004.json.gz",
-    "research/usgs-modern-coverage/metadata-00065-0005.json.gz",
-    "tests/test_data/usgs_nwis_historical/native.parquet",
-    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
-    "tests/test_data/usgs_nwis_terms_citation-1.html",
-    "tests/test_data/usgs_nwis_terms_licence-1.html",
-)
-def test_usgs_cli_invokes_recording_verification(
-    retained_evidence_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from tests.test_catalogue_build_provenance import _build
-
-    # Synthetic selection reaches only the intended failing verification boundary.
-    build_inputs_path = tmp_path / "synthetic-build-inputs.json"
-    build_inputs_path.write_text(_build().model_dump_json(), encoding="utf-8")
-    selected_provenance = tmp_path / "historical-provenance.json"
-    selected_provenance.write_text(build_acquisition_provenance().model_dump_json())
-
+@pytest.mark.governing(*_catalogue_recording_paths("usgs_nwis", scopes=("maintenance/catalogue/usgs_nwis",)))
+def test_usgs_cli_invokes_recording_verification(modern_publication_arguments, monkeypatch: pytest.MonkeyPatch) -> None:
     def reject(*_args: object) -> None:
         raise FatalContractError("recording verification invoked")
 
     monkeypatch.setattr(generate_catalogue, "verify_provenance_recordings", reject)
     with pytest.raises(FatalContractError, match="recording verification invoked"):
-        generate_catalogue.main(
-            [
-                "--build-inputs",
-                str(build_inputs_path),
-                "--acquisition-provenance",
-                str(selected_provenance),
-                "--native",
-                str(retained_evidence_root / "tests/test_data/usgs_nwis_historical/native.parquet"),
-                "--evidence-root",
-                str(retained_evidence_root),
-                "--modern-metadata",
-                str(retained_evidence_root / "research/usgs-modern-coverage"),
-                "--out",
-                str(tmp_path),
-            ]
-        )
+        generate_catalogue.main(modern_publication_arguments)
 
 
 def test_selected_native_provenance_credits_each_actual_event_not_historical_campaign():
