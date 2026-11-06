@@ -608,7 +608,7 @@ def _read_selection_and_originals(
                 raise FatalContractError("INA portal map does not establish EPSG:4326 and cero de escala")
         elif kind == "openapi_spec":
             text = raw.decode("utf-8")
-            if "Estacion:" not in text or "enum: [Point]" not in text:
+            if "Estacion:" not in text or ("enum: [Point]" not in text and "- Point" not in text):
                 raise FatalContractError("INA OpenAPI spec does not establish GeoJSON Point Estacion schema")
         elif kind == "terms_html":
             text = raw.decode("utf-8")

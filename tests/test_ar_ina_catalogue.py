@@ -632,6 +632,7 @@ def test_read_sources_and_cli_enforce_selection_and_output_boundaries(tmp_path):
 @pytest.mark.governing(
     "maintenance/catalogue/ar_ina/official",
     "maintenance/catalogue/ar_ina/official/selection.json",
+    "maintenance/catalogue/station_metadata/review.json",
 )
 def test_selected_inputs_publish_deterministic_catalogue(
     retained_evidence_root, catalogue_input_receipt, catalogue_build_inputs, tmp_path
