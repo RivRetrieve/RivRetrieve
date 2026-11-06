@@ -111,7 +111,28 @@ def prepare_native_table(
         )
         .sort("station_id")
     )
+    original_by_id = {str(row["id"]): row for row in station_rows}
+    for retained in data.iter_rows(named=True):
+        original = original_by_id[retained["station_id"]]
+        if not _same_source_value(original, {key: retained[key] for key in original}):
+            raise FatalContractError("NRFA native table cannot preserve source scalar types")
     return stamp_native_table(data, retrieved_at)
+
+
+def _same_source_value(original: object, retained: object) -> bool:
+    if type(original) is not type(retained):
+        return False
+    if isinstance(original, dict) and isinstance(retained, dict):
+        original = cast("dict[str, object]", original)
+        retained = cast("dict[str, object]", retained)
+        return original.keys() == retained.keys() and all(
+            _same_source_value(value, retained[key]) for key, value in original.items()
+        )
+    if isinstance(original, list) and isinstance(retained, list):
+        return len(original) == len(retained) and all(
+            _same_source_value(left, right) for left, right in zip(original, retained, strict=True)
+        )
+    return original == retained
 
 
 def build_products():

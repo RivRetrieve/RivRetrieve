@@ -168,3 +168,28 @@ def test_metadata_projection_preserves_source_values_nulls_units_and_datum():
     assert area["source_unit"].to_list() == ["km²", "km²"]
     names = metadata.filter(pl.col("attribute_role") == "station_name").sort("station_id")
     assert names["source_value"].to_list() == ['"Example Gauge"', '"Closed Gauge"']
+
+
+def test_native_preparation_refuses_lossy_scalar_inference():
+    import pytest
+
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.providers.uk_nrfa.generate_catalogue import prepare_native_table
+
+    rows = [
+        {
+            "id": identity,
+            "station-level": altitude,
+            "catchment-area": 12,
+            "lat-long": {"latitude": 51.25, "longitude": -1.5},
+            "data-summary": {"data-types": []},
+        }
+        for identity, altitude in [(12345, 10), (12346, 10.5), (12347, None)]
+    ]
+    instant = RetrievedAt(datetime(2026, 11, 6, tzinfo=UTC))
+    with pytest.raises(FatalContractError, match="scalar"):
+        prepare_native_table({"data": rows}, {"station-ids": [12345, 12346, 12347]}, retrieved_at=instant)
+    rows[1]["station-level"] = 11
+    native = prepare_native_table({"data": rows}, {"station-ids": [12345, 12346, 12347]}, retrieved_at=instant)
+    assert native.data["station-level"].dtype == pl.Int64
+    assert native.data["station-level"].to_list() == [10, 11, None]
