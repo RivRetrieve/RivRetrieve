@@ -99,13 +99,20 @@ def _serie(
     date_range = (
         {"timestart": None, "timeend": None, "count": "0"}
         if timestart is None
-        else {"timestart": timestart, "timeend": timeend, "count": "10"}
+        else {"timestart": timestart, "timeend": timeend, "count": "10", "data_availability": "C"}
     )
+    cutoff = dict.fromkeys(spec.expected_time_support, 0) if spec.requires_midnight_cutoff else None
     return {
         "tipo": "puntual",
         "id": series_id,
         "estacion": estacion,
-        "var": {"id": var_id},
+        "var": {
+            "id": var_id,
+            "var": spec.var_code,
+            "datatype": spec.expected_datatype,
+            "timeSupport": spec.expected_time_support,
+            "def_hora_corte": cutoff,
+        },
         "procedimiento": {"id": resolved_proc},
         "unidades": {"id": resolved_unit_id, "abrev": resolved_abrev},
         "date_range": date_range,
@@ -234,12 +241,25 @@ def test_build_and_write_catalogue_packages_stage_gauge_zero_and_metadata_projec
     native, associations = station_native_table_and_associations([gauge_29], series_map, retrieved_at=retrieved)
 
     descriptions = describe_associations(associations)
-    by_product = {item.product_id: item for item in descriptions.descriptions}
-    assert set(by_product) == {"discharge_daily_mean", "stage_daily_mean"}
-    assert by_product["discharge_daily_mean"].facts[0].source_unit.value == "m^3/s"
-    assert by_product["discharge_daily_mean"].facts[0].normalized_unit == "m3/s"
-    assert by_product["discharge_daily_mean"].facts[0].vertical_reference.state == "not_established"
-    assert by_product["stage_daily_mean"].facts[0].vertical_reference.value == "gauge_zero"
+    by_pair = {(item.station_id, item.product_id): item for item in descriptions.descriptions}
+    assert set(by_pair) == {
+        ("29", "discharge_daily_mean"),
+        ("29", "stage_daily_mean"),
+        ("96", "stage_daily_mean"),
+    }
+    q_desc = by_pair[("29", "discharge_daily_mean")]
+    assert q_desc.identity.namespace == "INA.Alerta5.series_id"
+    assert q_desc.identity.published_id == "1001"
+    assert q_desc.variant == "1001"
+    assert q_desc.facts[0].source_unit.value == "m^3/s"
+    assert q_desc.facts[0].normalized_unit == "m3/s"
+    assert q_desc.facts[0].frequency.value == "daily"
+    assert q_desc.facts[0].statistic.value == "mean"
+    assert q_desc.facts[0].temporal_support.value == "calendar_day"
+    assert q_desc.facts[0].time_zone.value == "UTC"
+    assert q_desc.facts[0].day_definition.state == "not_established"
+    assert q_desc.facts[0].vertical_reference.state == "not_established"
+    assert by_pair[("29", "stage_daily_mean")].facts[0].vertical_reference.value == "gauge_zero"
 
     facts = (
         "source.station.estaciones_registry",
@@ -247,6 +267,8 @@ def test_build_and_write_catalogue_packages_stage_gauge_zero_and_metadata_projec
         "source.station.openapi_estacion_schema",
         "source.station.documented_crs",
         "source.product.variables_unidades_procedimientos",
+        "source.product.observation_temporal_semantics",
+        "source.product.series_meaning_witnesses",
         "source.station_product.series_associations",
         "source.station.cero_ign_definition",
         "source.provider.license",
@@ -338,6 +360,7 @@ def test_build_and_write_catalogue_packages_stage_gauge_zero_and_metadata_projec
             code(prefix + "origins.py", "STATION_METADATA_FIELDS"),
             code(prefix + "origins.py", "STATION_METADATA_NOTICE"),
             code(prefix + "generate_catalogue.py", "build_catalogue"),
+            code(prefix + "series.py", "source_series"),
         ),
         inputs=(RetainedInputUse(reference=member, usage="native_table", facts=facts),),
     )
@@ -353,6 +376,8 @@ def test_build_and_write_catalogue_packages_stage_gauge_zero_and_metadata_projec
     loaded = load_packaged_catalogue_artifact(out_dir, on_issue="raise")
     assert loaded.stations["station_id"].to_list() == ["29", "96"]
     assert loaded.stations["crs"].to_list() == ["EPSG:4326", "EPSG:4326"]
+    assert loaded.source_descriptions == descriptions
+    assert json.loads((out_dir / "source_series.json").read_bytes())["schema_version"] == 2
     assert STATION_METADATA_NOTICE in (out_dir / "croissant.json").read_text("utf-8")
 
     metadata_df = pl.read_parquet(out_dir / "station_metadata.parquet")
@@ -379,6 +404,64 @@ def test_read_sources_and_cli_enforce_selection_and_output_boundaries(tmp_path):
     gauge = _estacion(29)
     bodies: dict[str, tuple[bytes, str, str, int | None]] = {
         "estaciones": (json.dumps([gauge]).encode(), "application/json", "estaciones", None),
+        "a5-variables": (
+            json.dumps(
+                [
+                    {
+                        "id": spec.var_id,
+                        "var": spec.var_code,
+                        "datatype": spec.expected_datatype,
+                        "timeSupport": spec.expected_time_support,
+                        "def_unit_id": str(spec.expected_unit_id),
+                        "SampleMedium": "Surface Water",
+                        "GeneralCategory": "Hydrology",
+                    }
+                    for spec in IN_SCOPE_SERIES_SPECS
+                ]
+            ).encode(),
+            "application/json",
+            "reference_table",
+            None,
+        ),
+        "a5-unidades": (
+            json.dumps(
+                [
+                    {"id": 10, "abrev": "m^3/s", "UnitsType": "Flow"},
+                    {"id": 11, "abrev": "m", "UnitsType": "Length"},
+                ]
+            ).encode(),
+            "application/json",
+            "reference_table",
+            None,
+        ),
+        "a5-procedimientos": (
+            json.dumps(
+                [
+                    {"id": 1, "abrev": "medicion"},
+                    {"id": 2, "abrev": "curva"},
+                    *({"id": pid, "abrev": f"p{pid}"} for pid in (3, 4, 5, 6, 7, 8, 9)),
+                ]
+            ).encode(),
+            "application/json",
+            "reference_table",
+            None,
+        ),
+        "obs-1040": (
+            json.dumps(
+                [
+                    {
+                        "series_id": 1040,
+                        "timestart": "2024-01-01T03:00:00.000Z",
+                        "timeend": "2024-01-02T03:00:00.000Z",
+                        "unit_id": None,
+                        "valor": 120.5,
+                    }
+                ]
+            ).encode(),
+            "application/json",
+            "observation_sample",
+            40,
+        ),
         "portal": (
             b"<html>projection: 'EPSG:4326' y cero de escala</html>",
             "text/html",
@@ -432,6 +515,8 @@ def test_read_sources_and_cli_enforce_selection_and_output_boundaries(tmp_path):
         }
         if var_id is not None:
             capture_entry["var_id"] = var_id
+        if kind == "observation_sample":
+            capture_entry["series_id"] = 1040
         captures.append(capture_entry)
         for rel_path, raw_bytes, role, suffix in (
             (rel_body, payload, "publisher_original", "body"),
@@ -479,6 +564,8 @@ def test_read_sources_and_cli_enforce_selection_and_output_boundaries(tmp_path):
         "source.station.openapi_estacion_schema",
         "source.station.documented_crs",
         "source.product.variables_unidades_procedimientos",
+        "source.product.observation_temporal_semantics",
+        "source.product.series_meaning_witnesses",
         "source.station_product.series_associations",
         "source.station.cero_ign_definition",
     )
@@ -676,6 +763,12 @@ def test_selected_inputs_publish_deterministic_catalogue(
         assert stations.filter(pl.col("station_id") == "96")["latitude"].to_list() == [None]
         products = pl.read_parquet(output / "products.parquet")
         assert products.height == 13
+        assert products.filter(pl.col("product_id") == "discharge_daily_mean").row(0, named=True)["statistic"] == "mean"
+        assert products.filter(pl.col("product_id") == "stage_4hourly").row(0, named=True)["statistic"] == "unknown"
+        source_series_doc = json.loads((output / "source_series.json").read_bytes())
+        assert source_series_doc["schema_version"] == 2
+        assert len(source_series_doc["physical_facts"]) == 13
+        assert len(source_series_doc["descriptions"]) == 2611
         pairs = pl.read_parquet(output / "station_products.parquet")
         assert pairs.height == 829 * 13
         assert pairs.filter(pl.col("availability") == "available").height == 2611
