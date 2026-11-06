@@ -112,6 +112,12 @@ def _adapter(
             provenance=sources.provenance,
             station_metadata=sources.station_metadata,
         )
+    if provider == "au_bom":
+        sources = generator.read_catalogue_sources(retained_evidence_root, input_receipt=input_receipt)
+        native_path = retained_evidence_root / "maintenance/catalogue/au_bom/official/native.parquet"
+        build = partial(
+            build, associations=sources.associations, checked_on=sources.checked_on, provenance=sources.provenance
+        )
     if provider == "br_ana":
         from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence, read_capture_record
         from rivretrieve._internal.providers.br_ana.origins import (
@@ -278,8 +284,8 @@ CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case i
 
 def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDecorator:
     paths = (
-        ["maintenance/catalogue/ch_foen/official"]
-        if provider == "ch_foen"
+        [f"maintenance/catalogue/{provider}/official"]
+        if provider in ("ch_foen", "au_bom")
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
     if provider == "br_ana":
@@ -306,7 +312,7 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
 
 @pytest.fixture(scope="module")
 def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> ProviderAdapter:
-    receipt = request.getfixturevalue("catalogue_input_receipt") if request.param == "ch_foen" else None
+    receipt = request.getfixturevalue("catalogue_input_receipt") if request.param in ("ch_foen", "au_bom") else None
     return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param], input_receipt=receipt)
 
 
@@ -728,6 +734,9 @@ def _assert_reviewed_crs(
         assert adapter.provider_id in {ProviderId("pl_imgw"), ProviderId("br_ana")}
         assert origin.reason == "acquisition_not_established"
         assert stations["crs"].unique().to_list() == ["unknown"]
+    elif adapter.provider_id == ProviderId("au_bom"):
+        assert isinstance(origin, Field)
+        assert str(origin.native_column) == "station_georefsystem"
     else:
         assert adapter.provider_id == ProviderId("usgs_nwis")
         assert isinstance(origin, Field)
@@ -872,6 +881,10 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
 @pytest.mark.parametrize(
     "adapter",
     [
+        pytest.param(
+            "au_bom",
+            marks=pytest.mark.governing("maintenance/catalogue/au_bom/official"),
+        ),
         pytest.param(
             "ba_fhmzbih",
             marks=pytest.mark.governing(
@@ -1064,7 +1077,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     if product_root.is_relative_to(ROOT.resolve()) or product_root.is_relative_to(retained_evidence_root.resolve()):
         pytest.fail("Catalogue products must stay outside the checkout and retained inputs.", pytrace=False)
     output = product_root / str(adapter.provider_id)
-    if adapter.provider_id != "ch_foen":
+    if adapter.provider_id not in {"ch_foen", "au_bom"}:
         output.mkdir(mode=0o700)
     if adapter.provider_id == "br_ana":
         from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
@@ -1121,9 +1134,10 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     with input_selection.open("x", encoding="utf-8") as stream:
         stream.write(adopted.model_dump_json())
     arguments = ["--out", str(output), "--build-inputs", str(input_selection)]
-    if adapter.provider_id != "ch_foen":
+    if adapter.provider_id not in {"ch_foen", "au_bom"}:
         arguments.extend(("--native", str(adapter.native_path)))
     if adapter.provider_id in {
+        "au_bom",
         "ba_fhmzbih",
         "ca_eccc",
         "ch_foen",
@@ -1134,7 +1148,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "za_dws",
     }:
         arguments.extend(("--evidence-root", str(retained_evidence_root)))
-    if adapter.provider_id in {"ch_foen", "fr_hubeau"}:
+    if adapter.provider_id in {"au_bom", "ch_foen", "fr_hubeau"}:
         selected_receipt = product_root / f"{adapter.provider_id}.input-receipt.json"
         selected_receipt.write_text(catalogue_input_receipt.model_dump_json())
         arguments.extend(("--input-receipt", str(selected_receipt)))

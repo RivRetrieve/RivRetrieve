@@ -12,6 +12,7 @@ import polars as pl
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
     CatalogueBuildInputs,
+    RetainedInputReceipt,
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table
@@ -324,27 +325,57 @@ class CatalogueSources:
     native_table: NativeTable
     associations: pl.DataFrame
     checked_on: date
+    provenance: AcquisitionProvenance
 
 
-def read_catalogue_sources(evidence_root: Path) -> CatalogueSources:
-    """Derive the native table and station-product associations from retained captures.
+def read_catalogue_sources(
+    evidence_root: Path,
+    *,
+    selection_path: str = "maintenance/catalogue/au_bom/official/catalogue.json",
+    input_receipt: RetainedInputReceipt,
+) -> CatalogueSources:
+    """Read an explicitly selected offline build after exact member verification.
 
-    ``evidence_root`` holds the retained files named by
-    ``maintenance/catalogue/au_bom/official/catalogue.json``'s captures, laid
-    out at their declared ``body`` paths (for example by running the
-    archive's ``fetch`` command against collections
-    ``au_bom-catalogue-2026-11-02-v1`` and
-    ``au_bom-catalogue-native-2026-11-03-v1``). This reads those bytes
-    directly; it does not perform the coordinator's exact-pin
-    ``RetainedInputReceipt`` verification -- that full-check wiring belongs
-    to Effort #648 (verification), not this catalogue step.
+    The reviewed declaration (``selection_path``, read from ``evidence_root``)
+    names 25 retained BoM captures and one separately retained derived
+    ``native_table``, each checked against ``input_receipt`` before use --
+    matching ``ch_foen``'s own ``read_catalogue_sources`` shape. The native
+    table is independently recomputed from the 3 station-list captures and
+    the 18 timeseries-list captures (``station_native_table`` /
+    ``river_gauge_native_table``, unchanged) and checked byte-for-byte
+    against the separately retained ``native_table`` member: two routes to
+    the same evidence must agree, not one asserted over the other.
     """
-    selection_path = evidence_root / "maintenance/catalogue/au_bom/official/catalogue.json"
-    selection = json.loads(selection_path.read_bytes())
+    from rivretrieve._internal.acquisition_provenance import (
+        AcquisitionRecord,
+        FactBinding,
+        NativeTableIdentity,
+        RecordingReference,
+        SourceStatement,
+    )
+    from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+    from rivretrieve._internal.catalogues.native import read_native_table
+    from rivretrieve._internal.providers.au_bom import origins
+
+    if selection_path not in {item.consumer_path for item in input_receipt.declaration_inputs}:
+        raise FatalContractError("au_bom selection requires a selected authored declaration")
+    verify_retained_input_files(input_receipt, evidence_root)
+    selection = json.loads((evidence_root / selection_path).read_bytes())
+    selected = {item.consumer_path: item for item in input_receipt.inputs}
     captures = {capture["kind"]: capture for capture in selection["captures"]}
 
+    def body(kind: str) -> bytes:
+        capture = captures[kind]
+        reference = RecordingReference.model_validate(capture["recording"])
+        if reference.repository_path != capture["body"]:
+            raise FatalContractError("au_bom selected body disagrees with recording identity")
+        member = selected.get(capture["body"])
+        if member is None or member.sha256 != reference.sha256:
+            raise FatalContractError("au_bom original is absent from selected retained inputs")
+        return (evidence_root / capture["body"]).read_bytes()
+
     station_docs = {
-        kind: json.loads((evidence_root / captures[kind]["body"]).read_bytes())
+        kind: json.loads(body(kind))
         for kind in ("station_list_discharge", "station_list_stage", "station_list_temperature")
     }
     checked_on_date = date.fromisoformat(selection["checked_on"])
@@ -357,7 +388,7 @@ def read_catalogue_sources(evidence_root: Path) -> CatalogueSources:
     provisional_ids = set(all_stations.data["station_no"].to_list())
     assoc_frames = [
         timeseries_list_associations(
-            json.loads((evidence_root / captures[d.timeseries_list_kind]["body"]).read_bytes()),
+            json.loads(body(d.timeseries_list_kind)),
             product_id=d.product_id,
             station_ids=provisional_ids,
         )
@@ -366,4 +397,72 @@ def read_catalogue_sources(evidence_root: Path) -> CatalogueSources:
     associations = pl.concat(assoc_frames)
     witnessed = set(associations["station_no"].to_list())
     native = river_gauge_native_table(all_stations, witnessed)
-    return CatalogueSources(native, associations, checked_on_date)
+
+    native_path = selection["native_table"]
+    native_member = selected.get(native_path)
+    if native_member is None:
+        raise FatalContractError("au_bom native table is absent from selected inputs")
+    retained_native = read_native_table(
+        evidence_root / native_path,
+        expected_sha256=native_member.sha256,
+        expected_byte_size=native_member.byte_size,
+    )
+    if not native.data.equals(retained_native.data):
+        raise FatalContractError("au_bom recomputed native table differs from its separately retained identity")
+
+    provenance = origins.build_acquisition_provenance(
+        NativeTableIdentity(
+            location_kind="retained",
+            repository_path=native_path,
+            revision=native_member.archive_revision,
+            sha256=native_member.sha256,
+            byte_size=native_member.byte_size,
+        ),
+        tuple(RecordingReference.model_validate(capture["recording"]) for capture in selection["captures"]),
+        acquisitions=tuple(AcquisitionRecord.model_validate(item) for item in selection["publication_acquisitions"]),
+        source_bindings=tuple(FactBinding.model_validate(item) for item in selection["source_bindings"]),
+        statements=tuple(SourceStatement.model_validate(item) for item in selection["statements"]),
+    )
+    return CatalogueSources(native, associations, checked_on_date, provenance)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Compose a selected, offline official au_bom catalogue candidate outside source checkouts."""
+    import argparse
+
+    from rivretrieve._internal.acquisition_provenance import RetainedInputReceipt
+    from rivretrieve._internal.providers.au_bom.origins import STATION_CATALOGUE_ORIGINS
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument("--selection", default="maintenance/catalogue/au_bom/official/catalogue.json")
+    parser.add_argument("--input-receipt", type=Path, required=True)
+    parser.add_argument("--build-inputs", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args(argv)
+    output = args.out.resolve()
+    evidence_root = args.evidence_root.resolve(strict=True)
+    if output.exists() or output.is_relative_to(evidence_root) or evidence_root.is_relative_to(output):
+        raise FatalContractError("au_bom catalogue output must be a new path separate from retained inputs")
+    if any((parent / ".git").exists() for parent in (output, *output.parents)):
+        raise FatalContractError("au_bom catalogue output must stay outside source checkouts")
+    receipt = RetainedInputReceipt.model_validate_json(args.input_receipt.read_bytes())
+    sources = read_catalogue_sources(evidence_root, selection_path=args.selection, input_receipt=receipt)
+    catalogue = build_catalogue(
+        sources.native_table,
+        STATION_CATALOGUE_ORIGINS,
+        associations=sources.associations,
+        checked_on=sources.checked_on,
+        provenance=sources.provenance,
+    )
+    write_catalogue(
+        catalogue,
+        output,
+        build_inputs=CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes()),
+        native_table=sources.native_table,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
