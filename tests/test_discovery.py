@@ -76,6 +76,28 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
             "recent",
         )
     ],
+    "co_ideam": [
+        "caudal_h",
+        "nivel_h",
+        "nv_media_a",
+        "nv_media_d",
+        "nv_media_m",
+        "nv_mn_a",
+        "nv_mn_d",
+        "nv_mn_m",
+        "nv_mx_a",
+        "nv_mx_d",
+        "nv_mx_m",
+        "q_media_a",
+        "q_media_d",
+        "q_media_m",
+        "q_mn_a",
+        "q_mn_d",
+        "q_mn_m",
+        "q_mx_a",
+        "q_mx_d",
+        "q_mx_m",
+    ],
     "cz_chmi": [
         "discharge_daily_mean",
         "discharge_hourly_mean",
@@ -131,7 +153,11 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
 }
 
 
-EXPECTED_PRODUCT_IDS = sorted(set(EXPECTED_PRODUCT_IDS) | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"]))
+EXPECTED_PRODUCT_IDS = sorted(
+    set(EXPECTED_PRODUCT_IDS)
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["co_ideam"])
+)
 
 
 def _issue_policy_error_chain(exc: BaseException) -> list[IssuePolicyError]:
@@ -164,6 +190,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "co_ideam",
         "cz_chmi",
         "fr_hubeau",
         "fr_hydroportail",
