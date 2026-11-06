@@ -106,6 +106,7 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
     provider = provenance.provider_id
     origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
     private_declarations = {
+        "maintenance/catalogue/au_bom/official/catalogue.json": "maintenance/catalogue/au_bom/official/catalogue.json",
         "maintenance/catalogue/usgs_nwis/selected-acquisitions.json": "declarations/usgs_nwis/selected-acquisitions.json",
         "maintenance/catalogue/usgs_nwis/retained-series.json": "declarations/usgs_nwis/retained-series.json",
         "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json": "declarations/ba_fhmzbih/baseline_workbook_access.json",

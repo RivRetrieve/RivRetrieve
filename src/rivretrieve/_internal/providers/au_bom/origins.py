@@ -97,11 +97,7 @@ STATION_METADATA_NOTICE = (
 
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (MetadataField("station_name", "station_name"),)
 
-NATIVE_TABLE_ACQUISITION_IDS: tuple[str, ...] = (
-    "au-bom-station-list-discharge",
-    "au-bom-station-list-stage",
-    "au-bom-station-list-temperature",
-)
+NATIVE_TABLE_ACQUISITION_IDS: tuple[str, ...] = ("station_lists",)
 
 # Canonical catalogue facts this provider must bind, grouped by the catalogue
 # schema prefix they close (CATALOGUE_FACT_UNIVERSE = provider.* | product.* |
