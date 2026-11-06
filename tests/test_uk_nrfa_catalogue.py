@@ -133,3 +133,38 @@ def test_native_preparation_preserves_source_fields_and_reconciles_inventory():
         prepare_native_table(
             {"data": rows}, {"station-ids": [12345]}, retrieved_at=RetrievedAt(datetime(2026, 11, 6, tzinfo=UTC))
         )
+
+
+def test_metadata_projection_preserves_source_values_nulls_units_and_datum():
+    from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
+    from rivretrieve._internal.providers.uk_nrfa.origins import STATION_CATALOGUE_ORIGINS, STATION_METADATA_FIELDS
+
+    native = stamp_native_table(
+        pl.DataFrame(
+            {
+                "station_id": ["12345", "201234"],
+                "latitude": [51.25, 54.5],
+                "longitude": [-1.5, -6.0],
+                "name": ["Example Gauge", "Closed Gauge"],
+                "river": ["River Example", None],
+                "catchment-area": [12.5, 8.0],
+                "station-level": [None, 2.0],
+                "station_altitude_datum": ["Ordnance Datum", "Malin Head"],
+            }
+        ),
+        RetrievedAt(datetime(2026, 11, 6, tzinfo=UTC)),
+    )
+    metadata = build_station_metadata(
+        "uk_nrfa", native, build_stations(native), STATION_CATALOGUE_ORIGINS["station_id"], STATION_METADATA_FIELDS
+    )
+    altitude = metadata.filter(pl.col("attribute_role") == "elevation").sort("station_id")
+    assert altitude["source_value"].to_list() == [None, "2.0"]
+    assert altitude["source_dtype"].to_list() == ["Float64", "Float64"]
+    assert altitude["source_unit"].to_list() == ["m", "m"]
+    assert altitude["state"].to_list() == ["source_null", "value"]
+    assert altitude["source_datum"].to_list() == ["Ordnance Datum", "Malin Head"]
+    area = metadata.filter(pl.col("attribute_role") == "drainage_area").sort("station_id")
+    assert area["source_value"].to_list() == ["12.5", "8.0"]
+    assert area["source_unit"].to_list() == ["km²", "km²"]
+    names = metadata.filter(pl.col("attribute_role") == "station_name").sort("station_id")
+    assert names["source_value"].to_list() == ['"Example Gauge"', '"Closed Gauge"']

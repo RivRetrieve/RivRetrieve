@@ -112,3 +112,14 @@ def prepare_native_table(
         .sort("station_id")
     )
     return stamp_native_table(data, retrieved_at)
+
+
+def build_products():
+    from rivretrieve._internal.catalogues.products import product_row
+    from rivretrieve._internal.catalogues.schemas import PRODUCT_CATALOG_SCHEMA
+    from rivretrieve._internal.providers.uk_nrfa.catalogue_series import product_facts
+
+    return pl.DataFrame(
+        [product_row("uk_nrfa", product, product, facts) for product, facts in product_facts().items()],
+        schema=PRODUCT_CATALOG_SCHEMA.polars_schema,
+    ).sort("product_id")
