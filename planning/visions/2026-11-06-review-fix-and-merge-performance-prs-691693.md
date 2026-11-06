@@ -72,8 +72,17 @@ serializers and validation shortcuts in #692/#693 deserve scrutiny because they
 repeat domain rules. Their presence alone does not mandate removal. The same
 applies to #691's custom scheduling and manual fixture copying. Fix demonstrated
 problems or justified material risks without turning this into a redesign or an
-exhaustive optimization study. Escalate a necessary behavior change or substantial
-performance trade-off rather than silently changing the objective.
+exhaustive optimization study.
+
+Surface major bugs and any proposed substantial production-code work to the user
+before implementing a remedy or merging the affected work. This includes broad
+refactors, changes to architecture or validation ownership, public behavior changes,
+and defects with significant data-correctness or provenance consequences. Explain
+the evidence, affected behavior, likely scope, options and performance implications
+so the user can decide how to address them. Discovery and bounded reproduction may
+continue; they do not authorize the major fix. Routine narrow fixes may proceed
+within this vision's existing behavior and performance constraints. If the required
+scope is uncertain, ask rather than silently expanding the work.
 
 ## Verification and performance
 
@@ -88,9 +97,20 @@ workloads and cache conditions. Compare equivalent outputs as well as elapsed ti
 Use the same machine and settings for before/after comparisons, distinguish cold
 from warm operation, and do not run competing timing workloads concurrently.
 Separate benefits from parallel execution from changes to production algorithms.
-Do not impose a new arbitrary speed threshold or require reproducing another
-machine's published timings. Investigate a repeatable material slowdown; report
-measurement variability and limits honestly.
+
+The unmodified current implementation of each PR is the performance baseline for
+its fixes, not the slower pre-PR `main`. Record the exact baseline heads before
+editing. Compare the final combination with the corresponding unmodified
+combination under equivalent conditions as well. Do not reset the baseline after
+a fix or use remaining gains over old `main` to excuse a regression.
+
+No demonstrated performance regression is accepted without explicit user approval.
+Investigate slower measurements to distinguish regression from noise, and report
+measurement variability and limits honestly. If a necessary correctness fix slows
+the implementation, surface the evidence and options and pause the affected work
+for the user's decision. Do not silently accept the slowdown, weaken correctness,
+or merge around the decision. Do not invent an allowed regression threshold or
+require reproducing another machine's published timings.
 
 For acceptance:
 
