@@ -281,6 +281,7 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
             ProviderId("br_ana"),
             ProviderId("ca_eccc"),
             ProviderId("ch_foen"),
+            ProviderId("co_ideam"),
             ProviderId("cz_chmi"),
             ProviderId("fr_hubeau"),
             ProviderId("fr_hydroportail"),
@@ -296,7 +297,7 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
     registered = frozenset(map(ProviderId, rr.providers().get_column("provider_id").to_list()))
 
     assert expected == ORIGIN_GATE_ENROLLED_PROVIDERS
-    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws"), ProviderId("co_ideam")}
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet")
