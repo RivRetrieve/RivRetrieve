@@ -84,6 +84,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         # Modern metadata UTC ranges do not establish calendar observation support.
         "usgs_nwis": (177_852, 0, 0),
         "za_dws": (8_715, 0, 0),
+        "uk_nrfa": (9_052, 0, 0),
     }
     expected_station_product_columns = (
         "provider_id",
@@ -109,6 +110,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "pl_imgw",
         "th_thaiwater",
         "usgs_nwis",
+        "uk_nrfa",
         "za_dws",
     )
     expected_provider_terms: dict[str, tuple[str | None, str | None]] = dict.fromkeys(provider_ids, (None, None))
@@ -121,6 +123,10 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     expected_provider_terms["br_ana"] = (
         "Os dados abertos são disponibilizados livremente para a utilização de toda a sociedade, sem restrição de licenças, patentes ou mecanismos de controle.",
         None,
+    )
+    expected_provider_terms["uk_nrfa"] = (
+        "https://eidc.ceh.ac.uk/licences/nrfa-data-terms-and-conditions-for-api-access-to-time-series-data-and-metadata/",
+        "Data from the UK National River Flow Archive",
     )
     for provider_id in provider_ids:
         catalogue_path = providers_root / provider_id / "catalogue"

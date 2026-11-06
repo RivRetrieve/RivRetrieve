@@ -92,3 +92,12 @@ def test_deferred_south_africa_remains_catalogue_only(reuse_packaged_catalogues,
     selection = rr.find(provider="za_dws", station=candidates.known_series[0].station_id)
     with pytest.raises(ObservationsUnavailableError, match="no observations registered"):
         rr.fetch(selection, start="2020-01-01", end="2020-01-02", on_issue="ignore")
+
+
+def test_nrfa_discovery_refuses_observation_retrieval(reuse_packaged_catalogues):
+    from rivretrieve._internal.issues import ObservationsUnavailableError
+
+    candidates = rr.find(provider="uk_nrfa")
+    selection = rr.find(provider="uk_nrfa", station=candidates.known_series[0].station_id)
+    with pytest.raises(ObservationsUnavailableError, match="no observations registered"):
+        rr.fetch(selection, start="2020-01-01", end="2020-01-02", on_issue="ignore")

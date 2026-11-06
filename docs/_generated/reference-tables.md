@@ -154,6 +154,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
 | `pl_imgw` | bulk store | none | 1301 | 0 | 3903 | 0 |
 | `th_thaiwater` | live | none | 825 | 1096 | 554 | 0 |
+| `uk_nrfa` | catalogue-only | none | 1604 | 9052 | 0 | 0 |
 | `usgs_nwis` | live | none | 29642 | 63502 | 0 | 114350 |
 
 ### Packaged access coordinates
@@ -240,6 +241,16 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `pl_imgw` | `water_temperature_daily` | `degC` |
 | `th_thaiwater` | `discharge_reported` | `m3/s` |
 | `th_thaiwater` | `stage_reported` | `m` |
+| `uk_nrfa` | `amax-flow` | `m3/s` |
+| `uk_nrfa` | `amax-stage` | `m` |
+| `uk_nrfa` | `gauging-flow` | `m3/s` |
+| `uk_nrfa` | `gauging-stage` | `m` |
+| `uk_nrfa` | `gdf` | `m3/s` |
+| `uk_nrfa` | `gmf` | `m3/s` |
+| `uk_nrfa` | `ndf` | `m3/s` |
+| `uk_nrfa` | `nmf` | `m3/s` |
+| `uk_nrfa` | `pot-flow` | `m3/s` |
+| `uk_nrfa` | `pot-stage` | `m` |
 | `usgs_nwis` | `discharge_daily_mean` | `m3/s` |
 | `usgs_nwis` | `discharge_instantaneous` | `m3/s` |
 | `usgs_nwis` | `stage_daily_max` | `m` |

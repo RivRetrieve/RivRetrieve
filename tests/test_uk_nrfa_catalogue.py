@@ -299,12 +299,12 @@ def test_publication_encodes_catalogue_only_descriptions_and_crs_support(tmp_pat
         "pot-flow",
         "pot-stage",
     }
+    # Exercise the shared selection contract with several products at one gauge.
+    from dataclasses import replace
+
     from rivretrieve._internal.catalogues.source_series import materialize_series
     from rivretrieve._internal.selection import _Selection
     from rivretrieve._internal.source_series import SeriesScope
-
-    # Exercise the shared selection contract with several products at one gauge.
-    from dataclasses import replace
 
     all_products = pl.concat(
         [
