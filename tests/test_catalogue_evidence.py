@@ -27,7 +27,13 @@ from rivretrieve._internal.catalogues.evidence_encoding import (
     reconstruct_provenance,
 )
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
-from tests._provenance import historical_source_provenance, registered_usgs_baseline
+from tests._provenance import (
+    canonical_legacy_provenance,
+    canonical_normalized_evidence,
+    historical_source_provenance,
+    legacy_document,
+    registered_usgs_baseline,
+)
 
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 
@@ -58,7 +64,8 @@ def _historical_metadata_extension_input(provider):
 
 
 def _legacy(provider, path=None):
-    path = ROOT / provider / "catalogue" if path is None else path
+    if path is None:
+        return canonical_legacy_provenance(provider)
     content = (path / "provenance.json").read_bytes()
     import json
 
@@ -70,12 +77,7 @@ def _legacy(provider, path=None):
 
 
 def _normalized(provider):
-    path = ROOT / provider / "catalogue"
-    return normalize_provenance(
-        _legacy(provider),
-        stations=pl.read_parquet(path / "stations.parquet"),
-        station_products=pl.read_parquet(path / "station_products.parquet"),
-    )
+    return canonical_normalized_evidence(provider)
 
 
 def _small_evidence():
@@ -748,10 +750,10 @@ def test_historical_projection_preserves_sources_and_validates_metadata(provider
 def test_historical_projection_rejects_changed_current_producer(provider):
     if provider == "usgs_nwis":
         original, metadata = registered_usgs_baseline()
+        payload = original.model_dump(mode="json")
     else:
-        original = _legacy(provider)
         metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
-    payload = original.model_dump(mode="json")
+        payload = legacy_document(ROOT / provider / "catalogue/provenance.json")
     # Even metadata-empty forms must validate their declared current producers.
     transformations = [
         item["transformation"]
@@ -769,9 +771,8 @@ def test_historical_projection_rejects_changed_current_producer(provider):
     ["producer", "declaration", "support", "review_owner", "review_path", "review_revision", "review_symbol"],
 )
 def test_historical_projection_rejects_changed_metadata_lineage(mutation):
-    original = _legacy("no_nve")
     metadata = pl.read_parquet(ROOT / "no_nve/catalogue/station_metadata.parquet")
-    payload = original.model_dump(mode="json")
+    payload = legacy_document(ROOT / "no_nve/catalogue/provenance.json")
     transformation = next(
         item["transformation"] for item in payload["fact_bindings"] if item["fact_group"] == "metadata.elevation.masl"
     )
@@ -1661,3 +1662,85 @@ def test_registered_usgs_baseline_rejects_changed_historical_declaration():
     payload["build_inputs"]["declarations"][-1]["symbol"] = "unreviewed_projection"
     with pytest.raises(AssertionError):
         historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
+
+
+@pytest.mark.parametrize("target", ["header", "file"])
+@pytest.mark.parametrize("boundary", ["parse", "construct"])
+@pytest.mark.parametrize("deep", [False, True])
+def test_updated_evidence_declarations_are_revalidated(target, boundary, deep):
+    evidence = _small_evidence()
+    files = encode_catalogue_evidence(evidence)
+    header = EvidenceHeader.model_validate_json(files.pop("provenance.json"))
+    if target == "header":
+        header = header.model_copy(deep=deep, update={"schema_version": 999})
+        header = EvidenceHeader.model_validate(header)
+    else:
+        filename = next(iter(header.files))
+        header.files[filename] = header.files[filename].model_copy(deep=deep, update={"schema_version": 999})
+        header = EvidenceHeader(**{name: getattr(header, name) for name in EvidenceHeader.model_fields})
+    with pytest.raises(ValidationError, match="schema_version"):
+        if boundary == "parse":
+            parse_catalogue_evidence(header, files)
+        else:
+            CatalogueEvidence(header=header, **{name: getattr(evidence, name) for name in EVIDENCE_SCHEMAS})
+
+
+def test_deepcopy_of_mutated_evidence_files_is_revalidated():
+    from copy import deepcopy
+
+    evidence = _small_evidence()
+    files = encode_catalogue_evidence(evidence)
+    files.pop("provenance.json")
+    filename = next(iter(evidence.header.files))
+    evidence.header.files[filename] = evidence.header.files[filename].model_copy(update={"schema_version": 999})
+    with pytest.raises(ValidationError, match="schema_version"):
+        parse_catalogue_evidence(deepcopy(evidence.header), files)
+
+
+def test_unchanged_deepcopy_preserves_validated_evidence_header():
+    from copy import deepcopy
+
+    evidence = _small_evidence()
+    original = EvidenceHeader.model_validate_json(evidence.header.model_dump_json())
+    copied = deepcopy(original).model_copy(deep=True, update={})
+    assert copied is not evidence.header
+    files = encode_catalogue_evidence(evidence)
+    files.pop("provenance.json")
+    parsed = parse_catalogue_evidence(copied, files)
+    assert parsed.header == evidence.header
+    for name in EVIDENCE_SCHEMAS:
+        plt.assert_frame_equal(getattr(parsed, name), getattr(evidence, name))
+
+
+@pytest.mark.parametrize(
+    "content,reason",
+    [
+        ("{", "not valid JSON"),
+        ("[]", "must contain an object"),
+        ('{"schema_version":999}', "Unsupported acquisition provenance schema_version"),
+    ],
+)
+def test_file_header_dispatch_errors_are_preserved(tmp_path, content, reason):
+    from rivretrieve._internal.catalogues.artifact import CorruptCatalogArtifactError, _read_provenance_json
+
+    path = tmp_path / "provenance.json"
+    path.write_text(content)
+    with pytest.raises(CorruptCatalogArtifactError, match=reason):
+        _read_provenance_json(path)
+
+
+@pytest.mark.parametrize("version", [2, 3])
+def test_file_header_keeps_historical_provenance_without_build_inputs(tmp_path, version):
+    from rivretrieve._internal.catalogues.artifact import _read_provenance_json
+
+    evidence = _small_evidence()
+    original = reconstruct_provenance(evidence)
+    if version == 2:
+        (tmp_path / "provenance.json").write_text(original.model_dump_json())
+    else:
+        for name, content in encode_catalogue_evidence(evidence).items():
+            (tmp_path / name).write_bytes(content)
+    parsed = _read_provenance_json(tmp_path / "provenance.json")
+    if isinstance(parsed, CatalogueEvidence):
+        parsed = reconstruct_provenance(parsed)
+    assert parsed == original

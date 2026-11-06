@@ -1012,6 +1012,7 @@ def fetch(
         raise MultiProviderSelectionError(provider_ids)
     routes = tuple(item for values in partitions.values() for item in values)
     normalized_start, normalized_end, future_local_date = _normalize_window(routes, start=start, end=end)
+    _ensure_default_providers_registered()
     _require_cache_mode_available(provider_ids, cache)
     credentials = _resolve_credentials(provider_ids, require_all=True)
     provider_id = provider_ids[0]
@@ -1088,6 +1089,7 @@ def fetch_by_provider(
     routes = tuple(item for values in partitions.values() for item in values)
     normalized_start, normalized_end, future_local_date = _normalize_window(routes, start=start, end=end)
     provider_ids = tuple(partitions)
+    _ensure_default_providers_registered()
     _require_cache_mode_available(provider_ids, cache)
     credentials = _resolve_credentials(provider_ids, require_all=True)
     transports = {

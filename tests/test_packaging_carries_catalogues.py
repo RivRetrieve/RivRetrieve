@@ -141,9 +141,6 @@ assert rivretrieve.as_frame(thailand).height == 1
 groups = thailand.acquisition_provenance[0].header.withheld_facts
 assert groups == ()
 """
-    verification += "\n" + inspect.getsource(historical_source_provenance)
-    verification += "\n" + inspect.getsource(historical_recording_locations)
-    verification += "\nclosure_oracles = " + repr(_CLOSURE_ORACLES) + "\n" + _PROFILE_VERIFICATION
     direct_distribution.verify(verification)
 
 
@@ -419,15 +416,43 @@ for provider, oracle in closure_oracles.items():
     graph = Graph().parse(data=json.dumps(descriptor), format="json-ld", publicID=BASE)
     assert list(graph.triples((None, CR.key, None)))
     assert not list(graph.triples((None, SC.key, None)))
+    import pyarrow as pa
+
+    pa_str_list = pa.list_(pa.string())
+    bytes_cls = bytes
     records = {record["@id"]: record for record in descriptor["recordSet"]}
     extracted = {}
     for relation, schema in EVIDENCE_SCHEMAS.items():
-        record = records[f"provenance_{relation}"]
-        assert record["key"] == [{"@id": f"provenance_{relation}/{column}"} for column in keys[relation]]
+        prefix = f"provenance_{relation}"
+        record = records[prefix]
+        assert record["key"] == [{"@id": f"{prefix}/{column}"} for column in keys[relation]]
         assert [field["@id"].partition("/")[2] for field in record["field"]] == list(schema)
-        rows = [{key.partition("/")[2]: decode(value) for key, value in row.items()}
-                for row in dataset.records(f"provenance_{relation}")]
-        actual = pl.DataFrame(rows, schema=schema)
+        columns = {col: [] for col in schema}
+        col_specs = [
+            (columns[col].append, f"{prefix}/{col}", dtype == pl.String, isinstance(dtype, pl.List))
+            for col, dtype in schema.items()
+        ]
+        expected_len = len(col_specs)
+        for row in dataset.records(prefix):
+            assert len(row) == expected_len
+            for append_fn, full_key, is_str, is_list in col_specs:
+                val = row[full_key]
+                if val is None:
+                    append_fn(None)
+                elif is_str:
+                    append_fn(val.decode() if isinstance(val, bytes_cls) else val)
+                elif is_list:
+                    seq = val.tolist() if hasattr(val, "tolist") else val
+                    append_fn([item.decode() if isinstance(item, bytes_cls) else item for item in seq])
+                else:
+                    append_fn(val)
+        series_list = [
+            pl.from_arrow(pa.array(columns[col], type=pa_str_list)).rename(col)
+            if isinstance(dtype, pl.List)
+            else pl.Series(col, columns[col], dtype=dtype)
+            for col, dtype in schema.items()
+        ]
+        actual = pl.DataFrame(series_list)
         expected = pl.read_parquet(catalogue.joinpath(EVIDENCE_FILENAMES[relation]))
         assert expected.schema == schema
         plt.assert_frame_equal(actual, expected)
@@ -452,9 +477,10 @@ for provider, oracle in closure_oracles.items():
     ownership = extracted["bindings"].filter(pl.col("acquisition_key").is_not_null()).join(
         extracted["acquisitions"].select("acquisition_key", "source_ordinal"), on="acquisition_key", suffix="_owner")
     assert ownership["source_ordinal"].equals(ownership["source_ordinal_owner"])
-    for row in extracted["acquisitions"].iter_rows(named=True):
-        source = header.source_records[row["source_ordinal"]]
-        assert set(row["recording_ids"]) <= {entry.recording.recording_id for entry in source.evidence}
+    source_recording_ids = [{entry.recording.recording_id for entry in s.evidence} for s in header.source_records]
+    acq_cols = extracted["acquisitions"].select("source_ordinal", "recording_ids").to_dict(as_series=False)
+    for src_ord, rec_ids in zip(acq_cols["source_ordinal"], acq_cols["recording_ids"], strict=True):
+        assert set(rec_ids) <= source_recording_ids[src_ord]
 
     for case in oracle["cases"]:
         pair = CanonicalPair(**case["pair"]) if case["pair"] is not None else None
@@ -498,16 +524,54 @@ for provider, oracle in closure_oracles.items():
         search = extracted["acquisitions"].filter(pl.col("acquisition_id") == "public_station_search")
         assert search.height == 1
         assert all(url.startswith("https://hydro.eaufrance.fr/") for url in search["requested_from"][0])
+    if provider == "br_ana":
+        products = resolve_evidence(evidence, FactSelection(names=("product.product_id",)))
+        assert "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3" in json.dumps(products)
+        assert "withheld" not in json.dumps(products)
+        assert set(rivretrieve.products(provider="br_ana")) == {
+            "discharge_daily_mean_bruto",
+            "discharge_daily_mean_consistido",
+            "discharge_instantaneous",
+            "stage_daily_mean_bruto",
+            "stage_daily_mean_consistido",
+            "stage_instantaneous",
+        }
 print("Installed socket-denied evidence proof: normalized relations; current service identities; historical closures and adopted products; keys/FKs/header; exact terms")
-
-brazil_catalogue = provider_root.joinpath("br_ana", "catalogue")
-brazil = parse_catalogue_evidence(EvidenceHeader.model_validate_json(brazil_catalogue.joinpath("provenance.json").read_bytes()),
-    {filename: brazil_catalogue.joinpath(filename).read_bytes() for filename in EVIDENCE_FILENAMES.values()})
-products = resolve_evidence(brazil, FactSelection(names=("product.product_id",)))
-assert "89e2929cb436241b4aae2bbb04c4077edd55379886f39c9a32eb7fec0c8faba3" in json.dumps(products)
-assert "withheld" not in json.dumps(products)
-assert set(rivretrieve.products(provider="br_ana")) == {"discharge_daily_mean_bruto", "discharge_daily_mean_consistido", "discharge_instantaneous", "stage_daily_mean_bruto", "stage_daily_mean_consistido", "stage_instantaneous"}
 """
+
+
+@pytest.mark.parametrize("provider", tuple(_CLOSURE_ORACLES))
+def test_wheel_evidence_closure_oracle(direct_distribution: InstalledDistribution, provider: str) -> None:
+    setup = """
+import json
+import os
+import socket
+import sys
+from pathlib import Path
+
+def forbid_network(*args, **kwargs):
+    raise AssertionError("Network access during installed-wheel discovery")
+
+socket.socket.connect = forbid_network
+socket.socket.connect_ex = forbid_network
+socket.create_connection = forbid_network
+
+from importlib.resources import files
+
+import rivretrieve
+import polars as pl
+from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+
+provider_root = files("rivretrieve._internal.providers")
+
+def artifact(provider):
+    return load_packaged_catalogue_artifact(Path(str(provider_root.joinpath(provider, "catalogue"))), on_issue="raise")
+"""
+    verification = setup
+    verification += "\n" + inspect.getsource(historical_source_provenance)
+    verification += "\n" + inspect.getsource(historical_recording_locations)
+    verification += "\nclosure_oracles = " + repr({provider: _CLOSURE_ORACLES[provider]}) + "\n" + _PROFILE_VERIFICATION
+    direct_distribution.verify(verification)
 
 
 @pytest.mark.derived("tests/test_data/french_combined_artifacts.tar.xz")

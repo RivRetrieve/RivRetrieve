@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from operator import attrgetter
+from typing import Literal, Protocol, cast
 
 import polars as pl
 
@@ -15,12 +16,16 @@ from rivretrieve._internal.issues import FatalContractError, Issue, apply_on_iss
 from rivretrieve._internal.primitives import OnIssue, ProviderId
 from rivretrieve._internal.registry import UnknownProviderError
 from rivretrieve._internal.source_series import (
+    _PLAIN_JSON_ASCII_FULLMATCH,
     InventoryCompleteness,
     InventorySnapshot,
+    PhysicalFacts,
     PhysicalPredicate,
     RestrictionKind,
     RetrievalOutcome,
+    ScopeState,
     SeriesScope,
+    SourceIdentity,
     SourceSeries,
     admission,
 )
@@ -110,10 +115,17 @@ class _Selection:
     empty_reason: _EmptyReason | None = None
 
     def __post_init__(self) -> None:
-        keys = tuple(item.series_id for item in self.known_series)
-        if len(keys) != len(set(keys)):
-            raise FatalContractError("Selection contains duplicate source-series definitions")
-        if any(not isinstance(item, SourceSeries) for item in self.known_series):
+        seen: set[str] = set()
+        seen_add = seen.add
+        has_non_series = False
+        for item in self.known_series:
+            sid = item.series_id
+            if sid in seen:
+                raise FatalContractError("Selection contains duplicate source-series definitions")
+            seen_add(sid)
+            if not has_non_series and type(item) is not SourceSeries and not isinstance(item, SourceSeries):
+                has_non_series = True
+        if has_non_series:
             raise TypeError("Selection requires validated source-series definitions")
 
     @property
@@ -225,19 +237,26 @@ def _selection_scope(
 
 
 def _validate_vocabulary(records: Sequence[_CatalogueRecord], scope: SeriesScope) -> None:
+    if not scope.provider_ids and not scope.product_ids and not scope.station_ids:
+        return
     providers = {str(record.provider_id) for record in records}
     for provider in scope.provider_ids:
         if provider not in providers:
             raise UnknownProviderError(provider)
-    relevant = tuple(record for record in records if not scope.provider_ids or record.provider_id in scope.provider_ids)
-    products = {value for record in relevant for value in record.artifact.products["product_id"].to_list()}
-    for product in scope.product_ids:
-        if product not in products:
-            raise UnknownProductError(product)
-    stations = {value for record in relevant for value in record.artifact.stations["station_id"].to_list()}
-    for station in scope.station_ids:
-        if station not in stations:
-            raise UnknownStationError(station, scope.provider_ids)
+    if not scope.product_ids and not scope.station_ids:
+        return
+    provider_set = set(scope.provider_ids)
+    relevant = tuple(record for record in records if not provider_set or record.provider_id in provider_set)
+    if scope.product_ids:
+        products = {value for record in relevant for value in record.artifact.products["product_id"].to_list()}
+        for product in scope.product_ids:
+            if product not in products:
+                raise UnknownProductError(product)
+    if scope.station_ids:
+        stations = {value for record in relevant for value in record.artifact.stations["station_id"].to_list()}
+        for station in scope.station_ids:
+            if station not in stations:
+                raise UnknownStationError(station, scope.provider_ids)
 
 
 def _find(records: Sequence[_CatalogueRecord], *, on_issue: OnIssue = "warn", **filters) -> _Selection:
@@ -249,45 +268,56 @@ def _find(records: Sequence[_CatalogueRecord], *, on_issue: OnIssue = "warn", **
     inventories: list[InventorySnapshot] = []
     locations: list[StationLocation] = []
     evidence: list[CatalogueEvidence] = []
+    provider_set = set(scope.provider_ids)
+    station_set = set(scope.station_ids)
+    product_set = set(scope.product_ids)
+    inventory_scope = scope.model_copy(
+        update={"predicates": (), "restriction": RestrictionKind.ALL, "variants": (), "series_ids": ()}
+    )
     for record in records:
-        if scope.provider_ids and record.provider_id not in scope.provider_ids:
+        if provider_set and record.provider_id not in provider_set:
             continue
-        inventory_scope = scope.model_copy(
-            update={"predicates": (), "restriction": RestrictionKind.ALL, "variants": (), "series_ids": ()}
-        )
         members, snapshots = catalogue_series(record.artifact, scope=inventory_scope)
-        # Keep acquired evidence for the routed stations/products. Physical and
-        # source-identity filters remain intent, not a frozen inventory member list.
-        routed = tuple(
-            item
-            for item in members
-            if (not scope.station_ids or item.station_id in scope.station_ids)
-            and (not scope.product_ids or item.product_id in scope.product_ids)
-        )
-        routed_ids = {item.series_id for item in routed}
-        retained_inventory = tuple(
-            item
-            for item in snapshots
-            if (
-                not scope.station_ids
-                or not item.scope.station_ids
-                or set(scope.station_ids).intersection(item.scope.station_ids)
+        if not station_set and not product_set:
+            definitions.extend(members)
+            inventories.extend(snapshots)
+        else:
+            # Keep acquired evidence for the routed stations/products. Physical and
+            # source-identity filters remain intent, not a frozen inventory member list.
+            routed_ids = {
+                item.series_id
+                for item in members
+                if (not station_set or item.station_id in station_set)
+                and (not product_set or item.product_id in product_set)
+            }
+            retained_inventory = tuple(
+                item
+                for item in snapshots
+                if (not station_set or not item.scope.station_ids or not station_set.isdisjoint(item.scope.station_ids))
+                and (
+                    not product_set or not item.scope.product_ids or not product_set.isdisjoint(item.scope.product_ids)
+                )
             )
-            and (
-                not scope.product_ids
-                or not item.scope.product_ids
-                or set(scope.product_ids).intersection(item.scope.product_ids)
+            # A broader recorded snapshot is retained whole, with its referenced descriptions.
+            evidence_ids = routed_ids | {member for item in retained_inventory for member in item.members}
+            definitions.extend(item for item in members if item.series_id in evidence_ids)
+            inventories.extend(retained_inventory)
+        stations_df = record.artifact.stations
+        if station_set:
+            stations_df = stations_df.filter(pl.col("station_id").is_in(station_set))
+        if stations_df.height:
+            s_cols = stations_df.to_dict(as_series=False)
+            locations.extend(
+                StationLocation(prov, sid, lat, lon, crs)
+                for prov, sid, lat, lon, crs in zip(
+                    s_cols["provider_id"],
+                    s_cols["station_id"],
+                    s_cols["latitude"],
+                    s_cols["longitude"],
+                    s_cols["crs"],
+                    strict=True,
+                )
             )
-        )
-        # A broader recorded snapshot is retained whole, with its referenced descriptions.
-        evidence_ids = routed_ids | {member for item in retained_inventory for member in item.members}
-        definitions.extend(item for item in members if item.series_id in evidence_ids)
-        inventories.extend(retained_inventory)
-        locations.extend(
-            StationLocation(**row)
-            for row in record.artifact.stations.iter_rows(named=True)
-            if not scope.station_ids or row["station_id"] in scope.station_ids
-        )
         if record.artifact.acquisition_provenance is not None:
             evidence.append(record.artifact.acquisition_provenance)
     selected = _Selection(
@@ -306,47 +336,56 @@ def _pick(
     _require_selection(selection)
     requested = _selection_scope(**filters)
     # Runtime identities are validated from retained evidence, not reconstructed from catalogue triples.
-    providers = {str(record.provider_id) for record in records} | {item.provider_id for item in selection.known_series}
-    for provider in requested.provider_ids:
-        if provider not in providers:
-            raise UnknownProviderError(provider)
-    products = {item.product_id for item in selection.known_series} | {
-        value for record in records for value in record.artifact.products["product_id"].to_list()
-    }
-    for product in requested.product_ids:
-        if product not in products:
-            raise UnknownProductError(product)
-    station_providers = requested.provider_ids or selection.scope.provider_ids
-    stations = {
-        item.station_id
-        for item in selection.known_series
-        if not station_providers or item.provider_id in station_providers
-    }
-    stations.update(
-        value
-        for record in records
-        if not station_providers or record.provider_id in station_providers
-        for value in record.artifact.stations["station_id"].to_list()
-    )
-    for station in requested.station_ids:
-        if station not in stations:
-            raise UnknownStationError(station, station_providers)
+    if requested.provider_ids:
+        providers = {str(record.provider_id) for record in records} | {
+            item.provider_id for item in selection.known_series
+        }
+        for provider in requested.provider_ids:
+            if provider not in providers:
+                raise UnknownProviderError(provider)
+    if requested.product_ids:
+        products = {item.product_id for item in selection.known_series} | {
+            value for record in records for value in record.artifact.products["product_id"].to_list()
+        }
+        for product in requested.product_ids:
+            if product not in products:
+                raise UnknownProductError(product)
+    if requested.station_ids:
+        station_providers = requested.provider_ids or selection.scope.provider_ids
+        station_provider_set = set(station_providers)
+        stations = {
+            item.station_id
+            for item in selection.known_series
+            if not station_provider_set or item.provider_id in station_provider_set
+        }
+        stations.update(
+            value
+            for record in records
+            if not station_provider_set or record.provider_id in station_provider_set
+            for value in record.artifact.stations["station_id"].to_list()
+        )
+        for station in requested.station_ids:
+            if station not in stations:
+                raise UnknownStationError(station, station_providers)
     narrowed = _coordinate_selection(selection, _intersect_scope(selection.scope, requested))
     return _with_selection_diagnostics(narrowed, on_issue)
 
 
 def _coordinate_selection(selection: _Selection, scope: SeriesScope) -> _Selection:
     """Retain coordinate-relevant prefetch evidence without rewriting acquired snapshots."""
-    from rivretrieve._internal.source_series import ScopeState
+    is_empty = scope.state is ScopeState.EMPTY
+    prov_set = set(scope.provider_ids)
+    stat_set = set(scope.station_ids)
+    prod_set = set(scope.product_ids)
 
     def overlaps(snapshot: InventorySnapshot) -> bool:
-        if scope.state is ScopeState.EMPTY:
+        if is_empty:
             return False
-        return all(
-            not getattr(scope, name)
-            or not getattr(snapshot.scope, name)
-            or bool(set(getattr(scope, name)).intersection(getattr(snapshot.scope, name)))
-            for name in ("provider_ids", "station_ids", "product_ids")
+        snap_scope = snapshot.scope
+        return (
+            (not prov_set or not snap_scope.provider_ids or not prov_set.isdisjoint(snap_scope.provider_ids))
+            and (not stat_set or not snap_scope.station_ids or not stat_set.isdisjoint(snap_scope.station_ids))
+            and (not prod_set or not snap_scope.product_ids or not prod_set.isdisjoint(snap_scope.product_ids))
         )
 
     inventories = tuple(item for item in selection.inventories if overlaps(item))
@@ -363,12 +402,12 @@ def _coordinate_selection(selection: _Selection, scope: SeriesScope) -> _Selecti
         for item in selection.locations
         if (item.provider_id, item.station_id) in referenced_stations
         or (
-            scope.state is not ScopeState.EMPTY
-            and (not scope.provider_ids or item.provider_id in scope.provider_ids)
-            and (not scope.station_ids or item.station_id in scope.station_ids)
+            not is_empty
+            and (not prov_set or item.provider_id in prov_set)
+            and (not stat_set or item.station_id in stat_set)
         )
     )
-    providers = {item.provider_id for item in definitions} | set(scope.provider_ids)
+    providers = {item.provider_id for item in definitions} | prov_set
     providers.update(provider for inventory in inventories for provider in inventory.scope.provider_ids)
     evidence = tuple(item for item in selection.acquisition_provenance if item.header.provider_id in providers)
     return _Selection(
@@ -381,17 +420,25 @@ def _coordinate_selection(selection: _Selection, scope: SeriesScope) -> _Selecti
     )
 
 
+def _has_admitted_series(selection: _Selection) -> bool:
+    scope = selection.scope
+    for item in selection.known_series:
+        if scope.matches(item):
+            for facts in item.facts:
+                if scope.matches_facts(facts) and admission(facts).status == "supported":
+                    return True
+    return False
+
+
 def _with_selection_diagnostics(selection: _Selection, on_issue: OnIssue) -> _Selection:
     from dataclasses import replace
-
-    from rivretrieve._internal.source_series import ScopeState
 
     # These findings describe the current view, not an earlier, broader selection.
     issues = [
         item for item in selection.issues if item.code not in ("selection.no_match", "selection.unresolved_inventory")
     ]
     reason = None
-    if not selection.series:
+    if not _has_admitted_series(selection):
         complete = selection.scope.state is ScopeState.EMPTY or _complete_inventory(selection)
         reason = _EmptyReason(
             "no_match" if complete else "unresolved_inventory",
@@ -464,8 +511,50 @@ def _inventory_vintage(inventory: InventorySnapshot) -> str | None:
 def _inventory_contains_facts(inventory: InventorySnapshot, series_id: str, facts_id: str) -> bool:
     if series_id not in inventory.members:
         return False
-    membership = dict(inventory.member_facts)
-    return series_id not in membership or facts_id in membership[series_id]
+    if not inventory.member_facts:
+        return True
+    for member, f_ids in inventory.member_facts:
+        if member == series_id:
+            return facts_id in f_ids
+    return True
+
+
+_SCOPE_PROBE = SeriesScope(
+    provider_ids=("__PROV__",),
+    station_ids=("__STAT__",),
+    product_ids=("__PROD__",),
+).model_dump_json()
+_SCOPE_P0, _SCOPE_R1 = _SCOPE_PROBE.split("__PROV__")
+_SCOPE_P1, _SCOPE_R2 = _SCOPE_R1.split("__STAT__")
+_SCOPE_P2, _SCOPE_P3 = _SCOPE_R2.split("__PROD__")
+del _SCOPE_PROBE, _SCOPE_R1, _SCOPE_R2
+
+
+_SERIES_SORT_KEY = attrgetter("provider_id", "station_id", "product_id", "series_id")
+_FACTS_SORT_KEY = attrgetter("facts_id")
+
+
+def _is_plain_json_ascii(value: str) -> bool:
+    return _PLAIN_JSON_ASCII_FULLMATCH(value) is not None
+
+
+def _fast_scope_json(scope_obj: SeriesScope) -> str:
+    if (
+        scope_obj.state is ScopeState.ACTIVE
+        and scope_obj.restriction is RestrictionKind.ALL
+        and not scope_obj.predicates
+        and not scope_obj.variants
+        and not scope_obj.series_ids
+        and len(scope_obj.provider_ids) == 1
+        and len(scope_obj.station_ids) == 1
+        and len(scope_obj.product_ids) == 1
+    ):
+        prov = scope_obj.provider_ids[0]
+        stat = scope_obj.station_ids[0]
+        prod = scope_obj.product_ids[0]
+        if _is_plain_json_ascii(prov) and _is_plain_json_ascii(stat) and _is_plain_json_ascii(prod):
+            return f"{_SCOPE_P0}{prov}{_SCOPE_P1}{stat}{_SCOPE_P2}{prod}{_SCOPE_P3}"
+    return scope_obj.model_dump_json()
 
 
 def _series_frame(
@@ -516,6 +605,250 @@ def _series_frame(
     for inventory in inventories:
         for member in inventory.members:
             inventory_by_series.setdefault(member, []).append(inventory)
+
+    if not outcomes:
+        if not definitions or scope.state is ScopeState.EMPTY:
+            return pl.DataFrame(schema=schema)
+
+        unrestricted_scope = (
+            scope.state is ScopeState.ACTIVE
+            and not scope.provider_ids
+            and not scope.station_ids
+            and not scope.product_ids
+            and scope.restriction is RestrictionKind.ALL
+            and not scope.predicates
+        )
+
+        # Deduplicate shared PhysicalFacts and SourceIdentity instances to compact indices
+        # and expand in native Polars via .gather() after scanning definitions.
+        unique_facts: list[PhysicalFacts] = []
+        facts_idx_cache: dict[int, tuple[PhysicalFacts, int, str]] = {}
+        unique_idents: list[SourceIdentity] = []
+        ident_idx_cache: dict[int, tuple[SourceIdentity, int]] = {}
+        inv_meta_cache: dict[int, tuple[InventorySnapshot, str, str | None, str | None]] = {}
+
+        c_prov: list[str] = []
+        c_stat: list[str] = []
+        c_prod: list[str] = []
+        c_sid: list[str] = []
+        c_var: list[str | None] = []
+        c_ident_idx: list[int] = []
+        c_fact_idx: list[int] = []
+
+        inv_offsets: list[int] = [0]
+        flat_inv_ids: list[str] = []
+        flat_inv_scope: list[str] = []
+        win_offsets: list[int] = [0]
+        flat_inv_win: list[str] = []
+        vint_offsets: list[int] = [0]
+        flat_inv_vint: list[str] = []
+        stat_offsets: list[int] = [0]
+        flat_inv_stat: list[str] = []
+
+        sorted_defs = sorted(definitions, key=_SERIES_SORT_KEY)
+        for definition in sorted_defs:
+            if unrestricted_scope:
+                if not definition.facts:
+                    continue
+            elif not scope.matches(definition):
+                continue
+            series_inventory = inventory_by_series.get(definition.series_id)
+            ident = definition.identity
+            ident_key = id(ident)
+            cached_ident = ident_idx_cache.get(ident_key)
+            if cached_ident is None:
+                ident_idx = len(unique_idents)
+                unique_idents.append(ident)
+                ident_idx_cache[ident_key] = (ident, ident_idx)
+            else:
+                ident_idx = cached_ident[1]
+
+            def_facts = (
+                definition.facts if len(definition.facts) == 1 else sorted(definition.facts, key=_FACTS_SORT_KEY)
+            )
+            for facts in def_facts:
+                fid_key = id(facts)
+                cached_fact = facts_idx_cache.get(fid_key)
+                if cached_fact is None:
+                    if unrestricted_scope or scope.matches_facts(facts):
+                        f_idx = len(unique_facts)
+                        unique_facts.append(facts)
+                        fid_str = facts.facts_id
+                        facts_idx_cache[fid_key] = (facts, f_idx, fid_str)
+                    else:
+                        facts_idx_cache[fid_key] = (facts, -1, "")
+                        continue
+                else:
+                    f_idx = cached_fact[1]
+                    if f_idx < 0:
+                        continue
+                    fid_str = cached_fact[2]
+
+                c_prov.append(definition.provider_id)
+                c_stat.append(definition.station_id)
+                c_prod.append(definition.product_id)
+                c_sid.append(definition.series_id)
+                c_var.append(definition.variant)
+                c_ident_idx.append(ident_idx)
+                c_fact_idx.append(f_idx)
+
+                if not series_inventory:
+                    inv_offsets.append(len(flat_inv_ids))
+                    win_offsets.append(len(flat_inv_win))
+                    vint_offsets.append(len(flat_inv_vint))
+                    stat_offsets.append(len(flat_inv_stat))
+                elif len(series_inventory) == 1:
+                    inv = series_inventory[0]
+                    if not inv.member_facts or _inventory_contains_facts(inv, definition.series_id, fid_str):
+                        inv_key = id(inv)
+                        cached_inv = inv_meta_cache.get(inv_key)
+                        if cached_inv is None:
+                            s_json = _fast_scope_json(inv.scope)
+                            w_json = inv.window.model_dump_json() if inv.window is not None else None
+                            v_str = _inventory_vintage(inv)
+                            inv_meta_cache[inv_key] = (inv, s_json, w_json, v_str)
+                        else:
+                            _, s_json, w_json, v_str = cached_inv
+                        flat_inv_ids.append(inv.snapshot_id)
+                        flat_inv_scope.append(s_json)
+                        inv_offsets.append(len(flat_inv_ids))
+                        if w_json is not None:
+                            flat_inv_win.append(w_json)
+                        win_offsets.append(len(flat_inv_win))
+                        if v_str is not None:
+                            flat_inv_vint.append(v_str)
+                        vint_offsets.append(len(flat_inv_vint))
+                        flat_inv_stat.append(inv.completeness.value)
+                        stat_offsets.append(len(flat_inv_stat))
+                    else:
+                        inv_offsets.append(len(flat_inv_ids))
+                        win_offsets.append(len(flat_inv_win))
+                        vint_offsets.append(len(flat_inv_vint))
+                        stat_offsets.append(len(flat_inv_stat))
+                else:
+                    matched_inv = [
+                        item
+                        for item in series_inventory
+                        if not item.member_facts or _inventory_contains_facts(item, definition.series_id, fid_str)
+                    ]
+                    for item in matched_inv:
+                        flat_inv_ids.append(item.snapshot_id)
+                        flat_inv_scope.append(_fast_scope_json(item.scope))
+                        if item.window is not None:
+                            flat_inv_win.append(item.window.model_dump_json())
+                        vint = _inventory_vintage(item)
+                        if vint is not None:
+                            flat_inv_vint.append(vint)
+                    inv_offsets.append(len(flat_inv_ids))
+                    win_offsets.append(len(flat_inv_win))
+                    vint_offsets.append(len(flat_inv_vint))
+                    if matched_inv:
+                        flat_inv_stat.extend(sorted({item.completeness.value for item in matched_inv}))
+                    stat_offsets.append(len(flat_inv_stat))
+
+        n_rows = len(c_prov)
+        if not n_rows:
+            return pl.DataFrame(schema=schema)
+        import pyarrow as pa
+
+        pa_str = pa.string()
+        pa_i32 = pa.int32()
+        pa_str_list = pa.list_(pa_str)
+
+        def _list_series(name: str, values: list[list[str]]) -> pl.Series:
+            return cast("pl.Series", pl.from_arrow(pa.array(values, type=pa_str_list))).rename(name)
+
+        def _flat_list_series(name: str, offsets_arr: pa.Array, flat_values: list[str]) -> pl.Series:
+            arr = pa.ListArray.from_arrays(offsets_arr, pa.array(flat_values, type=pa_str))
+            return cast("pl.Series", pl.from_arrow(arr)).rename(name)
+
+        empty_str_series = pl.repeat(None, n_rows, dtype=pl.String, eager=True)
+        empty_list_series = pl.repeat([], n_rows, dtype=pl.List(pl.String), eager=True)
+
+        # Build compact K-row PhysicalFacts table and gather to n_rows in Rust.
+        f_decisions = [admission(f) for f in unique_facts]
+        fact_cols: list[pl.Series] = [
+            pl.Series("facts_id", [f.facts_id for f in unique_facts], dtype=pl.String),
+            pl.Series("admission", [d.status for d in f_decisions], dtype=pl.String),
+            pl.Series("admission_reason", [d.reason for d in f_decisions], dtype=pl.String),
+            pl.Series("source_unit", [f.source_unit.value for f in unique_facts], dtype=pl.String),
+            pl.Series("source_unit_state", [f.source_unit.state.value for f in unique_facts], dtype=pl.String),
+            _list_series("source_unit_evidence", [list(f.source_unit.evidence) for f in unique_facts]),
+            pl.Series("normalized_unit", [f.normalized_unit for f in unique_facts], dtype=pl.String),
+            pl.Series("unit", [d.target_unit for d in f_decisions], dtype=pl.String),
+        ]
+        for field in _PHYSICAL_FIELDS:
+            objs = [getattr(f, field) for f in unique_facts]
+            fact_cols.append(pl.Series(field, [o.value for o in objs], dtype=pl.String))
+            fact_cols.append(pl.Series(f"{field}_state", [o.state.value for o in objs], dtype=pl.String))
+            fact_cols.append(_list_series(f"{field}_evidence", [list(o.evidence) for o in objs]))
+        fact_idx_s = pl.Series("_f_idx", c_fact_idx, dtype=pl.UInt32)
+        expanded_facts = pl.DataFrame(fact_cols).select(pl.all().gather(fact_idx_s))
+
+        # Build compact M-row SourceIdentity table and gather to n_rows in Rust.
+        ident_df = pl.DataFrame(
+            [
+                pl.Series("identity_namespace", [i.namespace for i in unique_idents], dtype=pl.String),
+                pl.Series("published_id", [i.published_id for i in unique_idents], dtype=pl.String),
+                pl.Series("description", [i.description for i in unique_idents], dtype=pl.String),
+                pl.Series("identity_origin", [i.origin for i in unique_idents], dtype=pl.String),
+                _list_series("identity_evidence", [list(i.evidence) for i in unique_idents]),
+            ]
+        )
+        ident_idx_s = pl.Series("_i_idx", c_ident_idx, dtype=pl.UInt32)
+        expanded_idents = ident_df.select(pl.all().gather(ident_idx_s))
+
+        inv_offsets_pa = pa.array(inv_offsets, type=pa_i32)
+        columns_map: dict[str, pl.Series] = {
+            "provider_id": pl.Series("provider_id", c_prov, dtype=pl.String),
+            "station_id": pl.Series("station_id", c_stat, dtype=pl.String),
+            "product_id": pl.Series("product_id", c_prod, dtype=pl.String),
+            "series_id": pl.Series("series_id", c_sid, dtype=pl.String),
+            "variant": pl.Series("variant", c_var, dtype=pl.String),
+            "requested_variants": pl.repeat(list(scope.variants), n_rows, dtype=pl.List(pl.String), eager=True).alias(
+                "requested_variants"
+            ),
+            "requested_series_ids": pl.repeat(
+                list(scope.series_ids), n_rows, dtype=pl.List(pl.String), eager=True
+            ).alias("requested_series_ids"),
+            "requested_selector_kind": empty_str_series.alias("requested_selector_kind"),
+            "requested_selector_value": empty_str_series.alias("requested_selector_value"),
+            "physical_match": pl.repeat("matched", n_rows, dtype=pl.String, eager=True).alias("physical_match"),
+            "inventory_ids": (
+                _flat_list_series("inventory_ids", inv_offsets_pa, flat_inv_ids)
+                if flat_inv_ids
+                else empty_list_series.alias("inventory_ids")
+            ),
+            "inventory_scope": (
+                _flat_list_series("inventory_scope", inv_offsets_pa, flat_inv_scope)
+                if flat_inv_scope
+                else empty_list_series.alias("inventory_scope")
+            ),
+            "inventory_windows": (
+                _flat_list_series("inventory_windows", pa.array(win_offsets, type=pa_i32), flat_inv_win)
+                if flat_inv_win
+                else empty_list_series.alias("inventory_windows")
+            ),
+            "outcome_windows": empty_list_series.alias("outcome_windows"),
+            "inventory_vintage": (
+                _flat_list_series("inventory_vintage", pa.array(vint_offsets, type=pa_i32), flat_inv_vint)
+                if flat_inv_vint
+                else empty_list_series.alias("inventory_vintage")
+            ),
+            "inventory_status": (
+                _flat_list_series("inventory_status", pa.array(stat_offsets, type=pa_i32), flat_inv_stat)
+                if flat_inv_stat
+                else empty_list_series.alias("inventory_status")
+            ),
+            "outcomes": empty_list_series.alias("outcomes"),
+            "outcome_reasons": empty_list_series.alias("outcome_reasons"),
+        }
+        for col in expanded_facts.get_columns():
+            columns_map[col.name] = col
+        for col in expanded_idents.get_columns():
+            columns_map[col.name] = col
+        return pl.DataFrame([columns_map[col_name] for col_name in schema])
+
     outcomes_by_series: dict[str, list[RetrievalOutcome]] = {}
     for outcome in outcomes:
         if outcome.series_id is not None:
@@ -545,6 +878,11 @@ def _series_frame(
                     if item.series_id == definition.series_id
                     and (not item.facts_ids or facts.facts_id in item.facts_ids)
                 )
+                matched_inv = [
+                    item
+                    for item in series_inventory
+                    if _inventory_contains_facts(item, definition.series_id, facts.facts_id)
+                ]
                 row: dict[str, object] = {
                     "provider_id": definition.provider_id,
                     "station_id": definition.station_id,
@@ -573,36 +911,16 @@ def _series_frame(
                     "normalized_unit": facts.normalized_unit,
                     "identity_evidence": list(definition.identity.evidence),
                     "unit": decision.target_unit,
-                    "inventory_ids": [
-                        item.snapshot_id
-                        for item in series_inventory
-                        if _inventory_contains_facts(item, definition.series_id, facts.facts_id)
-                    ],
-                    "inventory_scope": [
-                        item.scope.model_dump_json()
-                        for item in series_inventory
-                        if _inventory_contains_facts(item, definition.series_id, facts.facts_id)
-                    ],
+                    "inventory_ids": [item.snapshot_id for item in matched_inv],
+                    "inventory_scope": [_fast_scope_json(item.scope) for item in matched_inv],
                     "inventory_windows": [
-                        item.window.model_dump_json()
-                        for item in series_inventory
-                        if _inventory_contains_facts(item, definition.series_id, facts.facts_id)
-                        and item.window is not None
+                        item.window.model_dump_json() for item in matched_inv if item.window is not None
                     ],
                     "outcome_windows": [item.window.model_dump_json() for item in selected_outcomes],
                     "inventory_vintage": [
-                        vintage
-                        for item in series_inventory
-                        if _inventory_contains_facts(item, definition.series_id, facts.facts_id)
-                        and (vintage := _inventory_vintage(item)) is not None
+                        vintage for item in matched_inv if (vintage := _inventory_vintage(item)) is not None
                     ],
-                    "inventory_status": sorted(
-                        {
-                            item.completeness.value
-                            for item in series_inventory
-                            if _inventory_contains_facts(item, definition.series_id, facts.facts_id)
-                        }
-                    ),
+                    "inventory_status": sorted({item.completeness.value for item in matched_inv}),
                     "outcomes": [item.status.value for item in selected_outcomes],
                     "outcome_reasons": [item.reason for item in selected_outcomes if item.reason is not None],
                 }
@@ -620,8 +938,6 @@ def _series_frame(
             requested = outcome.requested_selector
             if requested is not None:
                 member_scope = _intersect_scope(scope, _selection_scope(**{requested.kind: requested.value}))
-                from rivretrieve._internal.source_series import ScopeState
-
                 if member_scope.state is ScopeState.EMPTY:
                     continue
                 if scope.series_ids:
@@ -635,8 +951,6 @@ def _series_frame(
                 continue
             if scope.product_ids and outcome.product_id not in scope.product_ids:
                 continue
-            from rivretrieve._internal.source_series import ScopeState
-
             if scope.state is ScopeState.EMPTY:
                 continue
             row: dict[str, object] = dict.fromkeys(schema)
@@ -691,18 +1005,44 @@ def _station_keys(selection: _Selection) -> pl.DataFrame:
     keys = sorted(
         {(item.provider_id, item.station_id) for item in selection.known_series if selection.scope.matches(item)}
     )
-    return pl.DataFrame(keys, schema={"provider_id": pl.String, "station_id": pl.String}, orient="row")
+    if not keys:
+        return pl.DataFrame(schema={"provider_id": pl.String, "station_id": pl.String})
+    provs, stats = zip(*keys, strict=True)
+    return pl.DataFrame(
+        {"provider_id": provs, "station_id": stats}, schema={"provider_id": pl.String, "station_id": pl.String}
+    )
 
 
 def _station_frame(selection: _Selection) -> StationCatalog:
     _require_selection(selection)
-    from dataclasses import asdict
-
-    selected = set(_station_keys(selection).iter_rows())
+    selected = {(item.provider_id, item.station_id) for item in selection.known_series if selection.scope.matches(item)}
+    if not selected or not selection.locations:
+        return pl.DataFrame(schema=STATION_CATALOG_SCHEMA.polars_schema)
+    seen: set[tuple[str, str]] = set()
+    provs: list[str] = []
+    stats: list[str] = []
+    lats: list[float | None] = []
+    lons: list[float | None] = []
+    crs_list: list[str] = []
+    for loc in selection.locations:
+        key = (loc.provider_id, loc.station_id)
+        if key in selected and key not in seen:
+            seen.add(key)
+            provs.append(loc.provider_id)
+            stats.append(loc.station_id)
+            lats.append(loc.latitude)
+            lons.append(loc.longitude)
+            crs_list.append(loc.crs)
     return pl.DataFrame(
-        [asdict(item) for item in selection.locations if (item.provider_id, item.station_id) in selected],
+        {
+            "provider_id": provs,
+            "station_id": stats,
+            "latitude": lats,
+            "longitude": lons,
+            "crs": crs_list,
+        },
         schema=STATION_CATALOG_SCHEMA.polars_schema,
-    ).unique(subset=["provider_id", "station_id"], maintain_order=True)
+    )
 
 
 def _from_frame(records: Sequence[_CatalogueRecord], frame: pl.DataFrame) -> _Selection:

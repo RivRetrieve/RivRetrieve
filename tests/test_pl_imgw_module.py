@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 import rivretrieve as rr
 from rivretrieve._internal.providers.pl_imgw.generate_catalogue import build_provider_info
 from rivretrieve._internal.results import CatalogResult
@@ -11,6 +13,7 @@ BULK_OBSERVATIONS = (
 )
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_pl_imgw_registered_with_packaged_stations() -> None:
     assert "pl_imgw" in rr.providers().get_column("provider_id").to_list()
     result = catalogue_reader("pl_imgw").read_stations()
@@ -78,6 +81,7 @@ def test_provider_metadata_describes_explicit_compiled_store_access() -> None:
     assert "monthly" in text and "annual" in text
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_precise_mean_filter_does_not_admit_unestablished_imgw_statistics() -> None:
     for quantity in ("discharge", "stage", "temperature"):
         broad = rr.find(provider="pl_imgw", station="154210010", quantity=quantity)
