@@ -412,7 +412,8 @@ def _read_provenance_json(path: Path) -> AcquisitionProvenance | CatalogueEviden
     if not path.exists():
         return None
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        content = path.read_text(encoding="utf-8")
+        value = json.loads(content)
         if not isinstance(value, dict):
             raise CorruptCatalogArtifactError(f"Acquisition provenance file must contain an object: {path}")
         version = value.get("schema_version")
@@ -423,7 +424,7 @@ def _read_provenance_json(path: Path) -> AcquisitionProvenance | CatalogueEviden
                 f"Unsupported acquisition provenance schema_version {version!r}: {path}; "
                 "install a compatible RivRetrieve catalogue or rebuild it with the current catalogue generator"
             )
-        header = EvidenceHeader.model_validate(value)
+        header = EvidenceHeader.model_validate_json(content)
         # The strict header permits only the five fixed relative evidence basenames.
         table_bytes = {}
         for filename in header.files:

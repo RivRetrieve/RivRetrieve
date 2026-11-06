@@ -288,6 +288,7 @@ def _decode_series_list(raw_series: list[object]) -> tuple[SourceSeries, ...]:
                     and ns
                     and (pub_id is None or type(pub_id) is str)
                     and (desc is None or type(desc) is str)
+                    and type(orig) is str
                     and orig in _IDENTITY_ORIGINS
                     and _is_str_list(ev)
                     and len(ev) >= 1
@@ -364,6 +365,7 @@ def _decode_inventories_list(raw_inventories: list[object]) -> tuple[InventorySn
                 and snap_id
                 and type(access) is str
                 and access
+                and type(orig) is str
                 and orig in _INVENTORY_ORIGINS
                 and comp is not None
                 and (comp is InventoryCompleteness.COMPLETE or (type(reason) is str and bool(reason)))
@@ -376,7 +378,10 @@ def _decode_inventories_list(raw_inventories: list[object]) -> tuple[InventorySn
                 and (len(members) <= 1 or len(set(members)) == len(members))
                 and _is_str_list(ev)
                 and len(ev) >= 1
-                and (chk_raw is None or type(chk_raw) is str)
+                and (
+                    chk_raw is None
+                    or (type(chk_raw) is str and len(chk_raw) == 10 and chk_raw[4] == "-" and chk_raw[7] == "-")
+                )
                 and _is_plain_dict(s_raw)
                 and len(s_raw) == 8
                 and _SCOPE_KEYS.issuperset(s_raw)

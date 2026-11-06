@@ -292,7 +292,7 @@ def _is_validated_header(header: EvidenceHeader) -> bool:
 def _ensure_validated_header(header: EvidenceHeader) -> EvidenceHeader:
     if _is_validated_header(header):
         return header
-    return EvidenceHeader.model_validate(header.model_dump(mode="json"))
+    return EvidenceHeader.model_validate_json(header.model_dump_json())
 
 
 class EvidenceFileIdentity(_EvidenceModel):
@@ -305,9 +305,16 @@ class EvidenceFileIdentity(_EvidenceModel):
     schema_version: Literal[3] = 3
 
     @model_validator(mode="after")
-    def _track_validated(self) -> Self:
-        _mark_validated_file_identity(self)
+    def _track_validated(self, info: ValidationInfo) -> Self:
+        if info.mode == "json":
+            _mark_validated_file_identity(self)
         return self
+
+    def model_copy(self, *, update: Mapping[str, object] | None = None, deep: bool = False) -> Self:
+        copied = super().model_copy(update=update, deep=deep)
+        if update:
+            _VALIDATED_FILE_IDENTITIES.pop(id(copied), None)
+        return copied
 
     def __deepcopy__(self, memo: dict[int, object] | None = None) -> Self:
         was_validated = (ref := _VALIDATED_FILE_IDENTITIES.get(id(self))) is not None and ref() is self
@@ -350,7 +357,7 @@ class EvidenceHeader(_EvidenceModel):
         return _encode_build_inputs(value) if value is not None else None
 
     @model_validator(mode="after")
-    def _identities(self) -> Self:
+    def _identities(self, info: ValidationInfo) -> Self:
         if set(self.files) != set(EVIDENCE_FILENAMES.values()):
             raise ValueError("evidence files must name exactly the five fixed basenames")
         if any(key != identity.path for key, identity in self.files.items()):
@@ -365,8 +372,15 @@ class EvidenceHeader(_EvidenceModel):
             raise ValueError("transformation declarations must be unique")
         if len(set(self.row_locator_requirements)) != len(self.row_locator_requirements):
             raise ValueError("row locator requirements must be unique")
-        _mark_validated_header(self)
+        if info.mode == "json":
+            _mark_validated_header(self)
         return self
+
+    def model_copy(self, *, update: Mapping[str, object] | None = None, deep: bool = False) -> Self:
+        copied = super().model_copy(update=update, deep=deep)
+        if update:
+            _VALIDATED_HEADERS.pop(id(copied), None)
+        return copied
 
     def __deepcopy__(self, memo: dict[int, object] | None = None) -> Self:
         was_validated = _is_validated_header(self)
