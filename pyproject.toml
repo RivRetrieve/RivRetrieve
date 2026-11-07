@@ -17,6 +17,7 @@ dependencies = [
     "jsonschema>=4.25.1",
     "python-dotenv>=1.2.2",
     "urllib3>=2.8.0,<3",
+    "pyproj>=3.8.0",
 ]
 
 [project.scripts]
