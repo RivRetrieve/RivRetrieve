@@ -43,6 +43,22 @@ sites with no catchment-area field; coordinates are available both in a packed
 degrees-minutes-seconds form (`KoordLat`/`KoordLong`) and in ETRS-TM35FIN
 (`KoordErTmIta`/`KoordErTmPohj`, EPSG:3067).
 
+**Each of these three variables has exactly one frequency and one row shape; there is
+no separate instantaneous, sub-daily, or monthly series to admit alongside it.**
+Checked directly: `Virtaama`, `Vedenkorkeus`, and `LampoPintavesi` rows carry only
+`Paikka_Id`, `Aika`, `Arvo` (plus `ArvoMin`/`ArvoMax`/`Lippu_id` on some, confirmed empty
+on every row tested, not a distinct series). The service's own `Jakso` entity set names
+three periods (`1 vrk`/`5 vrk`/`Kuukausi`, i.e. 1 day/5 days/month), but none of the
+three admitted tables carry a `Jakso_id` column, so `Jakso` is unused by them. The full
+service (21 entity sets total: `Haihdunta`, `Jaanpaksuus`, `JaatJaanlahto`, `Jakso`,
+`Korkeustaso`, `Laitteisto`, `LampoLuotaus`, `LampoPintavesi`, `Lippu`, `LumiAlue`,
+`LumiPiste`, `Omistaja`, `Paikka`, `SadantaAlue`, `SarakeKuvaus`, `Suure`,
+`TauluKuvaus`, `Tila`, `Valuma`, `VedenkTasoTieto`, `Vedenkorkeus`, `Virtaama`) has no
+telemetry or near-real-time counterpart either, unlike `at_ehyd`'s validated-archive
+versus unvalidated-telemetry split. The two exclusions below are different source
+variables, not an unported frequency of one of these three; everything this source
+publishes for discharge, stage, and surface water temperature is in scope.
+
 ### Documented upstream options excluded from `fi_syke`
 
 - **Water temperature profile (`LampoLuotaus`, `Suure_Id=12`, deferred):** 11 sites,
