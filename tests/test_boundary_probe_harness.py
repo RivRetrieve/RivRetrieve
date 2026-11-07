@@ -231,6 +231,17 @@ def test_probe_that_does_not_replay_its_recording_is_refused() -> None:
 def test_manifest_declarations_define_every_observation_product_obligation() -> None:
     obligations = manifest_boundary_obligations(load_manifest(BUILTIN_PROVIDER_IDS))
     assert obligations == (
+        (ProviderId("at_ehyd"), ProductId("owf_abfl_monatsmaxima")),
+        (ProviderId("at_ehyd"), ProductId("owf_abfl_monatsminima")),
+        (ProviderId("at_ehyd"), ProductId("owf_abfl_tagesmittel")),
+        (ProviderId("at_ehyd"), ProductId("owf_wasserst_monatsmaxima")),
+        (ProviderId("at_ehyd"), ProductId("owf_wasserst_monatsminima")),
+        (ProviderId("at_ehyd"), ProductId("owf_wasserst_tagesmittel")),
+        (ProviderId("at_ehyd"), ProductId("owf_wassertemp_monatsmittel")),
+        (ProviderId("at_ehyd"), ProductId("pegel_bgis_abfluss")),
+        (ProviderId("at_ehyd"), ProductId("pegel_bgis_wasserstand")),
+        (ProviderId("at_ehyd"), ProductId("pegel_longterm_abfluss")),
+        (ProviderId("at_ehyd"), ProductId("pegel_longterm_wasserstand")),
         (ProviderId("ba_fhmzbih"), ProductId("discharge_reported")),
         (ProviderId("ba_fhmzbih"), ProductId("stage_reported")),
         (ProviderId("ba_fhmzbih"), ProductId("water_temperature_reported")),

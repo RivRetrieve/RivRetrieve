@@ -30,6 +30,7 @@ _CANONICAL_CATALOGUE_FILES = {
 }
 
 _PROVENANCE_PROVIDER_IDS = {
+    "at_ehyd",
     "ba_fhmzbih",
     "br_ana",
     "ca_eccc",

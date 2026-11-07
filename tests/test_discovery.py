@@ -41,6 +41,19 @@ EXPECTED_PRODUCT_IDS = [
 ]
 
 EXPECTED_PRODUCTS_BY_PROVIDER = {
+    "at_ehyd": [
+        "owf_abfl_monatsmaxima",
+        "owf_abfl_monatsminima",
+        "owf_abfl_tagesmittel",
+        "owf_wasserst_monatsmaxima",
+        "owf_wasserst_monatsminima",
+        "owf_wasserst_tagesmittel",
+        "owf_wassertemp_monatsmittel",
+        "pegel_bgis_abfluss",
+        "pegel_bgis_wasserstand",
+        "pegel_longterm_abfluss",
+        "pegel_longterm_wasserstand",
+    ],
     "ba_fhmzbih": [
         "discharge_reported",
         "stage_reported",
@@ -131,7 +144,11 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
 }
 
 
-EXPECTED_PRODUCT_IDS = sorted(set(EXPECTED_PRODUCT_IDS) | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"]))
+EXPECTED_PRODUCT_IDS = sorted(
+    set(EXPECTED_PRODUCT_IDS)
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["at_ehyd"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"])
+)
 
 
 def _issue_policy_error_chain(exc: BaseException) -> list[IssuePolicyError]:
@@ -160,6 +177,7 @@ def _disable_default_provider_registration(monkeypatch: pytest.MonkeyPatch) -> N
 def test_providers_empty_registry_returns_default_providers() -> None:
     result = rr.providers()
     assert result.get_column("provider_id").to_list() == [
+        "at_ehyd",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
