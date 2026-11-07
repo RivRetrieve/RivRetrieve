@@ -46,6 +46,7 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, re
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.fi_syke.origins import ConstantCrsConversion
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
 from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
@@ -362,6 +363,7 @@ DECLARATIONS = {
         "ca_eccc",
         "ch_foen",
         "cz_chmi",
+        "fi_syke",
         "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
@@ -508,6 +510,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "latitude": field("GEOGR1", FloatConversion()),
             "longitude": field("GEOGR2", FloatConversion()),
             "crs": unpublished("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf"),
+        },
+        (ProviderId("fi_syke"), "stations"): {
+            "provider_id": authored("fi_syke"),
+            "station_id": field("Nro"),
+            "latitude": field("latitude_etrs89"),
+            "longitude": field("longitude_etrs89"),
+            "crs": field("KoordErTmIta", ConstantCrsConversion()),
         },
         (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): {
             "provider_id": authored("fr_hubeau"),
