@@ -71,7 +71,8 @@ def _plan_iso_instant(fetch_window: FetchWindow, declaration: WindowDeclaration)
         steps, remainder = divmod(stop - epoch, precision)
         stop = epoch + (steps + bool(remainder)) * precision
         fetch_window = _closed_bounds(start, stop - timedelta(microseconds=1))
-    return (RenderedWindow(_iso_z(start), _iso_z(stop), fetch_window),)
+    rendered_stop = stop + declaration.stop_extension if declaration.stop_extension is not None else stop
+    return (RenderedWindow(_iso_z(start), _iso_z(rendered_stop), fetch_window),)
 
 
 def _plan_date(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
@@ -191,11 +192,12 @@ def _plan_capped_span(fetch_window: FetchWindow, declaration: WindowDeclaration)
     ):
         cursor = _datetime_from_endpoint(fetch_window, "start")
         final = _datetime_from_endpoint(fetch_window, "end")
+        extension = declaration.stop_extension or timedelta(0)
         windows = []
         tick = timedelta(microseconds=1)
         while cursor <= final:
             stop = min(cursor + timedelta(days=size) - tick, final)
-            windows.append(RenderedWindow(_iso_z(cursor), _iso_z(stop), _closed_bounds(cursor, stop)))
+            windows.append(RenderedWindow(_iso_z(cursor), _iso_z(stop + extension), _closed_bounds(cursor, stop)))
             cursor = stop + tick
         return tuple(windows)
     cursor = _datetime_from_endpoint(fetch_window, "start").replace(hour=0, minute=0, second=0, microsecond=0)
