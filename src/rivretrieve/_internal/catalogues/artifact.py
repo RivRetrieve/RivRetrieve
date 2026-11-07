@@ -51,6 +51,7 @@ ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
         "ca_eccc",
         "ch_foen",
         "cz_chmi",
+        "fi_syke",
         "fr_hubeau",
         "fr_hydroportail",
         "jp_mlit",

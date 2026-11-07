@@ -10,6 +10,20 @@ same Effort, following the same vision-then-implementation split used for
 Austria's catalogue step (PR #640 vision, PR #642 implementation) and
 `au_bom`'s (`2026-11-02-au-bom-station-catalogue-and-metadata.md`).
 
+**Correction, 2026-11-07 (during implementation, same Effort):** the "Station
+discovery" section below settles on the union of `Paikka` rows (2,543 sites,
+one row per quantity-specific record) as the station universe, which still
+holds. It does not yet settle station *identity* — building the catalogue
+found that `Paikka_Id` (not `Nro`) is the real per-installation identifier.
+Checked against SYKE's own public WFS (one feature per `Paikka_Id`, in
+separate per-quantity layers) and independently against CAMELS-Finland, both
+confirmed `Paikka_Id`. `Nro` (SYKE's site code) is not a stable
+per-installation key: the same `Nro` can name a site discontinued decades ago
+and an unrelated, currently active site tens of kilometres away. The
+catalogue's `station_id` is `Paikka_Id`; a station therefore has exactly one
+admitted product, not potentially several. Full detail in
+`research/fi-syke-station-identity-correction.md` (verification-evidence).
+
 The port belongs to [Program #353](https://github.com/RivRetrieve/RivRetrieve/issues/353).
 Builds on the merged [source, scope and access vision](2026-11-07-fi-syke-source-scope-and-access.md)
 (Effort #753): `LiveStages`, three admitted entity sets — discharge
