@@ -62,23 +62,23 @@
       "@type": "cr:FileObject",
       "contentUrl": "stations.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "fe487b4e0c482d852bb3fb4255618298a50966927fa78c1e99c16c874472689c",
-      "contentSize": "34847 B"
+      "sha256": "27c1720c0b1e8634ee7477a7f24bf98a7b09da89ccaaded60e54680ec2d7e0d4",
+      "contentSize": "37789 B"
     },
     {
       "@id": "station_products.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "station_products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "23e3724cbac16876ae8c09ea120051e68adade5eaf593db94e2e6e70db9c551f",
-      "contentSize": "16551 B"
+      "sha256": "77c9522847878038ce5a911ae9190525a32efa8e4b07d12d01e7e9d607cb82c9",
+      "contentSize": "15491 B"
     },
     {
       "@id": "provenance.json",
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "560cd83e7c5ee89ebf93ca1fcdd9d5c0ebdd9a745357dcae3b52f3bf17acfc3c",
+      "sha256": "650e5fc59b4c01f79562e440f79edc3d9b445362dc05e22e3de6ff8a1178d739",
       "contentSize": "20045 B"
     },
     {
@@ -150,8 +150,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "station_metadata.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "3bf6ec17c22a9e4b5f88d06ae610e1c86837afdda6f4a2a61082bd3e993d8192",
-      "contentSize": "47582 B"
+      "sha256": "509047fd5fe405a40bba868c21c17dd6e62250ea64a10a056b26e6edb50f0c84",
+      "contentSize": "49878 B"
     }
   ],
   "recordSet": [
@@ -585,7 +585,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Native column Nro; conversion identity."
+          "description": "Native column Paikka_Id; conversion identity."
         },
         {
           "@id": "stations/latitude",
@@ -1573,8 +1573,8 @@
     "@type": "sc:MediaObject",
     "identifier": "fi_syke-native-table",
     "name": "Adopted retained input",
-    "sha256": "f8da350bd005f5c5b838bfb81a4a5f14e3319da660625803476d9282c5b1f6cc",
-    "contentSize": "102480 B",
+    "sha256": "defbe9b27636084f20075839ee2c42a02c2afce3c8ae2b6fe94c3c2aca457ca8",
+    "contentSize": "123359 B",
     "additionalProperty": [
       {
         "@type": "sc:PropertyValue",
@@ -1584,12 +1584,12 @@
       {
         "@type": "sc:PropertyValue",
         "name": "collection_id",
-        "value": "fi_syke-catalogue-native-2026-11-07-v2"
+        "value": "fi_syke-catalogue-native-2026-11-07-v3"
       },
       {
         "@type": "sc:PropertyValue",
         "name": "manifest_sha256",
-        "value": "b2f7ca0a47fa3001301642f28df4470d905a57263f3394d5e826466a8e233c82"
+        "value": "571ad88dfcfd55847ebe54f799c3ad83547761e7ddc6b892fcf9aad257f2b03a"
       },
       {
         "@type": "sc:PropertyValue",

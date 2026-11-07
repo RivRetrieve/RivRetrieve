@@ -513,7 +513,7 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
         },
         (ProviderId("fi_syke"), "stations"): {
             "provider_id": authored("fi_syke"),
-            "station_id": field("Nro"),
+            "station_id": field("Paikka_Id"),
             "latitude": field("latitude_etrs89"),
             "longitude": field("longitude_etrs89"),
             "crs": field("KoordErTmIta", ConstantCrsConversion()),

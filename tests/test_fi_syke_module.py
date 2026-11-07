@@ -24,9 +24,16 @@ def test_fi_syke_products_cover_the_three_admitted_quantities() -> None:
     assert result.data["frequency"].to_list() == ["daily"] * 3
 
 
-def test_fi_syke_a_station_can_have_more_than_one_product() -> None:
-    """A real gauge measuring both discharge and stage is one station (Nro), not two."""
+def test_fi_syke_each_station_is_witnessed_for_exactly_one_product() -> None:
+    """station_id is Paikka_Id, SYKE's own quantity-specific observation point --
+    confirmed via SYKE's public WFS (one feature per Paikka_Id, split per
+    quantity) and independently via CAMELS-Finland. A gauge with both discharge
+    and stage is two Paikka_Id stations, not one with two available products --
+    Nro (SYKE's site code) is not a stable per-installation identity (checked
+    live: the same Nro can name a site discontinued decades ago and an
+    unrelated, currently active site tens of kilometres away)."""
     result = catalogue_reader("fi_syke").read_station_products()
     available = result.data.filter(result.data["availability"] == "available")
     counts = available.group_by("station_id").len()
-    assert counts["len"].max() > 1
+    assert counts["len"].to_list() == [1] * counts.height
+    assert available.height == catalogue_reader("fi_syke").read_stations().data.height

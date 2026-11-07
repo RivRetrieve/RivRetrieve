@@ -64,7 +64,7 @@ class ConstantCrsConversion(FieldConversion):
 
 STATION_CATALOGUE_ORIGINS = {
     "provider_id": Authored(AuthoredValue("fi_syke")),
-    "station_id": Field(NativeColumn("Nro")),
+    "station_id": Field(NativeColumn("Paikka_Id")),
     "latitude": Field(NativeColumn("latitude_etrs89")),
     "longitude": Field(NativeColumn("longitude_etrs89")),
     "crs": Field(NativeColumn("KoordErTmIta"), ConstantCrsConversion()),

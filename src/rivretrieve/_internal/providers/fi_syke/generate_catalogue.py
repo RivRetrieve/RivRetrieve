@@ -35,8 +35,8 @@ PROVIDER_NAME = "Finnish Environment Institute (Syke), Hydrologiarajapinta"
 
 NATIVE_SOURCE_SCHEMA = pl.Schema(
     {
+        "Paikka_Id": pl.String,
         "Nro": pl.String,
-        "Paikka_Id": pl.Int64,
         "Nimi": pl.String,
         "KuntaNimi": pl.String,
         "VesalNimi": pl.String,
@@ -53,15 +53,7 @@ NATIVE_SOURCE_SCHEMA = pl.Schema(
 )
 NATIVE_SCHEMA = pl.Schema({**NATIVE_SOURCE_SCHEMA, "retrieved_at": pl.Datetime(time_unit="us", time_zone="UTC")})
 
-ASSOCIATION_SCHEMA = pl.Schema({"Nro": pl.String, "product_id": pl.String})
-
-# SYKE's own identity field (Paikka_Id) is quantity-specific, not station-specific --
-# confirmed live 2026-11-07: of 2,543 Paikka rows across the three admitted quantities,
-# only 1,967 distinct Nro (SYKE's official site code) exist; 546 Nro values have two
-# Paikka_Id rows (almost always a discharge + stage pair) and 30 have three, each with
-# its own slightly different coordinates (tens of metres apart) and sometimes a
-# different name or Tila_Id. Nro, not Paikka_Id, is the real station identity.
-_QUANTITY_PRIORITY = {1: 0, 2: 1, 11: 2}  # stage, discharge, temperature
+ASSOCIATION_SCHEMA = pl.Schema({"Paikka_Id": pl.String, "product_id": pl.String})
 
 
 @dataclass(frozen=True)
@@ -75,64 +67,57 @@ class GeneratedFiSykeCatalogue:
 
 def station_native_table(
     paikka_rows: list[dict[str, object]], *, retrieved_at: RetrievedAt
-) -> tuple[NativeTable, pl.DataFrame, tuple[str, ...]]:
-    """Group Paikka's quantity-specific rows by Nro into one row per real station.
+) -> tuple[NativeTable, pl.DataFrame]:
+    """One native row per Paikka row: station identity is Paikka_Id, not Nro.
 
-    For a station with more than one Paikka_Id (one per quantity), keeps the first
-    record in a fixed stage/discharge/temperature order -- the same "take the first
-    encountered" rule au_bom already applies to its own ambiguous-duplicate-station
-    problem -- and returns the Nro values where name or coordinates genuinely
-    disagree across a station's own records, rather than silently merging or
-    averaging them. Tila_Id is a per-(station, quantity) fact (confirmed to differ
-    within 97 stations' own records), so it belongs to the associations, not here.
+    SYKE's own public WFS (inspire_ef, INSPIRE Environmental Monitoring Facilities)
+    confirms this independently of the OData service: each quantity publishes its
+    own separate layer (HydrologisetHavaintopaikat_Virtaama_Q,
+    _Vedenkorkeus_W, _Pintaveden_lampotila_T, each with a "_lopetetut" discontinued
+    variant), one feature per Paikka_Id, with Paikka_Id baked directly into the
+    public feature id (e.g. "EF.HydrologisetHavaintopaikat_Virtaama_Q.894"). Nro
+    (SYKE's "tunnus") is a secondary code, not a stable per-installation identity:
+    checked live 2026-11-07, Nro 6701910 names a discharge site discontinued in
+    1958 in the _lopetetut layer and an unrelated, still-active stage site about
+    27 km away in the live layer -- the same administrative code reused across
+    unrelated monitoring points over SYKE's ~70-year record, not two sensors at
+    one gauge. CAMELS-Finland was independently confirmed to use Paikka_Id too.
     """
-    grouped: dict[str, list[dict[str, object]]] = {}
-    for row in paikka_rows:
-        nro = row["Nro"]
-        if not isinstance(nro, str) or not nro.strip():
-            raise FatalContractError("fi_syke Paikka row has an invalid Nro")
-        grouped.setdefault(nro, []).append(row)
-    if not grouped:
-        raise FatalContractError("fi_syke Paikka rows produced no stations")
-
     native_rows: list[dict[str, object]] = []
     assoc_rows: list[dict[str, object]] = []
-    ambiguous: list[str] = []
-    for nro in sorted(grouped):
-        group = sorted(grouped[nro], key=lambda r: _QUANTITY_PRIORITY[_required_int(r["Suure_Id"])])
-        primary = group[0]
-        if len(group) > 1:
-            coords = {(r["KoordErTmIta"], r["KoordErTmPohj"]) for r in group}
-            names = {str(r["Nimi"]).strip() for r in group}
-            if len(coords) > 1 or len(names) > 1:
-                ambiguous.append(nro)
+    for row in paikka_rows:
+        paikka_id = row["Paikka_Id"]
+        if not isinstance(paikka_id, int):
+            raise FatalContractError("fi_syke Paikka row has an invalid Paikka_Id")
+        station_id = str(paikka_id)
+        product_id = SUURE_ID_TO_PRODUCT.get(_required_int(row["Suure_Id"]))
+        if product_id is None:
+            raise FatalContractError(f"fi_syke Paikka row has an unadmitted Suure_Id: {row['Suure_Id']!r}")
         native_rows.append(
             {
-                "Nro": nro,
-                "Paikka_Id": primary["Paikka_Id"],
-                "Nimi": primary["Nimi"],
-                "KuntaNimi": primary["KuntaNimi"],
-                "VesalNimi": primary["VesalNimi"],
-                "PaaVesalNimi": primary["PaaVesalNimi"],
-                "KoordErTmIta": primary["KoordErTmIta"],
-                "KoordErTmPohj": primary["KoordErTmPohj"],
-                "KoordYkIta": primary["KoordYkIta"],
-                "KoordYkPohj": primary["KoordYkPohj"],
-                "KoordLat": primary["KoordLat"],
-                "KoordLong": primary["KoordLong"],
-                "latitude_etrs89": _ertm_to_etrs89_latitude(primary["KoordErTmIta"], primary["KoordErTmPohj"]),
-                "longitude_etrs89": _ertm_to_etrs89_longitude(primary["KoordErTmIta"], primary["KoordErTmPohj"]),
+                "Paikka_Id": station_id,
+                "Nro": row["Nro"],
+                "Nimi": row["Nimi"],
+                "KuntaNimi": row["KuntaNimi"],
+                "VesalNimi": row["VesalNimi"],
+                "PaaVesalNimi": row["PaaVesalNimi"],
+                "KoordErTmIta": row["KoordErTmIta"],
+                "KoordErTmPohj": row["KoordErTmPohj"],
+                "KoordYkIta": row["KoordYkIta"],
+                "KoordYkPohj": row["KoordYkPohj"],
+                "KoordLat": row["KoordLat"],
+                "KoordLong": row["KoordLong"],
+                "latitude_etrs89": _ertm_to_etrs89_latitude(row["KoordErTmIta"], row["KoordErTmPohj"]),
+                "longitude_etrs89": _ertm_to_etrs89_longitude(row["KoordErTmIta"], row["KoordErTmPohj"]),
             }
         )
-        for r in group:
-            product_id = SUURE_ID_TO_PRODUCT.get(_required_int(r["Suure_Id"]))
-            if product_id is None:
-                raise FatalContractError(f"fi_syke Paikka row has an unadmitted Suure_Id: {r['Suure_Id']!r}")
-            assoc_rows.append({"Nro": nro, "product_id": product_id})
+        assoc_rows.append({"Paikka_Id": station_id, "product_id": product_id})
+    if not native_rows:
+        raise FatalContractError("fi_syke Paikka rows produced no stations")
 
-    source = pl.DataFrame(native_rows, schema=NATIVE_SOURCE_SCHEMA)
+    source = pl.DataFrame(native_rows, schema=NATIVE_SOURCE_SCHEMA).sort("Paikka_Id")
     associations = pl.DataFrame(assoc_rows, schema=ASSOCIATION_SCHEMA)
-    return stamp_native_table(source, retrieved_at), associations, tuple(ambiguous)
+    return stamp_native_table(source, retrieved_at), associations
 
 
 def _required_int(value: object) -> int:
@@ -188,7 +173,7 @@ def build_stations(native_table: NativeTable) -> StationCatalog:
     rows = [
         {
             "provider_id": PROVIDER_ID,
-            "station_id": row["Nro"],
+            "station_id": row["Paikka_Id"],
             "latitude": row["latitude_etrs89"],
             "longitude": row["longitude_etrs89"],
             "crs": "EPSG:4258" if row["KoordErTmIta"] is not None else "unknown",
@@ -204,7 +189,7 @@ def build_station_products(
     associations: pl.DataFrame,
     catalogue_date: date,
 ) -> StationProductCatalog:
-    witnessed = {(row["Nro"], row["product_id"]) for row in associations.iter_rows(named=True)}
+    witnessed = {(row["Paikka_Id"], row["product_id"]) for row in associations.iter_rows(named=True)}
     rows = [
         {
             "provider_id": PROVIDER_ID,
@@ -391,7 +376,7 @@ def read_catalogue_sources(
         paikka_retrieved_at.append(RecordingReference.model_validate(captures[kind]["recording"]).retrieved_at)
 
     checked_on_date = date.fromisoformat(selection["checked_on"])
-    native, associations, _ambiguous = station_native_table(
+    native, associations = station_native_table(
         paikka_rows,
         retrieved_at=RetrievedAt(max(paikka_retrieved_at)),
     )
