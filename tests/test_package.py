@@ -69,6 +69,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     providers_root = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
     expected_station_products = {
         "ar_ina": (10_777, 0, 0),
+        "at_ehyd": (8_206, 0, 0),
         "ba_fhmzbih": (180, 0, 0),
         "br_ana": (107_484, 0, 0),
         "ca_eccc": (16_114, 0, 0),
@@ -98,6 +99,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     )
     provider_ids = (
         "ar_ina",
+        "at_ehyd",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
@@ -115,6 +117,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     )
     expected_provider_terms: dict[str, tuple[str | None, str | None]] = dict.fromkeys(provider_ids, (None, None))
     expected_provider_terms["ar_ina"] = ("Creative Commons Atribución 4.0 Internacional", None)
+    expected_provider_terms["at_ehyd"] = ("CC BY 4.0", "Datenquelle: ehyd.gv.at")
     expected_provider_terms["ch_foen"] = ("Freie Nutzung. Quellenangabe ist Pflicht.", None)
     expected_provider_terms["no_nve"] = (
         "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) "

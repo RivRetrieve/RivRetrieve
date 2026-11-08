@@ -278,6 +278,7 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
     expected = frozenset(
         {
             ProviderId("ar_ina"),
+            ProviderId("at_ehyd"),
             ProviderId("ba_fhmzbih"),
             ProviderId("br_ana"),
             ProviderId("ca_eccc"),

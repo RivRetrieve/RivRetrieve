@@ -143,6 +143,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | Provider | Observation kind | Required credential variables | Stations | Available pairs | Unknown pairs | Unavailable pairs |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | `ar_ina` | catalogue-only | none | 829 | 2611 | 8166 | 0 |
+| `at_ehyd` | live | none | 746 | 4837 | 3369 | 0 |
 | `ba_fhmzbih` | live | none | 60 | 132 | 48 | 0 |
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
@@ -176,6 +177,17 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `ar_ina` | `stage_monthly_mean` | `m` |
 | `ar_ina` | `stage_monthly_min` | `m` |
 | `ar_ina` | `stage_weekly_mean` | `m` |
+| `at_ehyd` | `owf_abfl_monatsmaxima` | `m3/s` |
+| `at_ehyd` | `owf_abfl_monatsminima` | `m3/s` |
+| `at_ehyd` | `owf_abfl_tagesmittel` | `m3/s` |
+| `at_ehyd` | `owf_wasserst_monatsmaxima` | `m` |
+| `at_ehyd` | `owf_wasserst_monatsminima` | `m` |
+| `at_ehyd` | `owf_wasserst_tagesmittel` | `m` |
+| `at_ehyd` | `owf_wassertemp_monatsmittel` | `degC` |
+| `at_ehyd` | `pegel_bgis_abfluss` | `m3/s` |
+| `at_ehyd` | `pegel_bgis_wasserstand` | `m` |
+| `at_ehyd` | `pegel_longterm_abfluss` | `m3/s` |
+| `at_ehyd` | `pegel_longterm_wasserstand` | `m` |
 | `ba_fhmzbih` | `discharge_reported` | `m3/s` |
 | `ba_fhmzbih` | `stage_reported` | `m` |
 | `ba_fhmzbih` | `water_temperature_reported` | `degC` |
