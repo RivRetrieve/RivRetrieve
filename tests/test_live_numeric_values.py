@@ -273,3 +273,92 @@ def test_japan_published_missing_flag_remains_absent_not_invalid_numeric(retaine
     assert result.rows.height == baseline.rows.height - 1
     assert result.outcomes[0].status == "success"
     assert any(issue.code == "source_missing" for issue in result.issues)
+
+
+@pytest.mark.parametrize("wire_format", ["owf_csv", "pegel_bgis_json", "pegel_longterm_json"])
+@pytest.mark.parametrize("mutation", [*BAD, "boolean", "zero", "finite", "null"])
+@pytest.mark.recorded("maintenance/observations/at_ehyd/retrieval")
+def test_at_ehyd_numeric_guards_reject_unrepresentable_cells_across_wire_formats(
+    retained_evidence_root: Path, wire_format: str, mutation: str
+) -> None:
+    from rivretrieve._internal.providers.at_ehyd.config import AtEhydPegelEndpointCoordinates
+    from rivretrieve._internal.providers.at_ehyd.config import config as at_config
+    from rivretrieve._internal.providers.at_ehyd.parse import parse as at_parse
+    from rivretrieve._internal.source_series import OutcomeStatus
+    from tests.test_at_ehyd_retrieval_recorded import _capture, _origin_from_receipt
+
+    cfg = at_config()
+    win = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2030, 1, 1)),
+    )
+
+    if wire_format == "owf_csv":
+        body, rcpt = _capture(retained_evidence_root, "access", "owf-209486-file5-q-tagesmittel")
+        prod = ProductId("owf_abfl_tagesmittel")
+        source = Payload(cfg.products[prod].coordinates, (("209486", prod),), win, body, _origin_from_receipt(rcpt), ())
+        baseline = at_parse(source, cfg)
+        header, sep, values = body.partition(b"Werte:")
+        lines = values.decode("cp1252").splitlines(keepends=True)
+        first_idx = next(i for i, line in enumerate(lines) if ";" in line and "Lücke" not in line)
+        ts_part = lines[first_idx].split(";", 1)[0]
+        token_map = {
+            **TOKENS,
+            "boolean": "true",
+            "finite": "1,25",
+            "null": "Lücke",
+        }
+        lines[first_idx] = f"{ts_part}; {token_map[mutation]}\r\n"
+        mutated_bytes = header + sep + "".join(lines).encode("cp1252")
+    else:
+        capture_name, subsystem, prod, sibling_prod = (
+            (
+                "pegel-bgis-209486",
+                "pegel_bgis",
+                ProductId("pegel_bgis_abfluss"),
+                ProductId("pegel_bgis_wasserstand"),
+            )
+            if wire_format == "pegel_bgis_json"
+            else (
+                "pegel-longterm-209486",
+                "pegel_longterm",
+                ProductId("pegel_longterm_abfluss"),
+                ProductId("pegel_longterm_wasserstand"),
+            )
+        )
+        body, rcpt = _capture(retained_evidence_root, "access", capture_name)
+        source = Payload(
+            SourceCoordinates(AtEhydPegelEndpointCoordinates(subsystem)),
+            (("209486", prod), ("209486", sibling_prod)),
+            win,
+            body,
+            _origin_from_receipt(rcpt),
+            (),
+        )
+        baseline = at_parse(source, cfg)
+        doc = json.loads(body)
+        field = "data" if wire_format == "pegel_bgis_json" else "current_value"
+        marker = "__AT_EHYD_NUMERIC_CELL__"
+        doc[field][0] = marker
+        raw_token = "true" if mutation == "boolean" else TOKENS[mutation]
+        mutated_bytes = json.dumps(doc).encode().replace(json.dumps(marker).encode(), raw_token.encode())
+
+    changed = at_parse(replace(source, content=mutated_bytes), cfg)
+    if mutation in (*BAD, "boolean"):
+        prod_outcomes = [item for item in changed.outcomes if item.product_id == str(prod)]
+        assert [item.status for item in prod_outcomes] == [OutcomeStatus.FAILED], (wire_format, mutation)
+        assert prod_outcomes[0].reason
+        assert changed.rows.is_empty()
+        if wire_format != "owf_csv":
+            sibling_outcomes = [item for item in changed.outcomes if item.product_id != str(prod)]
+            assert [item.status for item in sibling_outcomes] == [OutcomeStatus.NO_MATCH]
+    elif wire_format == "owf_csv" and mutation == "null":
+        # In owf CSVs, Lücke is an omitted gap-transition marker rather than a numeric row.
+        assert any(item.status is OutcomeStatus.SUCCESS for item in changed.outcomes)
+        assert changed.rows.height == baseline.rows.height - 1
+        assert_frame_equal(changed.rows, baseline.rows.slice(1))
+    else:
+        assert any(item.status is OutcomeStatus.SUCCESS for item in changed.outcomes)
+        assert changed.rows.height == baseline.rows.height
+        assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
+        assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))

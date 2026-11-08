@@ -170,21 +170,27 @@ def test_complete_ordered_provenance_roundtrip(provider):
     assert reconstruct_provenance(parsed).model_dump(mode="json") == old.model_dump(mode="json")
 
 
-def test_co_ideam_selected_metadata_publication_has_declared_source_lineage():
+@pytest.mark.parametrize("provider", ["at_ehyd", "co_ideam"])
+def test_selected_metadata_publication_has_declared_source_lineage(provider: str):
+    from importlib import import_module
+
     from rivretrieve._internal.acquisition_provenance import CodeReference, ExternalFactReference
     from rivretrieve._internal.catalogues.station_metadata import validate_metadata_fields
-    from rivretrieve._internal.providers.co_ideam.origins import STATION_METADATA_FIELDS
     from rivretrieve._internal.station_metadata import metadata_support_fact, source_metadata_frame
+
+    station_metadata_fields = import_module(
+        f"rivretrieve._internal.providers.{provider}.origins"
+    ).STATION_METADATA_FIELDS
 
     # Selected-original providers have no historical metadata migration to undo.
     # Check their current publication instead of applying the legacy projection.
-    provenance = _legacy("co_ideam")
-    metadata = pl.read_parquet(ROOT / "co_ideam/catalogue/station_metadata.parquet")
+    provenance = _legacy(provider)
+    metadata = pl.read_parquet(ROOT / f"{provider}/catalogue/station_metadata.parquet")
     source_metadata_frame(metadata.select("provider_id", "station_id").unique(), metadata)
-    validate_metadata_fields(metadata, STATION_METADATA_FIELDS)
+    validate_metadata_fields(metadata, station_metadata_fields)
     build = provenance.build_inputs
     assert build is not None
-    prefix = "src/rivretrieve/_internal/providers/co_ideam/"
+    prefix = f"src/rivretrieve/_internal/providers/{provider}/"
     declaration = CodeReference(
         repository=build.build.repository,
         revision=build.build.revision,
@@ -194,13 +200,13 @@ def test_co_ideam_selected_metadata_publication_has_declared_source_lineage():
     assert declaration in build.declarations
     selected = build.declarations[0]
     assert selected.repository == "https://github.com/RivRetrieve/verification-evidence"
-    assert selected.repository_path == "declarations/co_ideam/catalogue.json"
+    assert selected.repository_path == f"declarations/{provider}/catalogue.json"
     assert selected.symbol is None
     assert {item.reference.archive_revision for item in build.inputs} == {selected.revision}
     bindings = {binding.fact_group: binding for binding in provenance.fact_bindings}
     expected_facts = {
         metadata_support_fact(field.attribute_role, field.source_field, field.source_scope)
-        for field in STATION_METADATA_FIELDS
+        for field in station_metadata_fields
     }
     assert {fact for fact in provenance.fact_universe if fact.startswith("metadata.")} == expected_facts
     assert set(metadata["support_fact"].drop_nulls()) == expected_facts
@@ -211,7 +217,7 @@ def test_co_ideam_selected_metadata_publication_has_declared_source_lineage():
         if binding.transformation is None
         for fact in binding.facts
     }
-    for field in STATION_METADATA_FIELDS:
+    for field in station_metadata_fields:
         fact = metadata_support_fact(field.attribute_role, field.source_field, field.source_scope)
         binding = bindings[fact]
         assert binding.facts == (fact,)
@@ -229,10 +235,10 @@ def test_co_ideam_selected_metadata_publication_has_declared_source_lineage():
         support = (*field.source_facts, *field.support_facts)
         assert set(support) <= adopted
         assert transform.external_inputs == tuple(
-            ExternalFactReference(source_id="co_ideam", fact=item) for item in support
+            ExternalFactReference(source_id=provider, fact=item) for item in support
         )
         for item in support:
-            assert direct[item].source_id == "co_ideam"
+            assert direct[item].source_id == provider
             assert direct[item].acquisition_id is not None
 
 
@@ -734,7 +740,9 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
     return AcquisitionProvenance.model_validate(model)
 
 
-@pytest.mark.parametrize("provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"ch_foen", "co_ideam"}))
+@pytest.mark.parametrize(
+    "provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "co_ideam"})
+)
 def test_historical_projection_preserves_sources_and_validates_metadata(provider):
     if provider == "usgs_nwis":
         original, metadata = registered_usgs_baseline()
@@ -746,7 +754,9 @@ def test_historical_projection_preserves_sources_and_validates_metadata(provider
     assert not any(fact.startswith("metadata.") for fact in projected.fact_universe)
 
 
-@pytest.mark.parametrize("provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"ch_foen", "co_ideam"}))
+@pytest.mark.parametrize(
+    "provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "co_ideam"})
+)
 def test_historical_projection_rejects_changed_current_producer(provider):
     if provider == "usgs_nwis":
         original, metadata = registered_usgs_baseline()
