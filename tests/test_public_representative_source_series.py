@@ -165,6 +165,7 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
         ),
         pytest.param("br_ana", marks=pytest.mark.recorded("tests/recordings/br_ana")),
         pytest.param("at_ehyd", marks=pytest.mark.recorded("maintenance/observations/at_ehyd/retrieval")),
+        pytest.param("ar_ina", marks=pytest.mark.recorded("maintenance/observations/ar_ina/retrieval")),
     ],
 )
 def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, monkeypatch, tmp_path, request):
@@ -204,6 +205,28 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             statistic="mean",
         )
         start, end = "2023-01-01", "2023-01-10"
+    elif provider == "ar_ina":
+        from tests.test_ar_ina_recorded_public import _response_matching_request
+
+        class _ArInaReplay:
+            def send(self, req):
+                return _response_matching_request(
+                    retained_evidence_root,
+                    "retrieval",
+                    "a5-obs-26605-var40-planned-20240101-20240105",
+                    req,
+                    strict_params=True,
+                )
+
+        monkeypatch.setattr(discovery, "HttpClient", _ArInaReplay)
+        selection = rr.find(
+            provider=provider,
+            station="8",
+            quantity="discharge",
+            frequency="daily",
+            statistic="mean",
+        )
+        start, end = "2024-01-01T00:00:00", "2024-01-05T00:00:00"
     elif provider == "ch_foen":
         from tests.test_partial_explicit_scope import _official_replay
 

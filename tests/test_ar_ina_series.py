@@ -293,6 +293,8 @@ def test_validators_fail_closed_on_upstream_contract_contradictions() -> None:
         validate_observation_row({**base_obs, "valor": True}, qmd_spec, expected_series_id=26605)
     with pytest.raises(FatalContractError, match="non-finite"):
         validate_observation_row({**base_obs, "valor": float("nan")}, qmd_spec, expected_series_id=26605)
+    with pytest.raises(FatalContractError, match="overflows Float64"):
+        validate_observation_row({**base_obs, "valor": 10**400}, qmd_spec, expected_series_id=26605)
 
     # Series record and reference dictionary validation failures
     valid_series_row = {

@@ -79,6 +79,7 @@ for provider_id in provider_ids:
     selections.append(rr.from_bundle(rr.to_bundle(selection)))
     frames.append(rr.metadata(selections[-1], view="source"))
     if provider_id in {
+        "ar_ina",
         "at_ehyd",
         "br_ana",
         "ca_eccc",
@@ -190,6 +191,21 @@ for provider, station, role, field, raw, numeric, unit, datum in [
     assert summary[f"{role}_unit"][index] == source["source_unit"] == unit
     if role == "elevation":
         assert summary["elevation_datum"][index] == source["source_datum"] == datum
+
+ar_ina_gauge = rr.find(provider="ar_ina", station="8")
+ar_ina_summary = rr.metadata(ar_ina_gauge).row(0, named=True)
+assert ar_ina_summary["station_name"] == "Andresito"
+assert ar_ina_summary["water_body_name_field"] == ["rio"]
+assert ar_ina_summary["water_body_name_value"] == ["IGUAZU"]
+assert ar_ina_summary["drainage_area_value"] is None
+assert ar_ina_summary["elevation_value"] is None
+ar_ina_source = rr.metadata(ar_ina_gauge, view="source")
+assert dict(ar_ina_source.select("attribute_role", "state").iter_rows()) == {
+    "station_name": "value",
+    "water_body_name": "value",
+    "drainage_area": "no_metadata",
+    "elevation": "no_metadata",
+}
 
 empty = rr.pick(rr.pick(selection, quantity="discharge"), quantity="stage")
 assert_frame_equal(rr.metadata(empty, view="source"), pl.DataFrame(schema=schema))

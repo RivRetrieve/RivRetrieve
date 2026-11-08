@@ -109,7 +109,7 @@ def resolve_series_lookup(
 
     try:
         document = json.loads(content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
         raise UnsupportedSourceStructureError("INA /obs/puntual/series response is not valid JSON") from error
 
     if not isinstance(document, dict) or not isinstance(document.get("rows"), list):

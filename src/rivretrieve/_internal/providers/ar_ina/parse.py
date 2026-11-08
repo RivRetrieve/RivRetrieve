@@ -203,7 +203,7 @@ def _parse_observations(
 
         try:
             raw_document = json.loads(payload.content)
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
             raise UnsupportedSourceStructureError(
                 f"INA /observaciones response for series {coords.published_series_id} is not valid JSON"
             ) from error
