@@ -363,8 +363,15 @@ def test_option_2a_http_404_and_503_isolate_siblings_and_retain_held_rows(tmp_pa
                     category=TransportFailureCategory.HTTP_STATUS,
                 )
             if self.stage_status != 200:
-                return TransportResponse(
-                    no_such_key_xml, self.stage_status, _RETRIEVED_AT, "application/xml", stage_url, {}
+                raise TransportFailure(
+                    request,
+                    TransportFailureReason.HTTP_STATUS,
+                    1,
+                    status_code=self.stage_status,
+                    category=TransportFailureCategory.HTTP_STATUS,
+                    response=TransportResponse(
+                        no_such_key_xml, self.stage_status, _RETRIEVED_AT, "application/xml", stage_url, {}
+                    ),
                 )
             return TransportResponse(
                 _csv_bytes(("2009-01-01 00:00:00", "1.0", "Preliminar")),

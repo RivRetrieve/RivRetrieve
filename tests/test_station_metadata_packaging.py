@@ -79,6 +79,7 @@ for provider_id in provider_ids:
     selections.append(rr.from_bundle(rr.to_bundle(selection)))
     frames.append(rr.metadata(selections[-1], view="source"))
     if provider_id in {
+        "at_ehyd",
         "br_ana",
         "ca_eccc",
         "co_ideam",
@@ -177,6 +178,7 @@ for provider, station, role, field, raw, numeric, unit, datum in [
     ("ba_fhmzbih", "4024", "drainage_area", "metadata_CATCHMENT_SIZE", "1600.00 km²", "1600.00", "km²", None),
     ("ch_foen", "2004", "drainage_area", "Catchment size", "713 km2", "713", "km2", None),
     ("ch_foen", "2004", "elevation", "Station altitude", "432 m a.s.l.", "432", "m", "LN02"),
+    ("at_ehyd", "209486", "drainage_area", "orogr.Einzugsgebiet [km²]", "55,3", "55,3", "km²", None),
 ]:
     gauge = rr.find(provider=provider, station=station)
     source = rr.metadata(gauge, view="source").filter(pl.col("source_field") == field).row(0, named=True)

@@ -30,8 +30,6 @@ from rivretrieve._internal.transport import (
     HttpMethod,
     Transport,
     TransportFailure,
-    TransportFailureCategory,
-    TransportFailureReason,
     TransportRequest,
     TransportResponse,
 )
@@ -104,26 +102,6 @@ def fetch(
                         window,
                         request,
                         response,
-                    )
-                )
-                continue
-            if response.status_code >= 400:
-                http_failure = TransportFailure(
-                    request,
-                    TransportFailureReason.HTTP_STATUS,
-                    response.attempts,
-                    status_code=response.status_code,
-                    category=TransportFailureCategory.HTTP_STATUS,
-                    response=response,
-                    attempt_traces=response.attempt_traces,
-                )
-                failures.append(
-                    FailedSourceRequest(
-                        uuid4().hex,
-                        _request_target(station, product, known_series),
-                        window,
-                        request,
-                        http_failure,
                     )
                 )
                 continue

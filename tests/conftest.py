@@ -566,7 +566,7 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
             if provenance.provider_id == "usgs_nwis"
             else origins.NATIVE_TABLE_ACQUISITION_IDS
         )
-        if provenance.provider_id in {"ch_foen", "co_ideam"}:
+        if provenance.provider_id in {"at_ehyd", "ch_foen", "co_ideam"}:
             import json
 
             generator = importlib.import_module(
@@ -574,7 +574,7 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
             )
             selection_path = f"maintenance/catalogue/{provenance.provider_id}/official/selection.json"
             if selection_path not in {item.consumer_path for item in receipt.declaration_inputs}:
-                raise ValueError(f"{provenance.provider_id} build support requires the selected authored declaration")
+                raise ValueError("Build support requires the selected authored declaration")
             selection = json.loads((retained_evidence_root / selection_path).read_bytes())
             supporting_inputs.update(generator.selected_supporting_inputs(provenance, selection))
         result = select_catalogue_build_inputs(
