@@ -220,7 +220,11 @@ def build_provider_info(
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": "unknown: fi_syke is CatalogueOnly; retrieval behavior is not yet implemented",
+        "bulk_observations": (
+            "false: one Hydrologiarajapinta OData request per station-product, paginated via "
+            "odata.nextLink (never $top, which would suppress it); no shared or batched request "
+            "across products"
+        ),
         "catalogue_version": catalogue_date.isoformat(),
         "license": license_text,
         "citation": citation_text,

@@ -46,8 +46,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provider.json",
       "encodingFormat": "application/json",
-      "sha256": "d77778f0b299124ca6d93de2826b348ccbace59625f152f672daaba00c447cbe",
-      "contentSize": "823 B"
+      "sha256": "4121ed5ee55326f08823eccc7fc2d6d9b62a2ae02262708764142ecde79d6fb2",
+      "contentSize": "925 B"
     },
     {
       "@id": "products.parquet",
@@ -78,7 +78,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "9aab170097aea3b1285df79cb6d839c7e5a5e0969b89f3ce3e7164aa07fd7e99",
+      "sha256": "a9da0592ecc84bb6b7ce4776485c5ea2e500eba4515923e536af53aaf7796d93",
       "contentSize": "25793 B"
     },
     {
