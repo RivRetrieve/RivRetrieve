@@ -56,6 +56,19 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "stage_monthly_min",
         "stage_weekly_mean",
     ],
+    "at_ehyd": [
+        "owf_abfl_monatsmaxima",
+        "owf_abfl_monatsminima",
+        "owf_abfl_tagesmittel",
+        "owf_wasserst_monatsmaxima",
+        "owf_wasserst_monatsminima",
+        "owf_wasserst_tagesmittel",
+        "owf_wassertemp_monatsmittel",
+        "pegel_bgis_abfluss",
+        "pegel_bgis_wasserstand",
+        "pegel_longterm_abfluss",
+        "pegel_longterm_wasserstand",
+    ],
     "ba_fhmzbih": [
         "discharge_reported",
         "stage_reported",
@@ -149,6 +162,7 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
 EXPECTED_PRODUCT_IDS = sorted(
     set(EXPECTED_PRODUCT_IDS)
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["ar_ina"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["at_ehyd"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"])
 )
 
@@ -180,6 +194,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
     result = rr.providers()
     assert result.get_column("provider_id").to_list() == [
         "ar_ina",
+        "at_ehyd",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
