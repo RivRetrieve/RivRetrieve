@@ -37,3 +37,16 @@ def test_fi_syke_each_station_is_witnessed_for_exactly_one_product() -> None:
     counts = available.group_by("station_id").len()
     assert counts["len"].to_list() == [1] * counts.height
     assert available.height == catalogue_reader("fi_syke").read_stations().data.height
+
+
+def test_fi_syke_stage_vertical_reference_is_above_sea_level() -> None:
+    """Vedenkorkeus publishes an absolute water-surface elevation, not a small
+    gauge-relative reading: active stage stations range -223 to 24,469 cm,
+    matching Finland's coast-to-Lapland relief, independently corroborated by
+    VedenkTasoTieto's per-site national-datum corrections (see
+    research/fi-syke-series-identity.md, verification-evidence)."""
+    descriptions = catalogue_reader("fi_syke").artifact.source_descriptions.descriptions
+    by_product = {description.product_id: description.facts[0] for description in descriptions}
+    assert by_product["stage_reported"].vertical_reference.value == "above_sea_level"
+    assert by_product["discharge_reported"].vertical_reference.state == "not_established"
+    assert by_product["water_temperature_reported"].vertical_reference.state == "not_established"

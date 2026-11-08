@@ -78,8 +78,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "650e5fc59b4c01f79562e440f79edc3d9b445362dc05e22e3de6ff8a1178d739",
-      "contentSize": "20045 B"
+      "sha256": "9aab170097aea3b1285df79cb6d839c7e5a5e0969b89f3ce3e7164aa07fd7e99",
+      "contentSize": "25793 B"
     },
     {
       "@id": "provenance_facts.parquet",
@@ -94,8 +94,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance_acquisitions.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "e99cd5192587d39172de0db42fed652d96f78eaf8c5c0899ee2d4583de7add9e",
-      "contentSize": "6800 B"
+      "sha256": "4d088942d7b9585ca078b9847830579cf81288585a9967d02e252aa4a19713db",
+      "contentSize": "7223 B"
     },
     {
       "@id": "provenance_bindings.parquet",
@@ -134,8 +134,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "30c8c77ed04984b6271b1f137d914e1f51a8a1cd24fd63d38319c99cd3ae46b5",
-      "contentSize": "4466 B"
+      "sha256": "72e7bf8eb6c27c1b84c646b37f8d9a792e2c52cb6f9608cc9bf75e66c5dfb85c",
+      "contentSize": "5021 B"
     },
     {
       "@id": "series_claims.parquet",
