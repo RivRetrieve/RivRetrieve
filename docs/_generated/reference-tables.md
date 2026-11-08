@@ -148,7 +148,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
 | `ch_foen` | live | none | 1341 | 7008 | 41268 | 0 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
-| `fi_syke` | catalogue-only | none | 2543 | 2543 | 5086 | 0 |
+| `fi_syke` | live | none | 2543 | 2543 | 5086 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
 | `jp_mlit` | live | none | 1023 | 0 | 4092 | 0 |
