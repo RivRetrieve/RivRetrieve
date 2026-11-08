@@ -19,10 +19,8 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.co_ideam.generate_catalogue import (
     ASSOCIATION_SCHEMA,
     CATALOGO_COLUMNS,
-    DISCHARGE_LABELS,
     IN_SCOPE_HYDROLOGICAL_LABELS,
     S3_BUCKET_NAME,
-    STAGE_LABELS,
     build_catalogue,
     catalogue_tables,
     describe_associations,
@@ -82,30 +80,20 @@ def _catalogo_csv_bytes(rows: list[dict[str, str]], *, columns: tuple[str, ...] 
 
 
 def _variables_csv_bytes(extra_rows: list[dict[str, str]] | None = None) -> bytes:
+    from rivretrieve._internal.providers.co_ideam.series import SERIES_SPECS
+
     fieldnames = ["etiqueta", "parametro", "unidad", "periodo", "descripcion", "tipo_estadistica"]
-    rows = []
-    for label in DISCHARGE_LABELS:
-        rows.append(
-            {
-                "etiqueta": label,
-                "parametro": "Caudal ",
-                "unidad": "m3/s",
-                "periodo": "Diario",
-                "descripcion": label,
-                "tipo_estadistica": "Media",
-            }
-        )
-    for label in STAGE_LABELS:
-        rows.append(
-            {
-                "etiqueta": label,
-                "parametro": "Nivel",
-                "unidad": "cm",
-                "periodo": "Diario",
-                "descripcion": label,
-                "tipo_estadistica": "Media",
-            }
-        )
+    rows = [
+        {
+            "etiqueta": spec.etiqueta,
+            "parametro": "Caudal " if spec.expected_parametro == "Caudal" else "Nivel",
+            "unidad": spec.source_unit,
+            "periodo": spec.expected_periodo,
+            "descripcion": spec.etiqueta,
+            "tipo_estadistica": spec.expected_tipo_estadistica,
+        }
+        for spec in SERIES_SPECS
+    ]
     if extra_rows:
         rows.extend(extra_rows)
     buf = io.StringIO()
@@ -362,8 +350,12 @@ def test_metadata_projection_and_source_descriptions_preserve_units_and_null_cor
         "target_unit": "m",
         "factor": 0.01,
     }
-    assert nv_facts.vertical_reference.value is None
-    assert nv_facts.frequency.value is None
+    assert nv_facts.vertical_reference.value == "gauge_zero"
+    assert nv_facts.vertical_datum.value is None
+    assert nv_facts.frequency.value == "daily"
+    assert nv_facts.statistic.value == "mean"
+    assert descriptions["caudal_h"].facts[0].frequency.value is None
+    assert descriptions["caudal_h"].facts[0].statistic.value is None
 
 
 def test_provenance_offline_publication_and_cli_checkout_guard(tmp_path: Path):
@@ -427,6 +419,9 @@ def test_provenance_offline_publication_and_cli_checkout_guard(tmp_path: Path):
         "source.station.altitud_field_context",
         "source.product.variables_catalogue",
         "source.station_product.s3_prefix_listings",
+        "source.product.datosgov_series_definitions",
+        "source.product.ideam_hydrological_manuals",
+        "source.product.s3_observation_witnesses",
         "source.provider.license",
         "source.provider.citation",
         "source.provider.terms_series",
@@ -526,6 +521,7 @@ def test_provenance_offline_publication_and_cli_checkout_guard(tmp_path: Path):
             code(prefix + "generate_catalogue.py", "build_catalogue"),
             code(prefix + "generate_catalogue.py", "read_catalogue_sources"),
             code(prefix + "station_metadata.py", "project_station_metadata"),
+            code(prefix + "series.py", "source_series"),
         ),
         inputs=(RetainedInputUse(reference=member, usage="native_table", facts=facts),),
     )
