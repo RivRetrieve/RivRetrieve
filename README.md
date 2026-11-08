@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from fourteen different providers in thirteen countries.
+from fifteen different providers in fourteen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -37,6 +37,7 @@ for how to supply them.
 
 | Country | Agency | Provider | Stations | Access |
 |---|---|---|---:|---|
+| Argentina | Instituto Nacional del Agua (INA), Alerta5 | `ar_ina` | 829 | Open |
 | Austria | Federal Ministry of Agriculture and Forestry, Climate and Environmental Protection, Regions and Water Management / Bundesministerium für Land- und Forstwirtschaft, Klima- und Umweltschutz, Regionen und Wasserwirtschaft (BMLUK), eHYD | `at_ehyd` | 744 | Open |
 | Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | Open |
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
@@ -65,7 +66,7 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Argentina, Australia, Belgium, Chile, Colombia, Denmark, Estonia, Finland,
+Afghanistan, Australia, Belgium, Chile, Colombia, Denmark, Estonia, Finland,
 Germany, Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Peru, Portugal, Rwanda,
 Slovenia, South Africa, South Korea, Spain, Sweden, Taiwan and the United Kingdom.
 

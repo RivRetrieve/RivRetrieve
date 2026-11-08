@@ -1,4 +1,4 @@
-"""Offline public discovery and catalogue-only boundary checks for Argentina INA Alerta5."""
+"""Offline public discovery checks for Argentina INA Alerta5."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import polars as pl
 import pytest
 
 import rivretrieve as rr
-from rivretrieve._internal.issues import ObservationsUnavailableError
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
@@ -87,8 +86,3 @@ def test_ar_ina_offline_discovery_stations_products_and_metadata(monkeypatch: py
     assert [(s.identity.namespace, s.identity.published_id) for s in restored.series] == [
         ("INA.Alerta5.series_id", "26605")
     ]
-
-    # Step 3 keeps ar_ina as CatalogueOnly; observation retrieval fails closed without network I/O.
-    gauge = rr.find(provider="ar_ina", station="29", quantity="stage")
-    with pytest.raises(ObservationsUnavailableError):
-        rr.fetch(gauge, start="2024-01-01", end="2024-01-10")

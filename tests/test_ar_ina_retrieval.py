@@ -48,7 +48,7 @@ from rivretrieve._internal.providers.ar_ina.series import (
     SPECS_BY_PRODUCT_ID,
     source_series,
 )
-from rivretrieve._internal.providers.registration import CatalogueOnly
+from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     OutcomeStatus,
@@ -73,7 +73,7 @@ _SERIES_URL = "https://alerta.ina.gob.ar/a5/obs/puntual/series"
 
 @dataclass(frozen=True)
 class _ArInaStages:
-    """Explicit stage bundle matching ProviderStages while Step 4 remains CatalogueOnly."""
+    """Explicit stage bundle matching the live declaration contract."""
 
     config: ProviderConfig = config()
     window_declarations: ProductWindowDeclarations = window_declarations()
@@ -234,8 +234,10 @@ def _ok_response(request: TransportRequest, body: bytes) -> TransportResponse:
     )
 
 
-def test_step4_declaration_remains_catalogue_only_and_stages_expose_required_attributes() -> None:
-    assert isinstance(declaration.observations, CatalogueOnly)
+def test_declaration_wires_live_stages_and_exposes_required_attributes() -> None:
+    assert isinstance(declaration.observations, LiveStages)
+    assert declaration.observations.stages.observation_source == "live"
+    assert not hasattr(declaration.observations.stages, "shared_acquisition_products")
     stages = _ArInaStages()
     assert stages.config is config()
     assert stages.window_declarations is window_declarations()
