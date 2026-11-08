@@ -150,8 +150,10 @@ def test_window_declarations_and_renderings_are_immutable_and_non_arithmetic() -
         "size",
         "calendar_labels",
         "timestamp_precision",
+        "stop_extension",
     )
     assert declaration.timestamp_precision is None
+    assert declaration.stop_extension is None
     assert dict(declarations.products) == {ProductId("flow"): declaration}
     assert isinstance(rendered.start, str)
     assert isinstance(rendered.stop, str)
