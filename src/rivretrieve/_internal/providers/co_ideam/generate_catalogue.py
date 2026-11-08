@@ -23,38 +23,23 @@ from rivretrieve._internal.acquisition_provenance import (
 )
 from rivretrieve._internal.catalogue_origins import OriginDeclarations
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table
+from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.providers.co_ideam.series import (
+    DISCHARGE_LABELS,
+    IN_SCOPE_HYDROLOGICAL_LABELS,
+    association_product,
+    build_source_descriptions,
+    route_product_facts,
+    validate_s3_observation_csv_bytes,
+    validate_socrata_series_view,
+    validate_variables_row,
+)
 
 S3_XML_NS = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
 S3_BUCKET_NAME = "s3-estacionesideam"
-
-DISCHARGE_LABELS: tuple[str, ...] = (
-    "CAUDAL_H",
-    "Q_MEDIA_D",
-    "Q_MX_D",
-    "Q_MN_D",
-    "Q_MEDIA_M",
-    "Q_MX_M",
-    "Q_MN_M",
-    "Q_MEDIA_A",
-    "Q_MX_A",
-    "Q_MN_A",
-)
-STAGE_LABELS: tuple[str, ...] = (
-    "NIVEL_H",
-    "NV_MEDIA_D",
-    "NV_MX_D",
-    "NV_MN_D",
-    "NV_MEDIA_M",
-    "NV_MX_M",
-    "NV_MN_M",
-    "NV_MEDIA_A",
-    "NV_MX_A",
-    "NV_MN_A",
-)
-IN_SCOPE_HYDROLOGICAL_LABELS: tuple[str, ...] = DISCHARGE_LABELS + STAGE_LABELS
 
 SYNTHETIC_STATION_EXCLUSIONS: frozenset[str] = frozenset({"0010000000"})
 MARINE_CORRIENTES: frozenset[str] = frozenset({"MAR CARIBE", "PACÍFICO", "OCÉANO PACÍFICO"})
@@ -119,35 +104,33 @@ def _decode_utf8_csv(raw_bytes: bytes, label: str) -> tuple[tuple[str, ...], lis
 
 
 def parse_variables_catalogue(raw_bytes: bytes) -> dict[str, tuple[str, str]]:
-    """Verify IDEAM variables.csv parameters and units for all 20 hydrological series."""
+    """Verify IDEAM variables.csv parameters, units, periods, and statistics for all 20 series."""
     fieldnames, rows = _decode_utf8_csv(raw_bytes, "variables")
     required = {"etiqueta", "parametro", "unidad", "periodo", "descripcion", "tipo_estadistica"}
     if not required <= set(fieldnames):
         raise FatalContractError("IDEAM variables.csv is missing required schema columns")
-    by_label: dict[str, tuple[str, str]] = {}
+    by_label: dict[str, dict[str, str]] = {}
     for row in rows:
         label = row["etiqueta"].strip()
         if not label:
             raise FatalContractError("IDEAM variables.csv contains a blank etiqueta")
         if label in by_label:
             raise FatalContractError(f"IDEAM variables.csv contains duplicate etiqueta {label!r}")
-        by_label[label] = (row["parametro"].strip(), row["unidad"].strip())
+        by_label[label] = row
 
     verified: dict[str, tuple[str, str]] = {}
     for label in IN_SCOPE_HYDROLOGICAL_LABELS:
-        if label not in by_label:
+        raw_row = by_label.get(label)
+        if raw_row is None:
             raise FatalContractError(f"IDEAM variables.csv is missing hydrological series {label!r}")
-        parametro, unidad = by_label[label]
-        if label in DISCHARGE_LABELS:
-            if parametro != "Caudal" or unidad != "m3/s":
-                raise FatalContractError(
-                    f"IDEAM discharge series {label!r} has unexpected parameter/unit {(parametro, unidad)!r}"
-                )
-        elif parametro != "Nivel" or unidad != "cm":
-            raise FatalContractError(
-                f"IDEAM stage series {label!r} has unexpected parameter/unit {(parametro, unidad)!r}"
-            )
-        verified[label] = (parametro, unidad)
+        spec = validate_variables_row(
+            label,
+            parametro=raw_row["parametro"],
+            unidad=raw_row["unidad"],
+            periodo=raw_row["periodo"],
+            tipo_estadistica=raw_row["tipo_estadistica"],
+        )
+        verified[label] = (spec.expected_parametro, spec.source_unit)
     return verified
 
 
@@ -343,18 +326,6 @@ def s3_list_associations(
     return pl.DataFrame(rows, schema=ASSOCIATION_SCHEMA, orient="row").sort(ASSOCIATION_SCHEMA.names())
 
 
-def association_product(etiqueta: str) -> str:
-    return etiqueta.lower()
-
-
-def _quantity_and_canonical_unit(unit: str) -> tuple[str, str, str]:
-    if unit == "m3/s":
-        return "discharge", "m3/s", "m3/s"
-    if unit == "cm":
-        return "stage", "m", "cm"
-    raise FatalContractError(f"Unsupported IDEAM source unit: {unit!r}")
-
-
 def catalogue_tables(
     native: NativeTable,
     associations: pl.DataFrame,
@@ -381,22 +352,15 @@ def catalogue_tables(
     if not set(associations["station_id"]) <= set(stations["station_id"]):
         raise FatalContractError("IDEAM association references a station absent from canonical river scope")
 
-    product_rows = []
-    for etiqueta, unit in associations.select("etiqueta", "unit").unique().sort("etiqueta", "unit").iter_rows():
-        observed_property, canonical_unit, _ = _quantity_and_canonical_unit(unit)
-        product_rows.append(
-            {
-                "provider_id": "co_ideam",
-                "product_id": association_product(etiqueta),
-                "observed_property": observed_property,
-                "frequency": "unknown",
-                "statistic": "unknown",
-                "period_type": "unknown",
-                "period_anchor": "unknown",
-                "unit": canonical_unit,
-                "native_id": etiqueta,
-            }
+    product_rows = [
+        product_row(
+            "co_ideam",
+            association_product(etiqueta),
+            etiqueta,
+            route_product_facts(etiqueta, source_unit=unit),
         )
+        for etiqueta, unit in associations.select("etiqueta", "unit").unique().sort("etiqueta", "unit").iter_rows()
+    ]
     products = pl.DataFrame(product_rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
     observed = {(station, association_product(etiqueta)) for station, etiqueta, _ in associations.iter_rows()}
@@ -436,43 +400,15 @@ def catalogue_tables(
 
 
 def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
-    """Describe witnessed IDEAM S3 source series with established quantities and native units."""
-    from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
-    from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, known, stable_id
+    """Describe witnessed IDEAM S3 source series with established physical and temporal facts."""
+    from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 
     grouped: dict[tuple[str, str], list[str]] = {}
     for station, etiqueta, unit in associations.unique().sort(ASSOCIATION_SCHEMA.names()).iter_rows():
         grouped.setdefault((etiqueta, unit), []).append(station)
 
-    unit_evidence = "catalogue:co_ideam:source.product.variables_catalogue"
-    listing_evidence = "catalogue:co_ideam:source.station_product.s3_prefix_listings"
-
-    descriptions = []
-    for (etiqueta, unit), station_list in sorted(grouped.items()):
-        quantity, _, normalized_unit = _quantity_and_canonical_unit(unit)
-        facts = PhysicalFacts(
-            facts_id="pending",
-            quantity=known(quantity, unit_evidence),
-            source_unit=known(unit, unit_evidence),
-            normalized_unit=normalized_unit,
-        )
-        facts = facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})
-        descriptions.append(
-            SourceDescription(
-                product_id=association_product(etiqueta),
-                station_ids=tuple(sorted(station_list)),
-                identity_key=("s3_historicos_csv", etiqueta, unit),
-                native_coordinate=etiqueta,
-                identity=SourceIdentity(
-                    namespace="ideam.s3.historicos",
-                    published_id=etiqueta,
-                    origin="catalogue",
-                    evidence=(unit_evidence, listing_evidence),
-                ),
-                facts=(facts,),
-            )
-        )
-    return SourceDescriptions(provider_id="co_ideam", descriptions=tuple(descriptions))
+    ordered = [(etiqueta, unit, station_list) for (etiqueta, unit), station_list in sorted(grouped.items())]
+    return SourceDescriptions(provider_id="co_ideam", descriptions=build_source_descriptions(ordered))
 
 
 def read_original(evidence_root: Path, reference: RecordingReference, *, input_receipt: RetainedInputReceipt) -> bytes:
@@ -541,6 +477,25 @@ def _extract_selected_inventories(
             doc = json.loads(raw_bytes.decode("utf-8"))
             if not isinstance(doc, dict) or doc.get("licenseId") != "CC_40_BY_SA":
                 raise FatalContractError("IDEAM Datos Abiertos metadata view must declare CC_40_BY_SA")
+        elif kind == "datosgov_series_view":
+            view_id = capture.get("view_id")
+            etiqueta = capture.get("etiqueta")
+            if not isinstance(view_id, str) or not isinstance(etiqueta, str):
+                raise FatalContractError("IDEAM datosgov_series_view capture requires string view_id and etiqueta")
+            spec = validate_socrata_series_view(raw_bytes, expected_view_id=view_id)
+            if spec.etiqueta != etiqueta:
+                raise FatalContractError(
+                    f"IDEAM datosgov_series_view {view_id!r} etiqueta {spec.etiqueta!r} disagrees with {etiqueta!r}"
+                )
+        elif kind == "ideam_hydrological_manual":
+            if not raw_bytes.startswith(b"%PDF-"):
+                raise FatalContractError("IDEAM hydrological manual capture is not a valid PDF document")
+        elif kind == "s3_observation_sample":
+            etiqueta = capture.get("etiqueta")
+            station_id = capture.get("station_id")
+            if not isinstance(etiqueta, str) or not isinstance(station_id, str):
+                raise FatalContractError("IDEAM s3_observation_sample capture requires string etiqueta and station_id")
+            validate_s3_observation_csv_bytes(raw_bytes, etiqueta=etiqueta)
         else:
             raise FatalContractError(f"Unsupported IDEAM capture kind: {kind!r}")
 

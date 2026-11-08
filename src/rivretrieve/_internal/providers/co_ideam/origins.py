@@ -79,6 +79,9 @@ _CATALOGUE_SOURCE_FACTS = {
     "product": (
         "source.product.variables_catalogue",
         "source.station_product.s3_prefix_listings",
+        "source.product.datosgov_series_definitions",
+        "source.product.ideam_hydrological_manuals",
+        "source.product.s3_observation_witnesses",
     ),
     "station_product": (
         "source.station.catalogo_registry",
@@ -98,8 +101,8 @@ def build_acquisition_provenance(
     """Bind selected official IDEAM source evidence and derived native table to catalogue facts.
 
     Acquisitions and exact statements come from the verified selection. Unestablished
-    CRS, temporal meanings, vertical references, and record bounds remain unknown in
-    canonical catalogue products.
+    CRS, sub-daily cadence, temporal support, time zone, vertical datum, and record
+    bounds remain unknown in canonical catalogue products.
     """
     if any(binding.source_id != "co_ideam" or binding.transformation is not None for binding in source_bindings):
         raise ValueError("IDEAM source bindings must directly identify selected acquisitions")
@@ -199,4 +202,5 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/co_ideam/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/providers/co_ideam/generate_catalogue.py", "read_catalogue_sources"),
     ("src/rivretrieve/_internal/providers/co_ideam/station_metadata.py", "project_station_metadata"),
+    ("src/rivretrieve/_internal/providers/co_ideam/series.py", "source_series"),
 )
