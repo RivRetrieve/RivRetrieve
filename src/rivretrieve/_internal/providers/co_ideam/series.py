@@ -13,7 +13,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.source_series import (
@@ -26,6 +26,9 @@ from rivretrieve._internal.source_series import (
     admission,
     stable_id,
 )
+
+if TYPE_CHECKING:
+    from rivretrieve._internal.catalogues.source_series import SourceDescription
 
 NAMESPACE = "ideam.s3.historicos"
 CSV_HEADER: tuple[str, str, str] = ("fechaObservacion", "valorObservado", "nivelAprobacion")
@@ -669,7 +672,7 @@ def validate_s3_observation_csv_bytes(
 
 def build_source_descriptions(
     grouped_stations: Sequence[tuple[str, str, Sequence[str]]],
-) -> tuple[object, ...]:
+) -> tuple[SourceDescription, ...]:
     """Construct ``SourceDescription`` items for ``co_ideam`` from ``(etiqueta, unit, station_ids)``."""
     from rivretrieve._internal.catalogues.source_series import SourceDescription
 
