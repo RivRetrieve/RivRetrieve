@@ -96,6 +96,11 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "stage_hourly_mean",
         "water_temperature_daily_mean",
     ],
+    "fi_syke": [
+        "discharge_reported",
+        "stage_reported",
+        "water_temperature_reported",
+    ],
     "fr_hubeau": [
         "discharge_daily_max",
         "discharge_daily_mean",
@@ -201,6 +206,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "ca_eccc",
         "ch_foen",
         "cz_chmi",
+        "fi_syke",
         "fr_hubeau",
         "fr_hydroportail",
         "jp_mlit",

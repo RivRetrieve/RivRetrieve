@@ -42,6 +42,7 @@ for how to supply them.
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
 | Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Bulk download |
 | Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | Open |
+| Finland | Finnish Environment Institute (Syke), Hydrologiarajapinta | `fi_syke` | 2,543 | Open |
 | France | Hub'Eau | `fr_hubeau` | 7,347 | Open |
 | France | HydroPortail | `fr_hydroportail` | 6,409 | Open |
 | Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | Open |

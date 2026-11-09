@@ -108,6 +108,7 @@ nav:
       - Brazil (ANA): providers/br_ana.md
       - Canada (ECCC): providers/ca_eccc.md
       - Czechia (CHMI): providers/cz_chmi.md
+      - Finland (Syke): providers/fi_syke.md
       - France (Hub'Eau): providers/fr_hubeau.md
       - France (HydroPortail): providers/fr_hydroportail.md
       - Japan (MLIT): providers/jp_mlit.md

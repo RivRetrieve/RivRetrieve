@@ -122,7 +122,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     keys = ["provider_id", "station_id"]
     assert_frame_equal(result.select(keys).unique().sort(keys), before.select(keys).unique().sort(keys))
     assert result.select(*keys, "source_field").is_duplicated().sum() == 0
-    assert result["provider_id"].n_unique() == 15
+    assert result["provider_id"].n_unique() == 16
     assert_frame_equal(rr.as_frame(selection), before)
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
