@@ -48,6 +48,7 @@ for how to supply them.
 | Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | Open |
 | Lithuania | Lithuanian Hydrometeorological Service (LHMT) | `lt_lhmt` | 97 | Open |
 | Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | Credentials required |
+| Peru | Servicio Nacional de Meteorología e Hidrología del Perú (SENAMHI) | `pe_senamhi` | 270 | Open |
 | Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Bulk download |
 | Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 558 | Open |
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
@@ -59,6 +60,7 @@ See the [Austrian provider guide](https://rivretrieve.github.io/providers/at_ehy
 Switzerland's `ch_foen` catalogue retains 1,341 stations; 558 have selectable official series in this snapshot.
 See the [Swiss provider guide](https://rivretrieve.github.io/providers/ch_foen/) for catalogue coverage and limitations.
 The USGS catalogue retains 29,642 station identities; 29,387 have selectable series in this snapshot.
+SENAMHI retains 771 station identities; 270 have selectable series in this snapshot.
 A station can appear under both French services; their series remain separate.
 
 </details>
@@ -67,7 +69,7 @@ A station can appear under both French services; their series remain separate.
 <summary>Countries coming soon</summary>
 
 Afghanistan, Argentina, Australia, Belgium, Chile, Colombia, Denmark, Estonia, Finland,
-Germany, Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Peru, Portugal, Rwanda,
+Germany, Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Portugal, Rwanda,
 Slovenia, South Africa, South Korea, Spain, Sweden, Taiwan and the United Kingdom.
 
 Some of these have a fetcher in the legacy
