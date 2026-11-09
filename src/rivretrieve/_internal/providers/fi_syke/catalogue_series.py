@@ -21,6 +21,28 @@ _NATIVE_UNIT = {
     "water_temperature_reported": "°C",
 }
 
+# normalized_unit is a recognised *spelling* of source_unit, same scale and
+# zero (stage's native "cm" stays "cm"; admission() computes the cm->m
+# factor separately from canonical_unit, not here). Matches series.py's
+# _NORMALIZED_NATIVE_UNIT exactly.
+_NORMALIZED_NATIVE_UNIT = {
+    "discharge_reported": "m3/s",
+    "stage_reported": "cm",
+    "water_temperature_reported": "degC",
+}
+
+# The dimension name admission() checks the normalized unit against
+# (source_series._UNIT_DIMENSIONS), distinct from observed_property, which
+# is this catalogue's own public display label. Only water temperature
+# differs ("temperature" vs "water_temperature") -- matches series.py's
+# ProductDefinition.quantity exactly; without this, admission() marks every
+# water-temperature series unsupported at discovery time.
+_QUANTITY = {
+    "discharge_reported": "discharge",
+    "stage_reported": "stage",
+    "water_temperature_reported": "temperature",
+}
+
 
 def describe_catalogue(artifact: PackagedCatalogArtifact) -> SourceDescriptions:
     """Step 1/2 established frequency and native units; step 3 (#755) still owes
@@ -34,7 +56,7 @@ def describe_catalogue(artifact: PackagedCatalogArtifact) -> SourceDescriptions:
     descriptions = []
     for row in artifact.products.iter_rows(named=True):
         product = row["product_id"]
-        quantity = row["observed_property"]
+        quantity = _QUANTITY[product]
         if product == "stage_reported":
             vertical_reference = EvidenceFact(
                 value="above_sea_level",
@@ -47,6 +69,7 @@ def describe_catalogue(artifact: PackagedCatalogArtifact) -> SourceDescriptions:
             facts_id=product,
             quantity=known(quantity, _TAULUKUVAUS_EVIDENCE),
             source_unit=known(_NATIVE_UNIT[product], _TAULUKUVAUS_EVIDENCE),
+            normalized_unit=_NORMALIZED_NATIVE_UNIT[product],
             frequency=known("daily", _PAIKKA_EVIDENCE),
             statistic=EvidenceFact(state=EvidenceState.SOURCE_SILENT),
             temporal_support=EvidenceFact(state=EvidenceState.SOURCE_SILENT),
