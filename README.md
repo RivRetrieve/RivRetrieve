@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from fourteen different providers in thirteen countries.
+from fifteen different providers in fourteen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -41,6 +41,7 @@ for how to supply them.
 | Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | Open |
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
 | Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Bulk download |
+| Colombia | Instituto de Hidrología, Meteorología y Estudios Ambientales (IDEAM) | `co_ideam` | 1,372 | Open |
 | Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | Open |
 | France | Hub'Eau | `fr_hubeau` | 7,347 | Open |
 | France | HydroPortail | `fr_hydroportail` | 6,409 | Open |
@@ -65,7 +66,7 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Argentina, Australia, Belgium, Chile, Colombia, Denmark, Estonia, Finland,
+Afghanistan, Argentina, Australia, Belgium, Chile, Denmark, Estonia, Finland,
 Germany, Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Peru, Portugal, Rwanda,
 Slovenia, South Africa, South Korea, Spain, Sweden, Taiwan and the United Kingdom.
 

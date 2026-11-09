@@ -1,26 +1,25 @@
-"""Offline discovery and explicit retrieval refusal for the Colombia IDEAM catalogue."""
+"""Offline discovery remains independent of the live Colombia IDEAM stages."""
 
 import polars as pl
 import pytest
 
 
-def test_declaration_exposes_catalogue_only_without_credentials():
+def test_declaration_exposes_live_stages_without_credentials():
     from rivretrieve._internal.providers.co_ideam.declaration import declaration
-    from rivretrieve._internal.providers.registration import CatalogueOnly
+    from rivretrieve._internal.providers.registration import LiveStages
 
-    assert isinstance(declaration.observations, CatalogueOnly)
+    assert isinstance(declaration.observations, LiveStages)
     assert declaration.required_credentials == ()
 
 
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
-def test_discovery_metadata_and_retrieval_refusal_remain_offline(policy, monkeypatch):
+def test_discovery_and_metadata_remain_offline(policy, monkeypatch):
     import socket
 
     import rivretrieve as rr
-    from rivretrieve._internal.issues import ObservationsUnavailableError
 
     def refuse_network(*args, **kwargs):
-        pytest.fail("IDEAM catalogue-only workflow attempted network access")
+        pytest.fail("IDEAM offline discovery workflow attempted network access")
 
     monkeypatch.setattr(socket.socket, "connect", refuse_network)
     monkeypatch.setattr(socket.socket, "connect_ex", refuse_network)
@@ -58,7 +57,30 @@ def test_discovery_metadata_and_retrieval_refusal_remain_offline(policy, monkeyp
     )
     assert named_waterbody["state"].to_list() == ["value"]
 
-    discharge = rr.find(provider="co_ideam", quantity="discharge", station="0024017690", on_issue=policy)
-    for cache in ("bypass", "reuse", "refresh"):
-        with pytest.raises(ObservationsUnavailableError, match="co_ideam"):
-            rr.fetch(discharge, start="2020-01-01", end="2020-01-02", cache=cache, on_issue=policy)
+    daily_mean_q = rr.find(
+        provider="co_ideam",
+        station="0011017010",
+        quantity="discharge",
+        frequency="daily",
+        statistic="mean",
+        on_issue=policy,
+    )
+    assert [item.product_id for item in daily_mean_q.series] == ["q_media_d"]
+    assert [item.identity.published_id for item in daily_mean_q.series] == ["Q_MEDIA_D"]
+
+    all_q = rr.find(provider="co_ideam", station="0011017010", quantity="discharge", on_issue=policy)
+    by_product = {item.product_id: item for item in all_q.series}
+    assert len(by_product) == 10
+    assert by_product["caudal_h"].identity.published_id == "CAUDAL_H"
+    assert by_product["caudal_h"].facts[0].frequency.value is None
+    assert by_product["caudal_h"].facts[0].statistic.value is None
+    assert by_product["caudal_h"].facts[0].time_zone.value is None
+
+    tz_filtered = rr.find(provider="co_ideam", station="0011017010", time_zone="America/Bogota", on_issue=policy)
+    assert tz_filtered.series == ()
+
+    description = rr.describe("co_ideam")
+    assert description["license"] == "Creative Commons Attribution | Share Alike 4.0 International"
+    assert (
+        description["citation"] == "Instituto de Hidrología, Meteorología y Estudios Ambientales - IDEAM, Bogotá D.C."
+    )
