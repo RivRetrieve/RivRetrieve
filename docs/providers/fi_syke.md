@@ -49,10 +49,11 @@ time,time_zone,value,unit
 
 The request returned seven daily values in m³/s, one for each date from January 1
 to 7. The preview shows the first three. The empty tuple `()` means retrieval
-reported no issues; it does not establish the quality of the values. Syke's
-service does not state whether a daily value is a mean, an instantaneous
-reading, or something else, so `time_zone` is `unknown` and the request did not
-restrict by `statistic` or `frequency`.
+reported no issues; it does not establish the quality of the values. `time_zone`
+is `unknown` because Syke's timestamps carry no UTC offset. All three `fi_syke`
+series have `frequency="daily"`, and the request did not restrict by `statistic`
+because Syke's service does not state whether a daily value is a mean, an
+instantaneous reading, or another statistic.
 
 `cache="bypass"` requests Syke's service rather than a local cache. This output
 was checked live on 2026-11-08. Published values can change, so a later
@@ -72,10 +73,11 @@ station; it publishes what Syke publishes.
 Station identifiers are Syke's own per-installation site identifier
 (`Paikka_Id`), confirmed against Syke's public map service and against the
 independently published CAMELS-FI dataset, both of which key on the same
-identifier. A station publishes at most one of the three admitted quantities:
-a river gauge with both discharge and stage readings appears as two separate
-stations in the catalogue, one per quantity, not one station with two
-available products.
+identifier. In Syke's station table (`Paikka`), each `Paikka_Id` is associated
+with one of the three admitted quantities: a river gauge with both discharge
+and stage readings appears as two separate `Paikka_Id` stations in the
+catalogue, one per quantity, rather than one station with two available
+products.
 
 ## What you can retrieve
 
@@ -85,23 +87,40 @@ available products.
 | `stage` | Vedenkorkeus | Daily | Unknown | cm | m |
 | `temperature` | LampoPintavesi | Daily | Unknown | °C | °C |
 
-RivRetrieve converts stage from centimetres to metres. Discharge and water
-temperature need no unit conversion. Syke's own documentation never states
-whether a published daily value is a mean, an instantaneous reading, or
-something else, so RivRetrieve leaves frequency and statistic unknown rather
-than guessing from the roughly daily spacing of the values.
+The source field is the Hydrologiarajapinta OData entity-set name, where each
+row's numeric reading is published in `Arvo`. Each quantity has one daily
+series per station, so `variant` stays unset (`variant=None`). RivRetrieve
+converts stage from centimetres to metres; discharge and surface water
+temperature need no unit conversion. All three series have `frequency="daily"`,
+whereas `statistic` is `unknown` because Syke's documentation and metadata
+tables do not state whether a published daily value is a mean, an instantaneous
+reading, or another aggregation. Do not filter by `statistic="mean"` when
+selecting `fi_syke` series.
 
 Stage is an absolute water-surface elevation relative to a Finnish national
 height datum, not a small reading relative to a local gauge zero: published
 stage values range from about -2 m to +245 m, consistent with Finland's
-coast-to-inland relief. Which of Finland's several historical national height
-systems (such as N2000 or N60) a given station's own reading is expressed in
-has not been established.
+coast-to-inland relief (`vertical_reference="above_sea_level"`). Which of
+Finland's historical national height systems (such as N2000, N60, NN, or N43) a
+given reading is expressed in is not stated on observation rows, so
+`vertical_datum` remains `None` and RivRetrieve does not apply Syke's separate
+per-station datum-offset table (`VedenkTasoTieto`).
 
-The catalogue lists each station under exactly one of these three quantities,
-because the source itself associates one quantity with each station
-identifier. A station being listed does not guarantee data for every
-requested period.
+Depth-profile water temperature soundings (`LampoLuotaus`, which vary by
+measurement depth) and catchment runoff series (`Valuma`) are not included in
+`fi_syke`.
+
+In Syke's `Paikka` table, 711 stations are witnessed for `discharge`, 1,753 for
+`stage`, and 79 for `temperature`. The packaged catalogue records
+`availability="available"` for a station's witnessed quantity and
+`availability="unknown"` (rather than `"unavailable"`) for the other two
+quantities. Because RivRetrieve keeps pairs with `"unknown"` availability
+selectable, pass `quantity` when selecting a station so the selection targets
+only that quantity, and note that a provider-wide query such as
+`rr.find(provider="fi_syke", quantity="discharge")` includes both the 711
+stations witnessed for discharge and the remaining stations whose discharge
+availability is `"unknown"`. A station being listed does not guarantee data for
+every requested period.
 
 ## How far back, and how recent
 
