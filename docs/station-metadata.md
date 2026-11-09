@@ -56,6 +56,7 @@ of the source view.
 <!-- fields-by-provider:start -->
 | Provider | Station name | Water body | Drainage area | Elevation |
 |---|---|---|---|---|
+| [`ar_ina`](providers/ar_ina.md) | `nombre` | `rio` | — | — |
 | [`at_ehyd`](providers/at_ehyd.md) | `messstelle`, `name` | `gewaesser`, `gewasser` | `orogr.Einzugsgebiet [km²]` (km²) | — |
 | [`ba_fhmzbih`](providers/ba_fhmzbih.md) | — | — | `metadata_CATCHMENT_SIZE` (km²) | — |
 | [`br_ana`](providers/br_ana.md) | `Estacao_Nome` | `Rio_Nome` | `Area_Drenagem` | `Altitude` |
@@ -69,7 +70,7 @@ of the source view.
 | [`no_nve`](providers/no_nve.md) | `stationName` | `lakeName`, `reservoirName`, `riverName` | `drainageBasinArea`, `drainageBasinAreaNorway`, `transferAreaIn`, `transferAreaOut` (km2) | `masl` (m) |
 | [`pl_imgw`](providers/pl_imgw.md) | — | — | `area` (square kilometre) | `gauge_altitude` (m) |
 | [`th_thaiwater`](providers/th_thaiwater.md) | — | — | — | — |
-| [`usgs_nwis`](providers/usgs_nwis.md) | `station_nm` | — | `contrib_drain_area_va`, `drain_area_va` (sq mi) | `alt_va` (feet) |
+| [`usgs_nwis`](providers/usgs_nwis.md) | `monitoring_location_name` | — | `contrib_drain_area_va`, `drain_area_va` (sq mi) | `alt_va` (feet) |
 <!-- fields-by-provider:end -->
 
 The table lists names only. What a field means is defined by the agency: Norway's `transferAreaIn`
