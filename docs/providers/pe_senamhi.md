@@ -23,8 +23,10 @@ import rivretrieve as rr
 selection = rr.find(
     provider="pe_senamhi",
     station="212600",
-    series_id="fbbf4fa1e5858ded00123418b26c2fd936af128a0ced190b4b063934bb577711",
+    quantity="discharge",
+    frequency="daily",
 )
+selection = rr.pick(selection, variant="current")
 
 result = rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="bypass")
 
@@ -91,20 +93,22 @@ archive.
 
 PHISIS publishes discharge and water level under the `/api/hydrology/*` routes:
 
-| Quantity filter | Product | Published field | Frequency | Statistic | Source unit | Returned unit | Vertical reference |
-|---|---|---|---|---|---|---|---|
-| `discharge` | `phisis_daily_flow` | `current` | Daily | Unknown | m³/s | m³/s | None |
-| `discharge` | `phisis_daily_flow` | `minimum` | Daily | Unknown | m³/s | m³/s | None |
-| `discharge` | `phisis_daily_flow` | `maximum` | Daily | Unknown | m³/s | m³/s | None |
-| `discharge` | `phisis_hourly_flow` | `value` | Hourly | Unknown | m³/s | m³/s | None |
-| `stage` | `phisis_daily_level` | `current` | Daily | Unknown | m | m | None |
-| `stage` | `phisis_daily_level` | `minimum` | Daily | Unknown | m | m | None |
-| `stage` | `phisis_daily_level` | `maximum` | Daily | Unknown | m | m | None |
-| `stage` | `phisis_daily_level_above_sea_level` | `current` | Daily | Unknown | m.s.n.m | m | `above_sea_level` |
-| `stage` | `phisis_daily_level_above_sea_level` | `minimum` | Daily | Unknown | m.s.n.m | m | `above_sea_level` |
-| `stage` | `phisis_daily_level_above_sea_level` | `maximum` | Daily | Unknown | m.s.n.m | m | `above_sea_level` |
-| `stage` | `phisis_hourly_level` | `value` | Hourly | Unknown | m | m | None |
-| `stage` | `phisis_hourly_level_above_sea_level` | `value` | Hourly | Unknown | m.s.n.m | m | `above_sea_level` |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+|---|---|---|---|---|---|
+| `discharge` | `current` | Daily | Unknown | m³/s | m³/s |
+| `discharge` | `minimum` | Daily | Unknown | m³/s | m³/s |
+| `discharge` | `maximum` | Daily | Unknown | m³/s | m³/s |
+| `discharge` | `value` | Hourly | Unknown | m³/s | m³/s |
+| `stage` | `current` | Daily | Unknown | m, m.s.n.m | m |
+| `stage` | `minimum` | Daily | Unknown | m, m.s.n.m | m |
+| `stage` | `maximum` | Daily | Unknown | m, m.s.n.m | m |
+| `stage` | `value` | Hourly | Unknown | m, m.s.n.m | m |
+
+These field names are SENAMHI's published PHISIS values, returned in `published_id`.
+Stage has two separate series per field: one in metres and one above sea level in
+`m.s.n.m` (see [Units and vertical reference](#units-and-vertical-reference)). Narrow
+to one field with `rr.pick(selection, variant=...)` using the value shown above, or
+select an individual series directly with `series_id` from `rr.series(selection)`.
 
 Each daily PHISIS response contains three separate published fields: `current`,
 `minimum`, and `maximum`. RivRetrieve preserves each field as a distinct series.
@@ -128,17 +132,22 @@ to inspect the available series IDs, or select an individual series directly wit
 
 The station archive publishes water levels in metres (`m`) under `/api/station/stations/*`:
 
-| Quantity filter | Product / Source field | Frequency | Statistic | Source unit | Returned unit |
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
 |---|---|---|---|---|---|
-| `stage` | `monthly_archive_nivel_del_rio_06h` | Unknown | Unknown | m | m |
-| `stage` | `monthly_archive_nivel_del_rio_10h` | Unknown | Unknown | m | m |
-| `stage` | `monthly_archive_nivel_del_rio_14h` | Unknown | Unknown | m | m |
-| `stage` | `monthly_archive_nivel_del_rio_18h` | Unknown | Unknown | m | m |
-| `stage` | `monthly_archive_nivel_del_rio_promedio` | Unknown | Unknown | m | m |
-| `stage` | `monthly_archive_n_nivelagua` | Unknown | Unknown | m | m |
-| `stage` | `monthly_archive_n_nivelmedio` | Unknown | Unknown | m | m |
-| `stage` | `monthly_archive_n_niv_inst_00` | Unknown | Unknown | m | m |
-| `stage` | `monthly_archive_n_niv_inst_10` | Unknown | Unknown | m | m |
+| `stage` | `NIVEL_DEL_RIO_06H` | Unknown | Unknown | m | m |
+| `stage` | `NIVEL_DEL_RIO_10H` | Unknown | Unknown | m | m |
+| `stage` | `NIVEL_DEL_RIO_14H` | Unknown | Unknown | m | m |
+| `stage` | `NIVEL_DEL_RIO_18H` | Unknown | Unknown | m | m |
+| `stage` | `NIVEL_DEL_RIO_PROMEDIO` | Unknown | Unknown | m | m |
+| `stage` | `N_NIVELAGUA` | Unknown | Unknown | m | m |
+| `stage` | `N_NIVELMEDIO` | Unknown | Unknown | m | m |
+| `stage` | `N_NIV_INST_00` | Unknown | Unknown | m | m |
+| `stage` | `N_NIV_INST_10` | Unknown | Unknown | m | m |
+
+These field names are SENAMHI's published monthly station-archive JSON keys, also
+returned in `published_id`. Narrow to one field with `rr.pick(selection, variant=...)`
+using the value shown above, or select an individual series directly with `series_id`
+from `rr.series(selection)`.
 
 These nine fields remain distinct products in RivRetrieve. Frequency and statistic
 remain unestablished because the available evidence does not define their meanings
@@ -173,8 +182,8 @@ no rows. Published null values remain rows with `value=null`. Absent dates suppl
 no rows. Failed source responses remain issues reported alongside any successful
 records.
 
-Future-dated observations and negative values published by SENAMHI are preserved
-without unsupported correction or invented explanations.
+SENAMHI records occasionally contain negative values or future-dated timestamps;
+RivRetrieve returns these values as published.
 
 ## Time and data status
 
@@ -183,9 +192,13 @@ sets `time_zone="unknown"`. Do not assume timestamps are UTC or Peru local time
 (UTC-5).
 
 PHISIS DAILY `current` is not established as a daily mean, and its averaging day
-definition is unknown. A visual comparison of ten random gauge hydrographs against
-the CAMELS-PE benchmark dataset showed consistent hydrograph dynamics, but that
-comparison does not establish daily-mean semantics or resolve time-zone conventions.
+definition is unknown.
+
+PHISIS automatic-station views on the Observatorio display the notice *"Esta
+información corresponde a datos crudos registrados por la estación automática"*
+("This information corresponds to raw data recorded by the automatic station").
+This applies to PHISIS automatic-station series; it does not generalize to the
+conventional station-archive series above.
 
 SENAMHI provides data without warranty of fitness for a particular purpose.
 RivRetrieve makes no quality judgements of its own.
@@ -195,6 +208,11 @@ RivRetrieve makes no quality judgements of its own.
 SENAMHI requests must respect an access limit of at most one request per second.
 RivRetrieve's transport applies appropriate pacing. Avoid running concurrent
 unthrottled retrievals against SENAMHI endpoints.
+
+Direct connections to `servicios.senamhi.gob.pe` from some cloud or datacenter IP
+ranges can time out even when the same requests succeed from residential or
+institutional networks. If a retrieval times out on a cloud virtual machine or a
+CI runner, this network boundary is a likely cause, not a problem with the request.
 
 ## Terms and citation
 
@@ -219,7 +237,9 @@ Publisher pages checked on 2026-11-01:
 
 - [Observatorio SENAMHI](https://observatorio.senamhi.gob.pe/): station network and portal.
 - [SENAMHI API](https://servicios.senamhi.gob.pe/api): endpoints for hydrology and station readings.
+- [Manual de Hidrometría](https://www.senamhi.gob.pe/load/file/00701SENA-924.pdf) (SENAMHI, 2018), page 16: describes conventional readings at 06, 10, 14 and 18 hours and their arithmetic average as an estimate of daily level, without binding that procedure to every published field or historical record.
+- [CAMELS-PE](https://doi.org/10.5281/zenodo.21195425): an independent catchment-runoff benchmark dataset for Peru, used as background context during verification.
 
 The station count describes the packaged catalogue. The example was verified on
 2026-11-01. The [private verification archive](https://github.com/RivRetrieve/verification-evidence#readme)
-retains exact source responses, comparison records, and verification ledgers.
+retains commands, source checks, exact output and the limits of these checks.
