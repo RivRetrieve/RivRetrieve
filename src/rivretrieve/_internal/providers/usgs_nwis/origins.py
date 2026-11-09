@@ -29,10 +29,11 @@ STATION_METADATA_NOTICE = (
     "(https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits); this statement "
     "does not extend to third-party content. RivRetrieve selected the declared source fields and encoded "
     "their values and absence states; source names remain unchanged. Processing and publication of this "
-    "projection: RivRetrieve."
+    "projection: RivRetrieve. Fields with conflicting legacy values are omitted; "
+    "provenance_facts.parquet records their reasons as usgs_sitefile_conflict.<station_id>.<source_field>."
 )
 
-STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+LEGACY_STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
     MetadataField("drainage_area", "drain_area_va", "sq mi"),
     MetadataField(
         "drainage_area",
@@ -88,22 +89,70 @@ class DatumToCrsConversion(catalogue_origins.FieldConversion):
         return crs_from_datum(native_row[str(native_column)])
 
 
+class OptionalCoordinateConversion(catalogue_origins.FloatConversion):
+    """Preserve blank publisher coordinates as unknown, without inventing a location."""
+
+    @property
+    def name(self) -> catalogue_origins.ConversionName:
+        return catalogue_origins.ConversionName("usgs_nwis.optional_coordinate")
+
+    def apply(self, canonical_column, native_column, native_row):
+        value = native_row[str(native_column)]
+        if isinstance(value, str) and not value.strip():
+            return None
+        return super().apply(canonical_column, native_column, native_row)
+
+
 STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
     "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("usgs_nwis")),
     "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("site_no")),
-    "latitude": catalogue_origins.Field(
-        catalogue_origins.NativeColumn("dec_lat_va"), catalogue_origins.FloatConversion()
-    ),
-    "longitude": catalogue_origins.Field(
-        catalogue_origins.NativeColumn("dec_long_va"), catalogue_origins.FloatConversion()
-    ),
+    "latitude": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_lat_va"), OptionalCoordinateConversion()),
+    "longitude": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_long_va"), OptionalCoordinateConversion()),
     "crs": catalogue_origins.Field(catalogue_origins.NativeColumn("dec_coord_datum_cd"), DatumToCrsConversion()),
 }
+MODERN_STATION_CATALOGUE_ORIGINS: dict[str, catalogue_origins.CatalogueOrigin] = {
+    "provider_id": catalogue_origins.Authored(catalogue_origins.AuthoredValue("usgs_nwis")),
+    "station_id": catalogue_origins.Field(catalogue_origins.NativeColumn("station_id")),
+    **{
+        name: catalogue_origins.Field(catalogue_origins.NativeColumn(name)) for name in ("latitude", "longitude", "crs")
+    },
+}
+STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (
+    MetadataField(
+        "station_name", "monitoring_location_name", source_facts=("source.station.modern_monitoring_locations",)
+    ),
+    MetadataField(
+        "drainage_area", "drain_area_va", "sq mi", source_facts=("source.station.legacy_sitefile_attributes",)
+    ),
+    MetadataField(
+        "drainage_area",
+        "contrib_drain_area_va",
+        "sq mi",
+        source_facts=("source.station.legacy_sitefile_attributes",),
+        support_facts=("source.usgs.sitefile_drainage_area_definitions",),
+    ),
+    MetadataField(
+        "elevation",
+        "alt_va",
+        "feet",
+        datum_field="alt_datum_cd",
+        source_facts=("source.station.legacy_sitefile_attributes",),
+        support_facts=("source.usgs.sitefile_altitude_definition",),
+        datum_support=("source.usgs.sitefile_altitude_datum_definition",),
+    ),
+)
+
+
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/native.parquet"
-NATIVE_TABLE_REVISION = "bfeb825a6f3b3aad4982649625d570c070b4ee32"
-NATIVE_TABLE_SHA256 = "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701"
-NATIVE_TABLE_BYTE_SIZE = 14_093_302
-NATIVE_TABLE_SEMANTIC_SHA256 = "e4384cea2ff00e5a120d244977d2dd75bc00ec4c8ba941e3e83f06239cd5777f"
+HISTORICAL_NATIVE_TABLE_REVISION = "bfeb825a6f3b3aad4982649625d570c070b4ee32"
+HISTORICAL_NATIVE_TABLE_SHA256 = "90fede218826b640963e98515a6e3c4c106bf310a2e5bcf1606f805b55d5e701"
+HISTORICAL_NATIVE_TABLE_BYTE_SIZE = 14_093_302
+HISTORICAL_NATIVE_TABLE_SEMANTIC_SHA256 = "e4384cea2ff00e5a120d244977d2dd75bc00ec4c8ba941e3e83f06239cd5777f"
+NATIVE_TABLE_REVISION = "9bd8aa03bbc13db240be556a958a237f603acbe9"
+NATIVE_TABLE_SHA256 = "caaf72c18a6a499b04fe886d8b4b871c066bed0870a7049ff6d6c48c26e966f8"
+NATIVE_TABLE_BYTE_SIZE = 14_520_274
+NATIVE_TABLE_SEMANTIC_SHA256 = "1af2fdcffdfdf5689cb371dc0d1d41b4aded07e69a878187b1696f6b6bea8fb7"
+
 _LICENSE_TEXT = "USGS-authored or produced data and information are considered to be in the U.S. Public Domain."
 _CITATION_TEXT = "Example of how to cite USGS Water Data for the Nation in general: U.S. Geological Survey, [2024], USGS Water Data for the Nation: U.S. Geological Survey National Water Information System database, accessed [April 8, 2024], at https://doi.org/10.5066/F7P55KJN."
 
@@ -311,11 +360,11 @@ def _build_provider_acquisition_provenance() -> AcquisitionProvenance:
         provider_id="usgs_nwis",
         native_table=NativeTableIdentity(
             repository_path=NATIVE_TABLE_REPOSITORY_PATH,
-            revision=NATIVE_TABLE_REVISION,
-            sha256=NATIVE_TABLE_SHA256,
-            byte_size=NATIVE_TABLE_BYTE_SIZE,
+            revision=HISTORICAL_NATIVE_TABLE_REVISION,
+            sha256=HISTORICAL_NATIVE_TABLE_SHA256,
+            byte_size=HISTORICAL_NATIVE_TABLE_BYTE_SIZE,
             semantic_digest=SemanticDigest(
-                name="usgs_nwis.native_table_content_sha256", sha256=NATIVE_TABLE_SEMANTIC_SHA256
+                name="usgs_nwis.native_table_content_sha256", sha256=HISTORICAL_NATIVE_TABLE_SEMANTIC_SHA256
             ),
         ),
         source_records=(source,),
@@ -348,15 +397,290 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
     return _complete_catalogue_carrier(_build_provider_acquisition_provenance())
 
 
-def build_modern_acquisition_provenance(receipts, metadata_directory):
+def selected_native_provenance(
+    native_identity: NativeTableIdentity,
+    acquisitions: tuple[AcquisitionRecord, ...],
+    recordings: tuple[RecordingReference, ...],
+    *,
+    retained_acquisition_ids: tuple[str, ...] = (),
+) -> AcquisitionProvenance:
+    """Bind a selected station inventory to its original acquisition events.
+
+    Recording paths must be approved consumer references, not private archive
+    paths. Historical station claims remain historical and do not govern the
+    newly selected station coordinates. This function does not acquire inputs.
+    """
+    if not acquisitions and not retained_acquisition_ids:
+        raise ValueError("Selected native inputs require original acquisition events")
+    base = build_acquisition_provenance()
+    source = base.source_records[0]
+    known = {item.acquisition_id for item in source.acquisitions}
+    if not set(retained_acquisition_ids) <= known:
+        raise ValueError("Unknown retained acquisition identity")
+    selected_event_ids = tuple(event.acquisition_id for event in acquisitions) + retained_acquisition_ids
+    if len(selected_event_ids) != len(set(selected_event_ids)):
+        raise ValueError("Selected station acquisitions must be distinct")
+    source = source.model_copy(
+        update={
+            "acquisitions": source.acquisitions + acquisitions,
+            "evidence": source.evidence
+            + tuple(
+                EvidenceReference(
+                    evidence_id=record.recording_id, description="Selected original station input", recording=record
+                )
+                for record in recordings
+            ),
+        }
+    )
+    facts = tuple(f"source.station.selected_input_{index}" for index in range(len(selected_event_ids)))
+    bindings = tuple(
+        FactBinding(
+            fact_group=f"selected_station_input_{index}",
+            facts=(facts[index],),
+            source_id="usgs_nwis",
+            acquisition_id=event_id,
+        )
+        for index, event_id in enumerate(selected_event_ids)
+    )
+    updated = []
+    for binding in base.fact_bindings:
+        if binding.transformation is not None and any(fact.startswith("station.") for fact in binding.facts):
+            dependencies = tuple(
+                item
+                for item in binding.transformation.external_inputs
+                if item.fact != "source.station.nwis_identity_location_datum"
+            ) + tuple(ExternalFactReference(source_id="usgs_nwis", fact=fact) for fact in facts)
+            binding = binding.model_copy(
+                update={"transformation": binding.transformation.model_copy(update={"external_inputs": dependencies})}
+            )
+        updated.append(binding)
+    return AcquisitionProvenance.model_validate(
+        {
+            **base.model_dump(),
+            "native_table": native_identity,
+            "source_records": (source,),
+            "fact_universe": base.fact_universe + facts,
+            "fact_bindings": tuple(updated) + bindings,
+        }
+    )
+
+
+# Roles describe source meaning; indexed inputs retain separate acquisition bindings.
+SELECTED_SOURCE_ROLES = (
+    "modern_monitoring_locations",
+    "legacy_sitefile_attributes",
+    "legacy_series_claims",
+    "modern_series",
+    "retained_historical_metadata",
+)
+
+
+def selected_role_inputs(provenance: AcquisitionProvenance, role: str) -> tuple[str, ...]:
+    """Return the declared direct inputs of one selected source role."""
+    if role not in SELECTED_SOURCE_ROLES:
+        raise ValueError("Unknown selected USGS source role")
+    bindings = {fact: binding for binding in provenance.fact_bindings for fact in binding.facts}
+    binding = bindings.get(f"selected.{role}")
+    if binding is None or binding.transformation is None:
+        raise ValueError("Missing selected USGS source role")
+    inputs = binding.transformation.external_inputs
+    for index, reference in enumerate(inputs):
+        expected = f"source.{role}.input_{index}"
+        source = bindings.get(expected)
+        if (
+            reference.fact != expected
+            or reference.source_id != "usgs_nwis"
+            or source is None
+            or source.transformation is not None
+            or source.source_id != "usgs_nwis"
+        ):
+            raise ValueError("Selected USGS role must reference its declared direct inputs")
+    return tuple(reference.fact for reference in inputs)
+
+
+def selected_station_metadata_fields(provenance: AcquisitionProvenance) -> tuple[MetadataField, ...]:
+    """Resolve modern names and legacy quantities to their adopted source inputs."""
+    from dataclasses import replace
+
+    return tuple(
+        replace(
+            field,
+            source_facts=selected_role_inputs(
+                provenance,
+                "modern_monitoring_locations"
+                if field.attribute_role == "station_name"
+                else "legacy_sitefile_attributes",
+            ),
+        )
+        for field in STATION_METADATA_FIELDS
+    )
+
+
+def build_modern_acquisition_provenance(
+    native_identity: NativeTableIdentity,
+    acquisitions: tuple[AcquisitionRecord, ...],
+    recordings: tuple[RecordingReference, ...],
+    *,
+    role_acquisitions: Mapping[str, tuple[str, ...]],
+    baseline: AcquisitionRecord,
+) -> AcquisitionProvenance:
+    """Bind selected modern sources without changing original acquisition identities.
+
+    Role membership identifies the original events supporting each source meaning.
+    The baseline is a recovered published identity map, not a publisher response.
+    """
+    if set(role_acquisitions) != set(SELECTED_SOURCE_ROLES):
+        raise ValueError("Selected USGS provenance requires every source role")
+    event_ids = {event.acquisition_id for event in acquisitions}
+    if len(event_ids) != len(acquisitions) or baseline.acquisition_id in event_ids:
+        raise ValueError("Selected USGS acquisition identities must be distinct")
+    import re
+
+    if (
+        baseline.method != "repository_recovery"
+        or baseline.material is None
+        or len(baseline.requested_from) != 1
+        or re.fullmatch(r"https://github\.com/RivRetrieve/RivRetrieve/blob/[0-9a-f]{40}/.+", baseline.requested_from[0])
+        is None
+    ):
+        raise ValueError("Baseline identity requires recovered repository material")
+    base = _build_provider_acquisition_provenance()
+    source = base.source_records[0]
+    retained_facts = {
+        "source.usgs.sitefile_altitude_definition",
+        "source.usgs.sitefile_altitude_datum_definition",
+        "source.usgs.sitefile_drainage_area_definitions",
+        "source.usgs.instantaneous_value_definition",
+        "source.usgs.license_statement",
+        "source.usgs.citation_statement",
+        "source.observation.nwis_values_qualifiers_and_timestamps",
+    }
+    bindings = [binding for binding in base.fact_bindings if set(binding.facts) <= retained_facts]
+    support_events = {binding.acquisition_id for binding in bindings}
+    support = tuple(event for event in source.acquisitions if event.acquisition_id in support_events)
+    support += (
+        AcquisitionRecord(
+            acquisition_id="modern_observation_request",
+            method="runtime_http_request",
+            instant_type="runtime",
+            description="Modern Water Data daily or continuous retrieval; independent of historical NWIS routes",
+            requested_from=(
+                "https://api.waterdata.usgs.gov/ogcapi/v1/collections/daily/items",
+                "https://api.waterdata.usgs.gov/ogcapi/v1/collections/continuous/items",
+            ),
+        ),
+    )
+    bindings.append(
+        FactBinding(
+            fact_group="modern_observation_values",
+            facts=("source.observation.modern_values_qualifiers_and_timestamps",),
+            source_id="usgs_nwis",
+            acquisition_id="modern_observation_request",
+        )
+    )
+    recording_ids = {key for event in support for key in event.recording_ids}
+    evidence = tuple(item for item in source.evidence if item.recording.recording_id in recording_ids)
+    source = source.model_copy(
+        update={
+            "acquisitions": support + acquisitions,
+            "evidence": evidence
+            + tuple(
+                EvidenceReference(
+                    evidence_id=record.recording_id,
+                    description="Selected original USGS source recording",
+                    recording=record,
+                )
+                for record in recordings
+            ),
+        }
+    )
+    for role in SELECTED_SOURCE_ROLES:
+        events = role_acquisitions[role]
+        if not events or len(events) != len(set(events)) or not set(events) <= event_ids:
+            raise ValueError("Selected USGS role has missing or repeated original events")
+        inputs = []
+        for index, event in enumerate(events):
+            fact = f"source.{role}.input_{index}"
+            bindings.append(
+                FactBinding(
+                    fact_group=f"{role}_input_{index}", facts=(fact,), source_id="usgs_nwis", acquisition_id=event
+                )
+            )
+            inputs.append(ExternalFactReference(source_id="usgs_nwis", fact=fact))
+        bindings.append(
+            FactBinding(
+                fact_group=f"selected_{role}",
+                facts=(f"selected.{role}",),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name=f"Select verified USGS {role} records", external_inputs=tuple(inputs)
+                ),
+            )
+        )
+    bindings.append(
+        FactBinding(
+            fact_group="baseline_identity",
+            facts=("source.station.baseline_identity",),
+            source_id="rivretrieve_baseline",
+            acquisition_id=baseline.acquisition_id,
+        )
+    )
+    for kind in ("license", "citation"):
+        bindings.append(
+            FactBinding(
+                fact_group=f"provider_{kind}",
+                facts=(f"provider.{kind}",),
+                source_id=None,
+                acquisition_id=None,
+                transformation=Transformation(
+                    name=f"Preserve USGS {kind} statement",
+                    external_inputs=(
+                        ExternalFactReference(source_id="usgs_nwis", fact=f"source.usgs.{kind}_statement"),
+                    ),
+                ),
+            )
+        )
+    provenance = AcquisitionProvenance(
+        schema_version=2,
+        provider_id="usgs_nwis",
+        native_table=native_identity,
+        source_records=(
+            source,
+            SourceRecord(source_id="rivretrieve_baseline", issuer="RivRetrieve", acquisitions=(baseline,)),
+        ),
+        fact_universe=tuple(fact for binding in bindings for fact in binding.facts),
+        fact_bindings=tuple(bindings),
+    )
+    return complete_transformed_fact_universe(
+        provenance,
+        CATALOGUE_FACT_UNIVERSE,
+        transformation=Transformation(
+            name="Selected USGS locations, series and baseline keys to catalogue carriers",
+            external_inputs=tuple(
+                ExternalFactReference(source_id=None, fact=f"selected.{role}") for role in SELECTED_SOURCE_ROLES
+            )
+            + (ExternalFactReference(source_id="rivretrieve_baseline", fact="source.station.baseline_identity"),),
+        ),
+    )
+
+
+def historical_modern_acquisition_provenance(
+    receipts,
+    metadata_directory,
+    *,
+    native_provenance: AcquisitionProvenance | None = None,
+    metadata_acquisition_id: str = "modern_time_series_metadata_2026_09_22",
+    metadata_recording_root: str = "research/usgs-modern-coverage",
+):
     """Supplement retained station provenance with independently acquired modern facts."""
     import hashlib
 
-    legacy = _build_provider_acquisition_provenance()
+    legacy = native_provenance or _build_provider_acquisition_provenance()
     recordings = tuple(
         RecordingReference(
             recording_id=f"modern_metadata_{index}",
-            repository_path=f"research/usgs-modern-coverage/{receipt['file']}",
+            repository_path=f"{metadata_recording_root}/{receipt['file']}",
             source_url=receipt["url"],
             retrieved_at=datetime.fromisoformat(receipt["retrieved_at"]),
             media_type="application/gzip",
@@ -365,10 +689,10 @@ def build_modern_acquisition_provenance(receipts, metadata_directory):
         for index, receipt in enumerate(receipts)
     )
     acquisition = AcquisitionRecord(
-        acquisition_id="modern_time_series_metadata_2026_09_22",
+        acquisition_id=metadata_acquisition_id,
         method="http_campaign",
         instant_type="retrieval_interval",
-        description="Complete unsorted v1 metadata pagination for parameters 00060 and 00065, including discontinued records; exact decompressed response hashes and request receipts retained alongside gzip recordings. Station scope remains the independently acquired native station table. UTC metadata ranges do not establish physical daily support.",
+        description="Complete unsorted v1 metadata pagination for parameters 00060 and 00065, including discontinued records; exact decompressed response hashes and request receipts retained alongside gzip recordings. Station identity and geometry follow the selected monitoring-location source facts. UTC metadata ranges do not establish physical daily support.",
         requested_from=tuple(item.source_url for item in recordings),
         retrieved_at_start=min(item.retrieved_at for item in recordings),
         retrieved_at_end=max(item.retrieved_at for item in recordings),
@@ -391,9 +715,32 @@ def build_modern_acquisition_provenance(receipts, metadata_directory):
         acquisition_id=observation_request.acquisition_id,
     )
     source = legacy.source_records[0]
+    prior = next((item for item in source.acquisitions if item.acquisition_id == acquisition.acquisition_id), None)
+    acquisitions = source.acquisitions
+    if prior is not None:
+        instants = tuple(
+            value
+            for value in (
+                prior.retrieved_at_start,
+                prior.retrieved_at_end,
+                acquisition.retrieved_at_start,
+                acquisition.retrieved_at_end,
+            )
+            if value is not None
+        )
+        acquisition = acquisition.model_copy(
+            update={
+                "description": "Selected original station and modern metadata responses from one acquisition campaign",
+                "requested_from": tuple(dict.fromkeys(prior.requested_from + acquisition.requested_from)),
+                "recording_ids": prior.recording_ids + acquisition.recording_ids,
+                "retrieved_at_start": min(instants),
+                "retrieved_at_end": max(instants),
+            }
+        )
+        acquisitions = tuple(item for item in acquisitions if item.acquisition_id != acquisition.acquisition_id)
     source = source.model_copy(
         update={
-            "acquisitions": source.acquisitions + (acquisition, observation_request),
+            "acquisitions": acquisitions + (acquisition, observation_request),
             "evidence": source.evidence
             + tuple(
                 EvidenceReference(
@@ -423,18 +770,28 @@ def build_modern_acquisition_provenance(receipts, metadata_directory):
             "fact_bindings": legacy.fact_bindings + (binding, observation_binding),
         }
     )
+    if native_provenance is not None:
+        canonical = set(CATALOGUE_FACT_UNIVERSE)
+        payload = provenance.model_dump()
+        payload["fact_universe"] = tuple(fact for fact in provenance.fact_universe if fact not in canonical)
+        payload["fact_bindings"] = tuple(
+            binding for binding in provenance.fact_bindings if not canonical.intersection(binding.facts)
+        )
+        provenance = AcquisitionProvenance.model_validate(payload)
+    station_facts = (
+        ("source.station.modern_monitoring_locations",)
+        if "source.station.modern_monitoring_locations" in provenance.fact_universe
+        else tuple(fact for fact in provenance.fact_universe if fact.startswith("source.station.selected_input_"))
+        or ("source.station.nwis_identity_location_datum",)
+    )
     return complete_transformed_fact_universe(
         provenance,
         CATALOGUE_FACT_UNIVERSE,
         transformation=Transformation(
-            name="USGS native station facts and modern series metadata to canonical catalogue carriers",
+            name="USGS selected station inputs and modern series metadata to canonical catalogue carriers",
             external_inputs=tuple(
                 ExternalFactReference(source_id="usgs_nwis", fact=fact)
-                for fact in (
-                    "source.provider.usgs_agency_identity",
-                    "source.station.nwis_identity_location_datum",
-                    *modern_facts,
-                )
+                for fact in ("source.provider.usgs_agency_identity", *station_facts, *modern_facts)
             ),
         ),
     )
@@ -442,19 +799,29 @@ def build_modern_acquisition_provenance(receipts, metadata_directory):
 
 # Existing acquisition facts materialised in the retained native table.
 # This declares derived-input support, not preservation of original responses.
-NATIVE_TABLE_ACQUISITION_IDS = ("national_site_campaign_2026_08_02",)
+NATIVE_TABLE_ACQUISITION_IDS = (
+    "usgs-station-inventory-2026-10-31-01",
+    "usgs-station-inventory-2026-10-31-02",
+    "usgs-station-supplement-2026-10-31-01",
+    "national_site_campaign_2026_08_02",
+)
 
 
 # Authored catalogue, physical-fact and support declarations selected at build time.
 CATALOGUE_BUILD_DECLARATIONS = (
     ("maintenance/catalogue/station_metadata/review.json", None),
+    ("maintenance/catalogue/usgs_nwis/selected-acquisitions.json", None),
+    ("maintenance/catalogue/usgs_nwis/retention.json", None),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "retain_source_descriptions"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "selected_native_provenance"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "station_metadata_supporting_inputs"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
-    ("src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py", "project_station_metadata"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py", "project_modern_station_metadata"),
     ("src/rivretrieve/_internal/assembly.py", "assemble"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/config.py", "config"),
     ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "modern_source_descriptions"),
@@ -476,3 +843,60 @@ CATALOGUE_SUPPORTING_INPUTS = {
         "maintenance/catalogue/station_metadata/sources/usgs_nwis/nwis-sitefile-manual/receipt.json",
     ),
 }
+
+
+def selected_native_acquisition_ids(provenance: AcquisitionProvenance) -> tuple[str, ...]:
+    """Select original events represented by the adopted modern station table."""
+    facts = set(selected_role_inputs(provenance, "modern_monitoring_locations"))
+    return tuple(
+        dict.fromkeys(
+            binding.acquisition_id
+            for binding in provenance.fact_bindings
+            if facts.intersection(binding.facts) and binding.acquisition_id is not None
+        )
+    )
+
+
+def station_metadata_supporting_inputs(provenance: AcquisitionProvenance) -> dict[str, tuple[str, ...]]:
+    """Select adopted legacy and baseline support for the declared source roles."""
+    supporting: dict[str, tuple[str, ...]] = dict(CATALOGUE_SUPPORTING_INPUTS)
+    if "selected.modern_monitoring_locations" in provenance.fact_universe:
+        for role in ("legacy_sitefile_attributes", "legacy_series_claims"):
+            for fact in selected_role_inputs(provenance, role):
+                supporting[fact] = ("maintenance/catalogue/usgs_nwis/legacy-native.parquet",)
+        supporting["source.station.baseline_identity"] = (
+            "maintenance/catalogue/usgs_nwis/baseline-monitoring-locations.json",
+            "maintenance/catalogue/usgs_nwis/baseline/recovery.receipt.json",
+        )
+        return supporting
+    for binding in provenance.fact_bindings:
+        if binding.acquisition_id == "national_site_campaign_2026_08_02":
+            for fact in binding.facts:
+                if fact.startswith("source.station.selected_input_"):
+                    supporting[fact] = ("tests/test_data/usgs_nwis_historical/native.parquet",)
+    return supporting
+
+
+def bind_legacy_metadata_conflicts(
+    provenance: AcquisitionProvenance, conflicts: tuple[tuple[str, str], ...]
+) -> AcquisitionProvenance:
+    """Retain omitted field identities and their original source lineage."""
+    inputs = tuple(
+        ExternalFactReference(source_id="usgs_nwis", fact=fact)
+        for fact in selected_role_inputs(provenance, "legacy_sitefile_attributes")
+    )
+    facts = tuple(f"usgs_sitefile_conflict.{station}.{field}" for station, field in conflicts)
+    bindings = tuple(
+        FactBinding(
+            fact_group=fact,
+            facts=(fact,),
+            source_id=None,
+            acquisition_id=None,
+            transformation=Transformation(name="omit_conflicting_legacy_sitefile_field", external_inputs=inputs),
+        )
+        for fact in facts
+    )
+    payload = provenance.model_dump(mode="python")
+    payload["fact_universe"] = (*provenance.fact_universe, *facts)
+    payload["fact_bindings"] = (*provenance.fact_bindings, *bindings)
+    return AcquisitionProvenance.model_validate(payload)

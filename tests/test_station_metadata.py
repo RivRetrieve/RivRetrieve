@@ -169,6 +169,7 @@ def test_missing_role_and_bad_schema_are_fatal():
         source_metadata_frame(keys, pl.DataFrame())
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_offline_public_api_mixed_scope(tmp_path, monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError("metadata must stay offline")
@@ -358,6 +359,8 @@ def test_metadata_declarations_cover_providers_without_unreviewed_names():
         review = (
             "maintenance/catalogue/pe_senamhi/official/selection.json"
             if provider == "pe_senamhi"
+            else "maintenance/catalogue/at_ehyd/official/selection.json"
+            if provider == "at_ehyd"
             else "maintenance/catalogue/station_metadata/review.json"
         )
         assert (review, None) in origins.CATALOGUE_BUILD_DECLARATIONS
@@ -434,6 +437,7 @@ def test_source_null_name_requires_string_dtype():
         source_metadata_frame(source.select("provider_id", "station_id").unique(), source)
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_aligned_lists_preserve_every_source_entry(tmp_path, monkeypatch):
     from datetime import UTC, datetime
 
@@ -693,6 +697,7 @@ def test_duplicate_elevation_field_cannot_carry_conflicting_datums():
         source_metadata_frame(source.select("provider_id", "station_id").unique(), source)
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 @pytest.mark.parametrize("site_value,exposed", [("Other river", True), ("River", True), (None, True), (None, False)])
 def test_public_same_native_field_remains_distinct_between_source_scopes(tmp_path, monkeypatch, site_value, exposed):
     selected = rr.find(provider="ca_eccc", station="02GA010")
@@ -750,7 +755,9 @@ def test_usgs_elevation_scope_keeps_non_usgs_gauges_without_exposing_their_altit
 
     from rivretrieve._internal.catalogue_origins import Field, NativeColumn
     from rivretrieve._internal.catalogues.native import RetrievedAt, stamp_native_table
-    from rivretrieve._internal.providers.usgs_nwis.origins import STATION_METADATA_FIELDS
+    from rivretrieve._internal.providers.usgs_nwis.origins import (
+        LEGACY_STATION_METADATA_FIELDS as STATION_METADATA_FIELDS,
+    )
     from rivretrieve._internal.providers.usgs_nwis.station_metadata import project_station_metadata
 
     native = stamp_native_table(
@@ -1133,6 +1140,7 @@ def test_inline_unit_declarations_reject_conflicting_or_nonquantity_units(role, 
         ("ch_foen", "2004", "Station altitude", "elevation", "432 m a.s.l.", "432", "m", "LN02"),
     ],
 )
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_quantity_presentation_examples_are_offline(
     provider, station, field, role, raw, numeric, unit, datum, monkeypatch
 ):

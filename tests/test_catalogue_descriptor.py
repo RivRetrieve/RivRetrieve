@@ -27,10 +27,12 @@ from rivretrieve._internal.catalogues.evidence_graph import FactSelection, resol
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA
+from tests._catalogue_inputs import Fingerprint, _detach_evidence, _fingerprint
 
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 SC = Namespace("https://schema.org/")
 BASE = "https://example.org/catalogue/"
+_INPUTS_CACHE: dict[Path, tuple[Fingerprint, object, tuple, dict[str, bytes]]] = {}
 
 
 def _path(provider: str) -> Path:
@@ -38,11 +40,16 @@ def _path(provider: str) -> Path:
 
 
 def _descriptor(provider: str) -> dict:
-    return json.loads((_path(provider) / "croissant.json").read_text())
+    return json.loads((_path(provider) / "croissant.json").read_bytes())
 
 
 def _inputs(provider: str):
-    directory = _path(provider)
+    directory = _path(provider).absolute()
+    extra_files = ("station_metadata.parquet",) + (("monitoring_locations.json",) if provider == "usgs_nwis" else ())
+    fp = _fingerprint(directory, extra_files=extra_files)
+    cached = _INPUTS_CACHE.get(directory)
+    if fp is not None and cached is not None and cached[0] == fp:
+        return _detach_evidence(cached[1]), cached[2], dict(cached[3])
     payload = (directory / "provenance.json").read_bytes()
     canonical = {name: (directory / name).read_bytes() for name in REQUIRED_ARTIFACT_FILES}
     if json.loads(payload)["schema_version"] == 2:
@@ -66,6 +73,8 @@ def _inputs(provider: str):
     origins = (
         (module.HYDROMETRY_STATION_CATALOGUE_ORIGINS, module.TEMPERATURE_STATION_CATALOGUE_ORIGINS)
         if provider == "fr_hubeau"
+        else (module.MODERN_STATION_CATALOGUE_ORIGINS,)
+        if provider == "usgs_nwis"
         else (module.STATION_CATALOGUE_ORIGINS,)
     )
     files = {
@@ -80,6 +89,9 @@ def _inputs(provider: str):
         files["station_metadata.parquet"] = (directory / "station_metadata.parquet").read_bytes()
     if provider == "usgs_nwis":
         files["monitoring_locations.json"] = (directory / "monitoring_locations.json").read_bytes()
+    if fp is not None and _fingerprint(directory, extra_files=extra_files) == fp:
+        _INPUTS_CACHE[directory] = (fp, provenance, origins, files)
+        return _detach_evidence(provenance), origins, dict(files)
     return provenance, origins, files
 
 
@@ -403,7 +415,12 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
             for statement in provenance.header.source_records[0].statements
             if statement.kind == kind
         )
-    for provider in ("ca_eccc", "pl_imgw", "fr_hydroportail", "th_thaiwater"):
+    canadian, _, _ = _inputs("ca_eccc")
+    for source in canadian.header.source_records:
+        for statement in source.statements:
+            if statement.kind in {"license", "citation"}:
+                assert _descriptor("ca_eccc")[statement.kind] == statement.exact_text
+    for provider in ("pl_imgw", "fr_hydroportail", "th_thaiwater"):
         assert "license" not in _descriptor(provider) and "citation" not in _descriptor(provider)
     assert _descriptor("ch_foen")["license"] == "Freie Nutzung. Quellenangabe ist Pflicht."
     hubeau = _descriptor("fr_hubeau")
@@ -423,7 +440,12 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
     [
         pytest.param(
             provider,
-            marks=pytest.mark.derived(f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"),
+            marks=pytest.mark.derived(
+                {
+                    "usgs_nwis": "maintenance/catalogue/usgs_nwis",
+                    "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
+                }.get(provider, f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet")
+            ),
         )
         for provider in BUILTIN_PROVIDER_IDS
     ],
@@ -437,14 +459,50 @@ def test_native_material_identity_matches_committed_provenance_and_bytes(retaine
     if native is None:
         assert "isBasedOn" not in descriptor
         return
-    native_path = retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
+    native_path = retained_evidence_root / native.repository_path
     material = descriptor["isBasedOn"]
     assert material["sha256"] == native.sha256 == sha256(native_path.read_bytes()).hexdigest()
     assert material["contentSize"] == f"{native.byte_size} B" == f"{native_path.stat().st_size} B"
-    assert (
-        material["contentUrl"]
-        == f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}"
-    )
+    if native.location_kind == "retained":
+        assert "contentUrl" not in material
+        properties = {item["name"]: item["value"] for item in material["additionalProperty"]}
+        adopted = next(item for item in provenance.header.build_inputs.inputs if item.usage == "native_table")
+        assert properties == {
+            "archive_repository": adopted.reference.archive_repository,
+            "collection_id": adopted.reference.collection_id,
+            "manifest_sha256": adopted.reference.manifest_sha256,
+            "artifact_id": adopted.reference.artifact_id,
+            "role": adopted.reference.role,
+            "usage": "native_table",
+        }
+    else:
+        assert material["contentUrl"] == (
+            f"https://github.com/RivRetrieve/RivRetrieve/blob/{native.revision}/{native.repository_path}"
+        )
+
+
+def test_retained_catalogue_tests_select_bound_consumer_scopes():
+    from tests.test_coverage_map import test_usgs_station_inventory_preserves_selected_source_scope
+    from tests.test_station_metadata_areas import test_projection_preserves_every_native_scalar
+
+    # The maintained archive binds these exact consumer paths, not arbitrary descendants.
+    scopes = {
+        "usgs_nwis": "maintenance/catalogue/usgs_nwis",
+        "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
+    }
+    for test, providers in (
+        (test_native_material_identity_matches_committed_provenance_and_bytes, scopes),
+        (test_projection_preserves_every_native_scalar, {"usgs_nwis": scopes["usgs_nwis"]}),
+    ):
+        cases = next(mark.args[1] for mark in test.pytestmark if mark.name == "parametrize")
+        for case in cases:
+            if case.values[0] in providers:
+                assert [mark.args for mark in case.marks if mark.name == "derived"] == [(providers[case.values[0]],)]
+    assert [
+        mark.args
+        for mark in test_usgs_station_inventory_preserves_selected_source_scope.pytestmark
+        if mark.name == "derived"
+    ] == [(scopes["usgs_nwis"],)]
 
 
 def test_reference_loader_extracts_actual_columns_from_all_four_record_sets(monkeypatch):
@@ -496,24 +554,40 @@ def test_descriptor_preserves_exact_bounded_contents(provider: str):
 
 @pytest.mark.parametrize("provider", ("br_ana", "pl_imgw", "fr_hubeau", "ba_fhmzbih", "th_thaiwater"))
 def test_reference_loader_extracts_all_five_evidence_relations(provider, monkeypatch):
+    import pyarrow as pa
+
     monkeypatch.setattr(socket.socket, "connect", _deny_network)
     dataset = mlc.Dataset(_path(provider) / "croissant.json")
+    pa_str_list = pa.list_(pa.string())
+    bytes_cls = bytes
     for relation, schema in EVIDENCE_SCHEMAS.items():
-
-        def decode(value):
-            if isinstance(value, bytes):
-                return value.decode()
-            if hasattr(value, "tolist"):
-                return [decode(item) for item in value.tolist()]
-            if isinstance(value, list):
-                return [decode(item) for item in value]
-            return value
-
-        rows = [
-            {key.partition("/")[2]: decode(value) for key, value in row.items()}
-            for row in dataset.records(f"provenance_{relation}")
+        prefix = f"provenance_{relation}"
+        columns: dict[str, list[object]] = {col: [] for col in schema}
+        col_specs = [
+            (columns[col].append, f"{prefix}/{col}", dtype == pl.String, isinstance(dtype, pl.List))
+            for col, dtype in schema.items()
         ]
-        actual = pl.DataFrame(rows, schema=schema)
+        expected_len = len(col_specs)
+        for row in dataset.records(prefix):
+            assert len(row) == expected_len
+            for append_fn, full_key, is_str, is_list in col_specs:
+                val = row[full_key]
+                if val is None:
+                    append_fn(None)
+                elif is_str:
+                    append_fn(val.decode() if isinstance(val, bytes_cls) else val)
+                elif is_list:
+                    seq = val.tolist() if hasattr(val, "tolist") else val
+                    append_fn([item.decode() if isinstance(item, bytes_cls) else item for item in seq])
+                else:
+                    append_fn(val)
+        series_list = [
+            pl.from_arrow(pa.array(columns[col], type=pa_str_list)).rename(col)
+            if isinstance(dtype, pl.List)
+            else pl.Series(col, columns[col], dtype=dtype)
+            for col, dtype in schema.items()
+        ]
+        actual = pl.DataFrame(series_list)
         expected = pl.read_parquet(_path(provider) / EVIDENCE_FILENAMES[relation])
         pl_testing.assert_frame_equal(actual, expected)
 

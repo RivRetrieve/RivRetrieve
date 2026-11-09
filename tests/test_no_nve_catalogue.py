@@ -170,6 +170,7 @@ def test_build_populates_exact_attested_catalogue(retained_evidence_root) -> Non
     assert catalogue.acquisition_provenance.withheld_facts == ()
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_discovery_selects_a_real_norwegian_edge() -> None:
     selection = rr.find(provider="no_nve", station="1.200.0", quantity="stage", frequency="daily", statistic="mean")
     assert len(selection.series) == 1
@@ -214,6 +215,7 @@ def test_native_value_mutation_is_rejected(retained_evidence_root) -> None:
         generate_catalogue.build_catalogue(mutated, STATION_CATALOGUE_ORIGINS)
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_brazil_certified_candidates_are_selectable_without_inferred_availability() -> None:
     selection = rr.find(provider="br_ana")
     assert len(selection.series) == 6 * 17_914

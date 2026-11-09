@@ -16,6 +16,8 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
 class _Spans:
+    """Alternate offset labels at the boundary of two authored request spans."""
+
     def __init__(self, series_id):
         self.series_id = series_id
         self.second_series_id = series_id
@@ -68,7 +70,7 @@ def test_public_continuous_offset_boundaries_persist_refresh_and_reuse(monkeypat
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
     def fetch(cache):
-        return rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache=cache, receipts=True, on_issue="ignore")
+        return rr.fetch(selected, start="2000-01-03", end="2001-02-01", cache=cache, receipts=True, on_issue="ignore")
 
     first = fetch("refresh")
     assert len(transport.calls) == 2
@@ -105,7 +107,7 @@ def test_public_single_successful_utc_span_validates_native_offset_rows(monkeypa
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
     def fetch(cache):
-        return rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache=cache, on_issue="ignore")
+        return rr.fetch(selected, start="2000-01-03", end="2001-02-01", cache=cache, on_issue="ignore")
 
     partial = fetch("refresh")
     assert partial.data.height == 1
@@ -125,7 +127,7 @@ def test_public_all_series_completed_spans_reuse_complete_inventory_union(monkey
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
     def fetch(cache):
-        return rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache=cache, on_issue="ignore")
+        return rr.fetch(selected, start="2000-01-03", end="2001-02-01", cache=cache, on_issue="ignore")
 
     result = fetch("refresh")
     assert result.data.height == 2
@@ -147,13 +149,13 @@ def test_public_continuous_fact_changes_across_spans_keep_all_source_facts(monke
         transport.second_statistic = None
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
-    result = rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="refresh", on_issue="ignore")
+    result = rr.fetch(selected, start="2000-01-03", end="2001-02-01", cache="refresh", on_issue="ignore")
     assert result.data.height == 2
     assert len(set(result.data["facts_id"])) == 2
     definition = next(item for item in result.source_series if item.series_id == continuous.series_id)
     assert set(result.data["facts_id"]).issubset({fact.facts_id for fact in definition.facts})
     assert all(item.completeness.value == "complete" for item in result.inventories if item.origin == "response")
-    reused = rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="reuse", on_issue="ignore")
+    reused = rr.fetch(selected, start="2000-01-03", end="2001-02-01", cache="reuse", on_issue="ignore")
     assert_frame_equal(reused.data, result.data)
     assert len(transport.calls) == 2
 
@@ -174,7 +176,7 @@ def test_public_narrow_inventory_refresh_cannot_hide_new_series_in_broad_reuse(m
             begin, end = [
                 datetime.fromisoformat(value.removesuffix("Z")) for value in request.params["datetime"].split("/")
             ]
-            stamp = datetime(2003, 1, 15, 12)
+            stamp = datetime(2001, 1, 15, 12)
             observations = []
             if begin <= stamp <= end:
                 observation = feature("new-member-after-narrow-refresh")
@@ -192,11 +194,11 @@ def test_public_narrow_inventory_refresh_cannot_hide_new_series_in_broad_reuse(m
     transport = Publication()
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
-    rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="refresh", on_issue="ignore")
+    rr.fetch(selected, start="2000-01-03", end="2001-02-01", cache="refresh", on_issue="ignore")
     transport.updated = True
-    narrow = rr.fetch(selected, start="2003-01-03", end="2003-02-01", cache="refresh", on_issue="ignore")
+    narrow = rr.fetch(selected, start="2001-01-03", end="2001-02-01", cache="refresh", on_issue="ignore")
     assert narrow.data.height == 1
-    reused = rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="reuse", on_issue="ignore")
+    reused = rr.fetch(selected, start="2000-01-03", end="2001-02-01", cache="reuse", on_issue="ignore")
     assert_frame_equal(reused.data, narrow.data)
 
 
@@ -221,7 +223,7 @@ def test_public_failed_refresh_partial_recovery_and_full_recovery_do_not_replay_
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
     def fetch(cache, policy="ignore"):
-        return rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache=cache, on_issue=policy)
+        return rr.fetch(selected, start="2000-01-03", end="2001-02-01", cache=cache, on_issue=policy)
 
     first = fetch("refresh")
     assert first.data.height == 2
@@ -258,3 +260,49 @@ def test_public_failed_refresh_partial_recovery_and_full_recovery_do_not_replay_
     assert not any(item.status == "failed" for item in reused.outcomes)
     assert not any(item.code == "source.request_failed" for item in reused.issues)
     assert {item.retrieved_at for item in reused.provenance.served_intervals} == {stamp}
+
+
+@pytest.mark.parametrize("quantity,parameter,unit", [("discharge", "00060", "ft^3/s"), ("stage", "00065", "ft")])
+def test_public_yearly_acquisition_bounds_include_padding_and_leap_day(
+    monkeypatch, tmp_path, quantity, parameter, unit
+):
+    from tests.test_usgs_observation_acquisition import Transport
+
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity=quantity, temporal_support="instantaneous")
+    identifier = selected.series[0].identity.published_id
+    stamps = [
+        ["2000-02-29T12:00:00Z", "2000-12-30T23:59:59.999999Z"],
+        ["2000-12-31T00:00:00Z"],
+        ["2001-12-31T00:00:00Z"],
+    ]
+    pages = []
+    for span in stamps:
+        observations = []
+        for stamp in span:
+            observation = feature(identifier)
+            observation["properties"].update(
+                parameter_code=parameter, statistic_id="00011", unit_of_measure=unit, time=stamp
+            )
+            observations.append(observation)
+        pages.append(page(*observations))
+    transport = Transport(*pages)
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    result = rr.fetch(selected, start="2000-01-03", end="2002-01-01", cache="refresh", receipts=True, on_issue="raise")
+    # The shared engine pads by two days before partitioning into 365-day spans.
+    assert [request.params["datetime"] for request in transport.requests] == [
+        "2000-01-01T00:00:00Z/2000-12-30T23:59:59.999999Z",
+        "2000-12-31T00:00:00Z/2001-12-30T23:59:59.999999Z",
+        "2001-12-31T00:00:00Z/2002-01-03T23:59:59.999999Z",
+    ]
+    expected = pl.DataFrame(
+        {"time": [datetime.fromisoformat(stamp.removesuffix("Z")) for span in stamps for stamp in span]}
+    )
+    assert_frame_equal(result.data.select("time").sort("time"), expected)
+    assert [entry.content for entry in result.receipts.entries] == pages
+    reused = rr.fetch(selected, start="2000-01-03", end="2002-01-01", cache="reuse", receipts=True, on_issue="raise")
+    assert_frame_equal(reused.data, result.data)
+    assert all(entry.authorship.value == "store_excerpt" for entry in reused.receipts.entries)
+    assert reused.provenance.calls_made == result.provenance.calls_made
+    assert reused.provenance.retrieved_at == result.provenance.retrieved_at
+    assert len(transport.requests) == 3

@@ -468,6 +468,140 @@ test("native cluster click separates nearby gauges as zoom increases", async ({
   ).toBeVisible();
 });
 
+test("clusters keep one consistent non-state colour across counts, themes, filtering and zoom", async ({
+  page,
+}) => {
+  const clustersFixture = structuredClone(fixture);
+  clustersFixture.stations = [];
+  clustersFixture.series = [];
+  const groups = [
+    { count: 2, lat: 46.2, lng: 6.2, provider: 0, factIndex: 0 },
+    { count: 15, lat: 46.8, lng: 8.2, provider: 0, factIndex: 0 },
+    { count: 120, lat: 47.4, lng: 9.8, provider: 1, factIndex: 1 },
+  ];
+  let idx = 0;
+  for (const group of groups) {
+    for (let i = 0; i < group.count; i++) {
+      const stationIdx = idx++;
+      clustersFixture.stations.push([
+        group.provider,
+        `s-${stationIdx}`,
+        `Station ${stationIdx}`,
+        group.lat + (i % 5) * 0.0002,
+        group.lng + Math.floor(i / 5) * 0.0002,
+        "EPSG:4326",
+        [],
+      ]);
+      clustersFixture.series.push([
+        stationIdx,
+        `ser-${stationIdx}`,
+        null,
+        null,
+        [group.factIndex],
+      ]);
+    }
+  }
+  await page.route("**/catalogue.json", (route) =>
+    route.fulfill({ json: clustersFixture }),
+  );
+  await page.goto("/");
+  const clusters = page.locator(".marker-cluster");
+  await expect(clusters).toHaveCount(3);
+  await expect
+    .poll(async () =>
+      (await clusters.allTextContents()).map((t) => t.trim()).sort(),
+    )
+    .toEqual(["120", "15", "2"]);
+  await expect(
+    page.locator(
+      ".marker-cluster-small, .marker-cluster-medium, .marker-cluster-large",
+    ),
+  ).toHaveCount(0);
+
+  const readClusterStyles = () =>
+    clusters.evaluateAll((nodes) => {
+      const parseRgb = (value: string) =>
+        (value.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
+      const luminance = (rgb: number[]) => {
+        const [r, g, b] = rgb.map((v) => {
+          const s = v / 255;
+          return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const contrast = (a: string, b: string) => {
+        const l1 = luminance(parseRgb(a));
+        const l2 = luminance(parseRgb(b));
+        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+      };
+      const probe = (color: string) => {
+        const el = document.createElement("span");
+        el.style.color = color;
+        document.body.appendChild(el);
+        const resolved = getComputedStyle(el).color;
+        el.remove();
+        return resolved;
+      };
+      const rootStyle = getComputedStyle(document.documentElement);
+      const stateColors = [
+        "--gauge-match",
+        "--gauge-selected",
+        "--gauge-conflict",
+      ].map((name) => probe(rootStyle.getPropertyValue(name).trim()));
+      return nodes.map((node) => {
+        const outer = getComputedStyle(node);
+        const inner = getComputedStyle(node.querySelector("div")!);
+        const label = getComputedStyle(node.querySelector("span")!);
+        return {
+          text: node.textContent?.trim() ?? "",
+          outerBg: outer.backgroundColor,
+          innerBg: inner.backgroundColor,
+          textColor: label.color,
+          contrastRatio: contrast(inner.backgroundColor, label.color),
+          matchesStateColor: stateColors.includes(inner.backgroundColor),
+        };
+      });
+    });
+
+  const lightStyles = await readClusterStyles();
+  expect(new Set(lightStyles.map((s) => s.outerBg)).size).toBe(1);
+  expect(new Set(lightStyles.map((s) => s.innerBg)).size).toBe(1);
+  expect(new Set(lightStyles.map((s) => s.textColor)).size).toBe(1);
+  for (const style of lightStyles) {
+    expect(style.matchesStateColor).toBe(false);
+    expect(style.contrastRatio).toBeGreaterThanOrEqual(7);
+  }
+
+  await page.evaluate(() => {
+    document.documentElement.dataset.mdColorScheme = "slate";
+  });
+  await expect
+    .poll(async () => (await readClusterStyles())[0].innerBg)
+    .not.toBe(lightStyles[0].innerBg);
+  const darkStyles = await readClusterStyles();
+  expect(new Set(darkStyles.map((s) => s.outerBg)).size).toBe(1);
+  expect(new Set(darkStyles.map((s) => s.innerBg)).size).toBe(1);
+  expect(new Set(darkStyles.map((s) => s.textColor)).size).toBe(1);
+  for (const style of darkStyles) {
+    expect(style.matchesStateColor).toBe(false);
+    expect(style.contrastRatio).toBeGreaterThanOrEqual(7);
+  }
+
+  await page.getByLabel("Provider", { exact: true }).selectOption("alpha");
+  await expect(clusters).toHaveCount(2);
+  const filteredStyles = await readClusterStyles();
+  expect(filteredStyles.map((s) => s.innerBg)).toEqual([
+    darkStyles[0].innerBg,
+    darkStyles[0].innerBg,
+  ]);
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  const zoomedStyles = await readClusterStyles();
+  for (const style of zoomedStyles) {
+    expect(style.innerBg).toBe(darkStyles[0].innerBg);
+    expect(style.textColor).toBe(darkStyles[0].textColor);
+  }
+});
+
 test("theme switch safely retires pending tile loads", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", () => errors.push("pageerror"));

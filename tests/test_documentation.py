@@ -136,6 +136,7 @@ def test_documentation_requires_prepared_station_explorer(tmp_path, monkeypatch,
     assert missing in str(error.value)
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_generated_reference_is_current():
     namespace = runpy.run_path(str(ROOT / "scripts/generate_reference.py"))
     assert (ROOT / "docs/_generated/reference-tables.md").read_text() == namespace["render_tables"]()

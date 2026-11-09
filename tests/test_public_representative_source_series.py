@@ -164,6 +164,7 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
             ),
         ),
         pytest.param("br_ana", marks=pytest.mark.recorded("tests/recordings/br_ana")),
+        pytest.param("at_ehyd", marks=pytest.mark.recorded("maintenance/observations/at_ehyd/retrieval")),
     ],
 )
 def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, monkeypatch, tmp_path, request):
@@ -182,6 +183,27 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             variant="consistido",
         )
         start, end = "2020-01-10", "2020-01-20"
+    elif provider == "at_ehyd":
+        from tests.test_at_ehyd_recorded_public import _response_matching_request
+
+        class _AtEhydReplay:
+            def send(self, req):
+                name = (
+                    "messstellen-info-209486"
+                    if req.url.endswith("/Messstellen/info")
+                    else "owf-209486-file5-q-tagesmittel"
+                )
+                return _response_matching_request(retained_evidence_root, "access", name, req)
+
+        monkeypatch.setattr(discovery, "HttpClient", _AtEhydReplay)
+        selection = rr.find(
+            provider=provider,
+            station="209486",
+            quantity="discharge",
+            frequency="daily",
+            statistic="mean",
+        )
+        start, end = "2023-01-01", "2023-01-10"
     elif provider == "ch_foen":
         from tests.test_partial_explicit_scope import _official_replay
 

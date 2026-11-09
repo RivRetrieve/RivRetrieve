@@ -1,3 +1,5 @@
+import pytest
+
 import rivretrieve as rr
 from rivretrieve._internal.engine import UnknownTemporalSupport
 from rivretrieve._internal.providers.ba_fhmzbih.declaration import declaration
@@ -5,6 +7,7 @@ from rivretrieve._internal.providers.registration import LiveStages
 from tests._catalogue import catalogue_path, catalogue_reader, provider_info
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_ba_fhmzbih_catalogue_and_live_declaration():
     assert "ba_fhmzbih" in rr.providers().get_column("provider_id").to_list()
     assert isinstance(declaration.observations, LiveStages)

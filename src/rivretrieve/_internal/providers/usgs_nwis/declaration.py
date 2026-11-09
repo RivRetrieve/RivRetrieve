@@ -33,7 +33,7 @@ def _load_monitoring_locations(catalogue: Path) -> Mapping[str, str]:
                 or not station.strip()
                 or not isinstance(location, str)
                 or not location.strip()
-                or not location.endswith("-" + station)
+                or station not in (location, location.partition("-")[2])
                 for station, location in locations.items()
             )
         ):
