@@ -19,7 +19,7 @@ from rivretrieve._internal.catalogues.artifact import (
     load_packaged_catalogue_artifact,
 )
 from tests._catalogue import catalogue_path, catalogue_reader
-from tests._provenance import legacy_provenance
+from tests._provenance import canonical_legacy_provenance, legacy_document, legacy_provenance
 
 
 @pytest.mark.derived("tests/test_data/br_ana_inventory/capture.json")
@@ -55,6 +55,7 @@ def test_brazil_inventory_and_adopted_candidates_are_certified(retained_evidence
     assert artifact.provider_info["citation"] is None
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_brazil_discovery_exposes_only_documented_adopted_products() -> None:
     assert "br_ana" in rr.providers().get_column("provider_id").to_list()
     assert rr.products(provider="br_ana") == [
@@ -90,8 +91,9 @@ def test_brazil_requires_provenance_at_the_packaged_boundary(tmp_path: Path) -> 
         load_packaged_catalogue_artifact(copied, on_issue="raise")
 
 
-def test_brazil_selection_retains_unknown_candidate_reason_and_source_evidence() -> None:
-    artifact = load_packaged_catalogue_artifact(catalogue_path("br_ana"))
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+def test_brazil_selection_retains_unknown_candidate_reason_and_source_evidence(packaged_catalogue_inputs) -> None:
+    artifact = packaged_catalogue_inputs.load(catalogue_path("br_ana"))
     candidate = artifact.station_products.filter(
         (pl.col("availability") == "unknown") & (pl.col("product_id") == "stage_instantaneous")
     ).row(0, named=True)
@@ -125,10 +127,8 @@ def test_packaged_evidence_rejects_retired_schema(tmp_path: Path) -> None:
 
 
 def test_acquisition_provenance_v2_rejects_legacy_and_mixed_withheld_shapes() -> None:
-    provenance = load_packaged_catalogue_artifact(catalogue_path("br_ana"), on_issue="raise").acquisition_provenance
-    assert provenance is not None
-    provenance = legacy_provenance(provenance)
-    payload = provenance.model_dump(mode="json")
+    provenance = canonical_legacy_provenance("br_ana")
+    payload = legacy_document(catalogue_path("br_ana") / "provenance.json")
     assert payload["schema_version"] == 2
     assert payload["withheld_facts"]
     assert all("fact" not in item for item in payload["withheld_facts"])

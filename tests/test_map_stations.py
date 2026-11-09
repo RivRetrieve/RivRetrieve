@@ -10,6 +10,8 @@ import rivretrieve as rr
 from rivretrieve._internal.issues import FatalContractError, IssuePolicyError, MissingOptionalDependencyError
 from rivretrieve._internal.station_map import StationMap
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 class FakeMap:
     def __init__(self, *, location: list[float], zoom_start: int, control_scale: bool) -> None:
@@ -133,12 +135,12 @@ def test_map_established_crs_uses_distinct_marker_colour_and_exact_popup(
     assert isinstance(station_map, FakeMap)
     assert len(station_map.markers) == 1
     marker = station_map.markers[0]
-    assert marker.location == [38.94977778, -77.12763889]
+    assert marker.location == [38.949777777777776, -77.12763888888888]
     assert marker.tooltip == "usgs_nwis (01646500)"
     assert marker.popup == (
         "<strong>usgs_nwis</strong><br>Station: 01646500"
-        "<br>Latitude: 38.94977778<br>Longitude: -77.12763889"
-        "<br>crs: EPSG:4269"
+        "<br>Latitude: 38.949777777777776<br>Longitude: -77.12763888888888"
+        "<br>crs: EPSG:4326"
     )
     assert marker.icon.color == "blue"
     assert marker.icon.color != "orange"

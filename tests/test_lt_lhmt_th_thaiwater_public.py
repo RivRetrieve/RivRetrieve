@@ -105,6 +105,7 @@ def test_public_fetch_preserves_provider_acquisition_boundaries(
             rr.to_utc(result)
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_thaiwater_find_exposes_the_original_baseline_available_and_unknown_pairs() -> None:
     baseline = rr.as_frame(rr.find(provider="th_thaiwater"))
     positive_beyond_sample = rr.as_frame(rr.find(provider="th_thaiwater", station="1373272"))

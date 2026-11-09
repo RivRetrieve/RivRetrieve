@@ -83,7 +83,7 @@ def test_scoped_materialization_constructs_only_selected_coordinates(monkeypatch
     assert {series.identity.published_id for series in selected} == {"1", "2"}
 
 
-@pytest.mark.parametrize("provider", ["no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["at_ehyd", "no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis"])
 def test_catalogue_fact_identity_includes_exact_facts_and_evidence(provider):
     from rivretrieve._internal.source_series import stable_id
 
@@ -128,7 +128,17 @@ def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_lega
     }
     assert all(item.identity.description is None for item in restored.series)
     assert all(item.identity.namespace == "USGS.WaterData.time_series_id" for item in restored.series)
-    assert not any(inventory.catalogue_claims for inventory in restored.inventories)
+    assert restored.inventories == selection.inventories
+    # Physical predicates select series without narrowing the acquired inventory.
+    retained_claims = [
+        claim
+        for inventory in restored.inventories
+        for claim in inventory.catalogue_claims
+        if claim.station_id == "02196000" and claim.product_id == "discharge_daily_mean"
+    ]
+    assert {
+        (claim.identity.namespace, claim.identity.published_id, claim.identity.description) for claim in retained_claims
+    } == {("NWIS.ts_id", "126801", ""), ("NWIS.ts_id", "126805", "[(2)]")}
     legacy = pl.read_parquet(
         retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet"
     )
@@ -137,22 +147,17 @@ def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_lega
     assert set(claims["namespace"]) == {"NWIS.ts_id"}
 
 
-@pytest.mark.derived("research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
-def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary(retained_evidence_root: Path):
+def test_catalogue_claim_coordinate_names_are_validated_at_artifact_boundary():
     import polars as pl
 
     from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
 
     artifact = load_packaged_catalogue_artifact(BASE / "usgs_nwis/catalogue")
-    # Authored corruption of an independently retained historical claim carrier.
-    claims = (
-        pl.read_parquet(retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/series_claims.parquet")
-        .head(1)
-        .with_columns(
-            pl.lit(
-                [{"name": "", "value": "00060"}], dtype=pl.List(pl.Struct({"name": pl.String, "value": pl.String}))
-            ).alias("native_coordinates")
-        )
+    # The loaded artifact validates the claim before the single authored corruption.
+    claims = artifact.catalogue_claims.head(1).with_columns(
+        pl.lit(
+            [{"name": "", "value": "00060"}], dtype=pl.List(pl.Struct({"name": pl.String, "value": pl.String}))
+        ).alias("native_coordinates")
     )
     with pytest.raises(CorruptCatalogArtifactError, match="coordinate names"):
         packaged_catalogue_artifact_from_components(
@@ -201,3 +206,51 @@ def test_usgs_instantaneous_support_does_not_establish_sampling_frequency():
     assert series[0].facts[0].frequency.value is None
     assert series[0].facts[0].frequency.state.value == "source_silent"
     assert series[0].facts[0].temporal_support.value == "instantaneous"
+
+
+@pytest.mark.parametrize("series_id", [None, "", "published-series"])
+@pytest.mark.parametrize("station", ["station", 'station"\\é'])
+def test_materialization_preserves_generated_and_explicit_series_identity(series_id, station):
+    import hashlib
+    import json
+    from datetime import date
+
+    from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
+    from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
+    from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, SourceSeries
+
+    description = SourceDescription(
+        product_id="product",
+        station_id=station,
+        series_id=series_id,
+        identity=SourceIdentity(namespace="native", published_id="published", origin="catalogue", evidence=("source",)),
+        facts=(PhysicalFacts(facts_id="facts"),),
+    )
+    artifact = PackagedCatalogArtifact(
+        provider_info={"provider_id": "provider"},
+        products=pl.DataFrame(),
+        stations=pl.DataFrame(),
+        station_products=pl.DataFrame(
+            {
+                "station_id": [station],
+                "product_id": ["product"],
+                "availability": ["available"],
+                "last_catalogue_check": [date(2026, 1, 1)],
+            }
+        ),
+        source_descriptions=SourceDescriptions(provider_id="provider", descriptions=(description,)),
+    )
+    series, inventories = catalogue_series(artifact)
+    generated = hashlib.sha256(
+        json.dumps(["provider", station, "native", "published"], ensure_ascii=False, separators=(",", ":")).encode()
+    ).hexdigest()
+    expected_id = series_id or generated
+    assert series[0].series_id == expected_id
+    assert SourceSeries.model_validate(series[0].model_dump()) == series[0]
+    assert inventories[0].members == (expected_id,)
+    expected_snapshot = hashlib.sha256(
+        json.dumps(
+            ["provider", station, "product", "2026-01-01", expected_id], ensure_ascii=False, separators=(",", ":")
+        ).encode()
+    ).hexdigest()
+    assert inventories[0].snapshot_id == expected_snapshot

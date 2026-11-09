@@ -85,6 +85,7 @@ dev = [
     "geopandas>=1.2.0",
     "matplotlib>=3.11.2",
     "uv-build>=0.12.1,<0.13",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.ruff]

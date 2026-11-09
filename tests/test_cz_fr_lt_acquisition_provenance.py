@@ -181,6 +181,7 @@ def test_native_cli_rejects_raw_byte_substitution(
         generator.main(args)
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_france_binds_official_publication_without_original_producer_overclaims() -> None:
     selected = rr.find(provider="fr_hubeau")
     provenance = selected.acquisition_provenance[0]
@@ -215,6 +216,7 @@ def test_france_binds_official_publication_without_original_producer_overclaims(
         assert acquisitions[binding.source_id, binding.acquisition_id].method == "runtime_http_request"
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_lithuania_runtime_provenance_names_the_exact_monthly_route() -> None:
     provenance = rr.find(provider="lt_lhmt").acquisition_provenance[0]
     assert provenance is not None

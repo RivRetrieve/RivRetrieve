@@ -10,6 +10,7 @@ Use `uv` exclusively for project dependencies and execution.
 
 - Add dependencies: `uv add <package>`; development dependencies: `uv add --dev <package>`.
 - Sync the environment: `uv sync`.
+- Keep `uv.lock` on public PyPI URLs (`https://pypi.org/simple` and `https://files.pythonhosted.org/`). If your local environment routes `uv` through an internal or private package mirror, rewrite `uv.lock` back to the upstream public registry URLs before committing so `uv sync --locked` works for external contributors.
 - Run commands: `uv run <command>`.
 - Run source-independent tests: `uv run pytest --logic-only`.
 - Format: `uv run ruff format`.

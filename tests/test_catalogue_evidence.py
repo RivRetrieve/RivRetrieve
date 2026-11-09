@@ -27,13 +27,45 @@ from rivretrieve._internal.catalogues.evidence_encoding import (
     reconstruct_provenance,
 )
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
-from tests._provenance import historical_source_provenance
+from tests._provenance import (
+    canonical_legacy_provenance,
+    canonical_normalized_evidence,
+    historical_source_provenance,
+    legacy_document,
+    registered_usgs_baseline,
+)
 
 ROOT = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
 
 
+# Exact origins.py declarations at e845c58362bf1b3905612604ce10dd9d4c21b450.
+_USGS_PRE_ADOPTION_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "build_modern_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/origins.py", "STATION_METADATA_NOTICE"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/generate_catalogue.py", "build_modern_catalogue"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/station_metadata.py", "project_station_metadata"),
+    ("src/rivretrieve/_internal/assembly.py", "assemble"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/config.py", "config"),
+    ("src/rivretrieve/_internal/providers/usgs_nwis/catalogue_series.py", "modern_source_descriptions"),
+)
+
+
+def _historical_metadata_extension_input(provider):
+    """Use the fixed USGS graph to test its historical metadata-source extension."""
+    if provider == "usgs_nwis":
+        from rivretrieve._internal.providers.usgs_nwis.origins import build_acquisition_provenance
+
+        return build_acquisition_provenance()
+    return _legacy(provider)
+
+
 def _legacy(provider, path=None):
-    path = ROOT / provider / "catalogue" if path is None else path
+    if path is None:
+        return canonical_legacy_provenance(provider)
     content = (path / "provenance.json").read_bytes()
     import json
 
@@ -45,12 +77,7 @@ def _legacy(provider, path=None):
 
 
 def _normalized(provider):
-    path = ROOT / provider / "catalogue"
-    return normalize_provenance(
-        _legacy(provider),
-        stations=pl.read_parquet(path / "stations.parquet"),
-        station_products=pl.read_parquet(path / "station_products.parquet"),
-    )
+    return canonical_normalized_evidence(provider)
 
 
 def _small_evidence():
@@ -206,6 +233,72 @@ def test_senamhi_selected_metadata_publication_has_declared_source_lineage():
         )
         for item in support:
             assert direct[item].source_id == "pe_senamhi"
+            assert direct[item].acquisition_id is not None
+
+
+def test_at_ehyd_selected_metadata_publication_has_declared_source_lineage():
+    from rivretrieve._internal.acquisition_provenance import CodeReference, ExternalFactReference
+    from rivretrieve._internal.catalogues.station_metadata import validate_metadata_fields
+    from rivretrieve._internal.providers.at_ehyd.origins import STATION_METADATA_FIELDS
+    from rivretrieve._internal.station_metadata import metadata_support_fact, source_metadata_frame
+
+    # Selected-original providers have no historical metadata migration to undo.
+    # Check their current publication instead of applying the legacy projection.
+    provenance = _legacy("at_ehyd")
+    metadata = pl.read_parquet(ROOT / "at_ehyd/catalogue/station_metadata.parquet")
+    source_metadata_frame(metadata.select("provider_id", "station_id").unique(), metadata)
+    validate_metadata_fields(metadata, STATION_METADATA_FIELDS)
+    build = provenance.build_inputs
+    assert build is not None
+    prefix = "src/rivretrieve/_internal/providers/at_ehyd/"
+    declaration = CodeReference(
+        repository=build.build.repository,
+        revision=build.build.revision,
+        repository_path=prefix + "origins.py",
+        symbol="STATION_METADATA_FIELDS",
+    )
+    assert declaration in build.declarations
+    selected = build.declarations[0]
+    assert selected.repository == "https://github.com/RivRetrieve/verification-evidence"
+    assert selected.repository_path == "declarations/at_ehyd/catalogue.json"
+    assert selected.symbol is None
+    assert {item.reference.archive_revision for item in build.inputs} == {selected.revision}
+    bindings = {binding.fact_group: binding for binding in provenance.fact_bindings}
+    expected_facts = {
+        metadata_support_fact(field.attribute_role, field.source_field, field.source_scope)
+        for field in STATION_METADATA_FIELDS
+    }
+    assert {fact for fact in provenance.fact_universe if fact.startswith("metadata.")} == expected_facts
+    assert set(metadata["support_fact"].drop_nulls()) == expected_facts
+    adopted = {fact for item in build.inputs for fact in item.facts}
+    direct = {
+        fact: binding
+        for binding in provenance.fact_bindings
+        if binding.transformation is None
+        for fact in binding.facts
+    }
+    for field in STATION_METADATA_FIELDS:
+        fact = metadata_support_fact(field.attribute_role, field.source_field, field.source_scope)
+        binding = bindings[fact]
+        assert binding.facts == (fact,)
+        transform = binding.transformation
+        assert transform is not None
+        assert transform.name == "project_station_metadata"
+        assert transform.kind == "derived_value" and transform.marker_value is None
+        assert transform.declaration == declaration
+        assert transform.executable == CodeReference(
+            repository=build.build.repository,
+            revision=build.build.revision,
+            repository_path=prefix + "station_metadata.py",
+            symbol="project_station_metadata",
+        )
+        support = (*field.source_facts, *field.support_facts)
+        assert set(support) <= adopted
+        assert transform.external_inputs == tuple(
+            ExternalFactReference(source_id="at_ehyd", fact=item) for item in support
+        )
+        for item in support:
+            assert direct[item].source_id == "at_ehyd"
             assert direct[item].acquisition_id is not None
 
 
@@ -707,20 +800,30 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
     return AcquisitionProvenance.model_validate(model)
 
 
-@pytest.mark.parametrize("provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"ch_foen", "pe_senamhi"}))
+@pytest.mark.parametrize(
+    "provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "pe_senamhi"})
+)
 def test_historical_projection_preserves_sources_and_validates_metadata(provider):
-    original = _legacy(provider)
-    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+    if provider == "usgs_nwis":
+        original, metadata = registered_usgs_baseline()
+    else:
+        original = _legacy(provider)
+        metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     assert projected.source_records == original.source_records
     assert not any(fact.startswith("metadata.") for fact in projected.fact_universe)
 
 
-@pytest.mark.parametrize("provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"ch_foen", "pe_senamhi"}))
+@pytest.mark.parametrize(
+    "provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "pe_senamhi"})
+)
 def test_historical_projection_rejects_changed_current_producer(provider):
-    original = _legacy(provider)
-    metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
-    payload = original.model_dump(mode="json")
+    if provider == "usgs_nwis":
+        original, metadata = registered_usgs_baseline()
+        payload = original.model_dump(mode="json")
+    else:
+        metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
+        payload = legacy_document(ROOT / provider / "catalogue/provenance.json")
     # Even metadata-empty forms must validate their declared current producers.
     transformations = [
         item["transformation"]
@@ -738,9 +841,8 @@ def test_historical_projection_rejects_changed_current_producer(provider):
     ["producer", "declaration", "support", "review_owner", "review_path", "review_revision", "review_symbol"],
 )
 def test_historical_projection_rejects_changed_metadata_lineage(mutation):
-    original = _legacy("no_nve")
     metadata = pl.read_parquet(ROOT / "no_nve/catalogue/station_metadata.parquet")
-    payload = original.model_dump(mode="json")
+    payload = legacy_document(ROOT / "no_nve/catalogue/provenance.json")
     transformation = next(
         item["transformation"] for item in payload["fact_bindings"] if item["fact_group"] == "metadata.elevation.masl"
     )
@@ -818,7 +920,7 @@ def test_polish_historical_restoration_preserves_unexpected_source_facts():
 
 @pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_removes_only_declared_metadata_source_closure(provider):
-    original = _legacy(provider)
+    original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     restored = _assert_metadata_source_extensions_and_restore_original(projected)
@@ -852,7 +954,7 @@ def test_historical_restoration_removes_only_declared_metadata_source_closure(pr
 
 @pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_preserves_changes_outside_the_extension(provider):
-    original = _legacy(provider)
+    original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     expected = _assert_metadata_source_extensions_and_restore_original(projected).model_dump(mode="json")
@@ -886,7 +988,7 @@ def test_historical_restoration_preserves_changes_outside_the_extension(provider
     ],
 )
 def test_historical_restoration_rejects_changed_complete_source_closure(provider, mutation):
-    original = _legacy(provider)
+    original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     payload = projected.model_dump(mode="json")
@@ -1493,9 +1595,12 @@ def _assert_bulk_source_history_preserved(retained_evidence_root: Path, provider
         "th_thaiwater",
         pytest.param(
             "usgs_nwis",
-            marks=pytest.mark.recorded(
-                "research/usgs-modern-coverage",
-                "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+            marks=(
+                pytest.mark.recorded(
+                    "research/usgs-modern-coverage",
+                    "tests/test_data/usgs_nwis_instantaneous_values_definition.html",
+                ),
+                pytest.mark.derived("tests/test_data/usgs_nwis_historical/catalogue"),
             ),
         ),
         pytest.param(
@@ -1514,14 +1619,24 @@ def test_all_ordered_source_assertions_match_pinned_original_revision(request: p
     # This expected digest comes from original v2 Git bytes, not a v3 self-roundtrip.
     # The French oracle names the historical combined publication. Its exact
     # authenticated evidence remains readable for research, never as a current catalogue.
-    restored = _legacy(
-        provider,
-        retained_evidence_root / "tests/test_data/french_combined_catalogue" if provider == "fr_hubeau" else None,
-    )
+    historical_path = None
+    declaration_locations = None
+    metadata_path = ROOT / provider / "catalogue/station_metadata.parquet"
+    if provider == "fr_hubeau":
+        historical_path = retained_evidence_root / "tests/test_data/french_combined_catalogue"
+    elif provider == "usgs_nwis":
+        historical_path = retained_evidence_root / "tests/test_data/usgs_nwis_historical/catalogue"
+        metadata_path = historical_path / "station_metadata.parquet"
+        declaration_locations = _USGS_PRE_ADOPTION_BUILD_DECLARATIONS
+    restored = _legacy(provider, historical_path)
     if restored.build_inputs is not None:
-        restored = historical_source_provenance(
-            restored, pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
-        )
+        metadata = pl.read_parquet(metadata_path)
+        if provider == "usgs_nwis":
+            with pytest.raises(AssertionError):
+                historical_source_provenance(
+                    restored, metadata, declaration_locations=_USGS_PRE_ADOPTION_BUILD_DECLARATIONS[:-1]
+                )
+        restored = historical_source_provenance(restored, metadata, declaration_locations=declaration_locations)
     restored = _assert_metadata_source_extensions_and_restore_original(restored)
     if provider in {"ba_fhmzbih", "ch_foen", "fr_hubeau"}:
         restored = _assert_field_source_lineage_repair_and_restore_original(retained_evidence_root, restored)
@@ -1608,3 +1723,94 @@ def test_evidence_rejects_indirect_cycles_after_valid_relation_shapes() -> None:
     )
     with pytest.raises(ValidationError, match="cycle"):
         CatalogueEvidence.model_validate(_change(chain, "external_inputs", cyclic))
+
+
+def test_registered_usgs_baseline_rejects_changed_historical_declaration():
+    original, metadata = registered_usgs_baseline()
+    historical_source_provenance(original, metadata)
+    payload = original.model_dump(mode="json")
+    payload["build_inputs"]["declarations"][-1]["symbol"] = "unreviewed_projection"
+    with pytest.raises(AssertionError):
+        historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
+
+
+@pytest.mark.parametrize("target", ["header", "file"])
+@pytest.mark.parametrize("boundary", ["parse", "construct"])
+@pytest.mark.parametrize("deep", [False, True])
+def test_updated_evidence_declarations_are_revalidated(target, boundary, deep):
+    evidence = _small_evidence()
+    files = encode_catalogue_evidence(evidence)
+    header = EvidenceHeader.model_validate_json(files.pop("provenance.json"))
+    if target == "header":
+        header = header.model_copy(deep=deep, update={"schema_version": 999})
+        header = EvidenceHeader.model_validate(header)
+    else:
+        filename = next(iter(header.files))
+        header.files[filename] = header.files[filename].model_copy(deep=deep, update={"schema_version": 999})
+        header = EvidenceHeader(**{name: getattr(header, name) for name in EvidenceHeader.model_fields})
+    with pytest.raises(ValidationError, match="schema_version"):
+        if boundary == "parse":
+            parse_catalogue_evidence(header, files)
+        else:
+            CatalogueEvidence(header=header, **{name: getattr(evidence, name) for name in EVIDENCE_SCHEMAS})
+
+
+def test_deepcopy_of_mutated_evidence_files_is_revalidated():
+    from copy import deepcopy
+
+    evidence = _small_evidence()
+    files = encode_catalogue_evidence(evidence)
+    files.pop("provenance.json")
+    filename = next(iter(evidence.header.files))
+    evidence.header.files[filename] = evidence.header.files[filename].model_copy(update={"schema_version": 999})
+    with pytest.raises(ValidationError, match="schema_version"):
+        parse_catalogue_evidence(deepcopy(evidence.header), files)
+
+
+def test_unchanged_deepcopy_preserves_validated_evidence_header():
+    from copy import deepcopy
+
+    evidence = _small_evidence()
+    original = EvidenceHeader.model_validate_json(evidence.header.model_dump_json())
+    copied = deepcopy(original).model_copy(deep=True, update={})
+    assert copied is not evidence.header
+    files = encode_catalogue_evidence(evidence)
+    files.pop("provenance.json")
+    parsed = parse_catalogue_evidence(copied, files)
+    assert parsed.header == evidence.header
+    for name in EVIDENCE_SCHEMAS:
+        plt.assert_frame_equal(getattr(parsed, name), getattr(evidence, name))
+
+
+@pytest.mark.parametrize(
+    "content,reason",
+    [
+        ("{", "not valid JSON"),
+        ("[]", "must contain an object"),
+        ('{"schema_version":999}', "Unsupported acquisition provenance schema_version"),
+    ],
+)
+def test_file_header_dispatch_errors_are_preserved(tmp_path, content, reason):
+    from rivretrieve._internal.catalogues.artifact import CorruptCatalogArtifactError, _read_provenance_json
+
+    path = tmp_path / "provenance.json"
+    path.write_text(content)
+    with pytest.raises(CorruptCatalogArtifactError, match=reason):
+        _read_provenance_json(path)
+
+
+@pytest.mark.parametrize("version", [2, 3])
+def test_file_header_keeps_historical_provenance_without_build_inputs(tmp_path, version):
+    from rivretrieve._internal.catalogues.artifact import _read_provenance_json
+
+    evidence = _small_evidence()
+    original = reconstruct_provenance(evidence)
+    if version == 2:
+        (tmp_path / "provenance.json").write_text(original.model_dump_json())
+    else:
+        for name, content in encode_catalogue_evidence(evidence).items():
+            (tmp_path / name).write_bytes(content)
+    parsed = _read_provenance_json(tmp_path / "provenance.json")
+    if isinstance(parsed, CatalogueEvidence):
+        parsed = reconstruct_provenance(parsed)
+    assert parsed == original

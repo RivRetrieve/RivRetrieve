@@ -68,6 +68,7 @@ def test_init_public_surface_exports_catalogue_and_retrieval_functions() -> None
 def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     providers_root = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
     expected_station_products = {
+        "at_ehyd": (8_206, 0, 0),
         "ba_fhmzbih": (180, 0, 0),
         "br_ana": (107_484, 0, 0),
         "ca_eccc": (16_114, 0, 0),
@@ -82,7 +83,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "pl_imgw": (3_903, 0, 0),
         "th_thaiwater": (1_650, 0, 0),
         # Modern metadata UTC ranges do not establish calendar observation support.
-        "usgs_nwis": (157_548, 0, 0),
+        "usgs_nwis": (177_852, 0, 0),
         "za_dws": (8_715, 0, 0),
     }
     expected_station_product_columns = (
@@ -96,6 +97,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "last_catalogue_check",
     )
     provider_ids = (
+        "at_ehyd",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
@@ -112,6 +114,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "za_dws",
     )
     expected_provider_terms: dict[str, tuple[str | None, str | None]] = dict.fromkeys(provider_ids, (None, None))
+    expected_provider_terms["at_ehyd"] = ("CC BY 4.0", "Datenquelle: ehyd.gv.at")
     expected_provider_terms["ch_foen"] = ("Freie Nutzung. Quellenangabe ist Pflicht.", None)
     expected_provider_terms["no_nve"] = (
         "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) "
@@ -155,7 +158,9 @@ def test_usgs_legacy_calendar_period_claims_remain_independent_evidence(retained
         retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/station_products.parquet"
     )
     modern = pl.read_parquet(root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/station_products.parquet")
-    assert legacy.height == modern.height == 157_548
+    assert legacy.height == 157_548
+    # Six supported products across the independently reconciled modern station scope.
+    assert modern.height == 6 * 29_642
     for column in ("published_record_start_date", "published_record_end_date"):
         assert legacy[column].count() == 57_450
         assert modern[column].count() == 0
