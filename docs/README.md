@@ -13,6 +13,7 @@
 
 Provider pages explain their agencies and source-specific conditions:
 
+- [Argentina: INA](providers/ar_ina.md)
 - [Austria: eHYD](providers/at_ehyd.md)
 - [Bosnia and Herzegovina: AVP Sava](providers/ba_fhmzbih.md)
 - [Brazil: ANA](providers/br_ana.md)
