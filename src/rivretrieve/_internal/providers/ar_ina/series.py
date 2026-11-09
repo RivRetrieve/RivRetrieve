@@ -645,7 +645,12 @@ def validate_observation_row(
         raise FatalContractError(
             f"INA observation valor on series {expected_series_id} must be a finite number or null: {raw_valor!r}"
         )
-    numeric = float(raw_valor)
+    try:
+        numeric = float(raw_valor)
+    except OverflowError as error:
+        raise FatalContractError(
+            f"INA observation valor on series {expected_series_id} overflows Float64: {raw_valor!r}"
+        ) from error
     if not math.isfinite(numeric):
         raise FatalContractError(f"INA observation valor on series {expected_series_id} is non-finite: {raw_valor!r}")
     return start, end, numeric

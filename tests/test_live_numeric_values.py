@@ -362,3 +362,66 @@ def test_at_ehyd_numeric_guards_reject_unrepresentable_cells_across_wire_formats
         assert changed.rows.height == baseline.rows.height
         assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
         assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
+
+
+@pytest.mark.parametrize("mutation", [*BAD, "boolean", "zero", "finite", "null"])
+@pytest.mark.recorded("maintenance/observations/ar_ina/retrieval")
+def test_ar_ina_numeric_guards_reject_unrepresentable_cells(retained_evidence_root: Path, mutation: str) -> None:
+    from urllib.parse import parse_qs, urlsplit  # noqa: TID251 - URL parsing for retained receipt replay only
+
+    from rivretrieve._internal.providers.ar_ina.config import ArInaSourceCoordinates
+    from rivretrieve._internal.providers.ar_ina.config import config as ar_config
+    from rivretrieve._internal.providers.ar_ina.parse import parse as ar_parse
+    from rivretrieve._internal.source_series import OutcomeStatus
+    from tests.test_ar_ina_recorded_public import _load_capture
+
+    cfg = ar_config()
+    body, rcpt = _load_capture(retained_evidence_root, "retrieval", "a5-obs-26605-var40-planned-20240101-20240105")
+    parsed_url = urlsplit(str(rcpt["url"]))
+    params = {k: vals[0] for k, vals in parse_qs(parsed_url.query, keep_blank_values=True).items()}
+    origin = SourceCallOrigin(
+        url=f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}",
+        request_parameters=params,
+        status_code=int(str(rcpt["status"])),
+        retrieved_at=datetime.fromisoformat(str(rcpt["acquired_at"]).replace("Z", "+00:00")),
+        content_type="application/json",
+        source_path=UnknownOriginFact(),
+        query=UnknownOriginFact(),
+    )
+    prod = ProductId("discharge_daily_mean")
+    win = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2024, 1, 5)),
+    )
+    source = Payload(
+        SourceCoordinates(ArInaSourceCoordinates(var_id=40, proc_id=1, published_series_id=26605)),
+        (("8", prod),),
+        win,
+        body,
+        origin,
+        (),
+    )
+    baseline = ar_parse(source, cfg)
+    doc = json.loads(body)
+    target_idx = next(
+        idx
+        for idx, entry in enumerate(doc)
+        if datetime(2024, 1, 1)
+        <= datetime.fromisoformat(str(entry["timestart"]).replace("Z", "+00:00")).replace(tzinfo=None)
+        <= datetime(2024, 1, 5)
+    )
+    marker = "__AR_INA_NUMERIC_CELL__"
+    doc[target_idx]["valor"] = marker
+    raw_token = "true" if mutation == "boolean" else TOKENS[mutation]
+    mutated_bytes = json.dumps(doc).encode().replace(json.dumps(marker).encode(), raw_token.encode())
+
+    changed = ar_parse(replace(source, content=mutated_bytes), cfg)
+    if mutation in (*BAD, "boolean"):
+        assert [item.status for item in changed.outcomes] == [OutcomeStatus.FAILED], mutation
+        assert changed.outcomes[0].reason
+        assert changed.rows.is_empty()
+    else:
+        assert [item.status for item in changed.outcomes] == [OutcomeStatus.SUCCESS]
+        assert changed.rows.height == baseline.rows.height
+        assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
+        assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
