@@ -61,6 +61,7 @@ of the source view.
 | [`br_ana`](providers/br_ana.md) | `Estacao_Nome` | `Rio_Nome` | `Area_Drenagem` | `Altitude` |
 | [`ca_eccc`](providers/ca_eccc.md) | `STATION_NAME` | — | `DRAINAGE_AREA_EFFECT`, `DRAINAGE_AREA_GROSS` (km2) | — |
 | [`ch_foen`](providers/ch_foen.md) | `data-name`, `name` | `data-hydro-body`, `riverName` | `Catchment size` (km2) | `Station altitude` (m) |
+| [`co_ideam`](providers/co_ideam.md) | `Nombre` | `Corriente` | — | `Altitud` |
 | [`cz_chmi`](providers/cz_chmi.md) | `STATION_NAME` | `STREAM_NAME` | `PLO_STA` (km²) | — |
 | [`fr_hubeau`](providers/fr_hubeau.md) | `libelle_station` | `libelle_cours_eau`, `libelle_masse_eau` | `superficie_reelle`, `superficie_topo`; `surface_bv` (km²) | `altitude`, `altitude_site`; `altitude_ref_alti_station` (m) |
 | [`fr_hydroportail`](providers/fr_hydroportail.md) | — | — | — | — |
@@ -69,7 +70,7 @@ of the source view.
 | [`no_nve`](providers/no_nve.md) | `stationName` | `lakeName`, `reservoirName`, `riverName` | `drainageBasinArea`, `drainageBasinAreaNorway`, `transferAreaIn`, `transferAreaOut` (km2) | `masl` (m) |
 | [`pl_imgw`](providers/pl_imgw.md) | — | — | `area` (square kilometre) | `gauge_altitude` (m) |
 | [`th_thaiwater`](providers/th_thaiwater.md) | — | — | — | — |
-| [`usgs_nwis`](providers/usgs_nwis.md) | `station_nm` | — | `contrib_drain_area_va`, `drain_area_va` (sq mi) | `alt_va` (feet) |
+| [`usgs_nwis`](providers/usgs_nwis.md) | `monitoring_location_name` | — | `contrib_drain_area_va`, `drain_area_va` (sq mi) | `alt_va` (feet) |
 <!-- fields-by-provider:end -->
 
 The table lists names only. What a field means is defined by the agency: Norway's `transferAreaIn`
@@ -376,6 +377,8 @@ the [provider pages](README.md#providers). `rr.describe(provider)` reads the
 packaged catalogue descriptor offline; metadata notices appear in its
 `station_metadata` record set.
 
+- [IDEAM's terms](providers/co_ideam.md#terms-and-citation) require source attribution
+  to IDEAM and apply CC BY-SA 4.0. Adaptations must follow the licence's share-alike conditions.
 - [LHMT's terms](providers/lt_lhmt.md#terms-and-citation) require source attribution
   and apply CC BY-SA 4.0 unless stated otherwise. Adaptations must follow the licence's share-alike conditions.
 - [MLIT's terms](providers/jp_mlit.md#terms-and-citation) explain PDL1.0 and its
