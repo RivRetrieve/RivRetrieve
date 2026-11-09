@@ -1,0 +1,1979 @@
+diff --git a/src/rivretrieve/_internal/assembly.py b/src/rivretrieve/_internal/assembly.py
+index a57e810e..38240f21 100644
+--- a/src/rivretrieve/_internal/assembly.py
++++ b/src/rivretrieve/_internal/assembly.py
+@@ -7,6 +7,7 @@ from dataclasses import dataclass
+ from rivretrieve._internal.engine import CanonicalRows
+ from rivretrieve._internal.issues import Issue
+ from rivretrieve._internal.observations import ObservationProvenance, Receipts
++from rivretrieve._internal.source_annotations import AnnotationTable
+ from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
+ 
+ 
+@@ -21,6 +22,7 @@ class _AssemblyResult:
+     outcomes: tuple[RetrievalOutcome, ...] = ()
+     scope: SeriesScope = SeriesScope()
+     supporting_outcomes: tuple[RetrievalOutcome, ...] = ()
++    annotations: tuple[AnnotationTable, ...] = ()
+ 
+ 
+ def assemble(
+@@ -34,6 +36,7 @@ def assemble(
+     outcomes: tuple[RetrievalOutcome, ...] = (),
+     scope: SeriesScope | None = None,
+     supporting_outcomes: tuple[RetrievalOutcome, ...] = (),
++    annotations: tuple[AnnotationTable, ...] = (),
+ ) -> _AssemblyResult:
+     return _AssemblyResult(
+         canonical_rows=canonical_rows,
+@@ -45,4 +48,5 @@ def assemble(
+         outcomes=outcomes,
+         scope=scope or SeriesScope(),
+         supporting_outcomes=supporting_outcomes,
++        annotations=annotations,
+     )
+diff --git a/src/rivretrieve/_internal/conversion.py b/src/rivretrieve/_internal/conversion.py
+index effd1cde..591f0241 100644
+--- a/src/rivretrieve/_internal/conversion.py
++++ b/src/rivretrieve/_internal/conversion.py
+@@ -21,6 +21,7 @@ from rivretrieve._internal.engine import (
+ from rivretrieve._internal.issues import FatalContractError
+ from rivretrieve._internal.physical_window import native_window
+ from rivretrieve._internal.primitives import ProductId
++from rivretrieve._internal.source_annotations import row_schema
+ from rivretrieve._internal.source_series import SourceSeries, admission, validate_series_rows
+ 
+ 
+@@ -49,8 +50,8 @@ def convert(
+                 "unit": decision.target_unit,
+             }
+         )
+-    canonical = pl.DataFrame(output, schema=CanonicalRowsSchema.polars_schema)
+-    validate_catalogue(canonical, CanonicalRowsSchema, on_issue="raise")
++    canonical = pl.DataFrame(output, schema=row_schema(CanonicalRowsSchema, rows).polars_schema)
++    validate_catalogue(canonical, row_schema(CanonicalRowsSchema, rows), on_issue="raise")
+     return WithIssues(canonical)
+ 
+ 
+@@ -61,7 +62,7 @@ def _endpoint_datetime(endpoint: WindowEndpoint) -> datetime:
+ def validate_native_rows(
+     rows: Rows, products: Mapping[ProductId, ProductConfig], *, series: tuple[SourceSeries, ...]
+ ) -> None:
+-    validate_catalogue(rows, RowsSchema, on_issue="raise")
++    validate_catalogue(rows, row_schema(RowsSchema, rows), on_issue="raise")
+     validate_series_rows(rows, series)
+     for product_id in rows["product_id"].unique():
+         if ProductId(product_id) not in products:
+diff --git a/src/rivretrieve/_internal/discovery.py b/src/rivretrieve/_internal/discovery.py
+index d8c7200a..504a7748 100644
+--- a/src/rivretrieve/_internal/discovery.py
++++ b/src/rivretrieve/_internal/discovery.py
+@@ -348,8 +348,11 @@ def pick(
+ 
+         selected = _with_selection_diagnostics(selected, "ignore")
+         current_issues = _selection_issues_for_result(selected, selection)
++        from dataclasses import replace
++
+         result = ObservationResult(
+             data=selection.data.filter(predicate),
++            annotations=tuple(replace(table, rows=table.rows.filter(predicate)) for table in selection.annotations),
+             provenance=selection.provenance,
+             receipts=selection.receipts,
+             source_series=selection.source_series,
+@@ -1489,6 +1492,7 @@ def _merge_provider_results(
+     issues = _merge_provider_issues(results)
+     receipt_entries = tuple(entry for result in results for entry in result.receipts.entries)
+     from rivretrieve._internal.driver import _unique_calls
++    from rivretrieve._internal.source_annotations import combine_tables
+ 
+     calls_made = _unique_calls(tuple(call for result in results for call in result.provenance.calls_made))
+     endpoints = tuple(dict.fromkeys(endpoint for result in results for endpoint in result.provenance.endpoints))
+@@ -1512,6 +1516,7 @@ def _merge_provider_results(
+         supporting_outcomes.update((item.outcome_id, item) for item in result.supporting_outcomes)
+     return ObservationResult(
+         data=_canonical_observation_order(pl.concat([result.data for result in results])),
++        annotations=combine_tables(tuple(table for result in results for table in result.annotations)),
+         source_series=_merge_series_definitions(results),
+         inventories=tuple({item.snapshot_id: item for result in results for item in result.inventories}.values()),
+         outcomes=tuple(active_outcomes.values()),
+diff --git a/src/rivretrieve/_internal/driver.py b/src/rivretrieve/_internal/driver.py
+index 6d8ef43c..7d8ca08d 100644
+--- a/src/rivretrieve/_internal/driver.py
++++ b/src/rivretrieve/_internal/driver.py
+@@ -58,6 +58,7 @@ from rivretrieve._internal.observations import (
+ from rivretrieve._internal.physical_window import native_window, native_window_envelope
+ from rivretrieve._internal.primitives import CacheMode, ProductId, ProviderId
+ from rivretrieve._internal.source_acquisition import SourceResponseMeaning
++from rivretrieve._internal.source_annotations import combine_tables, row_schema, select_tables, validate_tables
+ from rivretrieve._internal.source_series import (
+     ClippingAxis,
+     InventoryCompleteness,
+@@ -126,7 +127,7 @@ def _require_canonical_rows_within_requested(
+     requested_window: RequestedWindow,
+ ) -> None:
+     """Validate converted output against admitted facts and the caller's physical window."""
+-    validate_catalogue(rows, CanonicalRowsSchema, on_issue="raise")
++    validate_catalogue(rows, row_schema(CanonicalRowsSchema, rows), on_issue="raise")
+     validate_series_rows(rows, series)
+     facts = {fact.facts_id: fact for definition in series for fact in definition.facts}
+     for row in rows.iter_rows(named=True):
+@@ -1903,6 +1904,8 @@ def drive(
+     pending: list[SuccessfulReplacement] = []
+     fresh_definitions: dict[str, SourceSeries] = {}
+     fresh_inventories: list[InventorySnapshot] = list(inventories)
++    fresh_annotations = []
++    published_annotations = None
+     fresh_outcomes: list[RetrievalOutcome] = []
+     supporting_outcomes: list[RetrievalOutcome] = []
+     unadmitted_outcome_ids: set[str] = set()
+@@ -2563,6 +2566,11 @@ def drive(
+             )
+             parsed = replace(parsed, outcomes=bound_outcomes, inventories=bound_inventories, issues=bound_issues)
+             validate_native_rows(parsed.rows, config.products, series=parsed.series)
++            validate_tables(parsed.annotations, parsed.rows, parsed.series)
++            from rivretrieve._internal.source_annotations import validate_outcome_scope
++
++            validate_outcome_scope(parsed.annotations, parsed.outcomes)
++            fresh_annotations.extend(parsed.annotations)
+             transaction_parsed.append(parsed)
+             parsed_payloads.append((payload_index, parsed))
+         # Resolve held fallback for the entire acquisition before admitting fresh
+@@ -2886,7 +2894,7 @@ def drive(
+     pending = _authorize_fact_retirement(
+         pending, tuple(retirement_definitions.values()), fresh_inventories, fresh_outcomes
+     )
+-    combined = pl.concat(rows)
++    combined = pl.concat([frame for frame in rows if frame.height] or rows[-1:])
+     # A rolling publication establishes only its explicit observation keys.
+     # Preserve older snapshot rows absent from the new publication, without
+     # presenting their dates as reusable interval coverage.
+@@ -2972,8 +2980,16 @@ def drive(
+                 ),
+                 acquired_calls,
+                 supporting_outcomes=tuple(supporting_outcomes),
++                annotations=select_tables(
++                    combine_tables(fresh_annotations),
++                    pl.concat([part.rows for part in pending if part.rows.height] or [combined.clear()]),
++                    tuple(fresh_definitions.values()),
++                    datetime.fromisoformat(request.window.start.isoformat()),
++                    datetime.fromisoformat(request.window.end.isoformat()),
++                ),
+             ),
+         )
++        published_annotations = published.annotations
+         resolved_reader.invalidate()
+         prior_diagnostics = (
+             {
+@@ -3084,6 +3100,17 @@ def drive(
+         ),
+         Receipts(request.provider_id, tuple(receipt_entries)),
+         source_series=selected,
++        annotations=select_tables(
++            published_annotations
++            if published_annotations is not None
++            else (
++                combine_tables(fresh_annotations) if fresh_annotations else (manifest.annotations if manifest else ())
++            ),
++            converted.value,
++            selected,
++            datetime.fromisoformat(request.window.start.isoformat()),
++            datetime.fromisoformat(request.window.end.isoformat()),
++        ),
+         inventories=evidence.inventories,
+         outcomes=evidence.outcomes,
+         supporting_outcomes=evidence.supporting_outcomes,
+diff --git a/src/rivretrieve/_internal/export_bundle.py b/src/rivretrieve/_internal/export_bundle.py
+index 7e431e7e..7b450734 100644
+--- a/src/rivretrieve/_internal/export_bundle.py
++++ b/src/rivretrieve/_internal/export_bundle.py
+@@ -29,6 +29,7 @@ from rivretrieve._internal.observations import (
+ from rivretrieve._internal.primitives import ProviderId
+ from rivretrieve._internal.publication_identity import publication_identity_fields
+ from rivretrieve._internal.selection import StationLocation, _EmptyReason, _Selection
++from rivretrieve._internal.source_annotations import decode_tables, encode_tables
+ from rivretrieve._internal.source_series import (
+     InventoryCompleteness,
+     InventorySnapshot,
+@@ -42,7 +43,7 @@ from rivretrieve._internal.source_series import (
+ )
+ 
+ _FORMAT = "rivretrieve-source-series"
+-_VERSION = 3
++_VERSION = 103
+ _PROVENANCE_VALUES = ("request", "calls_made", "time_windows", "query")
+ _EMPTY_REASON_ADAPTER = TypeAdapter(_EmptyReason)
+ _STATION_LOCATION_ADAPTER = TypeAdapter(StationLocation)
+@@ -509,6 +510,7 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
+             _write_entry(archive, "observations.parquet", data.getvalue())
+             manifest.update(
+                 {
++                    "annotations": encode_tables(value.annotations),
+                     "view_scope": value.view_scope.model_dump(mode="json") if value.view_scope is not None else None,
+                     "outcomes": [item.model_dump(mode="json") for item in value.outcomes],
+                     "supporting_outcomes": [item.model_dump(mode="json") for item in value.supporting_outcomes],
+@@ -578,6 +580,7 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
+             {"locations", "catalogue_evidence", "empty_reason"}
+             if kind == "selection"
+             else {
++                "annotations",
+                 "view_scope",
+                 "outcomes",
+                 "supporting_outcomes",
+@@ -694,6 +697,7 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
+         )
+         return ObservationResult(
+             data=pl.read_parquet(BytesIO(archive.read("observations.parquet"))),
++            annotations=decode_tables(manifest["annotations"]),
+             provenance=provenance,
+             receipts=Receipts(provider_id=ProviderId(manifest["receipt_provider"]), entries=tuple(receipts)),
+             source_series=definitions,
+diff --git a/src/rivretrieve/_internal/observations.py b/src/rivretrieve/_internal/observations.py
+index 7402b533..5938967e 100644
+--- a/src/rivretrieve/_internal/observations.py
++++ b/src/rivretrieve/_internal/observations.py
+@@ -25,6 +25,12 @@ from rivretrieve._internal.issues import (
+     ObservationDataSchemaError,
+ )
+ from rivretrieve._internal.primitives import ProviderId
++from rivretrieve._internal.source_annotations import (
++    AnnotationTable,
++    row_schema,
++    validate_outcome_scope,
++    validate_tables,
++)
+ from rivretrieve._internal.source_series import (
+     InventorySnapshot,
+     RetrievalOutcome,
+@@ -335,6 +341,7 @@ class ObservationResult(BaseModel):
+     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+ 
+     data: pl.DataFrame
++    annotations: tuple[AnnotationTable, ...] = ()
+     provenance: ObservationProvenance
+     issues: tuple[Issue, ...] = ()
+     receipts: Receipts
+@@ -347,6 +354,8 @@ class ObservationResult(BaseModel):
+ 
+     @model_validator(mode="after")
+     def _validate_series_context(self) -> Self:
++        validate_tables(self.annotations, self.data, self.source_series)
++        validate_outcome_scope(self.annotations, self.outcomes)
+         definitions = {item.series_id: item for item in self.source_series}
+         if len(definitions) != len(self.source_series):
+             raise ObservationDataSchemaError("Result contains duplicate source-series identities")
+@@ -436,7 +445,7 @@ def validate_observation_data(data: object) -> None:
+ 
+     expected = {column.name for column in ObservationDataSchema.columns}
+     actual = set(data.columns)
+-    extra = actual - expected
++    extra = actual - expected - {"occurrence_id"}
+     if extra:
+         raise ObservationDataSchemaError(f"{ObservationDataSchema.name} has extra columns: {sorted(extra)}")
+ 
+@@ -455,7 +464,7 @@ def validate_observation_data(data: object) -> None:
+             )
+ 
+     try:
+-        validate_catalogue(data, validation_schema, on_issue="raise")
++        validate_catalogue(data, row_schema(validation_schema, data), on_issue="raise")
+     except FatalContractError as exc:
+         raise ObservationDataSchemaError(str(exc)) from exc
+ 
+diff --git a/src/rivretrieve/_internal/providers/jp_mlit/parse.py b/src/rivretrieve/_internal/providers/jp_mlit/parse.py
+index 19a09aa0..7ceb935d 100644
+--- a/src/rivretrieve/_internal/providers/jp_mlit/parse.py
++++ b/src/rivretrieve/_internal/providers/jp_mlit/parse.py
+@@ -6,6 +6,7 @@ Contributed by: Thiago von Däniken
+ import csv
+ import re
+ from calendar import monthrange
++from dataclasses import replace
+ from datetime import datetime, timedelta
+ from math import isfinite
+ 
+@@ -17,6 +18,7 @@ from rivretrieve._internal.primitives import ProductId, ProviderId
+ from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
+ from rivretrieve._internal.providers.jp_mlit.config import SERIES_MAPPINGS, JpMlitSourceCoordinates
+ from rivretrieve._internal.providers.jp_mlit.fetch import JpMlitPayloadCoordinates, _page
++from rivretrieve._internal.source_annotations import AnnotationField, AnnotationTable
+ from rivretrieve._internal.source_series import ParsedSeries
+ 
+ _TITLES = {2: "時刻水位月表検索結果", 3: "日水位年表検索結果", 6: "時刻流量月表検索結果", 7: "日流量年表検索結果"}
+@@ -88,7 +90,7 @@ def _payload_identity(
+     return coordinates, station_id, product_id
+ 
+ 
+-def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
++def _parse_native(payload: Payload, provider_config: ProviderConfig, *, slots=None) -> WithIssues[Rows]:
+     coordinates, station_id, product_id = _payload_identity(payload, provider_config)
+     if coordinates.role == "html":
+         _page(payload.content, coordinates.kind, station_id)
+@@ -122,8 +124,8 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
+     if header != expected_header:
+         raise UnsupportedSourceStructureError("jp_mlit DAT value/flag header is malformed")
+     if coordinates.kind in (2, 6):
+-        return _hourly(lines[header_index + 1 :], station_id, product_id, count)
+-    return _daily(lines[header_index + 1 :], station_id, product_id, count)
++        return _hourly(lines[header_index + 1 :], station_id, product_id, count, slots=slots)
++    return _daily(lines[header_index + 1 :], station_id, product_id, count, slots=slots)
+ 
+ 
+ def _cell(
+@@ -135,11 +137,24 @@ def _cell(
+     rows: list[dict[str, object]],
+     issues: list[Issue],
+     time: datetime,
++    slots=None,
++    pair_index=0,
+ ) -> None:
+     raw = value.strip()
+     flag = flag_value.strip()
+     if flag not in ("", "*", "$", "#", "-"):
+         raise UnsupportedSourceStructureError(f"jp_mlit unknown native flag {flag!r} at {label}")
++    if slots is not None:
++        slots.append(
++            {
++                "time": time,
++                "time_zone": "unknown",
++                "marker": flag_value,
++                "source_label": label,
++                "pair_index": pair_index,
++                "measurement_index": None if flag in ("$", "#", "-") else len(rows),
++            }
++        )
+     if flag in ("$", "#", "-"):
+         issues.append(_issue(_FLAG_CODES[flag], station, product, label))
+         return
+@@ -158,7 +173,7 @@ def _cell(
+     rows.append({"station_id": station, "product_id": product, "time": time, "value": number, "time_zone": "unknown"})
+ 
+ 
+-def _hourly(lines: list[str], station: str, product: str, count: int) -> WithIssues[Rows]:
++def _hourly(lines: list[str], station: str, product: str, count: int, *, slots=None) -> WithIssues[Rows]:
+     rows: list[dict[str, object]] = []
+     issues: list[Issue] = []
+     for line in lines:
+@@ -182,12 +197,14 @@ def _hourly(lines: list[str], station: str, product: str, count: int) -> WithIss
+                 rows,
+                 issues,
+                 time,
++                slots=slots,
++                pair_index=hour,
+             )
+     frame = pl.DataFrame(rows, schema=NATIVE_SCHEMA)
+     return WithIssues(frame, _aggregate(issues))
+ 
+ 
+-def _daily(lines: list[str], station: str, product: str, count: int) -> WithIssues[Rows]:
++def _daily(lines: list[str], station: str, product: str, count: int, *, slots=None) -> WithIssues[Rows]:
+     rows: list[dict[str, object]] = []
+     issues: list[Issue] = []
+     year: int | None = None
+@@ -224,7 +241,18 @@ def _daily(lines: list[str], station: str, product: str, count: int) -> WithIssu
+                         "jp_mlit invalid calendar day contains an observation"
+                     ) from error
+                 continue
+-            _cell(raw, flag, station, product, f"{year}年{month}月{day}日", rows, issues, time)
++            _cell(
++                raw,
++                flag,
++                station,
++                product,
++                f"{year}年{month}月{day}日",
++                rows,
++                issues,
++                time,
++                slots=slots,
++                pair_index=day,
++            )
+     if year is None:
+         raise UnsupportedSourceStructureError("jp_mlit daily DAT has no year marker")
+     frame = pl.DataFrame(rows, schema=NATIVE_SCHEMA)
+@@ -242,6 +270,55 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+             if links:
+                 # A valid HTML prerequisite is not a successful empty observation series.
+                 return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), ())
+-    return parse_mapped_series(
+-        payload, provider_config, provider="jp_mlit", mappings=SERIES_MAPPINGS, native_parse=_parse_native
++    slots = []
++    result = parse_mapped_series(
++        payload,
++        provider_config,
++        provider="jp_mlit",
++        mappings=SERIES_MAPPINGS,
++        native_parse=lambda body, config: _parse_native(body, config, slots=slots),
++    )
++    if coordinates.role != "dat" or any(outcome.status not in ("success", "empty") for outcome in result.outcomes):
++        return result
++    definition = result.series[0]
++    ids = [None] * result.rows.height
++    annotation_rows = []
++    for index, slot in enumerate(slots):
++        occurrence = f"{payload.acquisition_id}:{index}"
++        measurement = slot.pop("measurement_index")
++        if measurement is not None:
++            ids[measurement] = occurrence
++        annotation_rows.append(
++            {
++                "slot_id": occurrence,
++                "occurrence_id": occurrence if measurement is not None else None,
++                "series_id": definition.series_id,
++                "facts_id": definition.facts[0].facts_id,
++                "source_call": payload.attempt_traces[0].attempt_id
++                if payload.attempt_traces
++                else payload.acquisition_id,
++                **slot,
++            }
++        )
++    table = AnnotationTable(
++        "jp_mlit:dated-slot-markers",
++        pl.DataFrame(
++            annotation_rows,
++            schema={
++                "slot_id": pl.String,
++                "occurrence_id": pl.String,
++                "series_id": pl.String,
++                "facts_id": pl.String,
++                "source_call": pl.String,
++                "time": pl.Datetime("us"),
++                "time_zone": pl.String,
++                "marker": pl.String,
++                "source_label": pl.String,
++                "pair_index": pl.Int64,
++            },
++        ),
++        tuple(AnnotationField(name, None, None) for name in ("marker", "source_label", "pair_index")),
++    )
++    return replace(
++        result, rows=result.rows.with_columns(pl.Series("occurrence_id", ids, dtype=pl.String)), annotations=(table,)
+     )
+diff --git a/src/rivretrieve/_internal/providers/no_nve/parse.py b/src/rivretrieve/_internal/providers/no_nve/parse.py
+index b8e89bff..3ecf71d1 100644
+--- a/src/rivretrieve/_internal/providers/no_nve/parse.py
++++ b/src/rivretrieve/_internal/providers/no_nve/parse.py
+@@ -20,6 +20,7 @@ from rivretrieve._internal.primitives import IssueSeverity, ProviderId
+ from rivretrieve._internal.providers.no_nve.config import NoNveSourceCoordinates
+ from rivretrieve._internal.providers.no_nve.issue_codes import NoNveObservationIssueCodes
+ from rivretrieve._internal.providers.no_nve.series import NVE_EVIDENCE, describe_series
++from rivretrieve._internal.source_annotations import AnnotationField, AnnotationTable
+ from rivretrieve._internal.source_series import (
+     InventoryCompleteness,
+     InventorySnapshot,
+@@ -60,6 +61,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+     retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+     definitions = []
+     rows = []
++    annotation_rows = []
+     outcomes = []
+     issues = []
+ 
+@@ -190,6 +192,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+             if type(raw.get("observationCount")) is not int or raw["observationCount"] != len(observations):
+                 raise SourceStructureError("HydAPI observationCount differs from its observations")
+             native = []
++            native_annotations = []
+             quality_codes = {}
+             correction_codes = {}
+             for index, observation in enumerate(observations):
+@@ -212,9 +215,24 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+                         "series_id": definition.series_id,
+                         "facts_id": facts.facts_id,
+                         "source_unit": unit,
++                        "occurrence_id": f"{payload.acquisition_id}:{version}:{index}",
++                    }
++                )
++                native_annotations.append(
++                    {
++                        "slot_id": f"{payload.acquisition_id}:{version}:{index}",
++                        "occurrence_id": f"{payload.acquisition_id}:{version}:{index}",
++                        "series_id": definition.series_id,
++                        "facts_id": facts.facts_id,
++                        "time": label,
++                        "time_zone": _SOURCE_ZONE,
++                        "source_call": payload.acquisition_id,
++                        "quality": quality,
++                        "correction": correction,
+                     }
+                 )
+             rows.extend(native)
++            annotation_rows.extend(native_annotations)
+             outcomes.append(
+                 RetrievalOutcome(
+                     outcome_id=stable_id(
+@@ -287,11 +305,31 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+         reason="An observation response establishes its requested versions, not a complete current or historical version inventory",
+     )
+     return ParsedSeries(
+-        pl.DataFrame(rows, schema=RowsSchema.polars_schema),
++        pl.DataFrame(rows, schema=dict(RowsSchema.polars_schema) | {"occurrence_id": pl.String}),
+         tuple(definitions),
+         (inventory,),
+         tuple(outcomes),
+         tuple(issues),
++        (
++            AnnotationTable(
++                "no_nve:observation-codes",
++                pl.DataFrame(
++                    annotation_rows,
++                    schema={
++                        "slot_id": pl.String,
++                        "occurrence_id": pl.String,
++                        "series_id": pl.String,
++                        "facts_id": pl.String,
++                        "time": pl.Datetime("us"),
++                        "time_zone": pl.String,
++                        "source_call": pl.String,
++                        "quality": pl.Int64,
++                        "correction": pl.Int64,
++                    },
++                ),
++                tuple(AnnotationField(name, None, None) for name in ("quality", "correction")),
++            ),
++        ),
+     )
+ 
+ 
+diff --git a/src/rivretrieve/_internal/providers/usgs_nwis/parse.py b/src/rivretrieve/_internal/providers/usgs_nwis/parse.py
+index ae8ddc50..21527c44 100644
+--- a/src/rivretrieve/_internal/providers/usgs_nwis/parse.py
++++ b/src/rivretrieve/_internal/providers/usgs_nwis/parse.py
+@@ -20,6 +20,7 @@ from rivretrieve._internal.issues import FatalContractError, Issue
+ from rivretrieve._internal.primitives import ProviderId
+ from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
+ from rivretrieve._internal.providers.usgs_nwis.metadata import NAMESPACE, source_series
++from rivretrieve._internal.source_annotations import AnnotationField, AnnotationTable
+ from rivretrieve._internal.source_series import (
+     OutcomeStatus,
+     ParsedSeries,
+@@ -99,7 +100,9 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+         window.model_dump_json(),
+     )
+     definitions: dict[str, SourceSeries] = {}
+-    rows: dict[tuple[str, datetime], dict[str, object]] = {}
++    rows: list[dict[str, object]] = []
++    annotations = []
++    observed_values = {}
+     failures: dict[str | None, list[str]] = {}
+     known = {item.series_id: item for item in payload.known_series}
+     try:
+@@ -114,7 +117,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+     except (ValueError, UnicodeDecodeError) as error:
+         failures[None] = [f"Unreadable modern USGS response: {error}"]
+         features = []
+-    for feature in features:
++    for index, feature in enumerate(features):
+         sid = None
+         try:
+             if (
+@@ -178,9 +181,34 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+             }
+             identity_time = stamp if zone == "unknown" else datetime.fromisoformat(f"{stamp.isoformat()}{zone}")
+             key = (sid, identity_time)
+-            if key in rows and rows[key] != row:
++            if key in observed_values and observed_values[key] != number:
+                 raise ValueError("Conflicting observations for the same series and time")
+-            rows[key] = row
++            observed_values[key] = number
++            occurrence = f"{payload.acquisition_id}:{index}"
++            row["occurrence_id"] = occurrence
++            rows.append(row)
++            annotations.append(
++                {
++                    "slot_id": occurrence,
++                    "occurrence_id": occurrence,
++                    "series_id": sid,
++                    "facts_id": current_facts.facts_id,
++                    "time": stamp,
++                    "time_zone": zone,
++                    "source_call": payload.attempt_traces[0].attempt_id
++                    if payload.attempt_traces
++                    else payload.acquisition_id,
++                    "approval_status": {"present": "approval_status" in properties, "value": approval},
++                    "qualifier": {
++                        "present": "qualifier" in properties,
++                        "kind": ("null" if qualifier is None else "list" if isinstance(qualifier, list) else "string")
++                        if "qualifier" in properties
++                        else None,
++                        "string": qualifier if isinstance(qualifier, str) else None,
++                        "strings": qualifier if isinstance(qualifier, list) else None,
++                    },
++                }
++            )
+         except ValidationError as error:
+             raise FatalContractError("Invalid internal USGS source-series definition") from error
+         except (KeyError, TypeError, ValueError) as error:
+@@ -220,7 +248,29 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+             )
+     # Invalid rows cannot establish success for that concrete series. Valid siblings survive.
+     frame = pl.DataFrame(
+-        [row for (sid, _), row in rows.items() if sid not in failures], schema=RowsSchema.polars_schema
++        [row for row in rows if row["series_id"] not in failures],
++        schema=dict(RowsSchema.polars_schema) | {"occurrence_id": pl.String},
+     )
+     validate_series_rows(frame, tuple(definitions.values()))
+-    return ParsedSeries(frame, tuple(definitions.values()), (), tuple(outcomes), tuple(issues))
++    annotation_frame = pl.DataFrame(
++        [row for row in annotations if row["series_id"] not in failures],
++        schema={
++            "slot_id": pl.String,
++            "occurrence_id": pl.String,
++            "series_id": pl.String,
++            "facts_id": pl.String,
++            "time": pl.Datetime("us"),
++            "time_zone": pl.String,
++            "source_call": pl.String,
++            "approval_status": pl.Struct({"present": pl.Boolean, "value": pl.String}),
++            "qualifier": pl.Struct(
++                {"present": pl.Boolean, "kind": pl.String, "string": pl.String, "strings": pl.List(pl.String)}
++            ),
++        },
++    )
++    table = AnnotationTable(
++        "usgs_nwis:observation-properties",
++        annotation_frame,
++        tuple(AnnotationField(name, None, None) for name in ("approval_status", "qualifier")),
++    )
++    return ParsedSeries(frame, tuple(definitions.values()), (), tuple(outcomes), tuple(issues), (table,))
+diff --git a/src/rivretrieve/_internal/registry.py b/src/rivretrieve/_internal/registry.py
+index f6cdcf67..e7f0b05c 100644
+--- a/src/rivretrieve/_internal/registry.py
++++ b/src/rivretrieve/_internal/registry.py
+@@ -263,6 +263,7 @@ class _ProviderHandle:
+         )
+         return ObservationResult(
+             data=assembled.canonical_rows,
++            annotations=assembled.annotations,
+             source_series=assembled.source_series,
+             inventories=assembled.inventories,
+             outcomes=assembled.outcomes,
+@@ -432,6 +433,7 @@ class _ProviderHandle:
+         provenance_issues = _unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation)
+         return ObservationResult(
+             data=assembled.canonical_rows,
++            annotations=assembled.annotations,
+             source_series=assembled.source_series,
+             inventories=assembled.inventories,
+             outcomes=assembled.outcomes,
+diff --git a/src/rivretrieve/_internal/source_annotations.py b/src/rivretrieve/_internal/source_annotations.py
+new file mode 100644
+index 00000000..532ee7d1
+--- /dev/null
++++ b/src/rivretrieve/_internal/source_annotations.py
+@@ -0,0 +1,263 @@
++"""Experimental typed source-slot relations."""
++
++from dataclasses import dataclass
++
++import polars as pl
++
++from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema
++
++
++@dataclass(frozen=True)
++class AnnotationField:
++    source_name: str
++    meaning: str | None
++    reference: str | None
++
++
++@dataclass(frozen=True)
++class AnnotationTable:
++    schema_id: str
++    rows: pl.DataFrame
++    fields: tuple[AnnotationField, ...] = ()
++
++
++def row_schema(base, rows):
++    # Names alone permit schema inspection; validate_annotations checks declarations.
++    extra = []
++    for name in ("occurrence_id",):
++        if name in rows.columns:
++            extra.append(CatalogueColumn(name, rows.schema[name]))
++    return CatalogueSchema(base.name, base.columns + tuple(extra), base.unique_keys, base.enum_values)
++
++
++def combine_tables(tables):
++    grouped = {}
++    declarations = {}
++    for table in tables:
++        if table.schema_id in declarations and declarations[table.schema_id] != table.fields:
++            from rivretrieve._internal.issues import FatalContractError
++
++            raise FatalContractError("Conflicting annotation field definitions")
++        declarations[table.schema_id] = table.fields
++        if table.schema_id in grouped and grouped[table.schema_id][0].schema != table.rows.schema:
++            from rivretrieve._internal.issues import FatalContractError
++
++            raise FatalContractError("Conflicting annotation schema definitions")
++        grouped.setdefault(table.schema_id, []).append(table.rows)
++    return tuple(AnnotationTable(name, pl.concat(rows), declarations[name]) for name, rows in grouped.items())
++
++
++def encode_tables(tables):
++    import base64
++    from io import BytesIO
++
++    encoded = []
++    for table in tables:
++        buffer = BytesIO()
++        table.rows.write_ipc(buffer)
++        encoded.append(
++            {
++                "schema_id": table.schema_id,
++                "fields": [
++                    {"source_name": field.source_name, "meaning": field.meaning, "reference": field.reference}
++                    for field in table.fields
++                ],
++                "ipc": base64.b64encode(buffer.getvalue()).decode("ascii"),
++            }
++        )
++    return encoded
++
++
++def decode_tables(encoded):
++    import base64
++    from io import BytesIO
++
++    return tuple(
++        AnnotationTable(
++            item["schema_id"],
++            pl.read_ipc(BytesIO(base64.b64decode(item["ipc"], validate=True))),
++            tuple(AnnotationField(**field) for field in item["fields"]),
++        )
++        for item in encoded
++    )
++
++
++def validate_tables(tables, observations, series):
++    from rivretrieve._internal.catalogues.schemas import validate_catalogue
++    from rivretrieve._internal.engine import ZoneValue
++    from rivretrieve._internal.issues import FatalContractError
++
++    definitions = {item.series_id: item for item in series}
++    if not tables:
++        if "occurrence_id" in observations.columns and observations.height:
++            raise FatalContractError("Observation occurrences require annotation tables")
++        return
++    if observations.height and "occurrence_id" not in observations.columns:
++        raise FatalContractError("Annotation tables require observation occurrence identifiers")
++    indexed = {row["occurrence_id"]: row for row in observations.iter_rows(named=True)}
++    if len(indexed) != observations.height:
++        raise FatalContractError("Duplicate observation occurrence identifiers")
++    seen = set()
++    linked = set()
++    for table in tables:
++        coordinates = CatalogueSchema(
++            "SourceSlot",
++            tuple(
++                CatalogueColumn(name, dtype, nullable=name == "occurrence_id")
++                for name, dtype in {
++                    "slot_id": pl.String,
++                    "occurrence_id": pl.String,
++                    "series_id": pl.String,
++                    "facts_id": pl.String,
++                    "time": pl.Datetime("us"),
++                    "time_zone": pl.String,
++                }.items()
++            ),
++        )
++        source_columns = set(table.rows.columns) - set(coordinates.polars_schema) - {"source_call"}
++        names = [field.source_name for field in table.fields]
++        if (
++            any(not isinstance(name, str) or not name.strip() for name in names)
++            or len(set(names)) != len(names)
++            or set(names) != source_columns
++        ):
++            raise FatalContractError("Annotation field declarations must uniquely describe source columns")
++        missing = set(coordinates.polars_schema) - set(table.rows.columns)
++        if missing:
++            raise FatalContractError(f"Source slot is missing required coordinates: {sorted(missing)}")
++        validate_catalogue(table.rows.select(*coordinates.polars_schema), coordinates, on_issue="raise")
++        for row in table.rows.iter_rows(named=True):
++            try:
++                ZoneValue(row["time_zone"])
++            except (ValueError, TypeError) as error:
++                raise FatalContractError(f"Invalid source slot time zone: {error}") from error
++            if not row["slot_id"] or row["slot_id"] in seen:
++                raise FatalContractError("Duplicate or empty source slot identifier")
++            seen.add(row["slot_id"])
++            definition = definitions.get(row["series_id"])
++            if definition is None or row["facts_id"] not in {fact.facts_id for fact in definition.facts}:
++                raise FatalContractError("Source slot references unknown series or facts")
++            occurrence = row["occurrence_id"]
++            if occurrence is None:
++                continue
++            if occurrence in linked or occurrence not in indexed:
++                raise FatalContractError("Source slot occurrence link is duplicate or dangling")
++            linked.add(occurrence)
++            observation = indexed[occurrence]
++            from rivretrieve._internal.time_axis import TimeAxis, timestamp_on_axis
++
++            same_label = (row["time"], row["time_zone"]) == (observation["time"], observation["time_zone"])
++            native_utc = timestamp_on_axis(row["time"], row["time_zone"], TimeAxis.UTC)
++            observed_utc = timestamp_on_axis(observation["time"], observation["time_zone"], TimeAxis.UTC)
++            same_instant = native_utc is not None and native_utc == observed_utc
++            if any(row[name] != observation[name] for name in ("series_id", "facts_id")) or not (
++                same_label or same_instant
++            ):
++                raise FatalContractError("Source slot contradicts observation coordinates")
++    if linked != set(indexed):
++        raise FatalContractError("Observation occurrence lacks source slot")
++
++
++def select_tables(tables, observations, series, start, end):
++    from rivretrieve._internal.physical_window import native_window
++
++    definitions = {item.series_id: item for item in series}
++    occurrences = set(observations["occurrence_id"]) if "occurrence_id" in observations.columns else set()
++    selected = []
++    for table in tables:
++        keep = []
++        for row in table.rows.iter_rows(named=True):
++            definition = definitions.get(row["series_id"])
++            fact = (
++                next((fact for fact in definition.facts if fact.facts_id == row["facts_id"]), None)
++                if definition
++                else None
++            )
++            if fact is None:
++                keep.append(False)
++                continue
++            interval = native_window(start, end, fact)
++            keep.append(
++                row["occurrence_id"] in occurrences
++                if row["occurrence_id"] is not None
++                else interval.start <= row["time"] <= interval.end
++            )
++        selected.append(
++            AnnotationTable(table.schema_id, table.rows.filter(pl.Series(keep, dtype=pl.Boolean)), table.fields)
++        )
++    return tuple(selected)
++
++
++def validate_outcome_scope(tables, outcomes):
++    from rivretrieve._internal.issues import FatalContractError
++    from rivretrieve._internal.source_series import OutcomeStatus
++    from rivretrieve._internal.time_axis import timestamp_on_axis
++
++    for table in tables:
++        if (
++            "source_call" not in table.rows.columns
++            or table.rows.schema["source_call"] != pl.String
++            or table.rows["source_call"].null_count()
++        ):
++            raise FatalContractError("Source slots require source outcome scope")
++        for row in table.rows.iter_rows(named=True):
++            supported = False
++            for outcome in outcomes:
++                if (
++                    row["source_call"] not in outcome.calls
++                    or outcome.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
++                    or outcome.series_id != row["series_id"]
++                    or row["facts_id"] not in outcome.facts_ids
++                ):
++                    continue
++                timestamp = timestamp_on_axis(row["time"], row["time_zone"], outcome.window.axis)
++                if (
++                    outcome.coverage == "interval"
++                    and timestamp is not None
++                    and outcome.window.start <= timestamp <= outcome.window.end
++                ):
++                    supported = True
++                    break
++            if not supported:
++                raise FatalContractError("Source slot contradicts source outcome scope")
++
++
++def replace_tables(held, additions, replacements):
++    from dataclasses import replace
++
++    from rivretrieve._internal.time_axis import timestamp_on_axis
++
++    def covered(row, *, retirement):
++        for replacement in replacements:
++            coverage = replacement.coverage
++            facts = (replacement.replaced_facts_ids or coverage.facts_ids) if retirement else coverage.facts_ids
++            if row["series_id"] != coverage.series_id or row["facts_id"] not in facts:
++                continue
++            timestamp = timestamp_on_axis(row["time"], row["time_zone"], coverage.interval.axis)
++            if timestamp is not None and coverage.interval.start <= timestamp <= coverage.interval.end:
++                return True
++        return False
++
++    retained = [
++        replace(
++            table,
++            rows=table.rows.filter(
++                pl.Series(
++                    [not covered(row, retirement=True) for row in table.rows.iter_rows(named=True)], dtype=pl.Boolean
++                )
++            ),
++        )
++        for table in held
++    ]
++    admitted = [
++        replace(
++            table,
++            rows=table.rows.filter(
++                pl.Series(
++                    [covered(row, retirement=False) for row in table.rows.iter_rows(named=True)], dtype=pl.Boolean
++                )
++            ),
++        )
++        for table in additions
++    ]
++    return combine_tables((*retained, *admitted))
+diff --git a/src/rivretrieve/_internal/source_series.py b/src/rivretrieve/_internal/source_series.py
+index c946dda0..78536001 100644
+--- a/src/rivretrieve/_internal/source_series.py
++++ b/src/rivretrieve/_internal/source_series.py
+@@ -19,6 +19,7 @@ import polars as pl
+ from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
+ 
+ from rivretrieve._internal.issues import FatalContractError, Issue
++from rivretrieve._internal.source_annotations import AnnotationTable
+ from rivretrieve._internal.time_axis import TimeAxis
+ 
+ 
+@@ -586,6 +587,7 @@ class ParsedSeries:
+     inventories: tuple[InventorySnapshot, ...]
+     outcomes: tuple[RetrievalOutcome, ...]
+     issues: tuple[Issue, ...] = ()
++    annotations: tuple[AnnotationTable, ...] = ()
+ 
+ 
+ def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -> None:
+diff --git a/src/rivretrieve/_internal/store/accumulation.py b/src/rivretrieve/_internal/store/accumulation.py
+index e6335252..dcf80bef 100644
+--- a/src/rivretrieve/_internal/store/accumulation.py
++++ b/src/rivretrieve/_internal/store/accumulation.py
+@@ -13,6 +13,7 @@ from rivretrieve._internal.coverage import CoverageInterval, remainder
+ from rivretrieve._internal.issues import FatalContractError, Issue
+ from rivretrieve._internal.primitives import ProviderId
+ from rivretrieve._internal.publication_identity import publication_identity_fields
++from rivretrieve._internal.source_annotations import AnnotationTable, encode_tables, replace_tables
+ from rivretrieve._internal.source_series import (
+     InventorySnapshot,
+     OutcomeStatus,
+@@ -62,6 +63,7 @@ class StoreUpdate:
+     issues: tuple[Issue, ...] = ()
+     source_calls: tuple[dict[str, object], ...] = ()
+     supporting_outcomes: tuple[RetrievalOutcome, ...] = ()
++    annotations: tuple[AnnotationTable, ...] = ()
+ 
+ 
+ def _coverage_json(item: CoverageInterval) -> dict[str, object]:
+@@ -360,6 +362,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
+                     "series_id",
+                     "facts_id",
+                     "source_unit",
++                    *(["occurrence_id"] if "occurrence_id" in rows.columns else []),
+                 )
+                 if existing_rows is not None:
+                     if outcome_by_id[coverage.outcome_id].coverage == "observations":
+@@ -378,7 +381,9 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
+                                 )
+                             )
+                         )
+-                    additions = pl.concat([retained_rows, additions])
++                    additions = pl.concat(
++                        [frame for frame in (retained_rows, additions) if frame.height] or [additions]
++                    )
+                 existing_rows = additions
+             assert existing_rows is not None
+             if existing_rows.is_empty():
+@@ -405,7 +410,10 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
+             new_inventory_ids=frozenset(item.snapshot_id for item in update.inventories),
+         )
+         manifest = {
+-            "format_version": 8,
++            "format_version": 109,
++            "annotations": encode_tables(
++                replace_tables(previous.annotations if previous else (), update.annotations, replacements)
++            ),
+             "provider_id": str(provider_id),
+             "built_at": datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z"),
+             "coverage": [_coverage_json(item) for item in held],
+diff --git a/src/rivretrieve/_internal/store/manifest.schema.json b/src/rivretrieve/_internal/store/manifest.schema.json
+index 4ab3980a..684ee7a2 100644
+--- a/src/rivretrieve/_internal/store/manifest.schema.json
++++ b/src/rivretrieve/_internal/store/manifest.schema.json
+@@ -301,11 +301,12 @@
+         "inventories",
+         "outcomes",
+         "issues",
+-        "source_calls"
++        "source_calls",
++        "annotations"
+       ],
+       "properties": {
+         "format_version": {
+-          "const": 8
++          "const": 109
+         },
+         "provider_id": {
+           "type": "string",
+@@ -444,6 +445,55 @@
+         },
+         "usgs_publication_service": {
+           "const": "usgs-waterdata-v1"
++        },
++        "annotations": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "additionalProperties": false,
++            "required": [
++              "schema_id",
++              "ipc",
++              "fields"
++            ],
++            "properties": {
++              "schema_id": {
++                "type": "string"
++              },
++              "ipc": {
++                "type": "string"
++              },
++              "fields": {
++                "type": "array",
++                "items": {
++                  "type": "object",
++                  "additionalProperties": false,
++                  "required": [
++                    "source_name",
++                    "meaning",
++                    "reference"
++                  ],
++                  "properties": {
++                    "source_name": {
++                      "type": "string"
++                    },
++                    "meaning": {
++                      "type": [
++                        "string",
++                        "null"
++                      ]
++                    },
++                    "reference": {
++                      "type": [
++                        "string",
++                        "null"
++                      ]
++                    }
++                  }
++                }
++              }
++            }
++          }
+         }
+       },
+       "allOf": [
+diff --git a/src/rivretrieve/_internal/store/reader.py b/src/rivretrieve/_internal/store/reader.py
+index 6c32debb..56a9d182 100644
+--- a/src/rivretrieve/_internal/store/reader.py
++++ b/src/rivretrieve/_internal/store/reader.py
+@@ -547,4 +547,5 @@ def _engine_rows(physical_rows: pl.DataFrame) -> Rows:
+         "series_id",
+         "facts_id",
+         "source_unit",
++        *(["occurrence_id"] if "occurrence_id" in physical_rows.columns else []),
+     )
+diff --git a/src/rivretrieve/_internal/store/validation.py b/src/rivretrieve/_internal/store/validation.py
+index 02d9d05a..87a31775 100644
+--- a/src/rivretrieve/_internal/store/validation.py
++++ b/src/rivretrieve/_internal/store/validation.py
+@@ -26,6 +26,7 @@ from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval
+ from rivretrieve._internal.issues import FatalContractError, Issue
+ from rivretrieve._internal.primitives import ProviderId
+ from rivretrieve._internal.publication_identity import publication_identity_fields
++from rivretrieve._internal.source_annotations import AnnotationTable, decode_tables, validate_tables
+ from rivretrieve._internal.source_series import (
+     InventorySnapshot,
+     OutcomeStatus,
+@@ -146,7 +147,7 @@ class AccumulatedStoreManifest:
+         Exact physical row counts keyed by product/year.
+     """
+ 
+-    format_version: Literal[8]
++    format_version: Literal[109]
+     provider_id: ProviderId
+     built_at: datetime
+     coverage: tuple[CoverageInterval, ...]
+@@ -157,6 +158,8 @@ class AccumulatedStoreManifest:
+     issues: tuple[Issue, ...] = ()
+     source_calls: tuple[dict[str, object], ...] = ()
+ 
++    annotations: tuple[AnnotationTable, ...] = ()
++
+     def __post_init__(self) -> None:
+         object.__setattr__(self, "partition_row_counts", MappingProxyType(dict(self.partition_row_counts)))
+ 
+@@ -304,7 +307,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
+     version = raw["format_version"]
+     if type(version) is not int:
+         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "manifest.type:format_version")
+-    if version not in (5, 8):
++    if version not in (5, 109):
+         _refuse(
+             StoreRefusalKind.INCOMPATIBLE,
+             store,
+@@ -312,7 +315,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
+             f"unsupported format revision {version!r}",
+         )
+     if (
+-        version == 8
++        version == 109
+         and isinstance(raw.get("source_calls"), list)
+         and any(
+             isinstance(call, dict) and "call_id" in call and field not in call
+@@ -349,7 +352,7 @@ def _schema_error_path(error: Any, raw: dict[str, Any]) -> str:
+ def _validate_manifest_schema(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> None:
+     schema_resource = resources.files(__package__).joinpath("manifest.schema.json")
+     schema = json.loads(schema_resource.read_text(encoding="utf-8"))
+-    if raw["format_version"] == 8:
++    if raw["format_version"] == 109:
+         schema = schema["$defs"]["accumulated"]
+     Draft202012Validator.check_schema(schema)
+     validator = Draft202012Validator(schema, format_checker=FormatChecker())
+@@ -494,6 +497,7 @@ def _validate_partition(
+     provider_id: ProviderId,
+     *,
+     allowed_null_states: tuple[str, ...] = ("published_null", "published_blank"),
++    annotation_columns: tuple[str, ...] = (),
+ ) -> None:
+     try:
+         parquet = _open_parquet(path)
+@@ -525,7 +529,7 @@ def _validate_partition(
+     if not names_are_valid or not types_are_valid:
+         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.schema:{identifier}")
+     native_columns = tuple(column for column in retained_columns if column not in _REQUIRED_FIELD_NAMES)
+-    expected_names = (*_REQUIRED_FIELD_NAMES, *native_columns)
++    expected_names = (*_REQUIRED_FIELD_NAMES, *native_columns, *annotation_columns)
+     source_types = {column["name"]: column["type"] for column in source_columns}
+     type_checks = {
+         "text": _is_utf8_string,
+@@ -674,7 +678,7 @@ def _validate_contents(
+     if raw["provider_id"] != str(provider_id):
+         _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")
+     _validate_metadata(raw, store, provider_id)
+-    if raw["format_version"] == 8:
++    if raw["format_version"] == 109:
+         return _validate_accumulated(raw, store, provider_id, checked_partitions)
+     _validate_source_contract(raw, store, provider_id)
+     partition_files = _discover_partitions(raw, store, provider_id)
+@@ -774,6 +778,7 @@ def _validate_accumulated(
+             store,
+             provider_id,
+             allowed_null_states=("published_null",),
++            annotation_columns=("occurrence_id",) if raw["annotations"] else (),
+         )
+         for batch in _open_parquet(path).iter_batches(columns=["series_id", "facts_id", "time", "time_zone"]):
+             for series_id, facts_id, timestamp, time_zone in zip(
+@@ -795,8 +800,21 @@ def _validate_accumulated(
+                 ):
+                     _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{identifier}")
+     _validate_series_partitions(raw, checked_files, store, provider_id)
++    if raw["annotations"]:
++        import polars as pl
++
++        all_rows = (
++            pl.concat([pl.read_parquet(path) for path in partitions.values()])
++            if partitions
++            else pl.DataFrame(schema={"occurrence_id": pl.String})
++        )
++        validate_tables(decode_tables(raw["annotations"]), all_rows, tuple(_metadata(raw)["series"]))
++        from rivretrieve._internal.source_annotations import validate_outcome_scope
++
++        validate_outcome_scope(decode_tables(raw["annotations"]), _metadata(raw)["outcomes"])
+     manifest = AccumulatedStoreManifest(
+-        format_version=8,
++        format_version=109,
++        annotations=decode_tables(raw["annotations"]),
+         provider_id=provider_id,
+         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
+         coverage=tuple(coverage),
+diff --git a/tests/test_annotation_bundle_experiment.py b/tests/test_annotation_bundle_experiment.py
+new file mode 100644
+index 00000000..66ff8e7c
+--- /dev/null
++++ b/tests/test_annotation_bundle_experiment.py
+@@ -0,0 +1,108 @@
++"""Actual public view and bundle paths for synthetic annotations."""
++
++import polars.testing as pt
++import pytest
++
++import rivretrieve as rr
++from rivretrieve._internal.source_series import OutcomeStatus
++from tests.test_independent_fact_cache import _fetch, fact_cache
++from tests.test_linked_annotations_experiment import attach_slots
++
++annotation_cache = fact_cache
++
++
++@pytest.mark.parametrize("state", ["success", "unmeasured", "empty", "failed"])
++def test_real_bundle_roundtrip_preserves_slots_and_definitions(annotation_cache, state):
++    stages, selection, _ = annotation_cache
++    attach_slots(stages)
++    if state == "failed":
++        _fetch(selection)
++        stages.status = {"mean": OutcomeStatus.FAILED, "max": OutcomeStatus.FAILED}
++    elif state in ("empty", "unmeasured"):
++        stages.status = {"mean": OutcomeStatus.EMPTY, "max": OutcomeStatus.EMPTY}
++        stages.no_slots = state == "empty"
++    result = _fetch(selection)
++    restored = rr.from_bundle(rr.to_bundle(result))
++    pt.assert_frame_equal(restored.data, result.data)
++    assert restored.annotations[0].fields == result.annotations[0].fields
++    pt.assert_frame_equal(restored.annotations[0].rows, result.annotations[0].rows)
++    assert restored.receipts.entries == ()
++    assert restored.outcomes == result.outcomes
++
++
++def test_pick_filters_source_slot_facts_before_bundle(annotation_cache):
++    stages, selection, _ = annotation_cache
++    attach_slots(stages)
++    result = _fetch(selection)
++    picked = rr.pick(result, statistic="mean")
++    assert picked.annotations[0].rows["facts_id"].to_list() == ["mean", "mean"]
++    restored = rr.from_bundle(rr.to_bundle(picked))
++    pt.assert_frame_equal(restored.annotations[0].rows, picked.annotations[0].rows)
++
++
++def test_utc_keeps_native_slots_and_occurrence_links_through_bundle(annotation_cache):
++    from dataclasses import replace
++    from datetime import timedelta
++
++    import polars as pl
++
++    from tests.test_independent_fact_cache import ROW_TIME
++
++    stages, selection, _ = annotation_cache
++    attach_slots(stages)
++    parse = stages.parse
++
++    def offset(payload, config):
++        parsed = parse(payload, config)
++        return replace(
++            parsed,
++            rows=parsed.rows.with_columns(pl.lit("+01:00").alias("time_zone")),
++            annotations=tuple(
++                replace(table, rows=table.rows.with_columns(pl.lit("+01:00").alias("time_zone")))
++                for table in parsed.annotations
++            ),
++        )
++
++    stages.parse = offset
++    native = _fetch(selection)
++    converted = rr.to_utc(native)
++    assert converted.data["time"].to_list() == [ROW_TIME - timedelta(hours=1)] * 2
++    pt.assert_frame_equal(converted.annotations[0].rows, native.annotations[0].rows)
++    restored = rr.from_bundle(rr.to_bundle(converted))
++    pt.assert_frame_equal(restored.data, converted.data)
++    pt.assert_frame_equal(restored.annotations[0].rows, native.annotations[0].rows)
++
++
++@pytest.mark.parametrize("defect", ["link", "support"])
++def test_bundle_rejects_invalid_slot_association(annotation_cache, defect):
++    import json
++    from dataclasses import replace
++    from io import BytesIO
++    from zipfile import ZipFile
++
++    import polars as pl
++
++    from rivretrieve._internal.issues import FatalContractError
++    from rivretrieve._internal.source_annotations import decode_tables, encode_tables
++
++    stages, selection, _ = annotation_cache
++    attach_slots(stages)
++    result = _fetch(selection)
++    content = rr.to_bundle(result)
++    with ZipFile(BytesIO(content)) as source:
++        files = {name: source.read(name) for name in source.namelist()}
++    manifest = json.loads(files["manifest.json"])
++    tables = decode_tables(manifest["annotations"])
++    rows = tables[0].rows.with_columns(
++        pl.when(pl.col("occurrence_id").is_not_null()).then(pl.lit("dangling")).otherwise(None).alias("occurrence_id")
++    )
++    if defect == "support":
++        rows = tables[0].rows.with_columns(pl.lit("unrecorded-call").alias("source_call"))
++    manifest["annotations"] = encode_tables((replace(tables[0], rows=rows),))
++    files["manifest.json"] = json.dumps(manifest).encode()
++    output = BytesIO()
++    with ZipFile(output, "w") as target:
++        for name, data in files.items():
++            target.writestr(name, data)
++    with pytest.raises(FatalContractError, match="dangling" if defect == "link" else "outcome scope"):
++        rr.from_bundle(output.getvalue())
+diff --git a/tests/test_annotation_mlit_adapter.py b/tests/test_annotation_mlit_adapter.py
+new file mode 100644
+index 00000000..0960f4bc
+--- /dev/null
++++ b/tests/test_annotation_mlit_adapter.py
+@@ -0,0 +1,48 @@
++"""Invented MLIT hourly DAT; never a retained publisher response."""
++
++from dataclasses import replace
++from datetime import datetime
++
++import polars as pl
++
++from rivretrieve._internal.engine import SourceCoordinates
++from rivretrieve._internal.primitives import ProductId
++from rivretrieve._internal.providers.jp_mlit.config import config
++from rivretrieve._internal.providers.jp_mlit.fetch import JpMlitPayloadCoordinates
++from rivretrieve._internal.providers.jp_mlit.parse import parse
++from tests.test_usgs_modern_parse import payload
++
++
++def test_missing_numeric_slot_and_raw_marker_preserved_without_measurement():
++    header = "," + ",".join(cell for hour in range(1, 25) for cell in (f"{hour}時", ""))
++    cells = ["2024/01/01"] + [cell for hour in range(1, 25) for cell in ("123", " $ " if hour == 2 else " ")]
++    lines = [
++        "時刻水位月表検索結果",
++        "水系名,synthetic",
++        "河川名,synthetic",
++        "観測所名,synthetic",
++        "観測所記号,synthetic",
++        "",
++        "#  フラグの意味： *:暫定値, $:欠測, #:閉局, -:未登録",
++        "",
++        header,
++        ",".join(cells),
++    ]
++    request = replace(
++        payload({}),
++        source_coordinates=SourceCoordinates(JpMlitPayloadCoordinates(2, "dat")),
++        station_products=(("synthetic", ProductId("stage_hourly")),),
++        content="\n".join(lines).encode("shift_jis"),
++        acquisition_id="mlit-authored",
++    )
++    result = parse(request, config())
++    assert result.rows.height == 23
++    slots = result.annotations[0].rows
++    assert slots.height == 24
++    assert slots["marker"].to_list() == [" ", " $ "] + [" "] * 22
++    missing = slots.filter(pl.col("occurrence_id").is_null())
++    assert missing.select("time", "source_label", "pair_index").rows() == [
++        (datetime(2024, 1, 1, 2), "2024/01/01 2時", 2)
++    ]
++    assert slots[-1, "time"] == datetime(2024, 1, 2)
++    assert slots[-1, "source_label"] == "2024/01/01 24時"
+diff --git a/tests/test_annotation_nve_adapter.py b/tests/test_annotation_nve_adapter.py
+new file mode 100644
+index 00000000..f47a3227
+--- /dev/null
++++ b/tests/test_annotation_nve_adapter.py
+@@ -0,0 +1,44 @@
++"""Invented NVE observation blocks, not publisher replay."""
++
++import json
++from dataclasses import replace
++
++import polars as pl
++
++from rivretrieve._internal.primitives import ProductId
++from rivretrieve._internal.providers.no_nve.config import config
++from rivretrieve._internal.providers.no_nve.parse import parse
++from tests.test_usgs_modern_parse import payload
++
++
++def test_nve_independent_integer_fields_keep_duplicate_occurrences():
++    product = ProductId("discharge_daily_mean")
++    observations = [
++        {"time": "2024-01-01T11:00:00Z", "value": 3.0, "quality": quality, "correction": correction}
++        for quality, correction in [(2, 0), (1, 3), (1, 3)]
++    ]
++    body = {
++        "data": [
++            {
++                "stationId": "synthetic",
++                "parameter": 1001,
++                "serieVersionNo": 7,
++                "method": "Mean",
++                "unit": "m³/s",
++                "observationCount": 3,
++                "observations": observations,
++            }
++        ]
++    }
++    request = replace(
++        payload({}),
++        source_coordinates=config().products[product].coordinates,
++        station_products=(("synthetic", product),),
++        content=json.dumps(body).encode(),
++        acquisition_id="nve-authored",
++    )
++    result = parse(request, config())
++    assert result.rows.height == 3
++    assert result.annotations[0].rows.select("quality", "correction").rows() == [(2, 0), (1, 3), (1, 3)]
++    assert result.annotations[0].rows["quality"].dtype == pl.Int64
++    assert result.rows["occurrence_id"].n_unique() == 3
+diff --git a/tests/test_annotation_refresh_experiment.py b/tests/test_annotation_refresh_experiment.py
+new file mode 100644
+index 00000000..360a246f
+--- /dev/null
++++ b/tests/test_annotation_refresh_experiment.py
+@@ -0,0 +1,83 @@
++"""Real replacement of source slots using existing successful coverage."""
++
++import pytest
++
++from rivretrieve._internal.source_series import OutcomeStatus
++from tests.test_independent_fact_cache import NEW, _fetch, fact_cache
++from tests.test_linked_annotations_experiment import attach_slots
++
++annotation_cache = fact_cache
++
++
++@pytest.mark.parametrize("mode", ["success", "empty", "empty_without_slots", "failed", "partial"])
++def test_refresh_keeps_source_slots_with_their_acquisition(annotation_cache, mode):
++    stages, selection, _ = annotation_cache
++    attach_slots(stages)
++    first = _fetch(selection)
++    stages.marker = "changed"
++    stages.stamps = {"mean": NEW, "max": NEW}
++    if mode in ("empty", "empty_without_slots"):
++        stages.no_slots = mode == "empty_without_slots"
++        stages.status = {"mean": OutcomeStatus.EMPTY, "max": OutcomeStatus.EMPTY}
++    elif mode == "failed":
++        stages.status = {"mean": OutcomeStatus.FAILED, "max": OutcomeStatus.FAILED}
++    elif mode == "partial":
++        stages.status["max"] = OutcomeStatus.FAILED
++    result = _fetch(selection)
++    slots = result.annotations[0].rows.sort("slot_id")
++    if mode == "failed":
++        assert slots["slot_id"].to_list() == ["1-max:0", "1-max:1", "1-mean:0", "1-mean:1"]
++        assert slots["source_call"].to_list() == ["1-max", "1-max", "1-mean", "1-mean"]
++    elif mode == "empty_without_slots":
++        assert result.data.is_empty()
++        assert slots.is_empty()
++    elif mode == "empty":
++        assert result.data.is_empty()
++        assert slots["slot_id"].to_list() == ["2-max:1", "2-mean:1"]
++        assert slots["occurrence_id"].null_count() == 2
++    elif mode == "partial":
++        assert slots["slot_id"].to_list() == ["1-max:0", "1-max:1", "2-mean:0", "2-mean:1"]
++        assert slots["marker"].to_list() == [" ", "$", "changed", "$"]
++    else:
++        assert slots["slot_id"].to_list() == ["2-max:0", "2-max:1", "2-mean:0", "2-mean:1"]
++        assert result.data["value"].to_list() == first.data["value"].to_list()
++    assert result.annotations[0].fields == first.annotations[0].fields
++    stages.forbid_fetch = True
++    cached = _fetch(selection, cache="reuse")
++    assert cached.annotations[0].rows.sort("slot_id").rows() == slots.rows()
++
++
++def test_overlapping_failed_fact_window_keeps_held_unmeasured_slot(annotation_cache):
++    from dataclasses import replace
++    from datetime import timedelta
++
++    import polars as pl
++
++    from tests.test_independent_fact_cache import ROW_TIME
++
++    stages, selection, _ = annotation_cache
++    attach_slots(stages)
++    _fetch(selection)
++    parse = stages.parse
++
++    def overlapping(payload, config):
++        parsed = parse(payload, config)
++        if payload.content == b"max":
++            failure = parsed.outcomes[0].model_copy(
++                update={
++                    "outcome_id": "overlap-failure",
++                    "facts_ids": ("mean",),
++                    "status": OutcomeStatus.FAILED,
++                    "reason": "synthetic overlap",
++                    "window": parsed.outcomes[0].window.model_copy(
++                        update={"start": ROW_TIME + timedelta(hours=1), "end": ROW_TIME + timedelta(hours=1)}
++                    ),
++                }
++            )
++            return replace(parsed, outcomes=(*parsed.outcomes, failure))
++        return parsed
++
++    stages.parse = overlapping
++    result = _fetch(selection)
++    mean = result.annotations[0].rows.filter(pl.col("facts_id") == "mean").sort("slot_id")
++    assert mean["slot_id"].to_list() == ["1-mean:1", "2-mean:0"]
+diff --git a/tests/test_annotation_scope_experiment.py b/tests/test_annotation_scope_experiment.py
+new file mode 100644
+index 00000000..d5eb8c2c
+--- /dev/null
++++ b/tests/test_annotation_scope_experiment.py
+@@ -0,0 +1,104 @@
++"""Synthetic annotation declarations and existing outcome scope."""
++
++from dataclasses import replace
++
++import polars as pl
++import pytest
++
++from rivretrieve._internal.issues import FatalContractError
++from tests.test_independent_fact_cache import _fetch, fact_cache
++from tests.test_linked_annotations_experiment import attach_slots
++
++annotation_cache = fact_cache
++
++
++def test_discovery_definitions_survive_cache(annotation_cache):
++    stages, selection, _ = annotation_cache
++    attach_slots(stages)
++    fresh = _fetch(selection)
++    assert fresh.annotations[0].fields[0].source_name == "marker"
++    assert fresh.annotations[0].fields[0].meaning is None
++    stages.forbid_fetch = True
++    reused = _fetch(selection, cache="reuse")
++    assert reused.annotations[0].fields == fresh.annotations[0].fields
++
++
++def test_wrong_fact_outcome_refused_before_cache_publication(annotation_cache):
++    stages, selection, root = annotation_cache
++    attach_slots(stages)
++    parse = stages.parse
++
++    def wrong_scope(payload, config):
++        parsed = parse(payload, config)
++        table = parsed.annotations[0]
++        rows = table.rows.with_columns(
++            pl.when(pl.col("occurrence_id").is_null())
++            .then(pl.lit("max" if payload.content == b"mean" else "mean"))
++            .otherwise(pl.col("facts_id"))
++            .alias("facts_id")
++        )
++        return replace(parsed, annotations=(replace(table, rows=rows),))
++
++    stages.parse = wrong_scope
++    with pytest.raises(FatalContractError, match="outcome scope"):
++        _fetch(selection)
++    assert not (root / stages.provider_id / "store" / "manifest.json").exists()
++
++
++def test_unmeasured_slot_requires_successful_original_acquisition_scope():
++    from datetime import timedelta
++
++    from rivretrieve._internal.source_annotations import AnnotationTable, validate_outcome_scope
++    from rivretrieve._internal.source_series import OutcomeStatus
++    from tests.test_independent_fact_cache import ROW_TIME
++    from tests.test_source_series_store import _success
++
++    outcome, _ = _success("series", "answer", [], day=1)
++    outcome = outcome.model_copy(
++        update={
++            "calls": ("source-a",),
++            "facts_ids": ("fact",),
++            "window": outcome.window.model_copy(update={"start": ROW_TIME, "end": ROW_TIME + timedelta(hours=1)}),
++        }
++    )
++    rows = pl.DataFrame(
++        {
++            "source_call": ["source-a"],
++            "series_id": ["series"],
++            "facts_id": ["fact"],
++            "time": [ROW_TIME],
++            "time_zone": ["unknown"],
++        }
++    )
++    table = AnnotationTable("synthetic:slot", rows)
++    validate_outcome_scope((table,), (outcome, outcome.model_copy(update={"outcome_id": "corroborating"})))
++    for unsupported in (
++        outcome.model_copy(update={"status": OutcomeStatus.FAILED}),
++        outcome.model_copy(update={"calls": ("different-source",)}),
++        outcome.model_copy(
++            update={"window": outcome.window.model_copy(update={"start": ROW_TIME + timedelta(minutes=1)})}
++        ),
++    ):
++        with pytest.raises(FatalContractError, match="outcome scope"):
++            validate_outcome_scope((table,), (unsupported,))
++
++
++@pytest.mark.parametrize("names", [("absent_column", "absent_column"), ("",), ("absent_column",), ()])
++def test_invalid_discovery_fields_refused_before_publication(annotation_cache, names):
++    from rivretrieve._internal.source_annotations import AnnotationField
++
++    stages, selection, root = annotation_cache
++    attach_slots(stages)
++    parse = stages.parse
++
++    def malformed(payload, config):
++        parsed = parse(payload, config)
++        table = parsed.annotations[0]
++        return replace(
++            parsed, annotations=(replace(table, fields=tuple(AnnotationField(name, None, None) for name in names)),)
++        )
++
++    stages.parse = malformed
++    with pytest.raises(FatalContractError, match="field declarations"):
++        _fetch(selection)
++    assert not (root / stages.provider_id / "store" / "manifest.json").exists()
+diff --git a/tests/test_annotation_usgs_adapter.py b/tests/test_annotation_usgs_adapter.py
+new file mode 100644
+index 00000000..0310e7cf
+--- /dev/null
++++ b/tests/test_annotation_usgs_adapter.py
+@@ -0,0 +1,43 @@
++"""Invented native USGS property shapes, not publisher replay."""
++
++from dataclasses import replace
++
++from rivretrieve._internal.providers.usgs_nwis.config import config
++from rivretrieve._internal.providers.usgs_nwis.parse import parse
++from tests.test_usgs_modern_parse import feature, payload
++
++
++def test_separate_native_fields_and_record_multiplicity():
++    items = [
++        feature(qualifier="ESTIMATED"),
++        feature(qualifier=["ESTIMATED"]),
++        feature(qualifier=None),
++        feature(qualifier=[]),
++    ]
++    items.append(feature())
++    del items[-1]["properties"]["qualifier"]
++    result = parse(
++        replace(payload({"type": "FeatureCollection", "features": items}), acquisition_id="authored-page"), config()
++    )
++    assert result.rows.height == 5
++    assert result.rows["occurrence_id"].to_list() == [f"authored-page:{i}" for i in range(5)]
++    table = result.annotations[0]
++    assert table.rows["qualifier"].to_list() == [
++        {"present": True, "kind": "string", "string": "ESTIMATED", "strings": None},
++        {"present": True, "kind": "list", "string": None, "strings": ["ESTIMATED"]},
++        {"present": True, "kind": "null", "string": None, "strings": None},
++        {"present": True, "kind": "list", "string": None, "strings": []},
++        {"present": False, "kind": None, "string": None, "strings": None},
++    ]
++    assert table.rows["approval_status"].to_list() == [{"present": True, "value": "Approved"}] * 5
++    assert table.rows["source_call"].to_list() == ["authored-page"] * 5
++
++
++def test_failed_usgs_series_does_not_leave_annotation_links():
++    items = [feature(qualifier=["invalid", None]), feature(time_series_id="independent", qualifier=None)]
++    result = parse(
++        replace(payload({"type": "FeatureCollection", "features": items}), acquisition_id="failure-page"), config()
++    )
++    assert result.rows.height == 1
++    assert result.annotations[0].rows["occurrence_id"].to_list() == ["failure-page:1"]
++    assert result.annotations[0].rows["series_id"].to_list() == result.rows["series_id"].to_list()
+diff --git a/tests/test_jp_mlit_acquisition_prerequisites.py b/tests/test_jp_mlit_acquisition_prerequisites.py
+index 775c58b4..bce3b9d0 100644
+--- a/tests/test_jp_mlit_acquisition_prerequisites.py
++++ b/tests/test_jp_mlit_acquisition_prerequisites.py
+@@ -309,7 +309,10 @@ def test_old_cache_requires_explicit_clear_before_new_acquisition(authored, cach
+     rr.clear_cache("jp_mlit")
+     authored.forbid = False
+     refreshed = _fetch(selected)
+-    assert_frame_equal(fresh.data, refreshed.data)
++    assert_frame_equal(fresh.data.drop("occurrence_id"), refreshed.data.drop("occurrence_id"))
++    assert set(fresh.data["occurrence_id"]).isdisjoint(refreshed.data["occurrence_id"])
++    assert set(refreshed.annotations[0].rows["occurrence_id"].drop_nulls()) == set(refreshed.data["occurrence_id"])
++    assert set(fresh.annotations[0].rows["source_call"]).isdisjoint(refreshed.annotations[0].rows["source_call"])
+     assert [call["retrieved_at"] for call in _calls(refreshed)] == [
+         datetime(2026, 1, 1, 0, 0, second, tzinfo=UTC) for second in (3, 4)
+     ]
+diff --git a/tests/test_linked_annotations_experiment.py b/tests/test_linked_annotations_experiment.py
+new file mode 100644
+index 00000000..980602e4
+--- /dev/null
++++ b/tests/test_linked_annotations_experiment.py
+@@ -0,0 +1,225 @@
++"""Synthetic slot relation through real driver and accumulated store."""
++
++from dataclasses import replace
++from datetime import timedelta
++
++import polars as pl
++import polars.testing as pt
++
++from rivretrieve._internal.source_annotations import AnnotationField, AnnotationTable
++from tests.test_independent_fact_cache import OLD, ROW_TIME, _fetch, fact_cache
++
++annotation_cache = fact_cache
++
++
++def attach_slots(stages):
++    parse = stages.parse
++
++    def annotated(payload, config):
++        parsed = parse(payload, config)
++        occurrence = payload.acquisition_id + ":0"
++        rows = parsed.rows.with_columns(pl.lit(occurrence).alias("occurrence_id"))
++        slots = pl.DataFrame(
++            {
++                "slot_id": [occurrence, payload.acquisition_id + ":1"],
++                "occurrence_id": [occurrence, None],
++                "series_id": [stages.definition.series_id] * 2,
++                "facts_id": [payload.content.decode()] * 2,
++                "time": [ROW_TIME, ROW_TIME + timedelta(hours=1)],
++                "time_zone": ["+00:00"] * 2,
++                "marker": [getattr(stages, "marker", " "), "$"],
++                "source_call": [payload.acquisition_id] * 2,
++            },
++            schema_overrides={"time": pl.Datetime("us")},
++        )
++        from rivretrieve._internal.source_series import OutcomeStatus
++
++        if parsed.outcomes[0].status is OutcomeStatus.EMPTY:
++            slots = (
++                slots.clear() if getattr(stages, "no_slots", False) else slots.filter(pl.col("occurrence_id").is_null())
++            )
++        elif parsed.outcomes[0].status is OutcomeStatus.FAILED:
++            slots = slots.clear()
++        return replace(
++            parsed,
++            rows=rows,
++            annotations=(AnnotationTable("synthetic:slot-markers", slots, (AnnotationField("marker", None, None),)),),
++        )
++
++    stages.parse = annotated
++
++
++def test_measured_and_unmeasured_slots_survive_actual_reuse(annotation_cache):
++    stages, selection, root = annotation_cache
++    attach_slots(stages)
++    fresh = _fetch(selection)
++    tables = fresh.annotations
++    assert len(tables) == 1
++    assert fresh.data.height == 2  # missing slots never become null measurements
++    assert tables[0].rows.sort("slot_id").select("slot_id", "occurrence_id", "facts_id", "time", "marker").rows() == [
++        ("1-max:0", "1-max:0", "max", ROW_TIME, " "),
++        ("1-max:1", None, "max", ROW_TIME + timedelta(hours=1), "$"),
++        ("1-mean:0", "1-mean:0", "mean", ROW_TIME, " "),
++        ("1-mean:1", None, "mean", ROW_TIME + timedelta(hours=1), "$"),
++    ]
++    stages.forbid_fetch = True
++    reused = _fetch(selection, cache="reuse")
++    pt.assert_frame_equal(fresh.data, reused.data)
++    pt.assert_frame_equal(tables[0].rows, reused.annotations[0].rows)
++    assert fresh.receipts.entries == reused.receipts.entries == ()
++    assert all(item.retrieved_at == OLD for item in reused.outcomes)
++    import json
++    from time import perf_counter
++
++    from rivretrieve._internal.source_annotations import decode_tables, encode_tables
++
++    manifest_path = root / stages.provider_id / "store" / "manifest.json"
++    manifest = json.loads(manifest_path.read_text())
++    started = perf_counter()
++    for _ in range(100):
++        decoded = decode_tables(manifest["annotations"])
++    decode_ms = (perf_counter() - started) * 10
++    started = perf_counter()
++    for _ in range(100):
++        encoded = encode_tables(tables)
++    encode_ms = (perf_counter() - started) * 10
++    pt.assert_frame_equal(decoded[0].rows, tables[0].rows)
++    assert encoded == manifest["annotations"]
++    print(
++        f"slots=4 measured=2 manifest_bytes={manifest_path.stat().st_size} annotation_json_bytes={len(json.dumps(encoded).encode())} warm_decode_mean_ms={decode_ms:.4f} encode_mean_ms={encode_ms:.4f}"
++    )
++    import rivretrieve as rr
++
++    narrow = rr.fetch(
++        selection, start="2026-01-01T12:00:00", end="2026-01-01T12:00:00", cache="reuse", on_issue="ignore"
++    )
++    assert narrow.annotations[0].rows["slot_id"].to_list() == ["1-mean:0", "1-max:0"]
++
++
++def test_dangling_slot_link_is_fatal():
++    import pytest
++
++    from rivretrieve._internal.issues import FatalContractError
++    from rivretrieve._internal.source_annotations import validate_tables
++    from tests.test_fetch import _test_definition
++
++    definition = _test_definition("synthetic", "a", "level")
++    slots = pl.DataFrame(
++        {
++            "slot_id": ["s"],
++            "occurrence_id": ["missing"],
++            "series_id": [definition.series_id],
++            "facts_id": [definition.facts[0].facts_id],
++            "time": [ROW_TIME],
++            "time_zone": ["+00:00"],
++        }
++    )
++    with pytest.raises(FatalContractError, match="dangling"):
++        validate_tables(
++            (AnnotationTable("synthetic:slots", slots),),
++            pl.DataFrame(schema={"occurrence_id": pl.String}),
++            (definition,),
++        )
++
++
++def test_schema_conflict_is_fatal_before_concatenation():
++    import pytest
++
++    from rivretrieve._internal.issues import FatalContractError
++    from rivretrieve._internal.source_annotations import combine_tables
++
++    with pytest.raises(FatalContractError, match="schema definitions"):
++        combine_tables(
++            (
++                AnnotationTable("synthetic:same", pl.DataFrame({"code": [2]})),
++                AnnotationTable("synthetic:same", pl.DataFrame({"code": ["2"]})),
++            )
++        )
++
++
++def test_slot_identity_and_scope_validation():
++    import pytest
++
++    from rivretrieve._internal.issues import FatalContractError
++    from rivretrieve._internal.source_annotations import select_tables, validate_tables
++    from tests.test_fetch import _test_definition
++
++    definition = _test_definition("synthetic", "a", "level")
++    slots = pl.DataFrame(
++        {
++            "slot_id": ["a", "b"],
++            "occurrence_id": [None, None],
++            "series_id": [definition.series_id] * 2,
++            "facts_id": [definition.facts[0].facts_id] * 2,
++            "time": [ROW_TIME, ROW_TIME + timedelta(hours=1)],
++            "time_zone": ["unknown"] * 2,
++        },
++        schema_overrides={"occurrence_id": pl.String},
++    )
++    empty = pl.DataFrame(schema={"occurrence_id": pl.String})
++    table = AnnotationTable("synthetic:slots", slots)
++    validate_tables((table,), empty, (definition,))
++    selected = select_tables((table,), empty, (definition,), ROW_TIME, ROW_TIME)
++    assert selected[0].rows["slot_id"].to_list() == ["a"]
++    for bad, message in (
++        (slots.with_columns(pl.lit("same").alias("slot_id")), "Duplicate"),
++        (slots.with_columns(pl.lit("bad").alias("series_id")), "unknown"),
++        (slots.with_columns(pl.lit("bad").alias("facts_id")), "unknown"),
++    ):
++        with pytest.raises(FatalContractError, match=message):
++            validate_tables((AnnotationTable("synthetic:slots", bad),), empty, (definition,))
++
++
++def test_fresh_narrow_fetch_keeps_only_eligible_unmeasured_slots(annotation_cache):
++    import rivretrieve as rr
++
++    stages, selection, _ = annotation_cache
++    attach_slots(stages)
++    fresh = rr.fetch(
++        selection, start="2026-01-01T12:01:00", end="2026-01-01T13:00:00", cache="refresh", on_issue="ignore"
++    )
++    assert fresh.data.is_empty()
++    assert fresh.annotations[0].rows.sort("slot_id").select("slot_id", "occurrence_id", "marker").rows() == [
++        ("1-max:1", None, "$"),
++        ("1-mean:1", None, "$"),
++    ]
++    stages.forbid_fetch = True
++    reused = rr.fetch(
++        selection, start="2026-01-01T12:01:00", end="2026-01-01T13:00:00", cache="reuse", on_issue="ignore"
++    )
++    pt.assert_frame_equal(fresh.annotations[0].rows, reused.annotations[0].rows)
++
++
++def test_unmeasured_slot_requires_valid_common_coordinates():
++    import pytest
++
++    from rivretrieve._internal.issues import FatalContractError
++    from rivretrieve._internal.source_annotations import validate_tables
++    from tests.test_fetch import _test_definition
++
++    definition = _test_definition("synthetic", "a", "level")
++    valid = pl.DataFrame(
++        {
++            "slot_id": ["s"],
++            "occurrence_id": [None],
++            "series_id": [definition.series_id],
++            "facts_id": [definition.facts[0].facts_id],
++            "time": [ROW_TIME],
++            "time_zone": ["unknown"],
++        },
++        schema_overrides={"occurrence_id": pl.String},
++    )
++    validate_tables(
++        (AnnotationTable("synthetic:slots", valid),), pl.DataFrame(schema={"occurrence_id": pl.String}), (definition,)
++    )
++    for bad in (
++        valid.drop("time"),
++        valid.with_columns(pl.lit(None, dtype=pl.Datetime("us")).alias("time")),
++        valid.with_columns(pl.lit("invalid").alias("time_zone")),
++    ):
++        with pytest.raises(FatalContractError):
++            validate_tables(
++                (AnnotationTable("synthetic:slots", bad),),
++                pl.DataFrame(schema={"occurrence_id": pl.String}),
++                (definition,),
++            )
+diff --git a/tests/test_usgs_continuous_cache_axis.py b/tests/test_usgs_continuous_cache_axis.py
+index 35f2f536..19d5f866 100644
+--- a/tests/test_usgs_continuous_cache_axis.py
++++ b/tests/test_usgs_continuous_cache_axis.py
+@@ -114,7 +114,11 @@ def test_public_single_successful_utc_span_validates_native_offset_rows(monkeypa
+     assert partial.data["time_zone"].to_list() == (["-05:00"] if failed_span == 0 else ["+03:00"])
+     stored = pl.concat([pl.read_parquet(path) for path in (tmp_path / "usgs_nwis/store").rglob("*.parquet")])
+     assert_frame_equal(stored.select("time", "time_zone"), partial.data.select("time", "time_zone"))
+-    assert_frame_equal(fetch("reuse").data, partial.data)
++    reacquired = fetch("reuse")
++    assert_frame_equal(reacquired.data.drop("occurrence_id"), partial.data.drop("occurrence_id"))
++    assert set(reacquired.data["occurrence_id"]).isdisjoint(partial.data["occurrence_id"])
++    assert reacquired.annotations[0].rows["occurrence_id"].to_list() == reacquired.data["occurrence_id"].to_list()
++    assert set(reacquired.annotations[0].rows["source_call"]).isdisjoint(partial.annotations[0].rows["source_call"])
+     assert len(transport.calls) == 4
+ 
+ 
+@@ -198,8 +202,12 @@ def test_public_narrow_inventory_refresh_cannot_hide_new_series_in_broad_reuse(m
+     transport.updated = True
+     narrow = rr.fetch(selected, start="2001-01-03", end="2001-02-01", cache="refresh", on_issue="ignore")
+     assert narrow.data.height == 1
++    before = len(transport.calls)
+     reused = rr.fetch(selected, start="2000-01-03", end="2001-02-01", cache="reuse", on_issue="ignore")
+-    assert_frame_equal(reused.data, narrow.data)
++    assert len(transport.calls) > before  # narrow inventory cannot settle broad reuse
++    assert_frame_equal(reused.data.drop("occurrence_id"), narrow.data.drop("occurrence_id"))
++    assert set(reused.data["occurrence_id"]).isdisjoint(narrow.data["occurrence_id"])
++    assert reused.annotations[0].rows["occurrence_id"].to_list() == reused.data["occurrence_id"].to_list()
+ 
+ 
+ def test_public_failed_refresh_partial_recovery_and_full_recovery_do_not_replay_old_failure(monkeypatch, tmp_path):
+diff --git a/tests/test_usgs_modern_parse.py b/tests/test_usgs_modern_parse.py
+index fde2c8fb..58ed2c92 100644
+--- a/tests/test_usgs_modern_parse.py
++++ b/tests/test_usgs_modern_parse.py
+@@ -199,7 +199,7 @@ def test_equal_valued_siblings_are_not_collapsed():
+ def test_record_revision_does_not_change_series_identity():
+     first = feature()
+     second = {**first, "id": "different-record-revision"}
+-    assert_frame_equal(decode([first]).rows, decode([second]).rows)
++    assert_frame_equal(decode([first]).rows.drop("occurrence_id"), decode([second]).rows.drop("occurrence_id"))
+     assert decode([first]).series == decode([second]).series
+ 
+ 
+@@ -207,7 +207,7 @@ def test_invalid_series_rows_do_not_discard_independent_siblings():
+     good = feature(time_series_id="opaque-series-b")
+     baseline = decode([good])
+     result = decode([feature(value="NaN"), good])
+-    assert_frame_equal(result.rows, baseline.rows)
++    assert_frame_equal(result.rows.drop("occurrence_id"), baseline.rows.drop("occurrence_id"))
+     assert {outcome.status for outcome in result.outcomes} == {"success", "unsupported"}
+     assert len(result.series) == 2
+ 
+@@ -223,7 +223,7 @@ def test_known_identity_preserved_on_coordinate_failure():
+ def test_conflicting_same_series_time_removes_only_that_series():
+     good = feature(time_series_id="opaque-series-b")
+     result = decode([feature(), feature(value="2"), good])
+-    assert_frame_equal(result.rows, decode([good]).rows)
++    assert_frame_equal(result.rows.drop("occurrence_id"), decode([good]).rows.drop("occurrence_id"))
+     assert any("Conflicting observations" in (outcome.reason or "") for outcome in result.outcomes)
+ 
+ 
+@@ -269,7 +269,7 @@ def test_daily_label_has_no_inferred_timezone_or_support_bounds():
+ def test_invalid_coordinate_and_valid_row_share_failure_identity_without_catalogue():
+     result = decode([feature(parameter_code="00065"), feature(), feature(time_series_id="opaque-series-b")])
+     expected = decode([feature(time_series_id="opaque-series-b")])
+-    assert_frame_equal(result.rows, expected.rows)
++    assert_frame_equal(result.rows.drop("occurrence_id"), expected.rows.drop("occurrence_id"))
+     failed = next(outcome for outcome in result.outcomes if outcome.status == "unsupported")
+     target = decode([feature()]).series[0]
+     assert failed.series_id == target.series_id
