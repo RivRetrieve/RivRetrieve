@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 import polars as pl
+import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
@@ -293,6 +294,11 @@ def test_public_recorded_special_witnesses_hora_gaviria_regeneration_and_404_iso
     second_dst = rr.fetch(sel_dst, start="1992-08-01", end="1992-08-03", cache="reuse", on_issue="raise")
     assert dst_replay.calls == 1
     assert second_dst.data["value"].to_list() == pytest.approx([12.34, 13.4, 20.16])
+    assert len(rr.cache_status("co_ideam").coverage) == 1
+    audit = rr.audit_cache("co_ideam")
+    assert str(audit.provider_id) == "co_ideam"
+    restored_dst = rr.from_bundle(rr.to_bundle(second_dst))
+    pl_testing.assert_frame_equal(restored_dst.data, second_dst.data)
 
     # 2. Real two-snapshot S3 regeneration and Preliminar revision on 0026177030-NV_MEDIA_D (2026-11-06 -> 2026-11-08).
     class _Regen0026177030:
@@ -359,6 +365,24 @@ def test_public_recorded_special_witnesses_hora_gaviria_regeneration_and_404_iso
         ),
         ("retrieval", "s3-0026157160-nv-mn-a", "0026157160", "nv_mn_a", "2000-01-01", "2020-01-01", [0.01]),
         ("retrieval", "s3-0012047010-q-media-a", "0012047010", "q_media_a", "1990-01-01", "2000-01-01", [0.0]),
+        (
+            "series",
+            "s3-0011037020-q-mx-m",
+            "0011037020",
+            "q_mx_m",
+            "1971-01-01",
+            "1971-03-01",
+            [685.0, 572.0, 663.0],
+        ),
+        (
+            "series",
+            "s3-0026177030-nivel-h",
+            "0026177030",
+            "nivel_h",
+            "2013-10-23T20:00:00",
+            "2013-10-23T20:00:00",
+            [0.0],
+        ),
     ):
         monkeypatch.setattr(
             discovery,

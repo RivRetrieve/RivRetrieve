@@ -362,3 +362,52 @@ def test_at_ehyd_numeric_guards_reject_unrepresentable_cells_across_wire_formats
         assert changed.rows.height == baseline.rows.height
         assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
         assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
+
+
+@pytest.mark.parametrize("mutation", [*BAD, "boolean", "zero", "finite", "null"])
+@pytest.mark.recorded("maintenance/observations/co_ideam/retrieval")
+def test_co_ideam_numeric_guards_reject_unrepresentable_cells(retained_evidence_root: Path, mutation: str) -> None:
+    from rivretrieve._internal.providers.co_ideam.config import config as co_config
+    from rivretrieve._internal.providers.co_ideam.parse import parse as co_parse
+    from rivretrieve._internal.source_series import OutcomeStatus
+    from tests.test_co_ideam_retrieval_recorded import _capture
+
+    cfg = co_config()
+    win = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(1970, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2030, 1, 1)),
+    )
+    body, rcpt = _capture(retained_evidence_root, "access", "s3-0011017010-q-media-d")
+    prod = ProductId("q_media_d")
+    origin = SourceCallOrigin(
+        str(rcpt["url"]),
+        {},
+        int(str(rcpt["http_status"])),
+        datetime.fromisoformat(str(rcpt["retrieved_at"]).replace("Z", "+00:00")),
+        str(rcpt.get("media_type") or "text/csv"),
+        UnknownOriginFact(),
+        UnknownOriginFact(),
+    )
+    source = Payload(cfg.products[prod].coordinates, (("0011017010", prod),), win, body, origin, ())
+    baseline = co_parse(source, cfg)
+
+    lines = body.decode("utf-8").splitlines(keepends=True)
+    ts_part, _, approval_part = lines[1].rstrip("\r\n").split(",")
+    token_map = {
+        **TOKENS,
+        "boolean": "true",
+        "null": "",
+    }
+    lines[1] = f"{ts_part},{token_map[mutation]},{approval_part}\n"
+    mutated_bytes = "".join(lines).encode("utf-8")
+
+    changed = co_parse(replace(source, content=mutated_bytes), cfg)
+    if mutation in (*BAD, "boolean", "null"):
+        assert [item.status for item in changed.outcomes] == [OutcomeStatus.FAILED], mutation
+        assert changed.outcomes[0].reason
+        assert changed.rows.is_empty()
+    else:
+        assert any(item.status is OutcomeStatus.SUCCESS for item in changed.outcomes)
+        assert changed.rows.height == baseline.rows.height
+        assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25}[mutation]
+        assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
