@@ -39,7 +39,7 @@ from rivretrieve._internal.providers.co_ideam.declaration import declaration
 from rivretrieve._internal.providers.co_ideam.fetch import fetch, s3_observation_csv_url
 from rivretrieve._internal.providers.co_ideam.parse import parse
 from rivretrieve._internal.providers.co_ideam.series import SERIES_SPECS, source_series
-from rivretrieve._internal.providers.registration import CatalogueOnly
+from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.recordings import RecordedRequest, RecordingEnvelope, ReplayTransport
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
@@ -89,8 +89,8 @@ def _csv_bytes(*rows: tuple[str, str, str], bom: bool = False) -> bytes:
     return ("\ufeff" + text if bom else text).encode("utf-8")
 
 
-def test_step4_declaration_remains_catalogue_only_and_config_covers_all_20_products() -> None:
-    assert isinstance(declaration.observations, CatalogueOnly)
+def test_declaration_exposes_live_stages_and_config_covers_all_20_products() -> None:
+    assert isinstance(declaration.observations, LiveStages)
     cfg = config()
     win_decls = window_declarations()
     assert cfg.zone == ZoneValue("unknown")
