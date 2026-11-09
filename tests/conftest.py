@@ -562,11 +562,17 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
                 if "source.station.native_identity" in binding.facts and binding.transformation is None
             )
             if provenance.provider_id == "ch_foen"
+            else tuple(
+                binding.acquisition_id
+                for binding in provenance.fact_bindings
+                if "source.station.registry" in binding.facts and binding.transformation is None
+            )
+            if provenance.provider_id == "pe_senamhi"
             else origins.selected_native_acquisition_ids(provenance)
             if provenance.provider_id == "usgs_nwis"
             else origins.NATIVE_TABLE_ACQUISITION_IDS
         )
-        if provenance.provider_id in {"at_ehyd", "ch_foen"}:
+        if provenance.provider_id in {"at_ehyd", "ch_foen", "pe_senamhi"}:
             import json
 
             selected_supporting_inputs = importlib.import_module(

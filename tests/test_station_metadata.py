@@ -357,7 +357,9 @@ def test_metadata_declarations_cover_providers_without_unreviewed_names():
         origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
         fields = origins.STATION_METADATA_FIELDS
         review = (
-            "maintenance/catalogue/at_ehyd/official/selection.json"
+            "maintenance/catalogue/pe_senamhi/official/selection.json"
+            if provider == "pe_senamhi"
+            else "maintenance/catalogue/at_ehyd/official/selection.json"
             if provider == "at_ehyd"
             else "maintenance/catalogue/station_metadata/review.json"
         )

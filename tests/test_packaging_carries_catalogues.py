@@ -41,6 +41,7 @@ _PROVENANCE_PROVIDER_IDS = {
     "jp_mlit",
     "lt_lhmt",
     "no_nve",
+    "pe_senamhi",
     "pl_imgw",
     "th_thaiwater",
     "usgs_nwis",
