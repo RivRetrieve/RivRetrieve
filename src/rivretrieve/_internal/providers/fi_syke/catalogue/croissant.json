@@ -134,8 +134,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "72e7bf8eb6c27c1b84c646b37f8d9a792e2c52cb6f9608cc9bf75e66c5dfb85c",
-      "contentSize": "5021 B"
+      "sha256": "6028c076db46c9659c84006833b46ef297b5c1aa7bbfca74032cdcd35de385e1",
+      "contentSize": "5028 B"
     },
     {
       "@id": "series_claims.parquet",

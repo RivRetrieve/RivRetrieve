@@ -50,6 +50,24 @@ def test_public_discovery_is_network_free() -> None:
     assert "stage_reported" in frame["product_id"].to_list()
 
 
+@pytest.mark.parametrize(
+    ("quantity", "product_id", "unit"),
+    [
+        ("discharge", "discharge_reported", "m3/s"),
+        ("stage", "stage_reported", "m"),
+        ("temperature", "water_temperature_reported", "degC"),
+    ],
+)
+def test_public_discovery_filters_all_three_quantities(quantity: str, product_id: str, unit: str) -> None:
+    selected = rr.find(provider="fi_syke", station=_STAGE_STATION, quantity=quantity)
+    assert selected.empty_reason is None
+    frame = rr.series(selected)
+    assert frame["product_id"].to_list() == [product_id]
+    assert frame["quantity"].to_list() == [quantity]
+    assert frame["unit"].to_list() == [unit]
+    assert frame["admission"].to_list() == ["supported"]
+
+
 def test_public_fetch_converts_native_cm_to_canonical_m(monkeypatch: pytest.MonkeyPatch) -> None:
     content = _page([_row(1721, 1, 11017)])
 
