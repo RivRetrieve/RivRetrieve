@@ -358,7 +358,7 @@ def test_metadata_declarations_cover_providers_without_unreviewed_names():
         fields = origins.STATION_METADATA_FIELDS
         review = (
             f"maintenance/catalogue/{provider}/official/selection.json"
-            if provider in {"at_ehyd", "co_ideam"}
+            if provider in {"at_ehyd", "co_ideam", "pe_senamhi"}
             else "maintenance/catalogue/station_metadata/review.json"
         )
         assert (review, None) in origins.CATALOGUE_BUILD_DECLARATIONS
