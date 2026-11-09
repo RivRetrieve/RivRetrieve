@@ -50,3 +50,24 @@ def test_fi_syke_stage_vertical_reference_is_above_sea_level() -> None:
     assert by_product["stage_reported"].vertical_reference.value == "above_sea_level"
     assert by_product["discharge_reported"].vertical_reference.state == "not_established"
     assert by_product["water_temperature_reported"].vertical_reference.state == "not_established"
+
+
+def test_fi_syke_catalogue_descriptions_admit_all_three_quantities() -> None:
+    from rivretrieve._internal.catalogues.source_descriptions import content_identified_descriptions
+    from rivretrieve._internal.providers.fi_syke.catalogue_series import describe_catalogue
+    from rivretrieve._internal.source_series import admission
+
+    artifact = catalogue_reader("fi_syke").artifact
+    assert artifact.source_descriptions is not None
+    assert content_identified_descriptions(describe_catalogue(artifact)) == artifact.source_descriptions
+    by_product = {d.product_id: d.facts[0] for d in artifact.source_descriptions.descriptions}
+    assert {k: f.quantity.value for k, f in by_product.items()} == {
+        "discharge_reported": "discharge",
+        "stage_reported": "stage",
+        "water_temperature_reported": "temperature",
+    }
+    assert {k: admission(f).target_unit for k, f in by_product.items()} == {
+        "discharge_reported": "m3/s",
+        "stage_reported": "m",
+        "water_temperature_reported": "degC",
+    }
