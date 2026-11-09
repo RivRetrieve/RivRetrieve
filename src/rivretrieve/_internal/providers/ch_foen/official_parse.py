@@ -119,16 +119,22 @@ def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                         raise UnsupportedSourceStructureError("Official Swiss timestamp must be explicit UTC")
                     timestamp = timestamp.replace(tzinfo=None)
                     value = entry.get("value")
-                    if "value" not in entry or (
-                        value is not None and (type(value) not in (int, float) or not isfinite(value))
-                    ):
+                    if "value" not in entry or (value is not None and type(value) not in (int, float)):
+                        raise UnsupportedSourceStructureError("Official Swiss observation must be numeric or null")
+                    try:
+                        numeric = None if value is None else float(value)
+                    except OverflowError as error:
+                        raise UnsupportedSourceStructureError(
+                            "Official Swiss observation must be numeric or null"
+                        ) from error
+                    if numeric is not None and not isfinite(numeric):
                         raise UnsupportedSourceStructureError("Official Swiss observation must be numeric or null")
                     native.append(
                         {
                             "station_id": station,
                             "product_id": product,
                             "time": timestamp,
-                            "value": value,
+                            "value": numeric,
                             "time_zone": "+00:00",
                             "series_id": definition.series_id,
                             "facts_id": fact.facts_id,

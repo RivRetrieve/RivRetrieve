@@ -49,7 +49,6 @@ def _source(retained_evidence_root: Path, provider):
             "109.42.0",
             "discharge_daily_mean",
         ),
-        "ch_foen": ("ch_foen_2251_rest_2026-09-19.recording.json", "2251", "discharge_reported"),
         "lt_lhmt": ("lt_lhmt_anyksciu-vms_2023-06.recording.json", "anyksciu-vms", "stage_daily_mean"),
         "th_thaiwater": ("th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json", "1373273", "stage_reported"),
         "cz_chmi": ("cz_chmi_0-203-1-000400_DQ_2023.recording.json", "0-203-1-000400", "stage_daily_mean"),
@@ -76,12 +75,11 @@ def _source(retained_evidence_root: Path, provider):
         ),
         recording.prerequisite_calls,
     )
-    if provider in ("lt_lhmt", "th_thaiwater", "cz_chmi", "ch_foen"):
+    if provider in ("lt_lhmt", "th_thaiwater", "cz_chmi"):
         sibling = {
             "lt_lhmt": "discharge_daily_mean",
             "th_thaiwater": "discharge_reported",
             "cz_chmi": "discharge_daily_mean",
-            "ch_foen": "stage_reported",
         }[provider]
         source = replace(source, station_products=(*source.station_products, (station, ProductId(sibling))))
     if provider == "cz_chmi":
@@ -105,9 +103,7 @@ def _source(retained_evidence_root: Path, provider):
     target = next(
         s
         for s in baseline.series
-        if s.product_id == product
-        and (provider != "no_nve" or s.identity.published_id == "2")
-        and (provider != "ch_foen" or s.identity.published_id == "flow_ls")
+        if s.product_id == product and (provider != "no_nve" or s.identity.published_id == "2")
     )
     return config, parse, source, baseline, target.series_id
 
@@ -150,8 +146,6 @@ def _mutated(provider, source, mutation):
         document["data"][0]["resultat_obs_elab"] = marker
     elif provider == "no_nve":
         document["data"][0]["observations"][0]["value"] = marker
-    elif provider == "ch_foen":
-        document["payload"]["2251|flow_ls"][0] = marker
     elif provider == "lt_lhmt":
         document["observations"][0]["waterLevel"] = marker
     elif provider == "th_thaiwater":
@@ -176,10 +170,6 @@ def _mutated(provider, source, mutation):
                     "tests/test_data/no_nve_109.42.0_1001_1440_version-2_2024-01-01_2024-01-03.recording.json",
                     "tests/test_data/no_nve_109.42.0_1001_1440_version-1_2024-01-01_2024-01-03.recording.json",
                 ),
-            ),
-            (
-                "ch_foen",
-                ("tests/test_data/ch_foen_2251_rest_2026-09-19.recording.json",),
             ),
             (
                 "lt_lhmt",
@@ -410,4 +400,89 @@ def test_co_ideam_numeric_guards_reject_unrepresentable_cells(retained_evidence_
         assert any(item.status is OutcomeStatus.SUCCESS for item in changed.outcomes)
         assert changed.rows.height == baseline.rows.height
         assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25}[mutation]
+        assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
+
+
+@pytest.mark.parametrize("route_kind", ["archive", "recent"])
+@pytest.mark.parametrize("mutation", [*BAD, "boolean", "zero", "finite", "null"])
+@pytest.mark.recorded("maintenance/observations/ch_foen/official-retrieval")
+def test_ch_foen_official_numeric_guards_reject_unrepresentable_cells(
+    retained_evidence_root: Path, route_kind: str, mutation: str
+) -> None:
+    from rivretrieve._internal.engine import SourceQuery
+    from rivretrieve._internal.providers.ch_foen.official_config import OfficialRoute
+    from rivretrieve._internal.providers.ch_foen.official_config import config as ch_config
+    from rivretrieve._internal.providers.ch_foen.official_parse import parse as ch_parse
+    from rivretrieve._internal.providers.ch_foen.official_series import product_id, source_series
+    from rivretrieve._internal.source_series import OutcomeStatus
+
+    root = retained_evidence_root / "maintenance/observations/ch_foen/official-retrieval"
+    capture_name, station, route, parameter = (
+        ("daily-min", "2602", "data_1day_min", "Q")
+        if route_kind == "archive"
+        else ("recent-single-parameter", "2018", "data_live", "Q")
+    )
+    body = (root / f"{capture_name}.body").read_bytes()
+    receipt = json.loads((root / f"{capture_name}.receipt.json").read_text())
+    acquired = receipt["acquired_at"] if "request_json" in receipt else receipt["acquired"]
+    query = receipt["request_json"]["query"] if "request_json" in receipt else receipt["query"]
+    cfg = ch_config()
+    prod = ProductId(product_id(route, parameter))
+    win = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2030, 1, 1)),
+    )
+    origin = SourceCallOrigin(
+        str(receipt["url"]),
+        {},
+        int(receipt["status"]),
+        datetime.fromisoformat(str(acquired)),
+        "application/json",
+        UnknownOriginFact(),
+        SourceQuery(str(query), ()),
+    )
+    known = (
+        ()
+        if route_kind == "archive"
+        else (
+            source_series(
+                station,
+                route,
+                parameter,
+                None,
+                units=("m3/s",),
+                evidence="catalogue:ch_foen:source.product.native_physics",
+                temporal_evidence="catalogue:ch_foen:source.product.temporal_meaning",
+                origin="catalogue",
+            ),
+        )
+    )
+    source = Payload(
+        SourceCoordinates(OfficialRoute(route, parameter)),
+        ((station, prod),),
+        win,
+        body,
+        origin,
+        (),
+        known_series=known,
+    )
+    baseline = ch_parse(source, cfg)
+    assert baseline.rows.height > 0
+
+    doc = json.loads(body)
+    marker = "__CH_FOEN_NUMERIC_CELL__"
+    doc["data"]["water"]["observations"][route][0]["value"] = marker
+    raw_token = "true" if mutation == "boolean" else TOKENS[mutation]
+    mutated_bytes = json.dumps(doc).encode().replace(json.dumps(marker).encode(), raw_token.encode())
+
+    changed = ch_parse(replace(source, content=mutated_bytes), cfg)
+    if mutation in (*BAD, "boolean"):
+        assert [item.status for item in changed.outcomes] == [OutcomeStatus.FAILED], (route_kind, mutation)
+        assert changed.outcomes[0].reason
+        assert changed.rows.is_empty()
+    else:
+        assert [item.status for item in changed.outcomes] == [item.status for item in baseline.outcomes]
+        assert all(item.status is OutcomeStatus.SUCCESS for item in changed.outcomes)
+        assert changed.rows.height == baseline.rows.height
+        assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
         assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
