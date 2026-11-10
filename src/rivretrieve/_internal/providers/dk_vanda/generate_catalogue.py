@@ -236,8 +236,19 @@ def catalogue_tables(
 
 
 def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
-    """Describe witnessed source fields with only established physical facts."""
+    """Describe witnessed source fields with only established physical facts.
+
+    Stage (examinationTypeSc 25) emits one SourceDescription per field in
+    `catalogue_series.STAGE_FIELDS` (raw `result` and `resultElevationCorrected`),
+    each independently identified and evidenced (see that module's docstring);
+    discharge and water temperature keep using `series_mappings`' single field.
+    """
     from rivretrieve._internal.catalogues.source_series import SourceDescription
+    from rivretrieve._internal.providers.dk_vanda.catalogue_series import (
+        STAGE_FIELDS,
+        stage_facts,
+        stage_identity,
+    )
 
     descriptions = []
     for station, code in (
@@ -247,6 +258,19 @@ def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
         .iter_rows()
     ):
         product = EXAMINATION_PRODUCTS[code]
+        if product == "stage":
+            for field in STAGE_FIELDS:
+                descriptions.append(
+                    SourceDescription(
+                        product_id=product,
+                        station_id=station,
+                        native_coordinate=field,
+                        variant=field,
+                        identity=stage_identity(field),
+                        facts=(stage_facts(field),),
+                    )
+                )
+            continue
         for field, mapping in series_mappings(code).items():
             descriptions.append(
                 SourceDescription(

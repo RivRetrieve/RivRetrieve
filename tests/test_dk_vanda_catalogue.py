@@ -96,13 +96,46 @@ def test_catalogue_keeps_unknown_pairs_and_projects_coordinates_into_denmark():
 
 
 def test_source_descriptions_preserve_unknown_frequency_and_statistic():
-    associations = pl.DataFrame([("A", 25, "Vandstand", "cm")], schema=ASSOCIATION_SCHEMA, orient="row")
+    # discharge (sc27) still has exactly one admitted field (SeriesMapping), unlike
+    # stage (sc25), which now emits two (see test_stage_descriptions_* below).
+    associations = pl.DataFrame([("A", 27, "Vandføring", "l/s")], schema=ASSOCIATION_SCHEMA, orient="row")
     description = describe_associations(associations).descriptions[0]
     facts = description.facts[0]
-    assert facts.source_unit.value == "cm"
+    assert facts.source_unit.value == "l/s"
     assert facts.frequency.value is None
     assert facts.statistic.value is None
     assert facts.vertical_reference.value is None
+
+
+def test_stage_descriptions_keep_raw_and_elevation_corrected_as_distinct_records():
+    """Step 3 (#798): raw `result` and `resultElevationCorrected` are separate,
+    independently identified source series with distinct vertical-reference facts,
+    not collapsed into one assumed "the" stage value."""
+    from rivretrieve._internal.source_series import EvidenceState
+
+    associations = pl.DataFrame([("A", 25, "Vandstand", "cm")], schema=ASSOCIATION_SCHEMA, orient="row")
+    descriptions = describe_associations(associations).descriptions
+    assert len(descriptions) == 2
+    by_field = {d.native_coordinate: d for d in descriptions}
+    assert set(by_field) == {"result", "resultElevationCorrected"}
+
+    raw = by_field["result"].facts[0]
+    assert raw.source_unit.value == "cm"
+    assert raw.vertical_reference.value == "gauge_zero"
+    assert raw.vertical_reference.state == EvidenceState.KNOWN
+    assert raw.vertical_datum.state == EvidenceState.SOURCE_SILENT
+    assert raw.vertical_datum.value is None
+
+    corrected = by_field["resultElevationCorrected"].facts[0]
+    assert corrected.source_unit.value == "cm"
+    assert corrected.vertical_reference.value == "above_sea_level"
+    assert corrected.vertical_datum.value == "DVR90"
+    assert corrected.vertical_datum.state == EvidenceState.KNOWN
+
+    assert by_field["result"].identity.published_id == "result"
+    assert by_field["resultElevationCorrected"].identity.published_id == "resultElevationCorrected"
+    assert by_field["result"].identity.namespace == by_field["resultElevationCorrected"].identity.namespace
+    assert raw.facts_id != corrected.facts_id
 
 
 def test_series_mappings_reject_out_of_scope_examination_types():
