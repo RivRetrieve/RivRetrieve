@@ -2,10 +2,21 @@
 
 Scope settled in planning/visions/2026-11-09-dk-vanda-source-scope-and-access.md:
 discharge (`Vandføring`, examinationTypeSc 27), stage (`Vandstand`, sc 25) and
-water temperature (sc 29). The catalogue currently describes only the raw
-`result` field for stage; `resultElevationCorrected`'s unit and vertical datum
-are unestablished (research/dk-vanda-source-access.md), so it is deliberately
-left out of this mapping until Effort #798 resolves them, rather than guessing.
+water temperature (sc 29).
+
+Step 3 (Effort #798, research/dk-vanda-source-access.md) resolved stage's
+raw-vs-corrected question: `resultElevationCorrected` is now admitted as a
+second, distinct source field alongside raw `result`, each independently
+identified with its own evidenced vertical-reference facts, never collapsed
+into one assumed "the" stage value. Because that distinction needs a
+source-silent vertical datum and field-specific evidence citations that
+`SeriesMapping` cannot express, stage's identities and physical facts are
+built directly in `catalogue_series.py` (the heavier `SourceIdentity`/
+`PhysicalFacts` pattern), not through this module's `series_mappings`.
+Discharge and water temperature stay on `SeriesMapping` below: each has
+exactly one admitted field and no competing vertical-reference claim, so the
+heavier pattern would buy nothing for them. See `catalogue_series.py`'s module
+docstring for the full evidence and the retrieval-wiring plan step 4 still owes.
 """
 
 from rivretrieve._internal.issues import FatalContractError
@@ -24,7 +35,15 @@ _NAMESPACE = {
 
 
 def series_mappings(examination_type_sc: int) -> dict[str, SeriesMapping]:
-    """Map the one admitted field per examination type without inferring cadence.
+    """Map the one `SeriesMapping`-admitted field for discharge and water temperature.
+
+    Stage's own fields are deliberately not added here (see the module
+    docstring): `catalogue_series.py` builds both of stage's fields directly,
+    so this still returns only raw `result` for examinationTypeSc 25. Callers
+    needing stage's full field set (`generate_catalogue.describe_associations`)
+    use `catalogue_series.STAGE_FIELDS` instead; callers needing only stage's
+    shared quantity/unit for the product-level catalogue row (`catalogue_tables`)
+    can keep using this function, since raw and corrected share both.
 
     Frequency and statistic stay unestablished: VandA publishes no named
     aggregation, and both prior reference adapters compute their own daily
