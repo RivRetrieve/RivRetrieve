@@ -1,5 +1,6 @@
 """coverage figure : CatalogueIdentities × CountryBoundaries → CountShading."""
 
+import re
 import runpy
 from pathlib import Path
 
@@ -7,6 +8,107 @@ import polars as pl
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+_ONES = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+}
+_TENS = {
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+
+
+def _parse_cardinal(token: str) -> int:
+    normalized = token.lower()
+    if normalized.isdigit():
+        return int(normalized)
+    if normalized in _ONES:
+        return _ONES[normalized]
+    if normalized in _TENS:
+        return _TENS[normalized]
+    tens, sep, ones = normalized.partition("-")
+    if sep and tens in _TENS and ones in _ONES and 1 <= _ONES[ones] <= 9:
+        return _TENS[tens] + _ONES[ones]
+    raise ValueError(f"Unsupported count token: {token!r}")
+
+
+def _assert_readme_coverage_claims(
+    readme: str,
+    provider_country: dict[str, str],
+    planned_country: dict[str, str],
+) -> dict[str, int]:
+    assert set(provider_country.values()).isdisjoint(planned_country)
+
+    summary = re.search(
+        r"retrieves observations\s+from\s+([\w-]+)\s+different\s+providers\s+in\s+([\w-]+)\s+countries\.",
+        readme,
+    )
+    assert summary is not None
+    assert _parse_cardinal(summary.group(1)) == len(provider_country)
+    assert _parse_cardinal(summary.group(2)) == len(set(provider_country.values()))
+
+    rows = re.findall(
+        r"^\|\s*([^|]+?)\s*\|\s*[^|]+?\s*\|\s*`([^`]+)`\s*\|\s*([\d,]+)\s*\|",
+        readme,
+        re.MULTILINE,
+    )
+    table = {provider: int(count.replace(",", "")) for _, provider, count in rows}
+    assert len(rows) == len(table)
+    assert set(table) == set(provider_country)
+
+    names_by_code: dict[str, set[str]] = {}
+    codes_by_name: dict[str, set[str]] = {}
+    for country, provider, _ in rows:
+        code = provider_country[provider]
+        names_by_code.setdefault(code, set()).add(country)
+        codes_by_name.setdefault(country, set()).add(code)
+    assert all(len(names) == 1 for names in names_by_code.values())
+    assert all(len(codes) == 1 for codes in codes_by_name.values())
+
+    coming_soon_match = re.search(
+        r"<summary>Countries coming soon</summary>\s+(.+?)\.\s*\n\n",
+        readme,
+        re.DOTALL,
+    )
+    assert coming_soon_match is not None
+    coming_soon_paragraph = " ".join(coming_soon_match.group(1).split())
+    parts = [part.strip() for part in coming_soon_paragraph.split(",") if part.strip()]
+    if parts[-1].startswith("and "):
+        parts[-1] = parts[-1].removeprefix("and ").strip()
+    else:
+        before_and, sep, after_and = parts[-1].partition(" and ")
+        assert sep, f"Expected final 'and' conjunction in Countries coming soon: {parts[-1]!r}"
+        parts[-1:] = [before_and.strip(), after_and.strip()]
+    coming_soon = [part.removeprefix("the ") for part in parts]
+    expected_planned = sorted(label.split(" (", 1)[0] for label in planned_country.values())
+    assert coming_soon == expected_planned
+    assert set(codes_by_name).isdisjoint(coming_soon)
+    return table
 
 
 def test_draw_needs_only_station_identity_not_unestablished_coordinates(tmp_path):
@@ -28,8 +130,6 @@ def test_draw_needs_only_station_identity_not_unestablished_coordinates(tmp_path
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_catalogue_counts_match_readme_and_observation_capabilities():
-    import re
-
     import rivretrieve as rr
     from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
     from rivretrieve._internal.providers.registration import CatalogueOnly, load_manifest
@@ -43,15 +143,66 @@ def test_catalogue_counts_match_readme_and_observation_capabilities():
     frame = rr.as_frame(rr.find()).filter(pl.col("provider_id").is_in(supported))
     stations = frame.select("provider_id", "station_id").unique()
     actual = dict(stations.group_by("provider_id").len().iter_rows())
-    table = {
-        provider: int(count.replace(",", ""))
-        for provider, count in re.findall(r"\| `([^`]+)` \| ([\d,]+) \|", (ROOT / "README.md").read_text())
-    }
-    assert actual == table
     assert supported == set(module["PROVIDER_COUNTRY"])
     assert "za_dws" not in supported
-    assert sum(actual.values()) == 81170
+    table = _assert_readme_coverage_claims(
+        (ROOT / "README.md").read_text(),
+        module["PROVIDER_COUNTRY"],
+        module["PLANNED_COUNTRY"],
+    )
+    assert actual == table
     assert module["country_counts"](frame) == module["country_counts"](stations)
+
+
+def test_readme_coverage_claims_reject_parallel_merge_drift():
+    provider_country = {"fi_syke": "FIN", "fr_hubeau": "FRA", "fr_hydroportail": "FRA"}
+    planned_country = {"CHL": "Chile", "GBR": "United Kingdom (EA, NRFA, SEPA)"}
+    valid = (
+        "Currently, RivRetrieve retrieves observations\n"
+        "from three different providers in two countries.\n\n"
+        "| Country | Agency | Provider | Stations | Access |\n"
+        "|---|---|---|---:|---|\n"
+        "| Finland | Syke | `fi_syke` | 2,543 | Open |\n"
+        "| France | Hub'Eau | `fr_hubeau` | 7,347 | Open |\n"
+        "| France | HydroPortail | `fr_hydroportail` | 6,409 | Open |\n\n"
+        "<details>\n"
+        "<summary>Countries coming soon</summary>\n\n"
+        "Chile and the United Kingdom.\n\n"
+        "Context paragraph.\n"
+        "</details>\n"
+    )
+    assert _assert_readme_coverage_claims(valid, provider_country, planned_country) == {
+        "fi_syke": 2543,
+        "fr_hubeau": 7347,
+        "fr_hydroportail": 6409,
+    }
+    assert _parse_cardinal("twenty-one") == 21
+    assert _parse_cardinal("21") == 21
+
+    with pytest.raises(AssertionError):
+        _assert_readme_coverage_claims(
+            valid.replace("three different providers", "two different providers"),
+            provider_country,
+            planned_country,
+        )
+    with pytest.raises(AssertionError):
+        _assert_readme_coverage_claims(
+            valid.replace("two countries", "one countries"),
+            provider_country,
+            planned_country,
+        )
+    with pytest.raises(AssertionError):
+        _assert_readme_coverage_claims(
+            valid.replace("Chile and the United Kingdom.", "Chile, Finland and the United Kingdom."),
+            provider_country,
+            planned_country,
+        )
+    with pytest.raises(AssertionError):
+        _assert_readme_coverage_claims(
+            valid,
+            provider_country,
+            planned_country | {"FIN": "Finland"},
+        )
 
 
 def test_boundaries_must_match_country_not_sovereign_and_must_include_supported_country(tmp_path, monkeypatch):
