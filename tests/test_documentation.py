@@ -108,6 +108,7 @@ def test_documentation_home_keeps_interactive_map_link(tmp_path, monkeypatch):
     app.mkdir(parents=True)
     (app / "index.html").write_text("<html></html>")
     (app / "catalogue.json").write_text("{}")
+    (tmp_path / "assets/coverage-map.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     commands = []
     monkeypatch.setattr(hooks.subprocess, "run", lambda command, **kwargs: commands.append(command))
     hooks.on_pre_build({})
@@ -115,6 +116,8 @@ def test_documentation_home_keeps_interactive_map_link(tmp_path, monkeypatch):
     assert commands[0][-1] == "--check"
     home = hooks.INDEX_MD_PATH.read_text()
     assert "[**Interactive Station Map**](map.md)" in home
+    assert "](assets/coverage-map.png)" in home
+    assert "https://rivretrieve.github.io/assets/coverage-map.png" not in home
 
 
 @pytest.mark.parametrize("missing", ["index.html", "catalogue.json"])
@@ -134,6 +137,23 @@ def test_documentation_requires_prepared_station_explorer(tmp_path, monkeypatch,
     with pytest.raises(RuntimeError, match="station-explorer-preview") as error:
         hooks.on_pre_build({})
     assert missing in str(error.value)
+
+
+def test_documentation_requires_generated_coverage_map(tmp_path, monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("documentation_hooks", ROOT / "docs/hooks.py")
+    hooks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hooks)
+    monkeypatch.setattr(hooks, "DOCS_DIR", tmp_path)
+    monkeypatch.setattr(hooks, "INDEX_MD_PATH", tmp_path / "index.md")
+    monkeypatch.setattr(hooks.subprocess, "run", lambda *args, **kwargs: None)
+    app = tmp_path / "assets/station-explorer"
+    app.mkdir(parents=True)
+    (app / "index.html").write_text("<html></html>")
+    (app / "catalogue.json").write_text("{}")
+    with pytest.raises(RuntimeError, match=r"coverage-map\.png"):
+        hooks.on_pre_build({})
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")

@@ -60,14 +60,16 @@ def documentation_site(tmp_path_factory, documentation_workspace):
             name
             for name in names
             if name == "__pycache__"
-            or Path(directory) / name in (ROOT / "docs/index.md", ROOT / "docs/assets/station-explorer")
+            or Path(directory) / name
+            in (ROOT / "docs/index.md", ROOT / "docs/assets/coverage-map.png", ROOT / "docs/assets/station-explorer")
         },
     )
-    # Reference rendering needs prepared asset paths, not a real browser bundle.
+    # Reference rendering needs prepared asset paths, not a real browser bundle or map render.
     app = docs / "assets/station-explorer"
     app.mkdir(parents=True)
     (app / "index.html").write_text("<html></html>")
     (app / "catalogue.json").write_text("{}")
+    (docs / "assets/coverage-map.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     outputs = [ROOT / "docs/index.md"]
     before = {path: path.read_bytes() if path.exists() else None for path in outputs}
     config = load_config(str(ROOT / "mkdocs.yml"), strict=True, site_dir=str(site), docs_dir=str(docs))
