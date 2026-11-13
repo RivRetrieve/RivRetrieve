@@ -39,6 +39,30 @@ def test_docs_workflow_prepares_explorer_before_strict_mkdocs_build(workflow_nam
     assert steps.index(frontend) < steps.index(docs)
 
 
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name"),
+    [("check-docs.yml", "check-docs"), ("publish-pypi.yml", "deploy-docs")],
+)
+def test_docs_workflow_renders_coverage_map_before_strict_mkdocs_build(workflow_name, job_name):
+    workflow = yaml.load(
+        (Path(__file__).parents[1] / ".github/workflows" / workflow_name).read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    steps = workflow["jobs"][job_name]["steps"]
+    dependencies = next(step for step in steps if step.get("run") == "uv sync --all-extras --dev")
+    cache = next(
+        step
+        for step in steps
+        if step.get("uses", "").startswith("actions/cache@")
+        and "ne-50m-admin-0-countries-" in step.get("with", {}).get("key", "")
+    )
+    render = next(step for step in steps if "docs/scripts/coverage_map.py" in step.get("run", ""))
+    assert "sha256sum -c -" in render["run"]
+    assert "--out docs/assets/coverage-map.png" in render["run"]
+    docs = next(step for step in steps if step.get("run") == "uv run mkdocs build --strict")
+    assert steps.index(dependencies) < steps.index(cache) < steps.index(render) < steps.index(docs)
+
+
 def test_docs_deploys_only_after_release_publication():
     workflows = Path(__file__).parents[1] / ".github/workflows"
     check = yaml.load((workflows / "check-docs.yml").read_text(), Loader=yaml.BaseLoader)

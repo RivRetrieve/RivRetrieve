@@ -2,7 +2,7 @@
 
 Reproduce from the checkout catalogue and Natural Earth 1:50m Admin 0 Countries:
 
-    uv run --with geopandas --with matplotlib python docs/scripts/coverage_map.py \
+    uv run python docs/scripts/coverage_map.py \
         --out docs/assets/coverage-map.png
 
 The default boundary URL is public. For offline regeneration, pass --world with a

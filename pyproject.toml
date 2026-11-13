@@ -37,6 +37,7 @@ build-backend = "uv_build"
 source-exclude = [
     "/web/**",
     "/.distribution-checks/**",
+    "/docs/assets/coverage-map.png",
     "/src/rivretrieve/_internal/providers/*/catalogue/native.parquet",
     "/tests/test_data/**",
     "/tests/recordings/**",
