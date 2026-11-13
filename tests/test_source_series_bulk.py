@@ -59,7 +59,7 @@ def test_certified_native_bulk_retains_concrete_identity_and_physical_units(
             )
         )
         station, start, end, native_unit = "154210010", datetime(2021, 11, 1), datetime(2021, 11, 3), "cm"
-    assert compiled.manifest.format_version == 5
+    assert compiled.manifest.format_version == 10
     assert compiled.manifest.series
     assert not artifact.exists()
     selected = StoreReader().query(

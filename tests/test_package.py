@@ -26,6 +26,7 @@ def test_init_public_surface_exports_catalogue_and_retrieval_functions() -> None
 
     assert "__version__" in vars(rivretrieve)
     assert module_defined_names == [
+        "annotations",
         "as_frame",
         "audit_cache",
         "cache_status",

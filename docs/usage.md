@@ -189,6 +189,35 @@ print(restored_result.data.height, len(restored_result.issues))
 `fetch_by_provider` returns separate results keyed by provider.
 See the [API reference](reference.md) for returned fields and export methods.
 
+### Source annotations
+
+`result.data` keeps its ten canonical columns without interpreting publisher flags.
+Providers that declare source annotations attach them alongside the result with
+plain Polars types. Use `rr.annotations(result)` to list each attached field's
+scope, schema, Polars dtype, row count, description and reference URL, and use
+`annotations=` on `to_polars`, `to_pandas`, or `rr.series` to project them:
+
+```python
+print(rr.annotations(result).select("schema", "name", "dtype").rows())
+
+# Output:
+# [('usgs_nwis.daily', 'approval_status', 'String'), ('usgs_nwis.daily', 'qualifier', 'List(String)')]
+
+print(result.to_polars(annotations=True).select("station_id", "approval_status", "qualifier").rows())
+
+# Output:
+# [('07374000', 'Approved', None)]
+```
+
+Pass `annotations=True`, a single field name, or a list of field names to
+`result.to_polars(...)` or `result.to_pandas(...)` for observation-grain fields.
+Use `rr.series(result, annotations=...)` to join non-identity series-grain
+attributes by `series_id`. Call `rr.annotations(result, schema=...)` to read
+one declared schema table directly without cross-route null padding, including
+any unmeasured source slots marked `measured=False`. Annotations stay attached
+across `pick`, `to_utc`, offline cache reuse, manual `cache="refresh"`, and
+`.rrbundle` exports.
+
 ### When an agency publishes more than one version
 
 Brazil's ANA publishes `bruto` (raw) and `consistido` (quality-checked) daily records.

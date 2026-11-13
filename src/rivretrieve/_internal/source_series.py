@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 from functools import lru_cache
@@ -19,6 +19,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.source_annotations import AnnotationBundle
 from rivretrieve._internal.time_axis import TimeAxis
 
 
@@ -586,6 +587,7 @@ class ParsedSeries:
     inventories: tuple[InventorySnapshot, ...]
     outcomes: tuple[RetrievalOutcome, ...]
     issues: tuple[Issue, ...] = ()
+    annotations: AnnotationBundle = field(default_factory=AnnotationBundle.empty)
 
 
 def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -> None:

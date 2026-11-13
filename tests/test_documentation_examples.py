@@ -208,11 +208,13 @@ def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
     assert scope["_transport"].ana.exchange_calls == 2
     assert scope["_transport"].ana.observation_calls >= 2
     assert_frame_equal(scope["restored_result"].data, result.data)
+    assert_frame_equal(scope["restored_result"].to_polars(annotations=True), result.to_polars(annotations=True))
     assert scope["restored_result"].source_series == result.source_series
     assert scope["restored_result"].outcomes == result.outcomes
     assert scope["restored_gauges"].scope == scope["chosen_gauges"].scope
     assert scope["restored_gauges"].known_series == scope["chosen_gauges"].known_series
     assert_frame_equal(scope["cached_result"].data, result.data)
+    assert_frame_equal(scope["cached_result"].to_polars(annotations=True), result.to_polars(annotations=True))
     assert scope["status"].store == tmp_path / "cache" / "usgs_nwis" / "store"
     calls = scope["_calls_by_block"]
     assert next(count for block, count in calls if "cached_result =" in block) == 1
@@ -227,7 +229,7 @@ def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
     assert len(scope["_transport"].calls) == before
     assert_frame_equal(cached.data, result.data)
     assert cached.receipts.entries[0].authorship.value == "store_excerpt"
-    assert cached.receipts.entries[0].format_version == 8
+    assert cached.receipts.entries[0].format_version == 9
     excerpt = pl.read_parquet(io.BytesIO(cached.receipts.entries[0].content))
     assert excerpt.height >= cached.data.height
     original_acquired_at = datetime.fromisoformat(manifest(retained_evidence_root)[DAILY_RECORDING]["acquired_utc"])

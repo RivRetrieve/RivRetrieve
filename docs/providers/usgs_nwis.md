@@ -211,11 +211,41 @@ by USGS. See [Usage](../usage.md#time-labels-and-request-windows) for request-wi
 
 USGS's [Provisional Data Statement](https://waterdata.usgs.gov/provisional-data-statement/)
 warns that provisional information is subject to revision, including substantial
-changes after field inspections and measurements. RivRetrieve does not attach
-source approval or qualifier fields to the returned observation table and does
-not assign a quality judgement. Successful retrieval does not mean values are
-approved. Retain source material with [receipts](../usage.md#receipts-optional)
-when those source fields matter.
+changes after field inspections and measurements. RivRetrieve does not assign a
+quality judgement or filter observations by approval status. Successful retrieval
+does not mean values are approved.
+
+RivRetrieve preserves source approval and qualifier fields as attached
+observation annotations so you can inspect them alongside `result.data`:
+
+- `usgs_nwis.daily`: `approval_status` (`String`) and `qualifier` (`List(String)`).
+- `usgs_nwis.continuous`: `approval_status` (`String`), `qualifier`
+  (`List(String)`), and `method_category` (`String`).
+
+Inspect the field catalog on `result` and project those columns onto the daily
+discharge rows fetched above:
+
+```python
+print(rr.annotations(result).select("schema", "name", "dtype").rows())
+
+annotated = result.to_polars(annotations=True)
+print(annotated.select("approval_status", "qualifier").head(2).rows())
+```
+
+Output:
+
+```text
+[('usgs_nwis.daily', 'approval_status', 'String'), ('usgs_nwis.daily', 'qualifier', 'List(String)')]
+[('Approved', ['ESTIMATED']), ('Approved', ['ESTIMATED'])]
+```
+
+Pass `annotations="approval_status"` to `result.to_polars(...)` or
+`result.to_pandas(...)` when you only want specific columns, or call
+`rr.annotations(result, schema="usgs_nwis.daily")` for the native schema table.
+Series descriptions (`web_description`) remain in `rr.series(...)["description"]`.
+Volatile response metadata such as feature `id` and `last_modified` are omitted
+from annotations; retain full response bytes with
+[receipts](../usage.md#receipts-optional) when raw payload records matter.
 
 A source observation with a null value remains a row with `value=null`.
 An absent observation remains absent; RivRetrieve does not fill gaps.

@@ -133,6 +133,15 @@ keep identity and physical interpretation separate.
 can share supported mappings between catalogue publication and parsing; it is not
 a substitute for response-specific identities when the source requires them.
 
+Preserve observation qualifiers, approval statuses, method notes, unmeasured source
+slots, and non-identity series attributes through declared
+[`AnnotationSchema`](../../src/rivretrieve/_internal/source_annotations.py) definitions
+with plain Polars types, verified descriptions (never placeholders such as
+`"unknown"`), and official `http` or `https` `reference_url` links. Do not alter
+`ObservationResult.data`, create stream variants solely for annotation changes, or
+emit per-row informational quality-code issues when annotations carry those source
+fields.
+
 **Outcome:** each adopted fact has supporting evidence, and remaining unknowns are
 explicit. Admission requires established quantity, source unit and valid conversion.
 Unknown time zone, temporal support or datum need not prohibit retrieval, but cannot
@@ -218,9 +227,10 @@ limits. Missing mandatory genuine inputs block acceptance.
 verified practical example.
 
 Explain who publishes the data, what users can retrieve, access requirements, source
-series distinctions, time and units, availability limits, terms and unresolved facts
-that affect interpretation. State consequences clearly rather than publishing the
-whole investigation. Keep detailed research and correspondence in the private record.
+series distinctions, declared source-annotation schemas and fields where applicable,
+time and units, availability limits, terms and unresolved facts that affect interpretation.
+State consequences clearly rather than publishing the whole investigation. Keep detailed
+research and correspondence in the private record.
 
 Follow [documentation guidance](../AGENTS.md) and use existing
 [provider pages](../providers/) for scope. Link general usage rather

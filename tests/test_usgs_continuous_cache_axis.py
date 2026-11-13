@@ -77,7 +77,9 @@ def test_public_continuous_offset_boundaries_persist_refresh_and_reuse(monkeypat
     assert first.data.height == 2
     assert set(first.data["time_zone"]) == {"+03:00", "-05:00"}
     assert len(set(first.data["facts_id"])) == 1
-    stored = pl.concat([pl.read_parquet(path) for path in (tmp_path / "usgs_nwis/store").rglob("*.parquet")])
+    stored = pl.concat(
+        [pl.read_parquet(path) for path in (tmp_path / "usgs_nwis/store").rglob("product=*/year=*/rows.parquet")]
+    )
     assert_frame_equal(
         stored.select("time", "time_zone").sort("time"), first.data.select("time", "time_zone").sort("time")
     )
@@ -112,7 +114,9 @@ def test_public_single_successful_utc_span_validates_native_offset_rows(monkeypa
     partial = fetch("refresh")
     assert partial.data.height == 1
     assert partial.data["time_zone"].to_list() == (["-05:00"] if failed_span == 0 else ["+03:00"])
-    stored = pl.concat([pl.read_parquet(path) for path in (tmp_path / "usgs_nwis/store").rglob("*.parquet")])
+    stored = pl.concat(
+        [pl.read_parquet(path) for path in (tmp_path / "usgs_nwis/store").rglob("product=*/year=*/rows.parquet")]
+    )
     assert_frame_equal(stored.select("time", "time_zone"), partial.data.select("time", "time_zone"))
     assert_frame_equal(fetch("reuse").data, partial.data)
     assert len(transport.calls) == 4

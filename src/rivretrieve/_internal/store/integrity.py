@@ -196,7 +196,7 @@ def _verify_all_contents(
         if observed[name][2] != identity.size or _digest(path) != identity.sha256 or _witness(path) != observed[name]:
             _fail(root, provider_id, f"digest:{name}")
     checked = validate_store(root, provider_id)
-    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in checked.partition_files.values())}
+    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in checked.all_partition_files.values())}
     if set(files) != expected:
         _fail(root, provider_id, "manifest_inventory")
     _closed_files(root, provider_id, {*files, SEAL_NAME, *pending})
@@ -320,7 +320,7 @@ def _inspect_integrity(
     if _digest(Path(root) / "manifest.json") != files["manifest.json"].sha256:
         _fail(root, provider_id, "digest:manifest.json")
     store = _validate_store_contents(root, provider_id, frozenset())
-    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in store.partition_files.values())}
+    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in store.all_partition_files.values())}
     if set(files) != expected:
         _fail(root, provider_id, "manifest_inventory")
     return SealedStore(store, generation, files, _supporting_outcomes(_read_raw_manifest(root, provider_id)))
@@ -350,8 +350,9 @@ def verify_inspected_files(sealed: SealedStore, identifiers: Iterable[PartitionI
     reusing this preparation. This function never grants path-only trust.
     """
     current = sealed
+    all_files = current.store.all_partition_files
     for identifier in set(identifiers):
-        path = current.store.partition_files[identifier]
+        path = all_files[identifier]
         name = path.relative_to(current.store.root).as_posix()
         before = _witness(path)
         if _digest(path) != current.files[name].sha256 or _witness(path) != before:
@@ -365,7 +366,7 @@ def link_partition(previous: SealedStore, identifier: PartitionIdentifier, desti
     inherited digest remains authoritative. A changed ctime triggers a digest
     check against the previous seal before reuse, including restored-mtime edits.
     """
-    source = previous.store.partition_files[identifier]
+    source = previous.store.all_partition_files[identifier]
     name = source.relative_to(previous.store.root).as_posix()
     identity = previous.files[name]
     before = _witness(source)
@@ -395,7 +396,8 @@ def _preserves_support(previous: ValidatedStore, candidate: ValidatedStore, reus
     new_outcomes = {item.outcome_id: item for item in new.outcomes}
     years: dict[str, set[int]] = defaultdict(set)
     for identifier in reused:
-        product, year = str(identifier).split("/")
+        parts = str(identifier).split("/")
+        product, year = parts[0], parts[1]
         years[product.removeprefix("product=")].add(int(year.removeprefix("year=")))
     for definition in old.series:
         if definition.product_id not in years:
@@ -503,29 +505,31 @@ def seal_store(
     except OSError as error:
         _fail(root, provider_id, f"inventory_io:{error}")
     candidate = _validate_store_contents(root, provider_id, frozenset())
-    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in candidate.partition_files.values())}
+    candidate_files = candidate.all_partition_files
+    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in candidate_files.values())}
     _closed_files(root, provider_id, expected | ({SEAL_NAME} if (Path(root) / SEAL_NAME).exists() else set()))
     if reused:
-        if previous is None or not set(reused).issubset(candidate.partition_files):
+        if previous is None or not set(reused).issubset(candidate_files):
             _fail(root, provider_id, "reuse_prior")
+        previous_files = previous.store.all_partition_files
+        prev_counts = previous.store.manifest.all_partition_row_counts
+        cand_counts = candidate.manifest.all_partition_row_counts
         for identifier, item in reused.items():
             if item.generation_id != previous.generation_id or item.identifier != identifier:
                 _fail(root, provider_id, "reuse_generation")
-            path = candidate.partition_files[identifier]
+            path = candidate_files[identifier]
             if item.destination != path or _witness(path) != item.identity.witness:
                 _fail(root, provider_id, "reuse_identity")
-            name = previous.store.partition_files[identifier].relative_to(previous.store.root).as_posix()
+            name = previous_files[identifier].relative_to(previous.store.root).as_posix()
             if (item.identity.sha256, item.identity.witness[:-1]) != (
                 previous.files[name].sha256,
                 previous.files[name].witness[:-1],
-            ) or candidate.manifest.partition_row_counts[identifier] != previous.store.manifest.partition_row_counts[
-                identifier
-            ]:
+            ) or cand_counts[identifier] != prev_counts[identifier]:
                 _fail(root, provider_id, "reuse_record")
         _preserves_support(previous.store, candidate, set(reused))
-    candidate = _validate_store_contents(root, provider_id, frozenset(set(candidate.partition_files) - set(reused)))
+    candidate = _validate_store_contents(root, provider_id, frozenset(set(candidate_files) - set(reused)))
     inherited = {
-        candidate.partition_files[key].relative_to(root).as_posix(): value.identity for key, value in reused.items()
+        candidate.all_partition_files[key].relative_to(root).as_posix(): value.identity for key, value in reused.items()
     }
     files: dict[str, FileIdentity] = {}
     for name in sorted(expected):
@@ -592,6 +596,10 @@ def refresh_witnesses(sealed: SealedStore, root: StoreRoot | None = None) -> Sea
         root,
         sealed.store.manifest,
         {key: Path(root) / path.relative_to(sealed.store.root) for key, path in sealed.store.partition_files.items()},
+        {
+            key: Path(root) / path.relative_to(sealed.store.root)
+            for key, path in sealed.store.annotation_partition_files.items()
+        },
     )
     return _write_seal(store, files, sealed.supporting_outcomes)
 

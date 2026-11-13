@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, cast
 
 import polars as pl
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
 from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema, validate_catalogue
@@ -25,6 +25,7 @@ from rivretrieve._internal.issues import (
     ObservationDataSchemaError,
 )
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.source_annotations import AnnotationBundle, AnnotationSelection
 from rivretrieve._internal.source_series import (
     InventorySnapshot,
     RetrievalOutcome,
@@ -216,7 +217,7 @@ class StoreExcerptReceipt(ReceiptEntry):
     executed_query : ExecutedStoreQuery
         Product, year, station and closed wall-clock predicates used by the scan.
     format_version : int
-        Store layout revision, 5 for compiled or 8 for accumulated stores.
+        Store layout revision, 10 for compiled or 9 for accumulated stores.
     source_vintage : datetime.date or None
         Source vintage of the compiled store, as described for
         ``StoreManifest.source_vintage``. None for an accumulated store.
@@ -344,6 +345,7 @@ class ObservationResult(BaseModel):
     supporting_outcomes: tuple[RetrievalOutcome, ...] = ()
     scope: SeriesScope = SeriesScope()
     view_scope: SeriesScope | None = None
+    _annotations: AnnotationBundle = PrivateAttr(default_factory=AnnotationBundle.empty)
 
     @model_validator(mode="after")
     def _validate_series_context(self) -> Self:
@@ -409,25 +411,59 @@ class ObservationResult(BaseModel):
             validate_observation_data(data)
         return values
 
-    def to_polars(self) -> pl.DataFrame:
+    def to_polars(self, *, annotations: AnnotationSelection = False) -> pl.DataFrame:
         """Return observation rows with identity and physical-unit context.
 
+        Parameters
+        ----------
+        annotations : bool, str, or sequence of str, default False
+            Observation-scope annotation fields to include alongside the ten
+            canonical columns. ``False`` returns only canonical columns;
+            ``True`` includes all attached observation annotation fields; a field
+            name or sequence selects those fields.
+
+        Returns
+        -------
+        polars.DataFrame
+            Observation rows with optional observation-annotation columns.
+            Series-scope attributes belong on ``series(..., annotations=...)``.
+
+        Raises
+        ------
+        ValueError
+            If a requested field is unknown or collides with an incompatible
+            definition across active schemas.
+
+        Notes
+        -----
         Use ``to_bundle`` to retain inventory, outcomes, provenance and receipts
         through a durable export. These cannot be encoded by absent observation rows.
         """
-        return self.data
+        columns = self._annotations.project_observation_columns(self.data.height, annotations)
+        if not columns:
+            return self.data
+        return self.data.with_columns(columns)
 
-    def to_pandas(self) -> Any:
+    def to_pandas(self, *, annotations: AnnotationSelection = False) -> Any:
         """Return the observation rows as a pandas DataFrame.
+
+        Parameters
+        ----------
+        annotations : bool, str, or sequence of str, default False
+            Observation-scope annotation fields to include alongside the ten
+            canonical columns. ``False`` returns only canonical columns;
+            ``True`` includes all attached observation annotation fields; a field
+            name or sequence selects those fields.
 
         Returns
         -------
         pandas.DataFrame
-            The ten observation columns of ``data``. ``time`` stays naive, so
-            read it together with ``time_zone``. Issues, outcomes, provenance
-            and receipts are not included.
+            The ten canonical columns of ``data`` plus any selected observation
+            annotation columns. ``time`` stays naive, so read it together with
+            ``time_zone``. Issues, outcomes, provenance and receipts are not
+            included.
         """
-        return self.data.to_pandas()
+        return self.to_polars(annotations=annotations).to_pandas()
 
 
 def validate_observation_data(data: object) -> None:

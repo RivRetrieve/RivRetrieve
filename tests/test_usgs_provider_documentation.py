@@ -50,7 +50,7 @@ def test_usgs_provider_page_exact_snippets_and_displayed_outputs(retained_eviden
     monkeypatch.setattr(discovery, "HttpClient", Replay)
     namespace = {}
     examples = re.findall(r"```python\n(.*?)```\s+Output:\s+```text\n(.*?)```", PAGE.read_text(), re.S)
-    assert len(examples) == 3
+    assert len(examples) == 4
     for code, output in examples:
         exec(compile(code, str(PAGE), "exec"), namespace)
         assert capsys.readouterr().out == output
@@ -63,6 +63,7 @@ def test_usgs_provider_page_exact_snippets_and_displayed_outputs(retained_eviden
         result = namespace[name]
         assert result.data["unit"].unique().to_list() == ["m3/s"]
         assert result.data["time_zone"].unique().to_list() == ["unknown"]
+        assert result.to_polars(annotations="approval_status")["approval_status"].is_not_null().all()
         assert not result.receipts.entries
         assert not result.issues
 
