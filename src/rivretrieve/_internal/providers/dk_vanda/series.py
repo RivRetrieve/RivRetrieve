@@ -26,7 +26,16 @@ EXAMINATION_PRODUCTS: dict[int, str] = {27: "discharge", 25: "stage", 29: "tempe
 """VandA `examinationTypeSc` codes admitted for this port, mapped to product_id."""
 
 _SOURCE_UNIT = {"discharge": "l/s", "stage": "cm", "temperature": "degC"}
-_QUANTITY = {"discharge": "discharge", "stage": "stage", "temperature": "water_temperature"}
+# "temperature" here is the admission-table quantity (`source_series.py`'s
+# `_UNIT_DIMENSIONS`/`_TARGET_UNITS`, matching every other provider's water-
+# temperature SeriesMapping: fr_hubeau, cz_chmi, no_nve, ch_foen all pass
+# "temperature" as this physical quantity and keep "water_temperature" only
+# as a product_id-style label. A prior "water_temperature" value here made
+# `admission()` reject dk_vanda temperature facts as dimensionally
+# incompatible, which made `conversion.convert` raise `FatalContractError`
+# for any live temperature retrieval (reproduced end-to-end through
+# `drive()` before this fix, Effort #800 step 5).
+_QUANTITY = {"discharge": "discharge", "stage": "stage", "temperature": "temperature"}
 _NAMESPACE = {
     "discharge": "dk_vanda.water_flows",
     "stage": "dk_vanda.water_levels",
