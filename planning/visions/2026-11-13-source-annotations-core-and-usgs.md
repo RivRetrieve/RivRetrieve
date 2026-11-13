@@ -8,7 +8,9 @@ based on them.
 This vision delivers [Effort #812](https://github.com/RivRetrieve/RivRetrieve/issues/812)
 and includes the [USGS migration #813](https://github.com/RivRetrieve/RivRetrieve/issues/813).
 Implementation completes those issues only when the shared capability and genuine
-USGS evidence checks pass. Publishing this document does not complete either issue.
+USGS evidence checks pass. Delivery also completes the motivating [#621](https://github.com/RivRetrieve/RivRetrieve/issues/621)
+once USGS and the core capability land, as agreed in the Program. Publishing this
+document does not complete these issues.
 The [approved Program decisions](https://github.com/RivRetrieve/RivRetrieve/issues/809#issuecomment-6860795374)
 and [USGS selection](https://github.com/RivRetrieve/RivRetrieve/issues/812#issuecomment-6860858138)
 record the agreed scope.
@@ -95,8 +97,8 @@ USGS is the one provider migrated and verified end-to-end in this Effort:
   OGC fields for applicable observation or non-identity series annotations.
 - Bind source-backed descriptions and official references, and document the USGS
   workflow motivating [#621](https://github.com/RivRetrieve/RivRetrieve/issues/621).
-- Retire QC-flag informational issues when their information is exposed through
-  annotations. Keep retrieval, structural, coverage, and provenance diagnostics.
+- Retire per-row and pre-clipping summary QC-flag informational issues when their
+  information is exposed through annotations. Keep retrieval, structural, coverage, and provenance diagnostics.
 
 Source research determines which audited fields genuinely belong in these grains;
 it is not permission to add inferred products or a generic metadata framework.
