@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import cast
@@ -18,7 +18,15 @@ import polars as pl
 import pyarrow.parquet as pq
 from polars.testing import assert_frame_equal
 
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.source_annotations import (
+    AnnotationBundle,
+    SeriesAnnotationTable,
+    advance_partition_key_ordinals,
+    encode_observation_table_for_parquet,
+    merge_series_tables,
+)
 from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.store.compiler import (
     NativeStoreRows,
@@ -26,7 +34,7 @@ from rivretrieve._internal.store.compiler import (
     StoreCompileRequest,
     StreamingCompileEvidence,
     _check_rows,
-    _physical_partition,
+    _partition_slices,
     compile_store,
     compile_store_batches,
 )
@@ -67,6 +75,7 @@ class NativeStoreMaterialization:
     observed_source_columns: tuple[SourceColumn, ...]
     source_units: tuple[SourceUnitCount, ...]
     series: tuple[SourceSeries, ...] = ()
+    annotations: AnnotationBundle = field(default_factory=AnnotationBundle.empty)
 
 
 class StoreCertificationError(RuntimeError):
@@ -114,7 +123,7 @@ def compilation_transaction(
 def _publish_certified(transaction: StoreTransaction, request: StoreCompileRequest) -> ValidatedStore:
     def validate(stage: Path) -> SealedStore:
         sealed = inspect_integrity(StoreRoot(stage), request.provider_id)
-        verify_files(sealed, tuple(sealed.store.partition_files))
+        verify_files(sealed, tuple(sealed.store.all_partition_files))
         return sealed
 
     staged = cast(SealedStore, transaction.publish(validate)).store
@@ -124,6 +133,10 @@ def _publish_certified(transaction: StoreTransaction, request: StoreCompileReque
         partition_files={
             identifier: transaction.root / path.relative_to(transaction.stage)
             for identifier, path in staged.partition_files.items()
+        },
+        annotation_partition_files={
+            identifier: transaction.root / path.relative_to(transaction.stage)
+            for identifier, path in staged.annotation_partition_files.items()
         },
     )
 
@@ -151,10 +164,18 @@ def certify_store(
         decoded = decode(artifact)
         if decoded.series:
             request = replace(request, series=decoded.series)
+        if not decoded.annotations.is_empty:
+            request = replace(request, annotations=decoded.annotations)
         _check_source(decoded, request)
         staged_request = replace(request, destination=StoreRoot(active.stage))
         writer(staged_request, decoded.rows)
-        _verify_read_back(active.stage, request, pl.DataFrame(decoded.rows), reader or StoreReader())
+        _verify_read_back(
+            active.stage,
+            request,
+            pl.DataFrame(decoded.rows),
+            reader or StoreReader(),
+            expected_annotations=request.annotations,
+        )
         active.register_cleanup((artifact,))
         validated = _publish_certified(active, request)
         artifact.unlink()
@@ -218,11 +239,38 @@ def _check_source(decoded: NativeStoreMaterialization, request: StoreCompileRequ
         )
 
 
+def _assert_series_tables_equal(
+    actual_tables: dict[str, SeriesAnnotationTable],
+    expected_tables: dict[str, SeriesAnnotationTable],
+    label: str,
+) -> None:
+    if set(actual_tables) != set(expected_tables):
+        raise StoreCertificationError(
+            f"{label} series annotation schemas differ: expected={sorted(expected_tables)!r}; actual={sorted(actual_tables)!r}"
+        )
+    for schema_id, expected_table in expected_tables.items():
+        actual_table = actual_tables[schema_id]
+        if actual_table.schema != expected_table.schema:
+            raise StoreCertificationError(f"{label} series annotation schema differs for {schema_id!r}")
+        try:
+            assert_frame_equal(
+                actual_table.rows,
+                expected_table.rows,
+                check_row_order=False,
+                check_column_order=True,
+                check_exact=True,
+            )
+        except AssertionError as error:
+            raise StoreCertificationError(f"{label} series annotations differ for {schema_id!r}: {error}") from error
+
+
 def _verify_read_back(
     stage: Path,
     request: StoreCompileRequest,
     expected: pl.DataFrame,
     reader: StoreReader,
+    *,
+    expected_annotations: AnnotationBundle | None = None,
 ) -> None:
     validated = validate_store(StoreRoot(stage), request.provider_id)
     actual_counts = dict(validated.manifest.partition_row_counts)
@@ -236,12 +284,42 @@ def _verify_read_back(
             f"staged partition counts differ from decoded rows: expected={expected_counts!r}; actual={actual_counts!r}"
         )
 
-    products = tuple(ProductId(value) for value in expected.get_column("product").unique().to_list())
-    stations = tuple(expected.get_column("station_id").unique().to_list())
-    start = expected.get_column("time").min()
-    end = expected.get_column("time").max()
-    if not isinstance(start, datetime) or not isinstance(end, datetime):
+    bundle = expected_annotations or AnnotationBundle.empty()
+    actual_ann_counts = {str(key): value for key, value in validated.manifest.annotation_partition_row_counts.items()}
+    expected_ann_counts: dict[str, int] = {}
+    for schema_id, table in bundle.observation_tables.items():
+        if table.row_count == 0:
+            continue
+        ann_with_year = table.rows.with_columns(pl.col("time").dt.year().alias("__year"))
+        for key, partition in ann_with_year.partition_by(["product_id", "__year"], as_dict=True).items():
+            product, year = key
+            expected_ann_counts[f"product={product}/year={year:04d}/annotations={schema_id}"] = partition.height
+    if actual_ann_counts != expected_ann_counts:
+        raise StoreCertificationError(
+            f"staged annotation partition counts differ: expected={expected_ann_counts!r}; actual={actual_ann_counts!r}"
+        )
+
+    manifest_series = {table.schema.schema_id: table for table in validated.manifest.series_annotations}
+    expected_series = {schema_id: table for schema_id, table in bundle.series_tables.items() if table.row_count > 0}
+    _assert_series_tables_equal(manifest_series, expected_series, "staged manifest")
+
+    product_values = list(expected.get_column("product").unique().to_list())
+    station_values = list(expected.get_column("station_id").unique().to_list())
+    times = [expected.get_column("time").min(), expected.get_column("time").max()]
+    for table in bundle.observation_tables.values():
+        if table.row_count == 0:
+            continue
+        product_values.extend(table.rows.get_column("product_id").unique().to_list())
+        station_values.extend(table.rows.get_column("station_id").unique().to_list())
+        times.append(table.rows.get_column("time").min())
+        times.append(table.rows.get_column("time").max())
+    products = tuple(ProductId(value) for value in dict.fromkeys(product_values))
+    stations = tuple(dict.fromkeys(station_values))
+    datetimes = [value for value in times if isinstance(value, datetime)]
+    if not datetimes:
         raise StoreCertificationError("materialized time bounds are not datetimes")
+    start = min(datetimes)
+    end = max(datetimes)
     query = StoreQuery(
         store=StoreRoot(stage),
         provider_id=request.provider_id,
@@ -250,7 +328,8 @@ def _verify_read_back(
         start=start,
         end=end,
     )
-    actual = reader.query(query).physical_rows.select(expected.columns)
+    read_result = reader.query(query)
+    actual = read_result.physical_rows.select(expected.columns)
     try:
         assert_frame_equal(
             actual,
@@ -261,6 +340,53 @@ def _verify_read_back(
         )
     except AssertionError as error:
         raise StoreCertificationError(f"staged store read-back differs from decoded rows: {error}") from error
+
+    expected_obs = {schema_id: table for schema_id, table in bundle.observation_tables.items() if table.row_count > 0}
+    actual_obs = {
+        schema_id: table
+        for schema_id, table in read_result.annotations.observation_tables.items()
+        if table.row_count > 0
+    }
+    if set(actual_obs) != set(expected_obs):
+        raise StoreCertificationError(
+            f"staged annotation schemas differ from read-back: expected={sorted(expected_obs)!r}; actual={sorted(actual_obs)!r}"
+        )
+    expected_obs_values = expected.get_column("value").to_list()
+    actual_obs_values = read_result.rows.get_column("value").to_list()
+    for schema_id, expected_table in expected_obs.items():
+        actual_table = actual_obs[schema_id]
+        if actual_table.schema != expected_table.schema:
+            raise StoreCertificationError(f"staged annotation schema differs on read-back for {schema_id!r}")
+        expected_linked = expected_table.rows.with_columns(
+            pl.Series(
+                "_obs_value",
+                [None if idx is None else expected_obs_values[idx] for idx in expected_table.measurement_indices],
+                dtype=pl.Float64,
+            )
+        )
+        actual_linked = actual_table.rows.with_columns(
+            pl.Series(
+                "_obs_value",
+                [None if idx is None else actual_obs_values[idx] for idx in actual_table.measurement_indices],
+                dtype=pl.Float64,
+            )
+        )
+        try:
+            assert_frame_equal(
+                actual_linked,
+                expected_linked,
+                check_row_order=False,
+                check_column_order=True,
+                check_exact=True,
+            )
+        except AssertionError as error:
+            raise StoreCertificationError(
+                f"staged store annotation read-back differs for {schema_id!r}: {error}"
+            ) from error
+    actual_series = {
+        schema_id: table for schema_id, table in read_result.annotations.series_tables.items() if table.row_count > 0
+    }
+    _assert_series_tables_equal(actual_series, expected_series, "staged read-back")
 
 
 def certify_store_batches(
@@ -303,6 +429,15 @@ def certify_store_batches(
         return validated
 
 
+def _check_exhausted_ann_row_groups(
+    parquets: dict[str, pq.ParquetFile],
+    indices: dict[str, int],
+) -> None:
+    for ann_id, pf in parquets.items():
+        if indices.get(ann_id, 0) != pf.num_row_groups:
+            raise StoreCertificationError(f"staged store contains unverified annotation row groups: {ann_id}")
+
+
 def _verify_streamed_read_back(
     stage: Path,
     request: StoreCompileRequest,
@@ -313,19 +448,35 @@ def _verify_streamed_read_back(
     # Compilation already validated all semantics. Verify the sealed bytes before
     # replay rather than repeating that full decode. Publication verifies again.
     sealed = inspect_integrity(StoreRoot(stage), request.provider_id)
-    verify_files(sealed, tuple(sealed.store.partition_files))
+    verify_files(sealed, tuple(sealed.store.all_partition_files))
     actual_counts = {str(key): value for key, value in sealed.store.manifest.partition_row_counts.items()}
     if actual_counts != dict(evidence.partition_row_counts):
         raise StoreCertificationError(
             f"staged partition counts differ from streamed rows: expected={dict(evidence.partition_row_counts)!r}; "
             f"actual={actual_counts!r}"
         )
+    actual_ann_counts = {
+        str(key): value for key, value in sealed.store.manifest.annotation_partition_row_counts.items()
+    }
+    if actual_ann_counts != dict(evidence.annotation_partition_row_counts):
+        raise StoreCertificationError(
+            "staged annotation partition counts differ from streamed rows: "
+            f"expected={dict(evidence.annotation_partition_row_counts)!r}; actual={actual_ann_counts!r}"
+        )
     if expected_stream.observed_source_columns != request.source_columns:
         raise StoreCertificationError("replayed source schema differs from the declared source schema")
     current_identifier: str | None = None
     current_parquet: pq.ParquetFile | None = None
     current_row_group = 0
+    current_ann_parquets: dict[str, pq.ParquetFile] = {}
+    current_ann_row_groups: dict[str, int] = {}
     expected_counts: dict[str, int] = {}
+    expected_ann_counts: dict[str, int] = {}
+    partition_key_counts: dict[str, dict[tuple[str, str, datetime, str], int]] = {}
+    replayed_series_tables: list[SeriesAnnotationTable] = [
+        *request.annotations.series_tables.values(),
+        *expected_stream.series_annotations,
+    ]
     try:
         for batch in expected_stream.batches:
             frame = pl.DataFrame(batch.rows)
@@ -334,27 +485,27 @@ def _verify_streamed_read_back(
                 request.source_columns,
                 request.source_column_dispositions,
             )
-            years = frame.get_column("time").dt.year().unique().to_list()
-            products = frame.get_column("product").unique().to_list()
-            for product in sorted(products, key=lambda value: str(value).encode("utf-8")):
-                for year in sorted(years):
-                    selected = frame.filter((pl.col("product") == product) & (pl.col("time").dt.year() == year))
-                    if selected.is_empty():
-                        continue
-                    identifier = f"product={product}/year={year:04d}"
-                    expected = _physical_partition(selected, native_columns, request.source_columns)
-                    if identifier != current_identifier:
-                        if (
-                            current_identifier is not None
-                            and current_parquet is not None
-                            and current_row_group != current_parquet.num_row_groups
-                        ):
-                            raise StoreCertificationError(
-                                f"staged store contains unverified row groups: {current_identifier}"
-                            )
-                        current_identifier = identifier
-                        current_parquet = pq.ParquetFile(stage / identifier / "part-0.parquet")
-                        current_row_group = 0
+            replayed_series_tables.extend(batch.annotations.series_tables.values())
+            for _product, _year, identifier, expected, selected_obs in _partition_slices(
+                frame, batch.annotations, native_columns, request.source_columns
+            ):
+                if identifier != current_identifier:
+                    if (
+                        current_identifier is not None
+                        and current_parquet is not None
+                        and current_row_group != current_parquet.num_row_groups
+                    ):
+                        raise StoreCertificationError(
+                            f"staged store contains unverified row groups: {current_identifier}"
+                        )
+                    _check_exhausted_ann_row_groups(current_ann_parquets, current_ann_row_groups)
+                    current_ann_parquets.clear()
+                    current_ann_row_groups.clear()
+                    current_identifier = identifier
+                    part_path = stage / identifier / "part-0.parquet"
+                    current_parquet = pq.ParquetFile(part_path) if part_path.exists() else None
+                    current_row_group = 0
+                if not expected.is_empty():
                     if current_parquet is None or current_row_group >= current_parquet.num_row_groups:
                         raise StoreCertificationError(f"staged store lacks streamed row group: {identifier}")
                     actual = cast(
@@ -372,6 +523,41 @@ def _verify_streamed_read_back(
                         ) from error
                     current_row_group += 1
                     expected_counts[identifier] = expected_counts.get(identifier, 0) + expected.height
+                row_ordinals = (
+                    advance_partition_key_ordinals(expected, partition_key_counts.setdefault(identifier, {}))
+                    if not expected.is_empty()
+                    else []
+                )
+                for schema_id in sorted(selected_obs):
+                    ann_identifier = f"{identifier}/annotations={schema_id}"
+                    expected_ann = encode_observation_table_for_parquet(
+                        selected_obs[schema_id],
+                        expected,
+                        row_ordinals=row_ordinals,
+                    )
+                    ann_pf = current_ann_parquets.get(ann_identifier)
+                    if ann_pf is None:
+                        ann_pf = pq.ParquetFile(stage / identifier / f"annotations={schema_id}" / "rows.parquet")
+                        current_ann_parquets[ann_identifier] = ann_pf
+                        current_ann_row_groups[ann_identifier] = 0
+                    ann_idx = current_ann_row_groups[ann_identifier]
+                    if ann_idx >= ann_pf.num_row_groups:
+                        raise StoreCertificationError(
+                            f"staged store lacks streamed annotation row group: {ann_identifier}"
+                        )
+                    actual_ann = cast(pl.DataFrame, pl.from_arrow(ann_pf.read_row_group(ann_idx)))
+                    try:
+                        assert_frame_equal(
+                            actual_ann, expected_ann, check_row_order=True, check_column_order=True, check_exact=True
+                        )
+                    except AssertionError as error:
+                        raise StoreCertificationError(
+                            f"staged store annotation read-back differs: {ann_identifier} row_group={ann_idx}: {error}"
+                        ) from error
+                    current_ann_row_groups[ann_identifier] = ann_idx + 1
+                    expected_ann_counts[ann_identifier] = (
+                        expected_ann_counts.get(ann_identifier, 0) + expected_ann.height
+                    )
     except StoreCertificationError:
         raise
     except Exception as error:
@@ -380,11 +566,24 @@ def _verify_streamed_read_back(
         raise StoreCertificationError(
             f"second source decode counts differ: expected={dict(evidence.partition_row_counts)!r}; actual={expected_counts!r}"
         )
+    if expected_ann_counts != dict(evidence.annotation_partition_row_counts):
+        raise StoreCertificationError(
+            f"second source decode annotation counts differ: expected={dict(evidence.annotation_partition_row_counts)!r}; actual={expected_ann_counts!r}"
+        )
     if (
         current_identifier is not None
         and current_parquet is not None
         and current_row_group != current_parquet.num_row_groups
     ):
         raise StoreCertificationError(f"staged store contains unverified row groups: {current_identifier}")
+    _check_exhausted_ann_row_groups(current_ann_parquets, current_ann_row_groups)
     if tuple(expected_counts) != tuple(evidence.partition_row_group_rows):
         raise StoreCertificationError("second source decode did not traverse partitions in manifest order")
+    if tuple(expected_ann_counts) != tuple(evidence.annotation_partition_row_group_rows):
+        raise StoreCertificationError("second source decode did not traverse annotation partitions in manifest order")
+    try:
+        merged_series = merge_series_tables(replayed_series_tables, conflict="raise")
+    except FatalContractError as error:
+        raise StoreCertificationError(f"second source decode series annotations failed: {error}") from error
+    manifest_series = {table.schema.schema_id: table for table in sealed.store.manifest.series_annotations}
+    _assert_series_tables_equal(manifest_series, merged_series, "second source decode")

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rivretrieve.org/schemas/observation-store-manifest-5.json",
-  "$comment": "Revision 5 compiled stores and revision 8 accumulated stores retain concrete source identity, physical facts, scoped inventory and outcomes.",
+  "$id": "https://rivretrieve.org/schemas/observation-store-manifest-10.json",
+  "$comment": "Revision 10 compiled stores and revision 9 accumulated stores retain concrete source identity, physical facts, scoped inventory, outcomes, and source annotations.",
   "title": "RivRetrieve observation-store manifest",
   "type": "object",
   "additionalProperties": false,
@@ -22,7 +22,7 @@
   ],
   "properties": {
     "format_version": {
-      "const": 5
+      "const": 10
     },
     "compiler_version": {
       "type": "string",
@@ -177,9 +177,114 @@
           }
         }
       }
+    },
+    "annotation_schemas": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/annotation_schema"
+      }
+    },
+    "annotation_partition_row_counts": {
+      "$ref": "#/$defs/annotation_partition_row_counts"
+    },
+    "series_annotations": {
+      "$ref": "#/$defs/series_annotations"
     }
   },
   "$defs": {
+    "annotation_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "dtype",
+        "description"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dtype": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "annotation_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_id",
+        "provider_id",
+        "scope",
+        "fields"
+      ],
+      "properties": {
+        "schema_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "enum": [
+            "observation",
+            "series"
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/annotation_field"
+          }
+        }
+      }
+    },
+    "annotation_partition_row_counts": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^product=[^/=]+/year=[0-9]{4}/annotations=[^/]+$"
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "series_annotations": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "series_id"
+          ],
+          "properties": {
+            "series_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
     "source_column": {
       "type": "object",
       "additionalProperties": false,
@@ -305,7 +410,7 @@
       ],
       "properties": {
         "format_version": {
-          "const": 8
+          "const": 9
         },
         "provider_id": {
           "type": "string",
@@ -444,6 +549,99 @@
         },
         "usgs_publication_service": {
           "const": "usgs-waterdata-v1"
+        },
+        "annotation_schemas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema_id",
+              "provider_id",
+              "scope",
+              "fields"
+            ],
+            "properties": {
+              "schema_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "provider_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scope": {
+                "enum": [
+                  "observation",
+                  "series"
+                ]
+              },
+              "fields": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "dtype",
+                    "description"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "dtype": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "reference_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "annotation_partition_row_counts": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^product=[^/=]+/year=[0-9]{4}/annotations=[^/]+$"
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "series_annotations": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "series_id"
+              ],
+              "properties": {
+                "series_id": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
         }
       },
       "allOf": [

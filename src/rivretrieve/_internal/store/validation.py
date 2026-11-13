@@ -8,7 +8,7 @@ import re
 from bisect import bisect_right
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 from importlib import resources
@@ -16,6 +16,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, NewType, NoReturn, cast
 
+import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 from jsonschema import Draft202012Validator, FormatChecker
@@ -23,9 +24,19 @@ from pydantic import ValidationError
 
 from rivretrieve._internal.acquisition_dependencies import source_call_dependencies
 from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval
+from rivretrieve._internal.engine import ZoneValue
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.publication_identity import publication_identity_fields
+from rivretrieve._internal.source_annotations import (
+    OBSERVATION_STRUCTURAL_SCHEMA,
+    AnnotationSchema,
+    AnnotationScope,
+    SeriesAnnotationTable,
+    decode_observation_table_from_parquet,
+    load_annotation_schema,
+    load_series_annotations,
+)
 from rivretrieve._internal.source_series import (
     InventorySnapshot,
     OutcomeStatus,
@@ -82,7 +93,7 @@ class StoreManifest:
     Attributes
     ----------
     format_version : int
-        Compiled layout revision, 5.
+        Compiled layout revision, 10.
     provider_id : ProviderId
         Provider whose native observations are stored.
     compiler_version : str
@@ -106,9 +117,15 @@ class StoreManifest:
         Retained, reconstructible or deliberately discarded fields and rationale.
     partition_row_counts : Mapping[PartitionIdentifier, int]
         Exact physical row counts keyed by product/year.
+    annotation_schemas : tuple[AnnotationSchema, ...]
+        Declared observation- and series-grain annotation schemas stored here.
+    annotation_partition_row_counts : Mapping[PartitionIdentifier, int]
+        Exact row counts keyed by annotation partition identifier.
+    series_annotations : tuple[SeriesAnnotationTable, ...]
+        Non-identity source-series annotation tables keyed by ``series_id``.
     """
 
-    format_version: Literal[5]
+    format_version: Literal[10]
     provider_id: ProviderId
     compiler_version: str
     built_at: datetime
@@ -123,9 +140,21 @@ class StoreManifest:
     outcomes: tuple[RetrievalOutcome, ...] = ()
     issues: tuple[Issue, ...] = ()
     source_calls: tuple[dict[str, object], ...] = ()
+    annotation_schemas: tuple[AnnotationSchema, ...] = ()
+    annotation_partition_row_counts: Mapping[PartitionIdentifier, int] = field(default_factory=dict)
+    series_annotations: tuple[SeriesAnnotationTable, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "partition_row_counts", MappingProxyType(dict(self.partition_row_counts)))
+        object.__setattr__(
+            self,
+            "annotation_partition_row_counts",
+            MappingProxyType(dict(self.annotation_partition_row_counts)),
+        )
+
+    @property
+    def all_partition_row_counts(self) -> Mapping[PartitionIdentifier, int]:
+        return MappingProxyType({**self.partition_row_counts, **self.annotation_partition_row_counts})
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,7 +164,7 @@ class AccumulatedStoreManifest:
     Attributes
     ----------
     format_version : int
-        Accumulated layout revision, 8.
+        Accumulated layout revision, 9.
     provider_id : ProviderId
         Provider whose native observations are stored.
     built_at : datetime
@@ -144,9 +173,15 @@ class AccumulatedStoreManifest:
         Successfully retrieved series intervals and source retrieval instants.
     partition_row_counts : Mapping[PartitionIdentifier, int]
         Exact physical row counts keyed by product/year.
+    annotation_schemas : tuple[AnnotationSchema, ...]
+        Declared observation- and series-grain annotation schemas stored here.
+    annotation_partition_row_counts : Mapping[PartitionIdentifier, int]
+        Exact row counts keyed by annotation partition identifier.
+    series_annotations : tuple[SeriesAnnotationTable, ...]
+        Non-identity source-series annotation tables keyed by ``series_id``.
     """
 
-    format_version: Literal[8]
+    format_version: Literal[9]
     provider_id: ProviderId
     built_at: datetime
     coverage: tuple[CoverageInterval, ...]
@@ -156,9 +191,21 @@ class AccumulatedStoreManifest:
     outcomes: tuple[RetrievalOutcome, ...] = ()
     issues: tuple[Issue, ...] = ()
     source_calls: tuple[dict[str, object], ...] = ()
+    annotation_schemas: tuple[AnnotationSchema, ...] = ()
+    annotation_partition_row_counts: Mapping[PartitionIdentifier, int] = field(default_factory=dict)
+    series_annotations: tuple[SeriesAnnotationTable, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "partition_row_counts", MappingProxyType(dict(self.partition_row_counts)))
+        object.__setattr__(
+            self,
+            "annotation_partition_row_counts",
+            MappingProxyType(dict(self.annotation_partition_row_counts)),
+        )
+
+    @property
+    def all_partition_row_counts(self) -> Mapping[PartitionIdentifier, int]:
+        return MappingProxyType({**self.partition_row_counts, **self.annotation_partition_row_counts})
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,14 +220,22 @@ class ValidatedStore:
         Validated manifest. download returns a compiled StoreManifest.
     partition_files : Mapping[PartitionIdentifier, pathlib.Path]
         Read-only product/year partition paths.
+    annotation_partition_files : Mapping[PartitionIdentifier, pathlib.Path]
+        Read-only observation-annotation partition paths.
     """
 
     root: StoreRoot
     manifest: StoreManifest | AccumulatedStoreManifest
     partition_files: Mapping[PartitionIdentifier, Path]
+    annotation_partition_files: Mapping[PartitionIdentifier, Path] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "partition_files", MappingProxyType(dict(self.partition_files)))
+        object.__setattr__(self, "annotation_partition_files", MappingProxyType(dict(self.annotation_partition_files)))
+
+    @property
+    def all_partition_files(self) -> Mapping[PartitionIdentifier, Path]:
+        return MappingProxyType({**self.partition_files, **self.annotation_partition_files})
 
 
 class StoreRefusalKind(StrEnum):
@@ -227,7 +282,9 @@ class _JSONObject(list[tuple[str, object]]):
 
 
 _PARTITION_FILE = re.compile(r"product=[^/=]+/year=[0-9]{4}/[^/]+\.parquet")
+_ANN_PARTITION_FILE = re.compile(r"product=[^/=]+/year=[0-9]{4}/annotations=[^/]+/[^/]+\.parquet")
 _PARTITION_DIRECTORY = re.compile(r"product=[^/=]+/year=[0-9]{4}")
+_ANN_PARTITION_DIRECTORY = re.compile(r"product=[^/=]+/year=[0-9]{4}/annotations=[^/]+")
 _REQUIRED_FIELD_NAMES = (
     "station_id",
     "time",
@@ -304,7 +361,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
     version = raw["format_version"]
     if type(version) is not int:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "manifest.type:format_version")
-    if version not in (5, 8):
+    if version not in (9, 10):
         _refuse(
             StoreRefusalKind.INCOMPATIBLE,
             store,
@@ -312,7 +369,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
             f"unsupported format revision {version!r}",
         )
     if (
-        version == 8
+        version == 9
         and isinstance(raw.get("source_calls"), list)
         and any(
             isinstance(call, dict) and "call_id" in call and field not in call
@@ -349,7 +406,7 @@ def _schema_error_path(error: Any, raw: dict[str, Any]) -> str:
 def _validate_manifest_schema(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> None:
     schema_resource = resources.files(__package__).joinpath("manifest.schema.json")
     schema = json.loads(schema_resource.read_text(encoding="utf-8"))
-    if raw["format_version"] == 8:
+    if raw["format_version"] == 9:
         schema = schema["$defs"]["accumulated"]
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
@@ -421,29 +478,42 @@ def _validate_source_contract(raw: dict[str, Any], store: StoreRoot, provider_id
 
 def _discover_partitions(
     raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId
-) -> dict[PartitionIdentifier, Path]:
+) -> tuple[dict[PartitionIdentifier, Path], dict[PartitionIdentifier, Path]]:
     root = Path(store)
     try:
         parquet_paths = sorted(root.rglob("*.parquet"), key=lambda path: path.relative_to(root).as_posix())
     except OSError:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "partition.path:.")
 
+    obs_by_directory: dict[Path, Path] = {}
+    ann_by_directory: dict[Path, Path] = {}
     for path in parquet_paths:
         relative = path.relative_to(root).as_posix()
-        if path.is_symlink() or not _PARTITION_FILE.fullmatch(relative):
+        if path.is_symlink():
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.path:{relative}")
+        if _PARTITION_FILE.fullmatch(relative):
+            obs_by_directory[path.parent] = path
+        elif _ANN_PARTITION_FILE.fullmatch(relative):
+            ann_by_directory[path.parent] = path
+        else:
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.path:{relative}")
 
-    directories: dict[PartitionIdentifier, Path] = {}
+    obs_directories: dict[PartitionIdentifier, Path] = {}
+    ann_directories: dict[PartitionIdentifier, Path] = {}
     for path in parquet_paths:
-        identifier = PartitionIdentifier(path.parent.relative_to(root).as_posix())
-        directories.setdefault(identifier, path.parent)
+        rel_dir = path.parent.relative_to(root).as_posix()
+        if _PARTITION_DIRECTORY.fullmatch(rel_dir):
+            obs_directories.setdefault(PartitionIdentifier(rel_dir), path.parent)
+        else:
+            ann_directories.setdefault(PartitionIdentifier(rel_dir), path.parent)
 
     try:
         canonical_directories = sorted(
             (
                 path
                 for path in root.glob("product=*/year=*")
-                if path.is_dir() and _PARTITION_DIRECTORY.fullmatch(path.relative_to(root).as_posix())
+                if (path.is_dir() or path.is_symlink())
+                and _PARTITION_DIRECTORY.fullmatch(path.relative_to(root).as_posix())
             ),
             key=lambda path: path.relative_to(root).as_posix(),
         )
@@ -455,15 +525,30 @@ def _discover_partitions(
         if directory.is_symlink():
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.path:{identifier}")
         try:
-            files = sorted(path for path in directory.iterdir() if path.is_file() and path.suffix == ".parquet")
+            direct_files = sorted(path for path in directory.iterdir() if path.is_file() and path.suffix == ".parquet")
+            subdirs = sorted(path for path in directory.iterdir() if path.is_dir() or path.is_symlink())
         except OSError:
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.file_count:{identifier}")
-        if len(files) != 1:
+        if len(direct_files) > 1:
             _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.file_count:{identifier}")
-        directories[identifier] = directory
+        for subdir in subdirs:
+            sub_rel = subdir.relative_to(root).as_posix()
+            if subdir.is_symlink() or not _ANN_PARTITION_DIRECTORY.fullmatch(sub_rel):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.path:{sub_rel}")
+            try:
+                sub_files = sorted(path for path in subdir.iterdir() if path.is_file() and path.suffix == ".parquet")
+            except OSError:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.file_count:{sub_rel}")
+            if len(sub_files) != 1:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.file_count:{sub_rel}")
+            ann_directories[PartitionIdentifier(sub_rel)] = subdir
+        if len(direct_files) == 0 and not subdirs:
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.file_count:{identifier}")
+        if len(direct_files) == 1:
+            obs_directories[identifier] = directory
 
     manifest_keys = {PartitionIdentifier(key) for key in raw["partition_row_counts"]}
-    actual_keys = set(directories)
+    actual_keys = set(obs_directories)
     if manifest_keys != actual_keys:
         _refuse(
             StoreRefusalKind.MALFORMED,
@@ -472,8 +557,20 @@ def _discover_partitions(
             f"partition.key:expected={sorted(manifest_keys)!r};actual={sorted(actual_keys)!r}",
         )
 
-    by_directory = {path.parent: path for path in parquet_paths}
-    return {identifier: by_directory[directory] for identifier, directory in sorted(directories.items())}
+    manifest_ann_keys = {PartitionIdentifier(key) for key in raw.get("annotation_partition_row_counts", {})}
+    actual_ann_keys = set(ann_directories)
+    if manifest_ann_keys != actual_ann_keys:
+        _refuse(
+            StoreRefusalKind.MALFORMED,
+            store,
+            provider_id,
+            f"partition.key:expected={sorted(manifest_ann_keys)!r};actual={sorted(actual_ann_keys)!r}",
+        )
+
+    return (
+        {identifier: obs_by_directory[directory] for identifier, directory in sorted(obs_directories.items())},
+        {identifier: ann_by_directory[directory] for identifier, directory in sorted(ann_directories.items())},
+    )
 
 
 def _open_parquet(path: Path) -> pq.ParquetFile:
@@ -602,10 +699,182 @@ def _validate_partition(
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.parquet:{identifier}")
 
 
-def _parse_manifest(raw: dict[str, Any]) -> StoreManifest:
+def _parse_annotations_metadata(
+    raw: dict[str, Any],
+    store: StoreRoot,
+    provider_id: ProviderId,
+    definitions: Mapping[str, SourceSeries],
+) -> tuple[
+    tuple[AnnotationSchema, ...],
+    dict[PartitionIdentifier, int],
+    tuple[SeriesAnnotationTable, ...],
+]:
+    schemas: list[AnnotationSchema] = []
+    schemas_by_id: dict[str, AnnotationSchema] = {}
+    for index, entry in enumerate(raw.get("annotation_schemas", ())):
+        try:
+            schema = load_annotation_schema(entry)
+        except (ValidationError, ValueError, TypeError) as error:
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"annotation.schema:{index}:{error}")
+        if schema.schema_id in schemas_by_id:
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"annotation.schema_duplicate:{schema.schema_id}")
+        schemas.append(schema)
+        schemas_by_id[schema.schema_id] = schema
+
+    ann_counts = {
+        PartitionIdentifier(identifier): int(count)
+        for identifier, count in raw.get("annotation_partition_row_counts", {}).items()
+    }
+    for identifier in ann_counts:
+        schema_id = str(identifier).split("/", 2)[2].removeprefix("annotations=")
+        schema = schemas_by_id.get(schema_id)
+        if schema is None or schema.scope is not AnnotationScope.OBSERVATION:
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"annotation.schema_missing:{identifier}")
+
+    try:
+        series_tables = load_series_annotations(raw.get("series_annotations", {}), schemas_by_id)
+    except (ValidationError, FatalContractError, ValueError, TypeError) as error:
+        _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"annotation.series:{error}")
+    for table in series_tables:
+        for sid in table.rows["series_id"].to_list():
+            if sid not in definitions:
+                _refuse(
+                    StoreRefusalKind.MALFORMED,
+                    store,
+                    provider_id,
+                    f"annotation.series_id:{table.schema.schema_id}:{sid}",
+                )
+    return tuple(schemas), ann_counts, series_tables
+
+
+def _validate_annotation_partitions(
+    raw: dict[str, Any],
+    obs_partitions: Mapping[PartitionIdentifier, Path],
+    ann_partitions: Mapping[PartitionIdentifier, Path],
+    checked_partitions: frozenset[PartitionIdentifier] | None,
+    schemas_by_id: Mapping[str, AnnotationSchema],
+    definitions: Mapping[str, SourceSeries],
+    store: StoreRoot,
+    provider_id: ProviderId,
+    *,
+    starts: Mapping[tuple[str, str, TimeAxis], list[datetime]] | None = None,
+    intervals: Mapping[tuple[str, str, TimeAxis], list[tuple[datetime, datetime]]] | None = None,
+    observed_keys: set[tuple[Any, ...]] | None = None,
+) -> None:
+    for ann_id, path in ann_partitions.items():
+        if checked_partitions is not None and ann_id not in checked_partitions:
+            continue
+        product_part, year_part, ann_part = str(ann_id).split("/", 2)
+        product = product_part.removeprefix("product=")
+        year = int(year_part.removeprefix("year="))
+        schema_id = ann_part.removeprefix("annotations=")
+        schema = schemas_by_id.get(schema_id)
+        if schema is None or schema.scope is not AnnotationScope.OBSERVATION:
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"annotation.schema:{ann_id}")
+        try:
+            frame = pl.read_parquet(path)
+        except (OSError, ValueError, pa.ArrowException):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.parquet:{ann_id}")
+        expected_rows = raw["annotation_partition_row_counts"][str(ann_id)]
+        if frame.height != expected_rows:
+            _refuse(
+                StoreRefusalKind.MALFORMED,
+                store,
+                provider_id,
+                f"partition.row_count:{ann_id}:expected={expected_rows}:actual={frame.height}",
+            )
+        expected_schema: dict[str, pl.DataType] = {
+            **OBSERVATION_STRUCTURAL_SCHEMA,
+            "_occurrence_ordinal": pl.Int64(),
+            **schema.polars_schema(),
+        }
+        if frame.columns != list(expected_schema) or any(
+            frame.schema[col] != dtype for col, dtype in expected_schema.items()
+        ):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.schema:{ann_id}")
+        for col_name in (*OBSERVATION_STRUCTURAL_SCHEMA, "_occurrence_ordinal"):
+            if frame[col_name].null_count() > 0:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.nullability:{ann_id}:{col_name}")
+        station_ids = frame["station_id"].to_list()
+        if any(sid == "" for sid in station_ids):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.station_id:{ann_id}")
+        byte_ids = [sid.encode("utf-8") for sid in station_ids]
+        if any(left > right for left, right in zip(byte_ids, byte_ids[1:], strict=False)):
+            _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.order:{ann_id}")
+
+        for idx, row in enumerate(
+            frame.select(
+                "station_id",
+                "product_id",
+                "series_id",
+                "facts_id",
+                "time",
+                "time_zone",
+                "measured",
+                "_occurrence_ordinal",
+            ).iter_rows()
+        ):
+            st, prod, sid, fid, ts, tz, measured, occ_ord = row
+            if prod != product:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"annotation.product:{ann_id}:row={idx}")
+            if ts.year != year:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.year:{ann_id}:row={idx}")
+            try:
+                ZoneValue(tz)
+            except (ValueError, FatalContractError):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"annotation.zone:{ann_id}:row={idx}")
+            definition = definitions.get(sid)
+            if definition is None or definition.station_id != st or definition.product_id != prod:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.series:{ann_id}")
+            fact = next((item for item in definition.facts if item.facts_id == fid), None)
+            if fact is None or admission(fact).status != "supported":
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.facts:{ann_id}")
+            if measured != (occ_ord >= 0) or (not measured and occ_ord != -1):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"annotation.measured:{ann_id}:row={idx}")
+            if (
+                starts is not None
+                and intervals is not None
+                and observed_keys is not None
+                and not any(
+                    (axis_ts := timestamp_on_axis(ts, tz, axis)) is not None
+                    and (pos := bisect_right(starts.get((sid, fid, axis), []), axis_ts) - 1) >= 0
+                    and axis_ts <= intervals[(sid, fid, axis)][pos][1]
+                    for axis in TimeAxis
+                )
+                and (sid, fid, ts, tz) not in observed_keys
+            ):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{ann_id}")
+
+        obs_id = PartitionIdentifier(f"{product_part}/{year_part}")
+        obs_path = obs_partitions.get(obs_id)
+        if obs_path is None:
+            if frame["measured"].any():
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"annotation.measured_without_rows:{ann_id}")
+        elif checked_partitions is None or obs_id in checked_partitions:
+            try:
+                obs_frame = (
+                    pl.read_parquet(obs_path)
+                    .select("station_id", "time", "time_zone", "value", "series_id", "facts_id", "source_unit")
+                    .with_columns(pl.lit(product).alias("product_id"))
+                )
+            except (OSError, ValueError, pa.ArrowException):
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.parquet:{obs_id}")
+            try:
+                decode_observation_table_from_parquet(frame, schema, obs_frame)
+            except FatalContractError:
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"annotation.alignment:{ann_id}")
+
+
+def _parse_manifest(
+    raw: dict[str, Any],
+    *,
+    annotation_schemas: tuple[AnnotationSchema, ...] = (),
+    annotation_partition_row_counts: Mapping[PartitionIdentifier, int] | None = None,
+    series_annotations: tuple[SeriesAnnotationTable, ...] = (),
+) -> StoreManifest:
     source_schema = raw["source_schema"]
     return StoreManifest(
-        format_version=5,
+        format_version=10,
         provider_id=ProviderId(raw["provider_id"]),
         compiler_version=raw["compiler_version"],
         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
@@ -637,6 +906,9 @@ def _parse_manifest(raw: dict[str, Any]) -> StoreManifest:
         partition_row_counts={
             PartitionIdentifier(identifier): count for identifier, count in raw["partition_row_counts"].items()
         },
+        annotation_schemas=annotation_schemas,
+        annotation_partition_row_counts=annotation_partition_row_counts or {},
+        series_annotations=series_annotations,
         **_metadata(raw),
     )
 
@@ -667,17 +939,28 @@ def _validate_contents(
     _check_revision(raw, store, provider_id)
     stored_provider = raw.get("provider_id")
     identity = publication_identity_fields((stored_provider,)) if isinstance(stored_provider, str) else {}
-    for field, expected in identity.items():
-        if raw.get(field) != expected:
-            _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"{field}:expected {expected}")
+    for field_name, expected in identity.items():
+        if raw.get(field_name) != expected:
+            _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"{field_name}:expected {expected}")
     _validate_manifest_schema(raw, store, provider_id)
     if raw["provider_id"] != str(provider_id):
         _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")
     _validate_metadata(raw, store, provider_id)
-    if raw["format_version"] == 8:
-        return _validate_accumulated(raw, store, provider_id, checked_partitions)
+    definitions = {item.series_id: item for item in _metadata(raw)["series"]}
+    ann_schemas, ann_counts, ser_tables = _parse_annotations_metadata(raw, store, provider_id, definitions)
+    schemas_by_id = {item.schema_id: item for item in ann_schemas}
+    if raw["format_version"] == 9:
+        return _validate_accumulated(
+            raw,
+            store,
+            provider_id,
+            checked_partitions,
+            ann_schemas=ann_schemas,
+            ann_counts=ann_counts,
+            ser_tables=ser_tables,
+        )
     _validate_source_contract(raw, store, provider_id)
-    partition_files = _discover_partitions(raw, store, provider_id)
+    partition_files, ann_partition_files = _discover_partitions(raw, store, provider_id)
     retained_columns = tuple(
         item["source_column"]
         for item in raw["source_column_dispositions"]
@@ -697,8 +980,28 @@ def _validate_contents(
             provider_id,
         )
     _validate_series_partitions(raw, checked_files, store, provider_id)
-    manifest = _parse_manifest(raw)
-    return ValidatedStore(root=store, manifest=manifest, partition_files=partition_files)
+    _validate_annotation_partitions(
+        raw,
+        partition_files,
+        ann_partition_files,
+        checked_partitions,
+        schemas_by_id,
+        definitions,
+        store,
+        provider_id,
+    )
+    manifest = _parse_manifest(
+        raw,
+        annotation_schemas=ann_schemas,
+        annotation_partition_row_counts=ann_counts,
+        series_annotations=ser_tables,
+    )
+    return ValidatedStore(
+        root=store,
+        manifest=manifest,
+        partition_files=partition_files,
+        annotation_partition_files=ann_partition_files,
+    )
 
 
 def _validate_accumulated(
@@ -706,6 +1009,10 @@ def _validate_accumulated(
     store: StoreRoot,
     provider_id: ProviderId,
     checked_partitions: frozenset[PartitionIdentifier] | None = None,
+    *,
+    ann_schemas: tuple[AnnotationSchema, ...] = (),
+    ann_counts: Mapping[PartitionIdentifier, int] | None = None,
+    ser_tables: tuple[SeriesAnnotationTable, ...] = (),
 ) -> ValidatedStore:
     coverage: list[CoverageInterval] = []
     outcomes = {item.outcome_id: item for item in _metadata(raw)["outcomes"]}
@@ -760,7 +1067,7 @@ def _validate_accumulated(
         if outcome.coverage == "observations" and outcome.status is OutcomeStatus.SUCCESS
         for key in outcome.observation_keys
     }
-    partitions = _discover_partitions(raw, store, provider_id)
+    partitions, ann_partitions = _discover_partitions(raw, store, provider_id)
     checked_files = {
         key: path for key, path in partitions.items() if checked_partitions is None or key in checked_partitions
     }
@@ -795,15 +1102,38 @@ def _validate_accumulated(
                 ):
                     _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{identifier}")
     _validate_series_partitions(raw, checked_files, store, provider_id)
+    definitions = {item.series_id: item for item in _metadata(raw)["series"]}
+    schemas_by_id = {item.schema_id: item for item in ann_schemas}
+    _validate_annotation_partitions(
+        raw,
+        partitions,
+        ann_partitions,
+        checked_partitions,
+        schemas_by_id,
+        definitions,
+        store,
+        provider_id,
+        starts=starts,
+        intervals=intervals,
+        observed_keys=observed_keys,
+    )
     manifest = AccumulatedStoreManifest(
-        format_version=8,
+        format_version=9,
         provider_id=provider_id,
         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
         coverage=tuple(coverage),
         partition_row_counts={PartitionIdentifier(key): value for key, value in raw["partition_row_counts"].items()},
+        annotation_schemas=ann_schemas,
+        annotation_partition_row_counts=ann_counts or {},
+        series_annotations=ser_tables,
         **_metadata(raw),
     )
-    return ValidatedStore(root=store, manifest=manifest, partition_files=partitions)
+    return ValidatedStore(
+        root=store,
+        manifest=manifest,
+        partition_files=partitions,
+        annotation_partition_files=ann_partitions,
+    )
 
 
 def _supporting_outcomes(raw: dict[str, Any]) -> tuple[RetrievalOutcome, ...]:
@@ -878,12 +1208,12 @@ def _validate_metadata(raw: dict[str, Any], store: StoreRoot, provider_id: Provi
 
     call_ids: set[str] = set()
     for index, call in enumerate(metadata["source_calls"]):
-        for field in ("call_id", "acquisition_id"):
-            identifier = call.get(field)
+        for field_name in ("call_id", "acquisition_id"):
+            identifier = call.get(field_name)
             if identifier is None:
                 continue
             if not isinstance(identifier, str) or not identifier.strip():
-                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"source_call.identity:{index}:{field}")
+                _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"source_call.identity:{index}:{field_name}")
             call_ids.add(identifier)
     for outcome in (*metadata["outcomes"], *support):
         if any(reference not in call_ids for reference in outcome.calls):

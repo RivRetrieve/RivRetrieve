@@ -8,6 +8,36 @@ import polars as pl
 from rivretrieve._internal.engine import ZoneValue
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import ObservationResult
+from rivretrieve._internal.source_annotations import AnnotationBundle, with_annotations
+
+
+def _convert_frame_timestamps(
+    frame: pl.DataFrame,
+    *,
+    provider_id: object,
+    row_kind: str,
+) -> tuple[list[datetime], pl.DataType]:
+    unknown_count = frame["time_zone"].eq("unknown").sum()
+    if unknown_count:
+        raise FatalContractError(
+            f"Cannot convert {unknown_count} {row_kind} rows for provider "
+            f"{str(provider_id)!r} to UTC because time_zone is 'unknown'"
+        )
+
+    time_dtype = frame.schema["time"]
+    naive_dtype = pl.Datetime(time_dtype.time_unit) if isinstance(time_dtype, pl.Datetime) else time_dtype
+    wall_clocks = frame["time"]
+    if isinstance(time_dtype, pl.Datetime) and time_dtype.time_zone is not None:
+        wall_clocks = wall_clocks.dt.replace_time_zone(None)
+    converted_times = [
+        _convert_wall_clock(wall_clock, zone)
+        for wall_clock, zone in zip(
+            wall_clocks.to_list(),
+            frame["time_zone"].to_list(),
+            strict=True,
+        )
+    ]
+    return converted_times, naive_dtype
 
 
 def to_utc(result: ObservationResult) -> ObservationResult:
@@ -42,31 +72,33 @@ def to_utc(result: ObservationResult) -> ObservationResult:
     Python timezone rules and the default fold for ambiguous labels. This does
     not establish a daily product's day definition or make series comparable.
     """
-    unknown_count = result.data["time_zone"].eq("unknown").sum()
-    if unknown_count:
-        raise FatalContractError(
-            f"Cannot convert {unknown_count} observation rows for provider "
-            f"{str(result.provenance.provider_id)!r} to UTC because time_zone is 'unknown'"
-        )
-
-    time_dtype = result.data.schema["time"]
-    naive_dtype = pl.Datetime(time_dtype.time_unit) if isinstance(time_dtype, pl.Datetime) else time_dtype
-    wall_clocks = result.data["time"]
-    if isinstance(time_dtype, pl.Datetime) and time_dtype.time_zone is not None:
-        wall_clocks = wall_clocks.dt.replace_time_zone(None)
-    converted_times = [
-        _convert_wall_clock(wall_clock, zone)
-        for wall_clock, zone in zip(
-            wall_clocks.to_list(),
-            result.data["time_zone"].to_list(),
-            strict=True,
-        )
-    ]
+    converted_times, naive_dtype = _convert_frame_timestamps(
+        result.data,
+        provider_id=result.provenance.provider_id,
+        row_kind="observation",
+    )
     converted_data = result.data.with_columns(
         pl.Series("time", converted_times, dtype=naive_dtype),
         pl.Series("time_zone", ["+00:00"] * result.data.height, dtype=pl.Utf8),
     )
-    return result.model_copy(update={"data": converted_data})
+    converted = result.model_copy(update={"data": converted_data})
+    if result._annotations.is_empty or not result._annotations.observation_tables:
+        return converted
+    converted_obs = {}
+    for schema_id, table in result._annotations.observation_tables.items():
+        ann_times, ann_dtype = _convert_frame_timestamps(
+            table.rows,
+            provider_id=result.provenance.provider_id,
+            row_kind="annotation",
+        )
+        converted_obs[schema_id] = table.with_utc_timestamps(ann_times, ann_dtype)
+    return with_annotations(
+        converted,
+        AnnotationBundle(
+            observation_tables=converted_obs,
+            series_tables=result._annotations.series_tables,
+        ),
+    )
 
 
 def _convert_wall_clock(wall_clock: datetime, raw_zone: str) -> datetime:

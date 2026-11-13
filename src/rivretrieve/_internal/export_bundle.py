@@ -9,15 +9,15 @@ from dataclasses import asdict
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import TypeIs
+from typing import TypeIs, cast
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile, ZipInfo
 
 import polars as pl
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.engine import SourceCallOrigin, SourceQuery, UnknownOriginFact, UnknownOriginReason
-from rivretrieve._internal.issues import Issue
+from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.observations import (
     ObservationProvenance,
     ObservationResult,
@@ -29,6 +29,18 @@ from rivretrieve._internal.observations import (
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.publication_identity import publication_identity_fields
 from rivretrieve._internal.selection import StationLocation, _EmptyReason, _Selection
+from rivretrieve._internal.source_annotations import (
+    AnnotationBundle,
+    AnnotationSchema,
+    AnnotationScope,
+    ObservationAnnotationTable,
+    SeriesAnnotationTable,
+    dump_annotation_schema,
+    dump_series_annotations,
+    load_annotation_schema,
+    load_series_annotations,
+    with_annotations,
+)
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -42,7 +54,7 @@ from rivretrieve._internal.source_series import (
 )
 
 _FORMAT = "rivretrieve-source-series"
-_VERSION = 3
+_VERSION = 4
 _PROVENANCE_VALUES = ("request", "calls_made", "time_windows", "query")
 _EMPTY_REASON_ADAPTER = TypeAdapter(_EmptyReason)
 _STATION_LOCATION_ADAPTER = TypeAdapter(StationLocation)
@@ -475,7 +487,7 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
         raise TypeError("to_bundle requires a selection or observation result")
     selected = isinstance(value, _Selection)
     definitions = value.known_series if selected else value.source_series
-    manifest = {
+    manifest: dict[str, object] = {
         "format": _FORMAT,
         "version": _VERSION,
         "kind": "selection" if selected else "result",
@@ -487,6 +499,12 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
     destination = BytesIO()
     with ZipFile(destination, "w", compression=ZIP_DEFLATED) as archive:
         if isinstance(value, _Selection):
+            ann_bundle = (
+                value.series_annotations
+                if isinstance(value.series_annotations, AnnotationBundle)
+                else AnnotationBundle.empty()
+            )
+            schemas = ann_bundle.all_schemas()
             manifest.update(
                 {
                     "locations": [
@@ -501,12 +519,27 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
                     ],
                     "catalogue_evidence": [item.to_json_dict() for item in value.acquisition_provenance],
                     "empty_reason": asdict(value.empty_reason) if value.empty_reason is not None else None,
+                    "annotation_schemas": [dump_annotation_schema(schema) for schema in schemas],
+                    "series_annotations": dump_series_annotations(ann_bundle.series_tables),
                 }
             )
         else:
             data = BytesIO()
             value.data.write_parquet(data)
             _write_entry(archive, "observations.parquet", data.getvalue())
+            ann_bundle = value._annotations
+            schemas = ann_bundle.all_schemas()
+            ann_files: list[dict[str, str]] = []
+            for schema_id, table in ann_bundle.observation_tables.items():
+                if table.row_count == 0:
+                    continue
+                indices = [-1 if idx is None else idx for idx in table.measurement_indices]
+                ann_frame = table.rows.with_columns(pl.Series("_measurement_index", indices, dtype=pl.Int64))
+                ann_buf = BytesIO()
+                ann_frame.write_parquet(ann_buf)
+                ann_name = f"annotations/{schema_id}.parquet"
+                _write_entry(archive, ann_name, ann_buf.getvalue())
+                ann_files.append({"schema_id": schema_id, "file": ann_name})
             manifest.update(
                 {
                     "view_scope": value.view_scope.model_dump(mode="json") if value.view_scope is not None else None,
@@ -518,6 +551,9 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
                     },
                     "receipt_provider": str(value.receipts.provider_id),
                     "receipts": [],
+                    "annotation_schemas": [dump_annotation_schema(schema) for schema in schemas],
+                    "series_annotations": dump_series_annotations(ann_bundle.series_tables),
+                    "annotation_files": ann_files,
                 }
             )
             receipts = []
@@ -552,6 +588,39 @@ def encode_bundle(value: _Selection | ObservationResult) -> bytes:
     return destination.getvalue()
 
 
+def _decode_bundle_annotations_metadata(
+    manifest: dict[str, object],
+    definition_ids: set[str],
+) -> tuple[dict[str, AnnotationSchema], dict[str, SeriesAnnotationTable]]:
+    raw_schemas = manifest["annotation_schemas"]
+    if type(raw_schemas) is not list:
+        raise ValueError("Bundle annotation_schemas must be a list")
+    schemas_by_id: dict[str, AnnotationSchema] = {}
+    for entry in raw_schemas:
+        if type(entry) is not dict:
+            raise ValueError("Bundle annotation schema entry must be an object")
+        try:
+            schema = load_annotation_schema(cast("dict[str, object]", entry))
+        except (ValidationError, FatalContractError, ValueError, TypeError) as error:
+            raise ValueError(f"Invalid bundle annotation schema: {error}") from error
+        if schema.schema_id in schemas_by_id:
+            raise ValueError(f"Bundle contains duplicate annotation schema {schema.schema_id!r}")
+        schemas_by_id[schema.schema_id] = schema
+
+    raw_series_ann = manifest["series_annotations"]
+    if type(raw_series_ann) is not dict:
+        raise ValueError("Bundle series_annotations must be an object")
+    try:
+        series_tables = load_series_annotations(cast("dict[str, object]", raw_series_ann), schemas_by_id)
+    except (ValidationError, FatalContractError, ValueError, TypeError, KeyError, pl.exceptions.PolarsError) as error:
+        raise ValueError(f"Invalid bundle series annotations: {error}") from error
+    for table in series_tables:
+        for sid in table.rows.get_column("series_id").to_list():
+            if sid not in definition_ids:
+                raise ValueError(f"Bundle series annotations reference unknown series {sid!r}")
+    return schemas_by_id, {table.schema.schema_id: table for table in series_tables}
+
+
 def decode_bundle(content: bytes) -> _Selection | ObservationResult:
     """Validate imported identity, facts and format without consulting current catalogues."""
     if type(content) is not bytes:
@@ -573,7 +642,17 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
         kind = manifest.get("kind")
         if kind not in ("selection", "result"):
             raise ValueError("Unknown source-series bundle kind")
-        fields = {"format", "version", "kind", "scope", "series", "inventories", "issues"}
+        fields = {
+            "format",
+            "version",
+            "kind",
+            "scope",
+            "series",
+            "inventories",
+            "issues",
+            "annotation_schemas",
+            "series_annotations",
+        }
         fields.update(
             {"locations", "catalogue_evidence", "empty_reason"}
             if kind == "selection"
@@ -585,6 +664,7 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
                 "provenance_values",
                 "receipt_provider",
                 "receipts",
+                "annotation_files",
             }
         )
         identity = _publication_identity(manifest)
@@ -609,6 +689,7 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
                 physical_facts[facts.facts_id] = facts
         if len(definition_ids) != len(definitions):
             raise ValueError("Bundle contains duplicate source-series identities")
+        schemas_by_id, series_tables_by_id = _decode_bundle_annotations_metadata(manifest, definition_ids)
         scope = SeriesScope.model_validate(manifest["scope"])
         raw_inventories = manifest["inventories"]
         inventories = (
@@ -634,6 +715,7 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
                 else None
             )
             raw_locations = manifest["locations"]
+            selection_annotations = AnnotationBundle(series_tables=series_tables_by_id) if series_tables_by_id else None
             return _Selection(
                 scope=scope,
                 known_series=definitions,
@@ -646,9 +728,30 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
                     CatalogueEvidence.from_parsed_json(item) for item in manifest["catalogue_evidence"]
                 ),
                 empty_reason=reason,
+                series_annotations=selection_annotations,
             )
+        raw_ann_files = manifest["annotation_files"]
+        if type(raw_ann_files) is not list:
+            raise ValueError("Bundle annotation_files must be a list")
+        ann_entries: list[tuple[AnnotationSchema, str]] = []
+        seen_ann_schemas: set[str] = set()
+        for entry in raw_ann_files:
+            if type(entry) is not dict or set(entry) != {"schema_id", "file"}:
+                raise ValueError("Bundle annotation_files entry is malformed")
+            schema_id = entry["schema_id"]
+            ann_file = entry["file"]
+            if type(schema_id) is not str or type(ann_file) is not str or schema_id in seen_ann_schemas:
+                raise ValueError("Bundle annotation_files entry contains invalid or duplicate schema_id")
+            schema = schemas_by_id.get(schema_id)
+            if schema is None or schema.scope is not AnnotationScope.OBSERVATION:
+                raise ValueError(f"Bundle annotation file references unknown observation schema {schema_id!r}")
+            if ann_file != f"annotations/{schema_id}.parquet":
+                raise ValueError(f"Bundle annotation file path is invalid: {ann_file!r}")
+            seen_ann_schemas.add(schema_id)
+            ann_entries.append((schema, ann_file))
+        ann_file_names = [ann_file for _, ann_file in ann_entries]
         receipt_files = [item["file"] for item in manifest["receipts"]]
-        if set(archive.namelist()) != {"manifest.json", "observations.parquet", *receipt_files} or len(
+        if set(archive.namelist()) != {"manifest.json", "observations.parquet", *receipt_files, *ann_file_names} or len(
             set(receipt_files)
         ) != len(receipt_files):
             raise ValueError("Result bundle receipt inventory does not match its files")
@@ -692,8 +795,37 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
                 **{name: _read_origin_value(value) for name, value in manifest["provenance_values"].items()},
             }
         )
-        return ObservationResult(
-            data=pl.read_parquet(BytesIO(archive.read("observations.parquet"))),
+        try:
+            data_frame = pl.read_parquet(BytesIO(archive.read("observations.parquet")))
+        except (pl.exceptions.PolarsError, OSError, ValueError) as error:
+            raise ValueError(f"Invalid bundle observations parquet: {error}") from error
+        obs_tables: dict[str, ObservationAnnotationTable] = {}
+        for schema, ann_file in ann_entries:
+            try:
+                ann_frame = pl.read_parquet(BytesIO(archive.read(ann_file)))
+            except (pl.exceptions.PolarsError, OSError, ValueError) as error:
+                raise ValueError(f"Invalid bundle annotation parquet {ann_file!r}: {error}") from error
+            if "_measurement_index" not in ann_frame.columns:
+                raise ValueError(f"Bundle annotation parquet {ann_file!r} lacks _measurement_index")
+            idx_col = ann_frame.get_column("_measurement_index")
+            if idx_col.dtype != pl.Int64 or idx_col.null_count() > 0:
+                raise ValueError(f"Bundle annotation _measurement_index in {ann_file!r} must be non-null Int64")
+            raw_indices = idx_col.to_list()
+            if any(idx < -1 or idx >= data_frame.height for idx in raw_indices):
+                raise ValueError(f"Bundle annotation _measurement_index out of bounds in {ann_file!r}")
+            meas_indices = [None if idx == -1 else int(idx) for idx in raw_indices]
+            try:
+                obs_tables[schema.schema_id] = ObservationAnnotationTable.from_rows(
+                    schema=schema,
+                    rows=ann_frame.drop("_measurement_index"),
+                    measurement_indices=meas_indices,
+                )
+            except (ValidationError, FatalContractError, ValueError, TypeError, pl.exceptions.PolarsError) as error:
+                raise ValueError(
+                    f"Invalid bundle observation annotation table {schema.schema_id!r}: {error}"
+                ) from error
+        result = ObservationResult(
+            data=data_frame,
             provenance=provenance,
             receipts=Receipts(provider_id=ProviderId(manifest["receipt_provider"]), entries=tuple(receipts)),
             source_series=definitions,
@@ -708,3 +840,13 @@ def decode_bundle(content: bytes) -> _Selection | ObservationResult:
             ),
             issues=issues,
         )
+        bundle = AnnotationBundle(
+            observation_tables=obs_tables,
+            series_tables=series_tables_by_id,
+        )
+        if not bundle.is_empty:
+            try:
+                result = with_annotations(result, bundle)
+            except FatalContractError as error:
+                raise ValueError(f"Bundle annotation linkage failed: {error}") from error
+        return result

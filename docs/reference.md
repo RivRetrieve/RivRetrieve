@@ -6,6 +6,10 @@ Functions import from `rivretrieve`. The reference renders their source docstrin
 
 ## Public functions
 
+### annotations
+
+::: rivretrieve.annotations
+
 ### as_frame
 
 ::: rivretrieve.as_frame
@@ -291,19 +295,19 @@ These types are not re-exported from `rivretrieve`. Their headings identify thei
 
 ::: rivretrieve._internal.store.validation.ValidatedStore
     options:
-      members: [root, manifest, partition_files]
+      members: [root, manifest, partition_files, annotation_partition_files]
 
 ### StoreManifest
 
 ::: rivretrieve._internal.store.validation.StoreManifest
     options:
-      members: [format_version, provider_id, compiler_version, built_at, source_vintage, publisher_artifact, publisher_artifacts, source_schema, source_column_dispositions, partition_row_counts, series, inventories, outcomes, issues, source_calls]
+      members: [format_version, provider_id, compiler_version, built_at, source_vintage, publisher_artifact, publisher_artifacts, source_schema, source_column_dispositions, partition_row_counts, annotation_schemas, annotation_partition_row_counts, series_annotations, series, inventories, outcomes, issues, source_calls]
 
 ### AccumulatedStoreManifest
 
 ::: rivretrieve._internal.store.validation.AccumulatedStoreManifest
     options:
-      members: [format_version, provider_id, built_at, coverage, partition_row_counts, series, inventories, outcomes, issues, source_calls]
+      members: [format_version, provider_id, built_at, coverage, partition_row_counts, annotation_schemas, annotation_partition_row_counts, series_annotations, series, inventories, outcomes, issues, source_calls]
 
 ### CacheAuditResult
 

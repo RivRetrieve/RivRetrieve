@@ -122,14 +122,14 @@ def test_service_specific_daily_store_and_bundles_round_trip(retained_evidence_r
     result = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="reuse", on_issue="raise")
     assert result.data.height > 0
     manifest = json.loads((tmp_path / "fr_hubeau/store/manifest.json").read_text())
-    assert manifest["format_version"] == 8
+    assert manifest["format_version"] == 9
     assert manifest["publication_service"] == "hubeau"
     assert rr.cache_status("fr_hubeau").exists
     for value in (selection, result):
         content = rr.to_bundle(value)
         with ZipFile(BytesIO(content)) as archive:
             manifest = json.loads(archive.read("manifest.json"))
-        assert manifest["version"] == 3
+        assert manifest["version"] == 4
         assert manifest["publication_service"] == "hubeau"
         restored = rr.from_bundle(content)
         assert_frame_equal(rr.series(restored), rr.series(value))
@@ -228,7 +228,7 @@ def test_current_bundle_refuses_retired_publication_service_before_values(
     with ZipFile(BytesIO(content)) as archive:
         members = {name: archive.read(name) for name in archive.namelist()}
     manifest = json.loads(members["manifest.json"])
-    assert manifest["version"] == 3
+    assert manifest["version"] == 4
     assert manifest["publication_service"] == "hubeau"
     if service is None:
         del manifest["publication_service"]

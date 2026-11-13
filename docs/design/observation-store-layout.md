@@ -10,8 +10,8 @@ intentionally invalid conformance stores are rooted at
 contract. Refusal fixtures also include unsupported formats. Runtime validation checks
 the typed source-series records and their references.
 
-The revision-5 contract below applies to stores produced by compiling a publisher
-artifact. The accumulated-store revision-8 section specifies live-provider parse output
+The revision-10 contract below applies to stores produced by compiling a publisher
+artifact. The accumulated-store revision-9 section specifies live-provider parse output
 and names its separately addressable manifest schema.
 
 This contract specifies data at rest. It does not specify or implement a store reader,
@@ -51,7 +51,7 @@ provider-native columns are permitted and are governed by source-column disposit
 The required physical names are exactly `station_id`, `time`, `time_zone`, `value`,
 `value_state`, `series_id`, `facts_id`, and `source_unit`; `source_time` and `native_value` are not format column names.
 
-Revision `5` fixes the physical encoding of the engine-facing columns: they MUST be the
+Revision `10` fixes the physical encoding of the engine-facing columns: they MUST be the
 first eight fields of the Parquet schema, in the order shown in the table above;
 `station_id`, `time_zone`, `value_state`, `series_id`, `facts_id`, and `source_unit` MUST be UTF-8 string fields; `time` MUST be a
 microsecond-precision timestamp without a time zone; and `value` MUST be a 64-bit binary
@@ -106,8 +106,29 @@ closure mechanically.
 
 Provider-native columns retain the source's vocabulary and values. When a native name
 collides with an engine-facing column or cannot be represented faithfully as a Parquet
-field name, revision `5` compilation MUST refuse the source schema. It MUST NOT silently
+field name, revision `10` compilation MUST refuse the source schema. It MUST NOT silently
 rename, overwrite, or drop the column.
+
+### Source-annotation partitions
+
+When declared source annotations are materialized, observation-grain annotation tables live in
+optional sidecar directories under each product/year partition:
+
+`product=<product_id>/year=<YYYY>/annotations=<schema_id>/`
+
+Each annotation partition directory contains one `.parquet` file (`rows.parquet`), sealed by
+`integrity.json` and keyed in `manifest.json` under `annotation_partition_row_counts` by
+`product=<product_id>/year=<YYYY>/annotations=<schema_id>`. Empty annotation partitions MUST
+NOT be materialized.
+
+Each Parquet row contains the structural columns `series_id`, `facts_id`, `station_id`,
+`product_id`, `time`, `time_zone`, and `measured`, followed by non-null `Int64`
+`_occurrence_ordinal` and the declared plain Polars annotation columns for `schema_id`.
+Measured rows (`measured=True`) carry zero-based `_occurrence_ordinal` indexing duplicate
+`(series_id, facts_id, time, time_zone)` occurrences in engine row order; unmeasured source slots
+(`measured=False`) carry `_occurrence_ordinal=-1`. Non-identity series-grain annotation tables
+are stored once in `manifest.json` under `series_annotations`, keyed by schema ID and `series_id`,
+without repeating across observation rows.
 
 ## Bounded certified compilation
 
@@ -126,9 +147,11 @@ requested closed wall-clock window also occurs only on read through that convert
 it MUST return a superset sufficient for convert to remain the authority for clipping.
 
 Standardising the container does not author new measurements, interpret quality codes,
-or promote source-only fields into the returned observation frame. Quality fields remain
-preserved native cells and may be reached through a store-excerpt receipt; they are not
-native annotations in the observation frame.
+or promote source-only fields into `ObservationResult.data`. Where a provider declares
+annotation schemas, those preserved observation and series fields are exposed through
+`annotations()`, `to_polars(annotations=...)`, `to_pandas(annotations=...)`, and
+`series(..., annotations=...)`. Other retained source columns in compiled stores stay
+accessible through store-excerpt receipts without altering `ObservationResult.data`.
 
 ## Manifest semantics
 
@@ -138,7 +161,7 @@ property spelling. It MUST require exactly one value for each semantic field bel
 
 | Semantic field | Canonical form and meaning |
 |---|---|
-| Format version | The positive integer format revision. This contract is revision `5`; an implementation recognises only revisions it explicitly supports. |
+| Format version | The positive integer format revision. Compiled stores use revision `10`; accumulated stores use revision `9`. An implementation recognises only revisions it explicitly supports and refuses older revisions with `download` or `clear_cache` recovery guidance. |
 | Provider identity | The exact non-empty provider id whose declared bulk configuration and unit conversion may read the store. Validation MUST refuse a different requested provider before reading rows. |
 | Compiler version | A non-empty PEP 440 version string identifying the RivRetrieve compiler that produced the store. |
 | UTC build time | An RFC 3339 UTC instant in `YYYY-MM-DDTHH:MM:SS.ffffffZ` form, recording completion of the staged build before publication. |
@@ -148,12 +171,12 @@ property spelling. It MUST require exactly one value for each semantic field bel
 | Source-schema fingerprint | `sha256:` followed by exactly 64 lowercase hexadecimal digits for the compiler's deterministic canonical encoding of the declared ordered source schema, including source column names and source data types. |
 | Per-partition row counts | A JSON object whose keys are canonical partition identifiers and whose values are positive JSON integers equal to the Parquet row counts. |
 | Source-column dispositions | The complete list of disposition records specified above. |
-| Series and evidence | Required `series`, `inventories`, `outcomes`, `issues`, and `source_calls` arrays, described below. |
+| Series and evidence | Required `series`, `inventories`, `outcomes`, `issues`, and `source_calls` arrays, described below. Optional `annotation_schemas`, `annotation_partition_row_counts`, and `series_annotations` fields describe attached source-annotation partitions and series tables. |
 
 The source-schema fingerprint MUST cover both the ordered source column names and the
 source data types; hashing column names alone is nonconforming.
 
-Revision `5` fixes that canonical encoding: the ordered `columns` list is serialised as
+Revision `10` fixes that canonical encoding: the ordered `columns` list is serialised as
 JSON with object keys sorted, no insignificant whitespace, and non-ASCII characters left
 unescaped, then encoded as UTF-8 and hashed with SHA-256; the manifest records the digest
 with the `sha256:` prefix. A reader MUST recompute the fingerprint under this encoding and
@@ -283,23 +306,24 @@ contract: their rows are compiled into the one file for that product/year partit
 
 ### IMGW partition finalisation
 
-Revision `5` compilation of an ordered IMGW archive set uses two passes. The first pass establishes
+Revision `10` compilation of an ordered IMGW archive set uses two passes. The first pass establishes
 every archive contribution and the final row count for each calendar `product`/`year` partition. The
 second pass streams contributing rows into the single file for that partition. A compiler MUST NOT
 finalise a partition file or its manifest count while an unread adjacent archive can still contribute.
 The partition remains a calendar product/year partition.
 
-### Accumulated-store format revision 8
+### Accumulated-store format revision 9
 
-Compiled stores use revision `5`. Accumulated live-provider parse output uses revision
-`8`, described by `manifest.schema.json#accumulated`. Readers MUST check the revision
+Compiled stores use revision `10`. Accumulated live-provider parse output uses revision
+`9`, described by `manifest.schema.json#accumulated`. Readers MUST check the revision
 before opening any Parquet file. Unsupported revisions are refused with the store path
 and an explicit operation: `download` for a compiled store or `clear_cache` for an
 accumulated store.
 
 The accumulated manifest requires `format_version`, `provider_id`, `built_at`,
 `coverage`, `partition_row_counts`, `series`, `inventories`, `outcomes`, `issues`, and
-`source_calls`. Publication-service fields identify Hub’Eau and modern USGS stores
+`source_calls`, and MAY include `annotation_schemas`, `annotation_partition_row_counts`,
+and `series_annotations`. Publication-service fields identify Hub’Eau and modern USGS stores
 where applicable. `built_at` is the UTC write instant with six fractional digits and `Z`.
 Coverage and partition counts MAY be empty: inventory and unsuccessful outcomes can be
 stored even when no successful interval or observation row exists.
@@ -310,7 +334,7 @@ prerequisite. Stores missing this declaration are incompatible. Both reuse and
 refresh MUST refuse them before transport or mutation. Run `clear_cache("jp_mlit")`
 and retrieve the required series again. This creates new acquisition history;
 it does not reconstruct an original HTML request that an older cache discarded.
-Other providers’ revision-8 stores remain readable without this field.
+Other providers’ revision-9 stores remain readable without this field.
 
 Each coverage record contains exactly `series_id`, `start`, `end`, `retrieved_at`,
 `outcome_id`, `facts_ids`, and `axis`. Endpoints are closed, timezone-naive timestamps
@@ -334,8 +358,10 @@ successful empty interval answer still records coverage. Coverage makes no fresh
 expiry, observation-density or age claim.
 
 Partitions use `product=<id>/year=<native-year>`, one Parquet file per partition,
-station-id ordering, and the eight-column physical prefix specified above. No
-provider-native columns follow that prefix. `published_value` denotes a non-null native
+station-id ordering, and the eight-column physical prefix specified above, with optional
+`annotations=<schema_id>/rows.parquet` sidecars under those partition directories for
+declared observation annotations and unmeasured slots. No provider-native columns follow
+that prefix in the main partition file. `published_value` denotes a non-null native
 value and `published_null` a null value; `published_blank` is forbidden. Every row MUST
 be supported either by interval coverage for its series and facts on the declared axis,
 or by a successful observation-only outcome identifying its exact series, physical-fact,
@@ -425,10 +451,10 @@ Operations have distinct detection scopes:
 
 | Operation | Checks performed |
 | --- | --- |
-| `cache_status` | Journal and ownership, closed file inventory, file identities, manifest digest and metadata relations. When recorded device, inode, size and modification-time witnesses match, no observation bytes are decoded or hashed; when they differ on an idle committed store, complete digest and observation validation runs once before updating local witnesses. |
-| Store read | Current metadata and closed inventory, then original content digests for selected product/year partitions. When recorded witnesses differ on first access after copying, the complete store is validated and re-witnessed before reading. Published validation establishes observation consistency; verified bytes preserve that authority. Observation decoding applies conservative request predicates. |
-| `audit_cache` | Every sealed file digest and all observation and metadata consistency rules for one generation. Updates local witnesses if a complete copied store was not yet re-witnessed. Return identifies the generation and checked counts. |
-| Accumulated update | Current metadata, new or changed partitions and the retained support for unchanged partitions. Original digests are carried forward, never inferred from replacement bytes. |
+| `cache_status` | Journal and ownership, closed file inventory, file identities, manifest digest and metadata relations. When recorded device, inode, size and modification-time witnesses match, no observation or annotation bytes are decoded or hashed; when they differ on an idle committed store, complete digest and observation validation runs once before updating local witnesses. |
+| Store read | Current metadata and closed inventory, then original content digests for selected product/year observation and annotation partitions. When recorded witnesses differ on first access after copying, the complete store is validated and re-witnessed before reading. Published validation establishes observation consistency; verified bytes preserve that authority. Observation decoding applies conservative request predicates. |
+| `audit_cache` | Every sealed file digest (including annotation partitions) and all observation and metadata consistency rules for one generation. Updates local witnesses if a complete copied store was not yet re-witnessed. Return identifies the generation and checked counts. |
+| Accumulated update | Current metadata, new or changed observation and annotation partitions, and the retained support for unchanged partitions. Original digests are carried forward, never inferred from replacement bytes. |
 
 The selected-read boundary uses `inspect_integrity` and the shared selected-file
 hash checks. A public request shares metadata preparation and verified partition

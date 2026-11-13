@@ -171,7 +171,7 @@ def _download(
             if inspect_remote_lifecycle(root).committed_path == root:
                 try:
                     sealed = inspect_remote_integrity(root, provider_id)
-                    verify_remote_files(sealed, tuple(sealed.store.partition_files))
+                    verify_remote_files(sealed, tuple(sealed.store.all_partition_files))
                 except ObservationStoreRefusedError:
                     pass
                 else:
@@ -220,7 +220,7 @@ def _download(
             try:
                 previous = validate_store(root, provider_id)
                 sealed = inspect_integrity(root, provider_id, lease=transaction.lease)
-                verify_files(sealed, tuple(previous.partition_files))
+                verify_files(sealed, tuple(previous.all_partition_files))
             except ObservationStoreRefusedError:
                 # Only an unambiguously selected valid snapshot establishes a floor.
                 # Explicit download remains the rebuild path for refused data.

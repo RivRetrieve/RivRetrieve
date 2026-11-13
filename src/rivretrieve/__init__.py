@@ -1,5 +1,6 @@
 from importlib.metadata import version as _version
 
+from rivretrieve._internal.discovery import annotations as annotations
 from rivretrieve._internal.discovery import as_frame as as_frame
 from rivretrieve._internal.discovery import audit_cache as audit_cache
 from rivretrieve._internal.discovery import cache_status as cache_status

@@ -133,6 +133,21 @@ See `metadata` above and [station metadata](station-metadata.md) for name altern
 
 Only value is nullable. Time precision can vary while remaining Datetime. The zone belongs to each row, not the timestamp dtype. See `ObservationResult` above for units and meanings.
 
+### Annotation catalog frame
+
+| Column | Polars dtype |
+| --- | --- |
+| `scope` | `String` |
+| `schema` | `String` |
+| `name` | `String` |
+| `dtype` | `String` |
+| `row_count` | `Int64` |
+| `unmeasured_count` | `Int64` |
+| `description` | `String` |
+| `reference_url` | `String` |
+
+Returned by `annotations(value)` when `schema` is omitted. `unmeasured_count` counts observation-grain source slots with `measured=False`; series-grain rows report `0`.
+
 
 ## Shipped software capabilities
 

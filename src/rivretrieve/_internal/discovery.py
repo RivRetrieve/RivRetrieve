@@ -27,6 +27,11 @@ from rivretrieve._internal.selection import _from_frame as _selection_from_frame
 from rivretrieve._internal.selection import _pick as _selection_pick
 from rivretrieve._internal.selection import _station_frame as _selection_station_frame
 from rivretrieve._internal.selection import _station_keys as _selection_station_keys
+from rivretrieve._internal.source_annotations import (
+    AnnotationBundle,
+    AnnotationSelection,
+    with_annotations,
+)
 from rivretrieve._internal.source_series import RetrievalOutcome, SeriesScope, SourceSeries
 from rivretrieve._internal.station_map import StationMap
 from rivretrieve._internal.store import StoreRoot
@@ -348,8 +353,11 @@ def pick(
 
         selected = _with_selection_diagnostics(selected, "ignore")
         current_issues = _selection_issues_for_result(selected, selection)
+        mask = selection.data.select(predicate.alias("_keep"))["_keep"]
+        keep_indices = [idx for idx, keep in enumerate(mask.to_list()) if keep]
+        old_to_new = {old: new for new, old in enumerate(keep_indices)}
         result = ObservationResult(
-            data=selection.data.filter(predicate),
+            data=selection.data.filter(mask),
             provenance=selection.provenance,
             receipts=selection.receipts,
             source_series=selection.source_series,
@@ -360,6 +368,13 @@ def pick(
             view_scope=scope,
             issues=(*selection.issues, *current_issues),
         )
+        if not selection._annotations.is_empty:
+            narrowed_annotations = selection._annotations.narrow(
+                old_to_new=old_to_new,
+                allowed_series_facts=set(pairs),
+                allowed_series_ids={sid for sid, _ in pairs},
+            )
+            result = with_annotations(result, narrowed_annotations)
         historical_issues = tuple(issue for issue in selection.issues if _issue_applies_to_view(issue, result))
         apply_on_issue((*historical_issues, *current_issues), on_issue)
         return result
@@ -469,7 +484,48 @@ def _finite_view_members_represented(scope: SeriesScope, result: ObservationResu
     return all(represented(member) for member in members)
 
 
-def series(value: _Selection | ObservationResult) -> pl.DataFrame:
+def annotations(value: ObservationResult | _Selection, *, schema: str | None = None) -> pl.DataFrame:
+    """Inspect attached source-annotation schemas or read one schema table.
+
+    Parameters
+    ----------
+    value : ObservationResult or selection
+        Result or selection whose source annotations to inspect.
+    schema : str or None, default None
+        When ``None``, return the eight-column field catalog across all active
+        observation and series schemas. When a schema identifier is given, return
+        that schema's direct table without cross-route null padding.
+
+    Returns
+    -------
+    polars.DataFrame
+        Either the eight-column annotation field catalog
+        ``(scope, schema, name, dtype, row_count, unmeasured_count, description, reference_url)``
+        or the requested schema's direct table, including ``measured=False``
+        unmeasured slots for observation-scope schemas.
+
+    Raises
+    ------
+    TypeError
+        If ``value`` is neither an ``ObservationResult`` nor a selection.
+    ValueError
+        If ``schema`` is given and no matching annotation schema is attached.
+    """
+    if isinstance(value, ObservationResult):
+        bundle = value._annotations
+    else:
+        _require_selection(value)
+        bundle = (
+            value.series_annotations
+            if isinstance(value.series_annotations, AnnotationBundle)
+            else AnnotationBundle.empty()
+        )
+    if schema is None:
+        return bundle.catalog_frame()
+    return bundle.schema_table(schema)
+
+
+def series(value: _Selection | ObservationResult, *, annotations: AnnotationSelection = False) -> pl.DataFrame:
     """Describe each source series in a selection or result as a table.
 
     Parameters
@@ -480,12 +536,15 @@ def series(value: _Selection | ObservationResult) -> pl.DataFrame:
         evidence before retrieval. For a result, rows describe the series known
         after retrieval, including series first identified in the source
         response, together with their retrieval outcomes.
+    annotations : bool, str, or sequence of str, default False
+        Non-identity series-scope annotation attributes to join by ``series_id``.
+        Observation-scope fields belong on ``ObservationResult.to_polars``.
 
     Returns
     -------
     polars.DataFrame
         One row per source series and physical-fact segment that matches the
-        selection or view. The schema is fixed and shown under "Series
+        selection or view, plus any requested series-scope annotation columns. The base schema is shown under "Series
         inspection frame" in the API reference. Rows sort by ``provider_id``,
         ``station_id``, ``product_id``, ``series_id`` and ``facts_id``.
 
@@ -536,6 +595,8 @@ def series(value: _Selection | ObservationResult) -> pl.DataFrame:
     ------
     TypeError
         If ``value`` is neither a selection nor an observation result.
+    ValueError
+        If a requested annotation field is unknown or collides across schemas.
 
     Notes
     -----
@@ -545,29 +606,38 @@ def series(value: _Selection | ObservationResult) -> pl.DataFrame:
     from rivretrieve._internal.selection import _series_frame
 
     if isinstance(value, ObservationResult):
-        return _series_frame(
+        frame = _series_frame(
             value.source_series,
             value.view_scope or value.scope,
             value.inventories,
             value.outcomes,
             provider_id=str(value.provenance.provider_id),
         )
-    return _selection_as_frame(value)
+        return value._annotations.join_series_columns(frame, annotations)
+    return _selection_as_frame(value, annotations=annotations)
 
 
-def as_frame(selection: _Selection) -> pl.DataFrame:
+def as_frame(selection: _Selection, *, annotations: AnnotationSelection = False) -> pl.DataFrame:
     """Return the source-series table for a selection, the same table as ``series``.
 
     Selecting rows from the table does not change the selection. Pass chosen
     identifiers back to ``pick`` instead. Use ``to_bundle`` to save a selection
     without losing information.
 
+    Parameters
+    ----------
+    selection : selection
+        Selection created by ``find``, ``pick`` or ``from_bundle``.
+    annotations : bool, str, or sequence of str, default False
+        Non-identity series-scope annotation attributes to join by ``series_id``.
+        Observation-scope fields belong on ``ObservationResult.to_polars``.
+
     Raises
     ------
     TypeError
         If ``selection`` is not a selection. Use ``series`` for a result.
     """
-    return _selection_as_frame(selection)
+    return _selection_as_frame(selection, annotations=annotations)
 
 
 def from_frame(frame: pl.DataFrame) -> _Selection:
@@ -597,12 +667,13 @@ def to_bundle(value: _Selection | ObservationResult) -> bytes:
     Returns
     -------
     bytes
-        ZIP archive in bundle format version 3. Write the bytes to a file to
+        ZIP archive in bundle format version 4. Write the bytes to a file to
         keep them. A selection bundle holds its request intent, source-series
         definitions, inventories, issues, station locations, catalogue evidence
         and empty-selection reason. A result bundle also holds the observation
-        rows as Parquet, the outcomes, the view scope, provenance and any
-        retained receipt bytes. Nothing is read from or written to disk.
+        rows as Parquet, any source annotations, the outcomes, the view scope,
+        provenance and any retained receipt bytes. Nothing is read from or
+        written to disk.
 
     Raises
     ------
@@ -626,17 +697,17 @@ def from_bundle(content: bytes) -> _Selection | ObservationResult:
     -------
     selection or ObservationResult
         The kind of value that was exported. Identities, physical facts,
-        inventories, issues and, for results, observations, outcomes,
-        provenance and receipts come from the bundle. The current packaged
-        catalogue is not consulted, so a restored selection keeps the evidence
-        it had when exported.
+        inventories, issues and, for results, observations, annotations,
+        outcomes, provenance and receipts come from the bundle. The current
+        packaged catalogue is not consulted, so a restored selection keeps the
+        evidence it had when exported.
 
     Raises
     ------
     TypeError
         If ``content`` is not ``bytes``.
     ValueError
-        If the bytes are not a bundle, the bundle version is not 3, or its
+        If the bytes are not a bundle, the bundle version is not 4, or its
         contents fail validation. Bundles from other format versions must be
         exported again or re-fetched.
     ObservationDataSchemaError
@@ -1510,8 +1581,24 @@ def _merge_provider_results(
                 raise FatalContractError("Provider results disagree about an acquisition outcome")
         active_outcomes.update((item.outcome_id, item) for item in result.outcomes)
         supporting_outcomes.update((item.outcome_id, item) for item in result.supporting_outcomes)
-    return ObservationResult(
-        data=_canonical_observation_order(pl.concat([result.data for result in results])),
+    row_offsets: list[int] = []
+    running = 0
+    for item in results:
+        row_offsets.append(running)
+        running += item.data.height
+    if running > 0:
+        combined = pl.concat([item.data for item in results]).with_columns(
+            pl.arange(0, running, eager=True, dtype=pl.Int64).alias("_rr_row_idx")
+        )
+        ordered = _canonical_observation_order(combined)
+        old_to_new = {old: new for new, old in enumerate(ordered["_rr_row_idx"].to_list())}
+        merged_data = ordered.drop("_rr_row_idx")
+    else:
+        old_to_new = {}
+        merged_data = pl.concat([item.data for item in results])
+
+    merged = ObservationResult(
+        data=merged_data,
         source_series=_merge_series_definitions(results),
         inventories=tuple({item.snapshot_id: item for result in results for item in result.inventories}.values()),
         outcomes=tuple(active_outcomes.values()),
@@ -1536,6 +1623,14 @@ def _merge_provider_results(
         issues=issues,
         receipts=Receipts(provider_id=first.provenance.provider_id, entries=receipt_entries),
     )
+    merged_annotations = AnnotationBundle.merge_sorted(
+        [item._annotations for item in results],
+        row_offsets=row_offsets,
+        old_to_new=old_to_new,
+    )
+    if merged_annotations.is_empty:
+        return merged
+    return with_annotations(merged, merged_annotations)
 
 
 def _merge_series_definitions(results: tuple[ObservationResult, ...]) -> tuple[SourceSeries, ...]:

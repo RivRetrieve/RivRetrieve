@@ -51,13 +51,19 @@ def test_recorded_public_route_identity_physics_cache_and_receipt(
     assert {s.product_id for s in selection.series} == {product}
     source = json.loads(content)["features"]
     expected = []
+    expected_annotations = []
     identities = set()
     for feature in source:
         item = feature["properties"]
         identities.add(item["time_series_id"])
         stamp = datetime.fromisoformat(item["time"].replace("Z", "+00:00")).replace(tzinfo=None)
         if datetime.fromisoformat(start) <= stamp <= datetime.fromisoformat(end):
-            expected.append((stamp, float(item["value"]) * factor))
+            converted = float(item["value"]) * factor
+            expected.append((stamp, converted))
+            raw_qualifier = item.get("qualifier")
+            qualifier = [raw_qualifier] if isinstance(raw_qualifier, str) else raw_qualifier
+            row_ann = (stamp, converted, item["approval_status"], qualifier)
+            expected_annotations.append(row_ann if daily else (*row_ann, item.get("method_category")))
     assert len(expected) == (7 if daily else 96)
 
     def fetch(mode):
@@ -67,6 +73,21 @@ def test_recorded_public_route_identity_physics_cache_and_receipt(
     expected_rows = pl.DataFrame(expected, schema={"time": pl.Datetime("us"), "value": pl.Float64}, orient="row")
     pt.assert_frame_equal(
         bypass.data.select("time", "value").sort("time", "value"), expected_rows.sort("time", "value")
+    )
+    expected_schema_id = "usgs_nwis.daily" if daily else "usgs_nwis.continuous"
+    assert rr.annotations(bypass)["schema"].unique().to_list() == [expected_schema_id]
+    ann_schema = {
+        "time": pl.Datetime("us"),
+        "value": pl.Float64,
+        "approval_status": pl.String,
+        "qualifier": pl.List(pl.String),
+    }
+    if not daily:
+        ann_schema["method_category"] = pl.String
+    expected_ann_frame = pl.DataFrame(expected_annotations, schema=ann_schema, orient="row")
+    pt.assert_frame_equal(
+        bypass.to_polars(annotations=True).select(list(ann_schema)).sort("time", "value"),
+        expected_ann_frame.sort("time", "value"),
     )
     assert {s.identity.published_id for s in bypass.source_series} == identities
     assert all(s.identity.namespace == "USGS.WaterData.time_series_id" for s in bypass.source_series)
@@ -81,7 +102,10 @@ def test_recorded_public_route_identity_physics_cache_and_receipt(
     for mode in ("reuse", "reuse", "refresh", "reuse"):
         result = fetch(mode)
         pt.assert_frame_equal(result.data, bypass.data)
+        pt.assert_frame_equal(result.to_polars(annotations=True), bypass.to_polars(annotations=True))
         assert all(o.status == "success" for o in result.outcomes)
+    restored = rr.from_bundle(rr.to_bundle(bypass))
+    pt.assert_frame_equal(restored.to_polars(annotations=True), bypass.to_polars(annotations=True))
     assert len(calls) == 3
 
 

@@ -77,7 +77,7 @@ def bulk_store(tmp_path, monkeypatch, stub_packaged_catalogue_artifact):
             ProductId("discharge"): ProductConfig(SourceCoordinates({}), Unit.M3_S, Instant()),
             ProductId("level"): ProductConfig(SourceCoordinates({}), Unit.M, Instant()),
         },
-        cache=CacheConfig(ObservationStoreConfig(format_version=5)),
+        cache=CacheConfig(ObservationStoreConfig(format_version=10)),
     )
     _registry.register(
         provider, stub_packaged_catalogue_artifact(provider), bulk_config=config, observation_store=store

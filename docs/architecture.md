@@ -89,6 +89,13 @@ interpretation consistent. Compiled stores preserve declared source columns and 
 states from publisher artifacts. Accumulated stores retain parsed observations and the
 evidence needed to decide whether a later request can reuse them.
 
+Provider-scoped observation annotations and unmeasured source slots are stored alongside
+observations in native-year Parquet partitions (`annotations=<schema_id>/rows.parquet`),
+while non-identity series annotations are stored once in `manifest.json`. `ObservationResult.data`
+retains its ten canonical columns, while `annotations()`, `to_polars(annotations=...)`,
+`to_pandas(annotations=...)`, and `series(..., annotations=...)` expose declared source
+annotations across live retrieval, store reuse, manual refresh, `pick`, `to_utc`, and bundles.
+
 Reuse requires both knowledge of the matching series and successful interval coverage.
 The decision is made per station and access route. An uncovered route is reacquired
 while another can be served locally. Coverage is separate from observation density:
