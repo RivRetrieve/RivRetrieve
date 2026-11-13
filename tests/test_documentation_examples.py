@@ -258,6 +258,7 @@ def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path, r
     from polars.testing import assert_frame_equal
 
     from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.source_annotations import AnnotationBundle, ObservationAnnotationTable, with_annotations
 
     scope = execute_page("README.md", monkeypatch, tmp_path, retained_evidence_root=retained_evidence_root)
     rr = scope["rr"]
@@ -266,13 +267,27 @@ def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path, r
         rr.to_utc(scope["result"])
     # Authored clock labels test the UTC operation, retaining real identity/fact context.
     original = scope["result"]
-    synthetic = original.model_copy(
-        update={
-            "data": original.data.with_columns(
-                pl.lit(datetime(2023, 1, 1, 12)).alias("time"),
-                pl.lit("+02:00").alias("time_zone"),
-            )
-        }
+    synthetic_data = original.data.with_columns(
+        pl.lit(datetime(2023, 1, 1, 12), dtype=pl.Datetime("us")).alias("time"),
+        pl.lit("+02:00", dtype=pl.String()).alias("time_zone"),
+    )
+    synthetic_obs_tables = {
+        schema_id: ObservationAnnotationTable.from_rows(
+            schema=table.schema,
+            rows=table.rows.with_columns(
+                pl.lit(datetime(2023, 1, 1, 12), dtype=pl.Datetime("us")).alias("time"),
+                pl.lit("+02:00", dtype=pl.String()).alias("time_zone"),
+            ),
+            measurement_indices=table.measurement_indices,
+        )
+        for schema_id, table in original._annotations.observation_tables.items()
+    }
+    synthetic = with_annotations(
+        original.model_copy(update={"data": synthetic_data}),
+        AnnotationBundle(
+            observation_tables=synthetic_obs_tables,
+            series_tables=original._annotations.series_tables,
+        ),
     )
     converted = rr.to_utc(synthetic)
     expected = synthetic.data.with_columns(
@@ -280,6 +295,8 @@ def test_utc_unknown_refusal_and_synthetic_fixed_offset(monkeypatch, tmp_path, r
         pl.lit("+00:00").alias("time_zone"),
     )
     assert_frame_equal(converted.data, expected)
+    assert rr.annotations(converted, schema="usgs_nwis.daily")["time"].to_list() == [datetime(2023, 1, 1, 10)]
+    assert rr.annotations(converted, schema="usgs_nwis.daily")["time_zone"].to_list() == ["+00:00"]
     assert converted.provenance is synthetic.provenance
     assert converted.issues is synthetic.issues
     assert converted.receipts is synthetic.receipts

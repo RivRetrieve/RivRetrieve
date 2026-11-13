@@ -415,6 +415,7 @@ def _document(content: bytes) -> dict:
 
 def _check_duplicates(document: dict, seen: set[tuple[str, datetime]], coordinates: UsgsNwisSourceCoordinates) -> None:
     repeated: set[str] = set()
+    page_keys: set[tuple[str, datetime]] = set()
     for feature in document["features"]:
         properties = feature.get("properties") if isinstance(feature, dict) else None
         if not isinstance(properties, dict):
@@ -430,7 +431,8 @@ def _check_duplicates(document: dict, seen: set[tuple[str, datetime]], coordinat
         key = (identifier, identity_time)
         if key in seen:
             repeated.add(key[0])
-        seen.add(key)
+        page_keys.add(key)
+    seen.update(page_keys)
     if repeated:
         raise _RepeatedObservationError(repeated)
 

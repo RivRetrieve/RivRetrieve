@@ -369,3 +369,109 @@ def test_public_usgs_annotations_workflows_utc_pick_mixed_bundle_and_store(monke
         rr.annotations(mixed_res, schema="usgs_nwis.continuous"),
     )
     pl_testing.assert_frame_equal(restored.to_polars(annotations=True), mixed_res.to_polars(annotations=True))
+
+
+def test_rr_fetch_single_page_exact_duplicate_feature_deduplicates_cleanly(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    sel = rr.find(provider="usgs_nwis", station="02196000", quantity="discharge", statistic="mean")
+    daily_series = sel.series[0]
+    daily_sel = rr.pick(sel, series_id=daily_series.series_id)
+
+    base = _usgs_feature(
+        location="USGS-02196000",
+        ts_id=daily_series.identity.published_id or "",
+        parameter_code="00060",
+        statistic_id="00003",
+        unit="ft^3/s",
+        time_str="2024-01-02",
+        value="100.0",
+        approval_status="Approved",
+        qualifier="Ice",
+    )
+    duplicate = {
+        **base,
+        "id": "different-record-revision",
+        "properties": {**dict(base["properties"]), "last_modified": "2024-02-01T00:00:00Z"},
+    }
+    body = json.dumps({"type": "FeatureCollection", "features": [base, duplicate], "links": []}).encode("utf-8")
+
+    class SinglePageTransport:
+        def send(self, request):
+            return TransportResponse(
+                body, 200, datetime(2026, 9, 28, tzinfo=UTC), "application/geo+json", request.url, request.params or {}
+            )
+
+    monkeypatch.setattr(discovery, "HttpClient", SinglePageTransport)
+    result = rr.fetch(daily_sel, start="2024-01-01", end="2024-01-04", cache="bypass", on_issue="raise")
+    assert result.data.height == 1
+    assert not result.issues
+    ann = rr.annotations(result, schema="usgs_nwis.daily")
+    assert ann.height == 1
+    assert ann["approval_status"].to_list() == ["Approved"]
+    assert ann["qualifier"].to_list() == [["Ice"]]
+    assert any(
+        item.series_id == daily_series.series_id and item.status is OutcomeStatus.SUCCESS for item in result.outcomes
+    )
+
+
+def test_rr_fetch_single_page_conflicting_annotation_isolates_only_offending_series(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    sel = rr.find(provider="usgs_nwis", station="02196000", quantity="discharge", statistic="mean")
+    assert len(sel.series) >= 2
+    bad_series, good_series = sel.series[0], sel.series[1]
+
+    bad_1 = _usgs_feature(
+        location="USGS-02196000",
+        ts_id=bad_series.identity.published_id or "",
+        parameter_code="00060",
+        statistic_id="00003",
+        unit="ft^3/s",
+        time_str="2024-01-02",
+        value="100.0",
+        approval_status="Approved",
+        qualifier=None,
+    )
+    bad_2 = _usgs_feature(
+        location="USGS-02196000",
+        ts_id=bad_series.identity.published_id or "",
+        parameter_code="00060",
+        statistic_id="00003",
+        unit="ft^3/s",
+        time_str="2024-01-02",
+        value="100.0",
+        approval_status="Provisional",
+        qualifier=["ESTIMATED"],
+    )
+    good = _usgs_feature(
+        location="USGS-02196000",
+        ts_id=good_series.identity.published_id or "",
+        parameter_code="00060",
+        statistic_id="00003",
+        unit="ft^3/s",
+        time_str="2024-01-02",
+        value="250.0",
+        approval_status="Approved",
+        qualifier="Ice",
+    )
+    body = json.dumps({"type": "FeatureCollection", "features": [bad_1, bad_2, good], "links": []}).encode("utf-8")
+
+    class BroadPageTransport:
+        def send(self, request):
+            return TransportResponse(
+                body, 200, datetime(2026, 9, 28, tzinfo=UTC), "application/geo+json", request.url, request.params or {}
+            )
+
+    monkeypatch.setattr(discovery, "HttpClient", BroadPageTransport)
+    result = rr.fetch(sel, start="2024-01-01", end="2024-01-04", cache="bypass", on_issue="ignore")
+    assert result.data["series_id"].to_list() == [good_series.series_id]
+    ann = rr.annotations(result, schema="usgs_nwis.daily")
+    assert ann["series_id"].to_list() == [good_series.series_id]
+    assert ann["approval_status"].to_list() == ["Approved"]
+    assert ann["qualifier"].to_list() == [["Ice"]]
+    assert any(issue.details.get("series_id") == bad_series.series_id for issue in result.issues)
+    assert any(
+        item.series_id == good_series.series_id and item.status is OutcomeStatus.SUCCESS for item in result.outcomes
+    )
+    assert any(
+        item.series_id == bad_series.series_id and item.status is OutcomeStatus.UNSUPPORTED for item in result.outcomes
+    )
