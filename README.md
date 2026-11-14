@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from fifteen different providers in fourteen countries.
+from sixteen different providers in fifteen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -42,6 +42,7 @@ for how to supply them.
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
 | Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Bulk download |
 | Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | Open |
+| Denmark | Miljøstyrelsen (Danish Environmental Protection Agency) / Danmarks Miljøportal (VandA) | `dk_vanda` | 1,388 | Open |
 | France | Hub'Eau | `fr_hubeau` | 7,347 | Open |
 | France | HydroPortail | `fr_hydroportail` | 6,409 | Open |
 | Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | Open |

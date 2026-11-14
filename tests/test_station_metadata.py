@@ -361,6 +361,8 @@ def test_metadata_declarations_cover_providers_without_unreviewed_names():
             if provider == "pe_senamhi"
             else "maintenance/catalogue/at_ehyd/official/selection.json"
             if provider == "at_ehyd"
+            else "maintenance/catalogue/dk_vanda/official/selection.json"
+            if provider == "dk_vanda"
             else "maintenance/catalogue/station_metadata/review.json"
         )
         assert (review, None) in origins.CATALOGUE_BUILD_DECLARATIONS

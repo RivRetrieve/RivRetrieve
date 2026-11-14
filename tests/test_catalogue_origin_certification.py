@@ -611,12 +611,11 @@ def test_provider_declarations_preserve_reviewed_identity_and_coordinate_fields(
     registered = frozenset(ProviderId(value) for value in discovery._registry.list_provider_ids())
 
     assert frozenset(DECLARATIONS) == ORIGIN_GATE_ENROLLED_PROVIDERS
-    # za_dws and dk_vanda are both origin-gate-enrolled with a real packaged
-    # catalogue but deliberately absent from BUILTIN_PROVIDER_IDS (dk_vanda as of
-    # Effort #800, step 5: enrollment and the real catalogue build are separable
-    # from registering it as a runtime LiveStages provider, exactly as za_dws
-    # already demonstrates).
-    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws"), ProviderId("dk_vanda")}
+    # za_dws is origin-gate-enrolled with a real packaged catalogue but
+    # deliberately absent from BUILTIN_PROVIDER_IDS. dk_vanda was in that same
+    # state during Effort #800, step 5, until its real catalogue was built and
+    # it was registered as a LiveStages provider (see declaration.py).
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
     assert {(provider, case.identity): case.declarations for provider, case in CASES} == _expected_declarations()
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
