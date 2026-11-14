@@ -4,7 +4,13 @@ Unlike providers that assemble a catalogue from several registry snapshots
 (e.g. `pe_senamhi`'s hydrological/meteorological/active registries), VandA
 returns station identity, coordinates and every station's examination list
 in one response. Station rows and station-product associations are both
-derived from that one retained capture.
+derived from that one retained capture. A selection may also name other,
+independently kinded captures (e.g. a `terms` catalogue record establishing
+`source.provider.terms`/`source.provider.attribution`, Effort #800 step 5);
+`read_catalogue_sources` verifies and carries every selected capture into
+`AcquisitionProvenance` evidence, mirroring `pe_senamhi`'s own handling of
+non-registry capture kinds, even though only the `stations` kind feeds native-
+table reconstruction and associations.
 """
 
 from dataclasses import dataclass
@@ -453,7 +459,19 @@ class CatalogueSources:
 def read_catalogue_sources(
     evidence_root: Path, *, selection_path: str, input_receipt: RetainedInputReceipt
 ) -> CatalogueSources:
-    """Recompute native rows and product witnesses from the verified selected original."""
+    """Recompute native rows and product witnesses from every verified selected original.
+
+    Every selected capture (the single ``stations`` registry response and any
+    other evidence a selection names, e.g. a ``terms`` catalogue record used only
+    to establish ``source.provider.terms``/``source.provider.attribution``) is
+    individually verified and carried into ``AcquisitionProvenance.source_records``'
+    evidence, not only the capture that drives native-table reconstruction. This
+    mirrors ``pe_senamhi``'s ``read_catalogue_sources``, which verifies and records
+    every selected capture even though only some kinds (there: ``hydrogram``/
+    ``monthly``) feed its association computation.
+    """
+    import json
+
     from rivretrieve._internal.acquisition_provenance import (
         AcquisitionRecord,
         FactBinding,
@@ -473,14 +491,27 @@ def read_catalogue_sources(
     native = read_native_table(
         evidence_root / native_path, expected_sha256=member.sha256, expected_byte_size=member.byte_size
     )
-    payload, retrieved_at = _selected_payload(evidence_root, selection, input_receipt)
-    reconstructed = station_native_table(payload, retrieved_at=retrieved_at)
+    recordings: list[RecordingReference] = []
+    stations_payload: object | None = None
+    stations_retrieved_at: RetrievedAt | None = None
+    for capture in selection["captures"]:
+        reference = RecordingReference.model_validate(capture["recording"])
+        if reference.repository_path != capture["body"]:
+            raise FatalContractError("VandA selected body disagrees with recording identity")
+        content = read_original(evidence_root, reference, input_receipt=input_receipt)
+        recordings.append(reference)
+        if capture["kind"] == "stations":
+            if stations_payload is not None:
+                raise FatalContractError("VandA selection requires exactly one stations capture")
+            stations_payload = json.loads(content)
+            stations_retrieved_at = RetrievedAt(reference.retrieved_at)
+    if stations_payload is None or stations_retrieved_at is None:
+        raise FatalContractError("VandA selection requires exactly one stations capture")
+    reconstructed = station_native_table(stations_payload, retrieved_at=stations_retrieved_at)
     if not native.data.equals(reconstructed.data):
         raise FatalContractError("VandA retained native differs from selected original reconstruction")
     identities = set(native.data["stationId"])
-    capture = next(item for item in selection["captures"] if item["kind"] == "stations")
-    reference = RecordingReference.model_validate(capture["recording"])
-    associations = station_product_associations(payload, station_ids=identities)
+    associations = station_product_associations(stations_payload, station_ids=identities)
     provenance = build_acquisition_provenance(
         NativeTableIdentity(
             location_kind="retained",
@@ -489,7 +520,7 @@ def read_catalogue_sources(
             sha256=member.sha256,
             byte_size=member.byte_size,
         ),
-        (reference,),
+        tuple(recordings),
         acquisitions=tuple(AcquisitionRecord.model_validate(item) for item in selection["publication_acquisitions"]),
         source_bindings=tuple(FactBinding.model_validate(item) for item in selection["source_bindings"]),
         statements=tuple(SourceStatement.model_validate(item) for item in selection["statements"]),

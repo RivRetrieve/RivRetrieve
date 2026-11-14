@@ -2,21 +2,23 @@
 unit conversion and assembly (`driver.drive`), independent of
 `BUILTIN_PROVIDER_IDS` registration.
 
-`dk_vanda` is deliberately not yet in `BUILTIN_PROVIDER_IDS` (its catalogue has
-never been published: `source.provider.terms`/`source.provider.attribution`
-remain unestablished, see `declaration.py` and
-research/dk-vanda-source-access.md in the evidence repository). `driver.drive`
-itself never looks up the provider manifest -- it only requires a
-`ProviderStages`-shaped object (`config`, `window_declarations`, `fetch`,
-`parse`), exactly like `test_internal_driver.py`'s own `provider_id=
-"throwaway"` stub providers. This module builds that object from dk_vanda's
-real, already-implemented `config()`/`window_declarations()`/`fetch`/`parse`
-(Effort #799, step 4) -- the same shape `lt_lhmt.__init__.py`'s `_Stages`
-class wires into `LiveStages` -- and drives it through `driver.drive` with a
-synthetic transport, so the shared window-planning, unit-conversion and
-clipping/assembly machinery the real `LiveStages` registration would use is
-exercised today, without a packaged catalogue and without touching
-`provider_manifest.BUILTIN_PROVIDER_IDS`.
+Written in Effort #800, step 5, while `dk_vanda`'s catalogue was still blocked
+on unresolved terms of use: at that point `dk_vanda` was deliberately absent
+from `BUILTIN_PROVIDER_IDS`, and this module exercised the engine-contract
+wiring directly, independent of that registration. The terms blocker is now
+resolved (see `declaration.py` and research/dk-vanda-source-access.md's
+"Terms and attribution: resolved (2026-11-14)" section in the evidence
+repository) and `dk_vanda` is now a real `LiveStages` provider in
+`BUILTIN_PROVIDER_IDS`. This module is kept as-is: `driver.drive` never looks
+up the provider manifest -- it only requires a `ProviderStages`-shaped object
+(`config`, `window_declarations`, `fetch`, `parse`), exactly like
+`test_internal_driver.py`'s own `provider_id="throwaway"` stub providers --
+so it remains a useful direct check of the shared window-planning, unit-
+conversion and clipping/assembly machinery against dk_vanda's real
+`config()`/`window_declarations()`/`fetch`/`parse` (Effort #799, step 4),
+independent of and in addition to the coverage the real registration now
+also exercises through `declaration.py`'s own `_Stages` class (the same
+shape this module builds, mirroring `lt_lhmt.__init__.py`'s `_Stages`).
 """
 
 import json
