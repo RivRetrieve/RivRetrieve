@@ -1,7 +1,7 @@
 """Normalize VandA water-flows/water-levels/measurements-results-current pages.
 
 Stage (examinationTypeSc 25) is parsed by hand into two distinct source
-series per `catalogue_series.py`'s `result`/`resultElevationCorrected`
+series per `series.py`'s `result`/`resultElevationCorrected`
 identities; discharge and temperature go through the shared
 `parse_mapped_series` machinery with `config.py`'s single-field
 `SeriesMapping`, matching `lt_lhmt`'s precedent.
@@ -40,8 +40,8 @@ from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema, Wi
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
-from rivretrieve._internal.providers.dk_vanda.catalogue_series import STAGE_FIELDS, stage_facts, stage_identity
 from rivretrieve._internal.providers.dk_vanda.config import DkVandaSourceCoordinates, series_mapping
+from rivretrieve._internal.providers.dk_vanda.series import STAGE_FIELDS, stage_facts, stage_identity
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,

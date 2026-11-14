@@ -31,7 +31,13 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, st
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.providers.dk_vanda.series import EXAMINATION_PRODUCTS, series_mappings
+from rivretrieve._internal.providers.dk_vanda.series import (
+    EXAMINATION_PRODUCTS,
+    STAGE_FIELDS,
+    series_mappings,
+    stage_facts,
+    stage_identity,
+)
 
 RIVER_LOCATION_TYPE = "Vandløb"
 EXPECTED_SRID = "25832"
@@ -245,16 +251,11 @@ def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
     """Describe witnessed source fields with only established physical facts.
 
     Stage (examinationTypeSc 25) emits one SourceDescription per field in
-    `catalogue_series.STAGE_FIELDS` (raw `result` and `resultElevationCorrected`),
+    `series.STAGE_FIELDS` (raw `result` and `resultElevationCorrected`),
     each independently identified and evidenced (see that module's docstring);
     discharge and water temperature keep using `series_mappings`' single field.
     """
     from rivretrieve._internal.catalogues.source_series import SourceDescription
-    from rivretrieve._internal.providers.dk_vanda.catalogue_series import (
-        STAGE_FIELDS,
-        stage_facts,
-        stage_identity,
-    )
 
     descriptions = []
     for station, code in (

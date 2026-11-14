@@ -210,8 +210,8 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/dk_vanda/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/providers/dk_vanda/series.py", "series_mappings"),
-    ("src/rivretrieve/_internal/providers/dk_vanda/catalogue_series.py", "stage_identity"),
-    ("src/rivretrieve/_internal/providers/dk_vanda/catalogue_series.py", "stage_facts"),
+    ("src/rivretrieve/_internal/providers/dk_vanda/series.py", "stage_identity"),
+    ("src/rivretrieve/_internal/providers/dk_vanda/series.py", "stage_facts"),
     ("src/rivretrieve/_internal/providers/dk_vanda/generate_catalogue.py", "read_catalogue_sources"),
     ("src/rivretrieve/_internal/providers/dk_vanda/station_metadata.py", "project_station_metadata"),
 )
