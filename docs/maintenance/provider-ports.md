@@ -89,6 +89,12 @@ scope, available routes, access conditions, terms and attribution. Obtain small
 genuine examples of metadata and observations. Distinguish unavailable access from
 an empty response and from evidence that has not yet been collected.
 
+A terms or licence page that automated tools cannot read, such as one requiring
+JavaScript, is not the same as terms that do not exist. Ask a person to open it
+directly before drafting external correspondence; a publisher's own data catalogue
+often states a licence, in seconds, where a support request would take much
+longer.
+
 [`ProviderDeclaration`](../../src/rivretrieve/_internal/providers/registration.py)
 selects `LiveStages` for on-demand acquisition, `BulkStore` for explicit download
 and compilation, or `CatalogueOnly` for discovery without observation retrieval.
