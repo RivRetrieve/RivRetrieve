@@ -196,10 +196,16 @@ def build_acquisition_provenance(
     )
 
 
+# Existing acquisition fact materialised in the retained native table.
+# This declares derived-input support, not preservation of original responses.
+NATIVE_TABLE_ACQUISITION_IDS = ("dk-vanda-catalogue-stations",)
+
 CATALOGUE_SUPPORTING_INPUTS: dict[str, tuple[str, ...]] = {}
 CATALOGUE_BUILD_DECLARATIONS = (
     ("maintenance/catalogue/dk_vanda/official/selection.json", None),
     ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/dk_vanda/generate_catalogue.py", "build_catalogue"),
