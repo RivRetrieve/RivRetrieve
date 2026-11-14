@@ -146,19 +146,22 @@ def test_series_mappings_reject_out_of_scope_examination_types():
 
 
 def test_catalogue_builder_checks_declared_station_identity():
-    # dk_vanda is not yet in ORIGIN_GATE_ENROLLED_PROVIDERS (Effort #797's catalogue
-    # publication is blocked on unresolved terms of use, see origins.py), so this
-    # checks validate_catalogue_origins directly rather than through
-    # enforce_catalogue_origins/build_catalogue's enrollment gate.
-    from rivretrieve._internal.catalogue_origins import Field, NativeColumn, validate_catalogue_origins
+    # dk_vanda is now enrolled in ORIGIN_GATE_ENROLLED_PROVIDERS (Effort #800, step
+    # 5: terms of use are now established, see origins.py and
+    # research/dk-vanda-source-access.md's "Terms and attribution: resolved
+    # (2026-11-14)" section), so this goes through enforce_catalogue_origins/
+    # build_catalogue's real enrollment gate, like every other enrolled provider's
+    # equivalent test (e.g. test_no_nve_catalogue_certification.py).
+    from rivretrieve._internal.catalogue_origins import Field, NativeColumn, enforce_catalogue_origins
+    from rivretrieve._internal.issues import FatalContractError
     from rivretrieve._internal.primitives import ProviderId
     from rivretrieve._internal.providers.dk_vanda.origins import STATION_CATALOGUE_ORIGINS
 
     native = station_native_table([station("A")], retrieved_at=RetrievedAt(datetime(2026, 11, 9, tzinfo=UTC)))
     _, stations, _ = catalogue_tables(native, pl.DataFrame(schema=ASSOCIATION_SCHEMA), checked_on=date(2026, 11, 9))
     wrong = {**STATION_CATALOGUE_ORIGINS, "station_id": Field(NativeColumn("name"))}
-    issues = validate_catalogue_origins(ProviderId("dk_vanda"), wrong, native, stations)
-    assert any("station_id" in issue.message for issue in issues)
+    with pytest.raises(FatalContractError, match="station_id"):
+        enforce_catalogue_origins(ProviderId("dk_vanda"), wrong, native, stations)
 
 
 def test_station_origins_round_trip_the_projected_coordinates():
@@ -171,18 +174,95 @@ def test_station_origins_round_trip_the_projected_coordinates():
     assert validate_catalogue_origins(ProviderId("dk_vanda"), STATION_CATALOGUE_ORIGINS, native, stations) == []
 
 
-def test_catalogue_enrollment_is_deliberately_not_yet_declared():
-    """dk_vanda joins ORIGIN_GATE_ENROLLED_PROVIDERS once catalogue publication
-    is unblocked (see the terms-of-use gap recorded in origins.py and the
-    continuing research record), not before; enforce_catalogue_origins must
-    keep refusing it until then."""
+def test_catalogue_enrollment_is_now_declared():
+    """dk_vanda joined ORIGIN_GATE_ENROLLED_PROVIDERS once catalogue publication
+    was unblocked (Effort #800, step 5: terms of use are now established, see
+    origins.py and research/dk-vanda-source-access.md's "Terms and attribution:
+    resolved (2026-11-14)" section); enforce_catalogue_origins must accept a
+    correctly declared mapping rather than refusing on enrollment alone, the
+    way it did before this step (see git history for that prior assertion)."""
     from rivretrieve._internal.catalogue_origins import ORIGIN_GATE_ENROLLED_PROVIDERS, enforce_catalogue_origins
-    from rivretrieve._internal.issues import FatalContractError
     from rivretrieve._internal.primitives import ProviderId
     from rivretrieve._internal.providers.dk_vanda.origins import STATION_CATALOGUE_ORIGINS
 
-    assert ProviderId("dk_vanda") not in ORIGIN_GATE_ENROLLED_PROVIDERS
+    assert ProviderId("dk_vanda") in ORIGIN_GATE_ENROLLED_PROVIDERS
     native = station_native_table([station("A")], retrieved_at=RetrievedAt(datetime(2026, 11, 9, tzinfo=UTC)))
     _, stations, _ = catalogue_tables(native, pl.DataFrame(schema=ASSOCIATION_SCHEMA), checked_on=date(2026, 11, 9))
-    with pytest.raises(FatalContractError, match="not enrolled"):
-        enforce_catalogue_origins(ProviderId("dk_vanda"), STATION_CATALOGUE_ORIGINS, native, stations)
+    enforce_catalogue_origins(ProviderId("dk_vanda"), STATION_CATALOGUE_ORIGINS, native, stations)
+
+
+@pytest.mark.governing(
+    "maintenance/catalogue/dk_vanda/official",
+    "maintenance/catalogue/dk_vanda/official/selection.json",
+)
+def test_selected_inputs_publish_deterministic_catalogue(
+    retained_evidence_root, catalogue_input_receipt, catalogue_build_inputs, tmp_path
+):
+    """Build the real dk_vanda packaged catalogue from verified selected originals
+    (Effort #800, step 5), mirroring pe_senamhi's
+    `test_selected_inputs_publish_deterministic_catalogue`."""
+    import json
+    import os
+    from pathlib import Path
+
+    import polars.testing as pl_testing
+
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.dk_vanda.generate_catalogue import main
+    from rivretrieve._internal.providers.dk_vanda.origins import STATION_METADATA_NOTICE
+
+    configured = os.environ.get("RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT")
+    if not configured:
+        pytest.fail("Reviewed catalogue generation requires restricted product output.", pytrace=False)
+    product_root = Path(configured).resolve()
+    selection = "maintenance/catalogue/dk_vanda/official/selection.json"
+    from rivretrieve._internal.providers.dk_vanda.generate_catalogue import read_catalogue_sources
+
+    sources = read_catalogue_sources(
+        retained_evidence_root, selection_path=selection, input_receipt=catalogue_input_receipt
+    )
+    build_inputs = catalogue_build_inputs(sources.provenance)
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(catalogue_input_receipt.model_dump_json())
+    build_path = tmp_path / "build-inputs.json"
+    build_path.write_text(build_inputs.model_dump_json())
+    outputs = [product_root / "dk_vanda", product_root / "dk_vanda-repeat"]
+    for output in outputs:
+        assert (
+            main(
+                [
+                    "--evidence-root",
+                    str(retained_evidence_root),
+                    "--selection",
+                    selection,
+                    "--input-receipt",
+                    str(receipt_path),
+                    "--build-inputs",
+                    str(build_path),
+                    "--out",
+                    str(output),
+                ]
+            )
+            == 0
+        )
+        load_packaged_catalogue_artifact(output, on_issue="raise")
+        stations = pl.read_parquet(output / "stations.parquet")
+        assert stations["crs"].unique().to_list() == ["EPSG:4326"]
+        products = pl.read_parquet(output / "products.parquet")
+        assert set(products["product_id"]) == {"discharge", "stage", "temperature"}
+        pairs = pl.read_parquet(output / "station_products.parquet")
+        assert pairs["published_record_start_date"].null_count() == pairs.height
+        assert pairs["published_record_end_date"].null_count() == pairs.height
+        assert "unavailable" not in pairs["availability"].to_list()
+        provider = json.loads((output / "provider.json").read_bytes())
+        assert provider["license"] == "http://publications.europa.eu/resource/authority/licence/CC0"
+        assert "Danmarks Milj" in provider["citation"]
+        assert STATION_METADATA_NOTICE in json.dumps(
+            json.loads((output / "croissant.json").read_bytes()), ensure_ascii=False
+        )
+        assert not (output / "native.parquet").exists()
+    assert {p.name for p in outputs[0].iterdir()} == {p.name for p in outputs[1].iterdir()}
+    for path in outputs[0].iterdir():
+        repeated = outputs[1] / path.name
+        if path.suffix == ".parquet":
+            pl_testing.assert_frame_equal(pl.read_parquet(path), pl.read_parquet(repeated))

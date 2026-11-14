@@ -13,6 +13,11 @@ from rivretrieve._internal.providers.dk_vanda.parse import parse
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason, TransportResponse
 from rivretrieve._internal.window_planning import plan_windows
 
+# The archive binding's requirement is the coarser "maintenance/catalogue/dk_vanda/official"
+# scope (every dk_vanda TestBinding shares that one requirement string, selecting all five
+# registered dk_vanda collections together); the actual composed files land at this narrower
+# path, matching the TestBinding's own target for the retrieval collection.
+_REQUIREMENT = "maintenance/catalogue/dk_vanda/official"
 _SCOPE = "maintenance/catalogue/dk_vanda/official/retrieval/web"
 
 
@@ -28,7 +33,7 @@ def _plan(coordinates: DkVandaSourceCoordinates, start: str, stop: str):
     return plan_windows(_make_fetch_window(endpoint_start, endpoint_stop), decls.products[product]), product
 
 
-@pytest.mark.recorded(_SCOPE)
+@pytest.mark.recorded(_REQUIREMENT)
 @pytest.mark.parametrize(
     ("member", "station", "examination_type_sc", "endpoint", "start", "stop", "status"),
     [
@@ -118,7 +123,7 @@ def test_retained_acquisition_preserves_exact_request_and_response(
         assert failure.meaning.value == "unspecified"
 
 
-@pytest.mark.recorded(_SCOPE)
+@pytest.mark.recorded(_REQUIREMENT)
 def test_temperature_current_and_all_retained_bytes_are_byte_identical(retained_evidence_root):
     """Fourth multi-version-results recheck (station/product not tried before):
     `/measurements/results/current` and `/measurements/results/all` returned

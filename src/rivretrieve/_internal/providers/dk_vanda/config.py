@@ -30,8 +30,8 @@ Retrieval endpoint choice per product, decided in Effort #799
 
 discharge and temperature keep exactly one admitted field each
 (``series.py``'s ``SeriesMapping``); stage's two admitted fields are carried
-directly by ``catalogue_series.py`` and merged in ``parse.py``, not through
-this module's ``ProductConfig``/``SourceCoordinates``, since
+directly by ``series.py``'s ``stage_identity``/``stage_facts`` and merged in
+``parse.py``, not through this module's ``ProductConfig``/``SourceCoordinates``, since
 ``SourceCoordinates`` only selects one HTTP route per product and both stage
 fields share that one route and rendered window.
 """
@@ -124,8 +124,9 @@ _WINDOW = WindowDeclaration(
 _WINDOW_DECLARATIONS = ProductWindowDeclarations(dict.fromkeys(_CONFIG.products, _WINDOW))
 
 # discharge and temperature have exactly one admitted field each; stage's two
-# fields are built directly from catalogue_series.py by parse.py instead (see
-# the module docstring), so "stage" is deliberately absent here.
+# fields are built directly from series.py's stage_identity/stage_facts by
+# parse.py instead (see the module docstring), so "stage" is deliberately
+# absent here.
 _SERIES_MAPPINGS: dict[str, SeriesMapping] = {
     product: series_mappings(sc)["result"] for sc, product in EXAMINATION_PRODUCTS.items() if product != "stage"
 }
