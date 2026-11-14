@@ -45,6 +45,7 @@ SOURCE_FIELDS = {
     "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": "km2", "DRAINAGE_AREA_EFFECT": "km2"}),
     "ch_foen": ("name", {}),
     "cz_chmi": ("objID", {"PLO_STA": "km²"}),
+    "dk_vanda": ("stationId", {"catchmentAreaKm2": "km2"}),
     "fr_hubeau": ("code_station", {"superficie_topo": None, "superficie_reelle": None}),
     "fr_hydroportail": ("bookmarkCode", {}),
     "jp_mlit": ("観測所記号", {"流域面積": None}),
@@ -122,7 +123,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     keys = ["provider_id", "station_id"]
     assert_frame_equal(result.select(keys).unique().sort(keys), before.select(keys).unique().sort(keys))
     assert result.select(*keys, "source_field").is_duplicated().sum() == 0
-    assert result["provider_id"].n_unique() == 15
+    assert result["provider_id"].n_unique() == 16
     assert_frame_equal(rr.as_frame(selection), before)
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
@@ -148,6 +149,8 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
                 if provider == "at_ehyd"
                 else "maintenance/catalogue/usgs_nwis"
                 if provider == "usgs_nwis"
+                else "maintenance/catalogue/dk_vanda/official"
+                if provider == "dk_vanda"
                 else f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"
             ),
         )
@@ -162,6 +165,8 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         if provider == "at_ehyd"
         else retained_evidence_root / "maintenance/catalogue/usgs_nwis/legacy-native.parquet"
         if provider == "usgs_nwis"
+        else retained_evidence_root / "maintenance/catalogue/dk_vanda/official/native.parquet"
+        if provider == "dk_vanda"
         else retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     )
     native = pl.read_parquet(native_path)

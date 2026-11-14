@@ -46,6 +46,7 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, re
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.dk_vanda.origins import Utm32EtrsToWgs84Conversion
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
 from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
@@ -363,6 +364,7 @@ DECLARATIONS = {
         "ca_eccc",
         "ch_foen",
         "cz_chmi",
+        "dk_vanda",
         "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
@@ -562,6 +564,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "longitude": field("longitude", FloatConversion()),
             "crs": unpublished("https://hydapi.nve.no/swagger/v1/swagger.json"),
         },
+        (ProviderId("dk_vanda"), "stations"): {
+            "provider_id": authored("dk_vanda"),
+            "station_id": field("stationId"),
+            "latitude": field("y", Utm32EtrsToWgs84Conversion()),
+            "longitude": field("x", Utm32EtrsToWgs84Conversion()),
+            "crs": documented("https://vandah.miljoeportal.dk/api/stations"),
+        },
         (ProviderId("pl_imgw"), "stations"): {
             "provider_id": authored("pl_imgw"),
             "station_id": field("gauge_id"),
@@ -602,6 +611,10 @@ def test_provider_declarations_preserve_reviewed_identity_and_coordinate_fields(
     registered = frozenset(ProviderId(value) for value in discovery._registry.list_provider_ids())
 
     assert frozenset(DECLARATIONS) == ORIGIN_GATE_ENROLLED_PROVIDERS
+    # za_dws is origin-gate-enrolled with a real packaged catalogue but
+    # deliberately absent from BUILTIN_PROVIDER_IDS. dk_vanda was in that same
+    # state during Effort #800, step 5, until its real catalogue was built and
+    # it was registered as a LiveStages provider (see declaration.py).
     assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
     assert {(provider, case.identity): case.declarations for provider, case in CASES} == _expected_declarations()
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)

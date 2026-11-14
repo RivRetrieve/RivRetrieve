@@ -82,8 +82,9 @@ STATION_CATALOGUE_ORIGINS = {
 STATION_METADATA_NOTICE = (
     "Station metadata from Miljøstyrelsen's VandA service, distributed through the Miljøportal platform "
     "(https://vandah.miljoeportal.dk/api). This RivRetrieve projection selected the fields below from the "
-    "published station registry; source names and absence remain unchanged. Terms of use have not yet "
-    "been established for this port (see the continuing research record)."
+    "published station registry; source names and absence remain unchanged. Danmarks Miljøportal's own "
+    "open-data catalogue record states this dataset (and its API distribution) is licensed CC0 (see the "
+    "continuing research record's 'Terms and attribution: resolved' section)."
 )
 
 STATION_METADATA_FIELDS = (
@@ -116,8 +117,11 @@ def build_acquisition_provenance(
 ) -> AcquisitionProvenance:
     """Bind original source evidence and a retained derivative to catalogue facts.
 
-    Terms of use are genuinely unestablished for this port (no accessible
-    terms page was found during step 1 research); callers must still bind
+    Terms of use are established directly from Danmarks Miljøportal's own
+    open-data catalogue record (Effort #800, step 5; see
+    research/dk-vanda-source-access.md's "Terms and attribution: resolved
+    (2026-11-14)" section in the evidence repository): CC0, stated at both
+    dataset and API-distribution level. Callers must still bind
     ``source.provider.terms``/``source.provider.attribution`` to an acquisition
     that records what was actually checked, not invent a statement. An empty
     ``statements`` tuple correctly yields an unknown license rather than one
@@ -192,16 +196,22 @@ def build_acquisition_provenance(
     )
 
 
+# Existing acquisition fact materialised in the retained native table.
+# This declares derived-input support, not preservation of original responses.
+NATIVE_TABLE_ACQUISITION_IDS = ("dk-vanda-catalogue-stations",)
+
 CATALOGUE_SUPPORTING_INPUTS: dict[str, tuple[str, ...]] = {}
 CATALOGUE_BUILD_DECLARATIONS = (
     ("maintenance/catalogue/dk_vanda/official/selection.json", None),
     ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/dk_vanda/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/dk_vanda/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/providers/dk_vanda/series.py", "series_mappings"),
-    ("src/rivretrieve/_internal/providers/dk_vanda/catalogue_series.py", "stage_identity"),
-    ("src/rivretrieve/_internal/providers/dk_vanda/catalogue_series.py", "stage_facts"),
+    ("src/rivretrieve/_internal/providers/dk_vanda/series.py", "stage_identity"),
+    ("src/rivretrieve/_internal/providers/dk_vanda/series.py", "stage_facts"),
     ("src/rivretrieve/_internal/providers/dk_vanda/generate_catalogue.py", "read_catalogue_sources"),
     ("src/rivretrieve/_internal/providers/dk_vanda/station_metadata.py", "project_station_metadata"),
 )
