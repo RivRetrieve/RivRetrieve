@@ -306,6 +306,17 @@ def test_pre_variant_cache_and_exports_do_not_settle_expanded_scope(retained_evi
     assert {p.relative_to(artifact): p.read_bytes() for p in artifact.rglob("*") if p.is_file()} == before
 
 
+def _expected_source_annotations(content: bytes, start: str, end: str) -> list[tuple[datetime, int, int, int, int]]:
+    first = datetime.fromisoformat(start)
+    last = datetime.fromisoformat(end).replace(hour=23, minute=59, second=59, microsecond=999999)
+    rows = []
+    for item in json.loads(content)["series"]["data"]:
+        stamp = datetime.fromisoformat(item["t"].removesuffix("Z"))
+        if first <= stamp <= last:
+            rows.append((stamp, item["s"], item["q"], item["m"], item["c"]))
+    return sorted(rows, key=lambda row: row[0])
+
+
 @pytest.mark.parametrize(
     "station,start,end", [("Y251002001", "2020-01-01", "2020-01-02"), ("1232000101", "2026-06-01", "2026-06-02")]
 )
@@ -327,22 +338,40 @@ def test_recorded_source_variant_public_path(
         rr.find(provider="fr_hydroportail", station=station, quantity=quantity, statistic="instantaneous"),
         variant=variant,
     )
-    result = rr.fetch(selection, start=start, end=end, receipts=True, on_issue="raise")
+    result = rr.fetch(selection, start=start, end=end, cache="reuse", receipts=True, on_issue="raise")
     expected_count = (
         (576 if variant == "raw" else 50)
         if station == "Y251002001"
         else (282 if variant in {"raw", "most_valid"} else 0)
     )
     assert result.data.height == expected_count
+    assert_frame_equal(result.to_polars(), result.data)
     assert rr.series(result)["variant"].to_list() == [variant]
     assert result.receipts.entries[0].content == recording.content
     body = json.loads(result.receipts.entries[0].content)
     assert body["series"]["statuses"] == variant
+    expected_ann = _expected_source_annotations(recording.content, start, end)
+    assert len(expected_ann) == expected_count
     if expected_count:
         expected_first = start + ("T00:01:00" if station == "Y251002001" and variant != "raw" else "T00:00:00")
         assert result.data["time"].min() == datetime.fromisoformat(expected_first)
         assert result.data["time_zone"].unique().to_list() == ["+00:00"]
+        catalog = rr.annotations(result)
+        assert catalog["schema"].to_list() == ["fr_hydroportail.series"] * 4
+        assert catalog["name"].to_list() == ["s", "q", "m", "c"]
+        assert catalog["dtype"].to_list() == ["Int64"] * 4
+        assert catalog["row_count"].to_list() == [expected_count] * 4
+        assert catalog["unmeasured_count"].to_list() == [0] * 4
+        projected = result.to_polars(annotations=True).sort("time", maintain_order=True)
+        assert projected.select("time", "s", "q", "m", "c").rows() == expected_ann
+        reused = rr.fetch(selection, start=start, end=end, cache="reuse", receipts=True, on_issue="raise")
+        assert reused.receipts.entries[0].authorship is ReceiptAuthorship.STORE_EXCERPT
+        assert_frame_equal(reused.to_polars(annotations=True).sort("time"), projected)
+        restored = rr.from_bundle(rr.to_bundle(result))
+        assert_frame_equal(restored.to_polars(annotations=True).sort("time"), projected)
     else:
+        assert rr.annotations(result).is_empty()
+        assert result.to_polars(annotations=True).equals(result.data)
         assert any(outcome.status == "empty" for outcome in result.outcomes)
     assert {issue.code for issue in result.issues} <= {
         "provenance.license_not_established",
@@ -367,10 +396,19 @@ def test_recorded_unrestricted_overlaps_keep_source_identities(
     assert result.data["series_id"].n_unique() == 4
     assert len(result.receipts.entries) == 4
     assert {entry.content for entry in result.receipts.entries} == {recording.content for recording in recordings}
-    validated = rr.pick(result, variant="validated", on_issue="ignore").data
-    most_valid = rr.pick(result, variant="most_valid", on_issue="ignore").data
-    assert_frame_equal(validated.select("time", "value"), most_valid.select("time", "value"))
-    assert validated["series_id"][0] != most_valid["series_id"][0]
+    validated = rr.pick(result, variant="validated", on_issue="ignore")
+    most_valid = rr.pick(result, variant="most_valid", on_issue="ignore")
+    raw_picked = rr.pick(result, variant="raw", on_issue="ignore")
+    assert_frame_equal(validated.data.select("time", "value"), most_valid.data.select("time", "value"))
+    assert validated.data["series_id"][0] != most_valid.data["series_id"][0]
+    for variant, recording in zip(sorted(VARIANTS), recordings, strict=True):
+        picked_variant = rr.pick(result, variant=variant, on_issue="ignore")
+        assert picked_variant.to_polars(annotations=True).sort("time", maintain_order=True).select(
+            "time", "s", "q", "m", "c"
+        ).rows() == _expected_source_annotations(recording.content, "2020-01-01", "2020-01-02")
+    assert raw_picked.to_polars(annotations=True)["s"].unique().to_list() == [4]
+    assert validated.to_polars(annotations=True)["s"].unique().to_list() == [16]
+    assert most_valid.to_polars(annotations=True)["s"].unique().to_list() == [16]
     assert {issue.code for issue in result.issues} <= {
         "provenance.license_not_established",
         "provenance.citation_not_established",
