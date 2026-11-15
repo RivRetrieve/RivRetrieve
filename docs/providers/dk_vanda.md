@@ -203,6 +203,12 @@ municipalities and Miljøstyrelsen (the Danish Environmental Protection Agency),
 matching the dataset's own data-responsibility agreement. Retrieval requires no
 credentials.
 
+Separately, Miljøportal's portal-wide terms of use ask that catalogue data
+carry the generic sentence "Indeholder data, som benyttes i henhold til
+vilkår for brug af danske offentlige data" ("Contains data used under the
+terms of use for Danish public data"); it is not specific to this dataset,
+and this dataset's own explicit, twice-stated CC0 marking takes precedence.
+
 ## Sources
 
 Publisher pages checked on 2026-11-14 and 2026-11-15:
@@ -211,6 +217,7 @@ Publisher pages checked on 2026-11-14 and 2026-11-15:
 - [VandA Swagger reference](https://vandah.miljoeportal.dk/api/swagger/index.html): endpoint and field definitions.
 - Danmarks Miljøportal's dataset catalogue record (`datavejviser.dk`, JSON-LD, DCAT-AP): publisher, licence and the dataset's own data-responsibility statement.
 - Danmarks Miljøportal's dataset landing page (`arealdata.miljoeportal.dk`): licence, data owners and the specific data-responsibility annex, confirmed by the maintainer directly in a browser.
+- [Danmarks Miljøportal's terms of use](https://miljoeportal.dk/dataansvar/vilkaar-for-brug/): the portal-wide source-attribution sentence.
 - VandA's live station endpoint (`GET /stations?stationId=...`): per-station, per-examination-type first and latest result dates.
 
 The station counts describe the packaged catalogue. The examples were retrieved
