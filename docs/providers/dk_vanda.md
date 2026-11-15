@@ -66,9 +66,7 @@ that distributes the data on the owners' behalf, not the measuring body itself.
 VandA's own station registry additionally lists a station owner and a field
 operator for each station (for example, station `25003918` lists Miljøstyrelsen
 as owner and DCE, Aarhus University as operator). RivRetrieve's catalogue does
-not currently surface these per-station owner and operator fields, so it cannot
-tell you who specifically measures a given station; it publishes what the
-dataset-level agreement establishes.
+not currently surface these per-station fields.
 
 Station coordinates are RivRetrieve's own reprojection of VandA's native
 coordinates (ETRS89 / UTM zone 32N, EPSG:25832) to EPSG:4326. VandA does not
@@ -89,18 +87,18 @@ VandA publishes no named aggregation for any of these readings, so RivRetrieve
 leaves frequency and statistic unknown rather than inferring one from the
 reading interval.
 
-Stage is published as two parallel fields for every reading, not a raw-versus-
-checked pair: `result` and `resultElevationCorrected`. Both describe the same
-measured water level; they differ in vertical reference. `resultElevationCorrected`
-is stated, and independently confirmed against VandA's own benchmark
+Stage is published as two parallel fields for every reading: `result` and
+`resultElevationCorrected`. Both describe the same measured water level; they
+differ in vertical reference. `resultElevationCorrected` is stated, and
+independently confirmed against VandA's own benchmark
 ("Kotemåling") readings at two stations, to be an elevation above sea level in
 the DVR90 vertical datum (Dansk Vertikal Reference 1990, Denmark's national
 height system). The raw `result` field is a reading relative to the station's
 own local gauge zero; VandA does not state what that gauge zero is referenced
 to, and this port found the full published field description and the
-examination-type configuration both silent on a datum for it. Do not treat
-`result` as height above sea level, and do not assume its gauge zero is
-comparable between stations.
+examination-type configuration both silent on a datum for it. Its relationship
+to sea level, and whether its gauge zero is consistent across stations, are
+unestablished by the source.
 
 The catalogue holds 1,565 stations. A snapshot check of recorded availability
 (2026-11-14) found numerical discharge values at 294 stations, stage at 1,373,
