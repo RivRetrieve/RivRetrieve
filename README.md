@@ -57,6 +57,8 @@ for how to supply them.
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
 Austria's `at_ehyd` catalogue retains 746 river station identities; 744 have selectable series in this snapshot.
 See the [Austrian provider guide](https://rivretrieve.github.io/providers/at_ehyd/) for catalogue coverage and limitations.
+Denmark's `dk_vanda` catalogue retains 1,565 stations; 1,388 have selectable series in this snapshot.
+See the [Danish provider guide](https://rivretrieve.github.io/providers/dk_vanda/) for catalogue coverage and limitations.
 Switzerland's `ch_foen` catalogue retains 1,341 stations; 558 have selectable official series in this snapshot.
 See the [Swiss provider guide](https://rivretrieve.github.io/providers/ch_foen/) for catalogue coverage and limitations.
 The USGS catalogue retains 29,642 station identities; 29,387 have selectable series in this snapshot.
@@ -68,7 +70,7 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Argentina, Australia, Belgium, Chile, Colombia, Denmark, Estonia, Finland,
+Afghanistan, Argentina, Australia, Belgium, Chile, Colombia, Estonia, Finland,
 Germany, Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Portugal, Rwanda,
 Slovenia, South Africa, South Korea, Spain, Sweden, Taiwan and the United Kingdom.
 
