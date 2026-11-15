@@ -21,7 +21,7 @@ EVIDENCE = Path("tests/test_data/french_provider_documentation")
 
 
 @pytest.mark.recorded("tests/test_data/french_provider_documentation")
-@pytest.mark.parametrize("provider,block_count", [("fr_hubeau", 1), ("fr_hydroportail", 3)])
+@pytest.mark.parametrize("provider,block_count", [("fr_hubeau", 1), ("fr_hydroportail", 4)])
 def test_french_page_examples_and_displayed_outputs(
     retained_evidence_root, monkeypatch, tmp_path, provider, block_count
 ):
@@ -47,6 +47,7 @@ def test_french_page_examples_and_displayed_outputs(
         assert namespace["rr"].series(namespace["result"])["variant"].to_list() == ["validated"]
         assert namespace["rr"].series(namespace["most_valid_result"])["variant"].to_list() == ["most_valid"]
         assert namespace["most_valid_result"].issues == namespace["result"].issues
+        assert namespace["rr"].annotations(namespace["result"])["name"].to_list() == ["s", "q", "m", "c"]
 
 
 @pytest.mark.parametrize("provider", ["fr_hubeau", "fr_hydroportail"])
