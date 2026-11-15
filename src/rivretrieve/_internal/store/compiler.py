@@ -619,6 +619,7 @@ def compile_store_batches(request: StoreCompileRequest, stream: ObservationBatch
                     for active in ann_writers.values():
                         active.close()
                     ann_writers.clear()
+                    partition_key_counts.clear()
                 last_partition_key = partition_key
                 last_partition_identifier = identifier
                 directory = root / identifier

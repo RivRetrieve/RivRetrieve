@@ -936,3 +936,124 @@ def test_rrbundle_v4_roundtrip_and_version_or_tamper_refusal(tmp_path: Path) -> 
             dst.writestr(info.filename, data)
     with pytest.raises(ValueError):
         rr.from_bundle(tampered_buf.getvalue())
+
+
+def test_streamed_compilation_clears_finished_partition_ordinal_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import gc
+
+    from rivretrieve._internal import source_annotations as sa
+    from rivretrieve._internal.store import certification as cert_mod
+    from rivretrieve._internal.store import compiler as comp_mod
+
+    series = fixture_series()
+    schema = AnnotationSchema(
+        schema_id="fixture_bulk.obs",
+        provider_id="fixture_bulk",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="qc", dtype="String", description="Bulk quality flag."),),
+    )
+
+    def _obs_rows(year: int, qcs: list[str]) -> pl.DataFrame:
+        return pl.DataFrame(
+            {
+                "series_id": [series.series_id] * len(qcs),
+                "facts_id": [series.facts[0].facts_id] * len(qcs),
+                "station_id": [series.station_id] * len(qcs),
+                "product_id": [series.product_id] * len(qcs),
+                "time": [datetime(year, 1, 2)] * len(qcs),
+                "time_zone": ["Europe/Warsaw"] * len(qcs),
+                "measured": [True] * len(qcs),
+                "qc": qcs,
+            },
+            schema={
+                "series_id": pl.String,
+                "facts_id": pl.String,
+                "station_id": pl.String,
+                "product_id": pl.String,
+                "time": pl.Datetime("us"),
+                "time_zone": pl.String,
+                "measured": pl.Boolean,
+                **schema.polars_schema(),
+            },
+        )
+
+    def _batch(year: int, unit: str, value: float, qc: str) -> NativeObservationBatch:
+        return NativeObservationBatch(
+            cert_rows(year=year, value=value),
+            (SourceUnitCount(unit, 1, 1),),
+            (SourceUnitContribution(unit, 1),),
+            annotations=AnnotationBundle(
+                observation_tables={
+                    schema.schema_id: ObservationAnnotationTable.from_rows(
+                        schema=schema, rows=_obs_rows(year, [qc]), measurement_indices=[0]
+                    )
+                }
+            ),
+        )
+
+    orig_advance = sa.advance_partition_key_ordinals
+    retained_after_transition: dict[str, bool] = {}
+
+    def _make_spy(stage: str):
+        first_counts: list[dict[object, int]] = []
+
+        def _spy(frame, counts):
+            if not first_counts:
+                first_counts.append(counts)
+            elif frame.get_column("time")[0].year == 1999:
+                retained_after_transition[stage] = any(
+                    isinstance(ref, dict) and "product=discharge/year=1998" in ref
+                    for ref in gc.get_referrers(first_counts[0])
+                )
+            return orig_advance(frame, counts)
+
+        return _spy
+
+    monkeypatch.setattr(comp_mod, "advance_partition_key_ordinals", _make_spy("compiler"))
+    monkeypatch.setattr(cert_mod, "advance_partition_key_ordinals", _make_spy("certification"))
+
+    artifact, req = artifact_and_request(tmp_path)
+    batches = (
+        _batch(1998, "u1", 5.0, "dup-0"),
+        _batch(1998, "u2", 5.0, "dup-1"),
+        _batch(1999, "u3", 6.0, "y1999-0"),
+    )
+    certify_store_batches(
+        req,
+        artifact,
+        lambda _p: ObservationBatchStream(
+            COLUMNS,
+            iter(batches),
+            3,
+            3,
+            source_unit_inventory_fingerprint((("u1", 1, 1), ("u2", 1, 1), ("u3", 1, 1))),
+        ),
+    )
+
+    assert retained_after_transition == {"compiler": False, "certification": False}
+    ann_1998 = pl.read_parquet(
+        req.destination / "product=discharge/year=1998/annotations=fixture_bulk.obs/rows.parquet"
+    )
+    assert ann_1998["_occurrence_ordinal"].to_list() == [0, 1]
+    assert ann_1998["qc"].to_list() == ["dup-0", "dup-1"]
+    ann_1999 = pl.read_parquet(
+        req.destination / "product=discharge/year=1999/annotations=fixture_bulk.obs/rows.parquet"
+    )
+    assert ann_1999["_occurrence_ordinal"].to_list() == [0]
+    read_back = StoreReader().query(
+        StoreQuery(
+            req.destination,
+            req.provider_id,
+            (series.station_id,),
+            (ProductId("discharge"),),
+            datetime(1998, 1, 1),
+            datetime(1999, 12, 31),
+        )
+    )
+    assert read_back.annotations.observation_tables[schema.schema_id].rows["qc"].to_list() == [
+        "dup-0",
+        "dup-1",
+        "y1999-0",
+    ]
