@@ -19,6 +19,10 @@ from rivretrieve._internal.window_planning import plan_windows
 # path, matching the TestBinding's own target for the retrieval collection.
 _REQUIREMENT = "maintenance/catalogue/dk_vanda/official"
 _SCOPE = "maintenance/catalogue/dk_vanda/official/retrieval/web"
+# Genuine /water-flows (discharge) captures were retained for the Program #351
+# first/current/all version-investigation pass (Effort #799 follow-up), not the
+# step-4 retrieval pass, so this one discharge case reads from that scope instead.
+_DISCHARGE_SCOPE = "maintenance/catalogue/dk_vanda/official/version-investigation/web"
 
 
 def _plan(coordinates: DkVandaSourceCoordinates, start: str, stop: str):
@@ -35,10 +39,10 @@ def _plan(coordinates: DkVandaSourceCoordinates, start: str, stop: str):
 
 @pytest.mark.recorded(_REQUIREMENT)
 @pytest.mark.parametrize(
-    ("member", "station", "examination_type_sc", "endpoint", "start", "stop", "status"),
+    ("member", "station", "examination_type_sc", "endpoint", "start", "stop", "status", "scope"),
     [
-        ("stage-retention-52000092-1968", "52000092", 25, "water-levels", "1968-01-01", "1968-01-03", 200),
-        ("empty-window-52000092-2031", "52000092", 25, "water-levels", "2031-01-01", "2031-01-02", 200),
+        ("stage-retention-52000092-1968", "52000092", 25, "water-levels", "1968-01-01", "1968-01-03", 200, _SCOPE),
+        ("empty-window-52000092-2031", "52000092", 25, "water-levels", "2031-01-01", "2031-01-02", 200, _SCOPE),
         (
             "invalid-station-measurements-current",
             "00000000",
@@ -47,6 +51,7 @@ def _plan(coordinates: DkVandaSourceCoordinates, start: str, stop: str):
             "2020-01-01",
             "2020-01-02",
             400,
+            _SCOPE,
         ),
         (
             "temperature-current-70000277-2014",
@@ -56,13 +61,26 @@ def _plan(coordinates: DkVandaSourceCoordinates, start: str, stop: str):
             "2014-01-01",
             "2014-01-02",
             200,
+            _SCOPE,
+        ),
+        (
+            # Genuine /water-flows capture, station 59000235, 2025-07-02; see
+            # the Program #351 follow-up research record (Effort #799 sign-off).
+            "nowcast-waterflows-59000235-20250702",
+            "59000235",
+            27,
+            "water-flows",
+            "2025-07-02",
+            "2025-07-03",
+            200,
+            _DISCHARGE_SCOPE,
         ),
     ],
 )
 def test_retained_acquisition_preserves_exact_request_and_response(
-    retained_evidence_root, member, station, examination_type_sc, endpoint, start, stop, status
+    retained_evidence_root, member, station, examination_type_sc, endpoint, start, stop, status, scope
 ):
-    root = retained_evidence_root / _SCOPE
+    root = retained_evidence_root / scope
     content = (root / (member + ".body")).read_bytes()
     receipt = json.loads((root / (member + ".receipt.json")).read_text())
     source_url = urlsplit(receipt["url"])
