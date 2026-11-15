@@ -826,11 +826,9 @@ def validate_bundle_for_result(
     source_series: tuple[SourceSeries, ...],
 ) -> None:
     """Validate annotation table alignment against observation rows and series definitions."""
-    known_series_facts = {
-        (item.series_id, facts.facts_id): (item.station_id, item.product_id)
-        for item in source_series
-        for facts in item.facts
-    }
+    if not bundle.observation_tables:
+        return
+    known_series_facts: dict[tuple[str, str], tuple[str, str]] | None = None
     obs_coords = list(data.select("series_id", "facts_id", "station_id", "product_id", "time", "time_zone").iter_rows())
     row_count = len(obs_coords)
     for table in bundle.observation_tables.values():
@@ -848,10 +846,17 @@ def validate_bundle_for_result(
                     raise FatalContractError(
                         f"Annotation row {pos} in {table.schema.schema_id!r} disagrees with observation row coordinates"
                     )
-            elif source_series and known_series_facts.get((coords[0], coords[1])) != (coords[2], coords[3]):
-                raise FatalContractError(
-                    f"Unmeasured annotation slot in {table.schema.schema_id!r} references unknown series or facts"
-                )
+            elif source_series:
+                if known_series_facts is None:
+                    known_series_facts = {
+                        (item.series_id, facts.facts_id): (item.station_id, item.product_id)
+                        for item in source_series
+                        for facts in item.facts
+                    }
+                if known_series_facts.get((coords[0], coords[1])) != (coords[2], coords[3]):
+                    raise FatalContractError(
+                        f"Unmeasured annotation slot in {table.schema.schema_id!r} references unknown series or facts"
+                    )
 
 
 def with_annotations(result: ObservationResult, bundle: AnnotationBundle) -> ObservationResult:

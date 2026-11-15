@@ -501,6 +501,7 @@ def _verify_streamed_read_back(
                     _check_exhausted_ann_row_groups(current_ann_parquets, current_ann_row_groups)
                     current_ann_parquets.clear()
                     current_ann_row_groups.clear()
+                    partition_key_counts.clear()
                     current_identifier = identifier
                     part_path = stage / identifier / "part-0.parquet"
                     current_parquet = pq.ParquetFile(part_path) if part_path.exists() else None
