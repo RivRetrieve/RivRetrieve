@@ -74,10 +74,13 @@ implementation:
   stripping or blank-to-null normalization, and document legacy `' '` values in
   `docs/providers/ca_eccc.md`.
 - **Monthly precision variation:** `DLY_LEVELS.PRECISION_CODE` is non-null on every
-  `DLY_LEVELS` row and changes across months (including mid-year) within a station,
-  so it cannot be stored as a static series annotation. Because every present
-  `DLY_LEVELS` month emits 28 to 31 valid daily rows carrying that month's integer
-  code, `DLY_LEVELS.PRECISION_CODE` is deterministically recoverable from the daily
+  `DLY_LEVELS` row in genuine `Hydat.sqlite3` and changes across months
+  (including mid-year) within a station, so it cannot be stored as a static
+  series annotation. Preserve SQLite `INTEGER | NULL` values verbatim in the
+  `Int64` annotation column so existing synthetic SQLite fixtures inserting
+  `PRECISION_CODE = NULL` remain valid. Because every present `DLY_LEVELS` month
+  emits 28 to 31 valid daily rows carrying that month's value,
+  `DLY_LEVELS.PRECISION_CODE` is deterministically recoverable from the daily
   `DLY_LEVELS` annotation table.
 - **StoreReader behavior on unmarked windows:** `StoreReader._read_annotations`
   (`src/rivretrieve/_internal/store/reader.py`) populates an observation schema
@@ -89,13 +92,14 @@ implementation:
   symbol.
 - **Lineage and existing store-excerpt assertions:** `src/rivretrieve/_internal/providers/ca_eccc/origins.py`
   pins `("src/rivretrieve/_internal/providers/ca_eccc/bulk.py", "_unpivot_month")`
-  for catalogue lineage (`tests/test_catalogue_origin_certification.py`). Existing
-  tests that read `DLY_FLOWS.FLOW_SYMBOL*` or `DLY_LEVELS.LEVEL_SYMBOL*` from
-  `part-0.parquet` or `StoreExcerptReceipt` (`tests/store/test_receipts_store_excerpt.py`,
-  `tests/test_ca_eccc_boundary_probe.py`, `tests/test_ca_eccc_no_days_evidence.py`,
-  `tests/store/test_ca_eccc_publisher_schema.py`, and
-  `tests/store/test_ca_eccc_streaming.py`) must be updated for the new
-  `RECONSTRUCTIBLE` dispositions and annotation partitions.
+  for catalogue lineage (checked offline in `tests/test_catalogue_build_provenance.py`
+  and under `@pytest.mark.governing` in `tests/test_catalogue_origin_certification.py`).
+  Existing tests that inspect unpivoted symbol columns in `part-0.parquet` or
+  `StoreExcerptReceipt` (`tests/store/test_receipts_store_excerpt.py`,
+  `tests/test_ca_eccc_boundary_probe.py`, and `tests/test_ca_eccc_no_days_evidence.py`)
+  must be updated for the new `RECONSTRUCTIBLE` dispositions and annotation
+  partitions; `tests/store/test_ca_eccc_streaming.py` also monkeypatches
+  `_unpivot_month` and bounds per-batch row lists.
 
 ## Scope boundaries and exclusions
 
@@ -143,7 +147,7 @@ Protect the migration with source-independent tests (`uv run pytest --logic-only
   `published_null` days within valid calendar months, windows whose days all have
   `null` symbols, verbatim legacy `' '` strings, `pick`, `to_utc`, and bundles.
 - Verified field descriptions and official ECCC `reference_url` bindings, plus
-  passing `tests/test_catalogue_origin_certification.py`.
+  passing `tests/test_catalogue_build_provenance.py`.
 
 Update `docs/providers/ca_eccc.md` following `docs/AGENTS.md` to show practical
 inspection and projection of `ca_eccc` annotations and explain `DATA_SYMBOLS`,
@@ -152,8 +156,9 @@ inspection and projection of `ca_eccc` annotations and explain `DATA_SYMBOLS`,
 Follow [the testing guide](../../docs/maintenance/testing.md) and
 [the evidence guide](../../docs/maintenance/evidence.md). Verify the compiled
 `ca_eccc` store against the genuine `Hydat.sqlite3` publisher artifact and
-applicable `ca_eccc` checks in the private `verification-evidence` archive on an
-independently reviewed revision. Report unavailable mandatory evidence as blocked;
-do not weaken checks or substitute synthetic fixtures for genuine archive inputs.
-Keep controlled material and private paths out of public repositories, logs, and
-artifacts.
+applicable `ca_eccc` checks (including `@pytest.mark.governing` catalogue-origin
+checks in `tests/test_catalogue_origin_certification.py`) on an independently
+reviewed revision using the private `verification-evidence` archive. Report
+unavailable mandatory evidence as blocked; do not weaken checks or substitute
+synthetic fixtures for genuine archive inputs. Keep controlled material and
+private paths out of public repositories, logs, and artifacts.
