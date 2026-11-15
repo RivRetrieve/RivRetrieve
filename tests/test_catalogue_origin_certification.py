@@ -811,6 +811,7 @@ EXPECTED_CRS_COUNTS = {
     (ProviderId("ba_fhmzbih"), "stations"): (60, "unknown"),
     (ProviderId("ca_eccc"), "stations"): (8_057, "EPSG:4326"),
     (ProviderId("cz_chmi"), "stations"): (831, "unknown"),
+    (ProviderId("dk_vanda"), "stations"): (1_565, "EPSG:4326"),
     # Native publication inventories acquired 2026-09-21.
     (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): (6_475, "EPSG:4326"),
     (ProviderId("fr_hubeau"), "temperature/station"): (872, "EPSG:4326"),
