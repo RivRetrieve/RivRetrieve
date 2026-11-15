@@ -158,8 +158,8 @@ def test_jp_mlit_hourly_annotations_preserve_flags_unmeasured_slots_and_hour_24(
     assert table.measurement_indices[-1] is None
 
 
-def test_jp_mlit_daily_skips_calendar_padding_and_ignores_monthly_summary() -> None:
-    # February 2023 has 28 days; invalid calendar days 29..31 are blank table padding, not real slots.
+def test_jp_mlit_daily_emits_exact_calendar_day_slots_and_rejects_extra_cells() -> None:
+    # February 2023 has 28 days; valid daily rows emit 28 calendar slots and reject padded or summary columns.
     feb_pairs = [("1.10", " "), ("", "$"), ("", "-")] + [("1.20", " ")] * 25
     content = _daily_dat(2023, [(2, feb_pairs, None)], kind=3)
     parsed = parse(
@@ -176,6 +176,24 @@ def test_jp_mlit_daily_skips_calendar_padding_and_ignores_monthly_summary() -> N
     assert table.rows["time"].to_list()[:3] == [datetime(2023, 2, 1), datetime(2023, 2, 2), datetime(2023, 2, 3)]
     assert table.rows["time"][-1] == datetime(2023, 2, 28)
     assert table.rows["flag"].to_list()[:4] == [None, "$", "-", None]
+
+    padded_short_month = _daily_dat(2023, [(2, feb_pairs + [("", "")] * 3, None)], kind=3)
+    padded_parsed = parse(
+        _dat_payload("stage_daily", 3, padded_short_month, datetime(2023, 1, 1), datetime(2023, 12, 31)),
+        config(),
+    )
+    assert padded_parsed.outcomes[0].status is OutcomeStatus.UNSUPPORTED
+    assert padded_parsed.rows.is_empty()
+    assert padded_parsed.annotations.is_empty
+
+    with_summary = _daily_dat(2023, [(2, feb_pairs, ("1.15", " "))], kind=3)
+    summary_parsed = parse(
+        _dat_payload("stage_daily", 3, with_summary, datetime(2023, 1, 1), datetime(2023, 12, 31)),
+        config(),
+    )
+    assert summary_parsed.outcomes[0].status is OutcomeStatus.UNSUPPORTED
+    assert summary_parsed.rows.is_empty()
+    assert summary_parsed.annotations.is_empty
 
 
 def test_jp_mlit_all_unmeasured_series_retains_slots_at_empty_outcome() -> None:
@@ -292,3 +310,43 @@ def test_jp_mlit_public_projection_clipping_cache_reuse_and_bundle_roundtrip(
     pl_testing.assert_frame_equal(rr.annotations(restored), rr.annotations(result))
     pl_testing.assert_frame_equal(rr.annotations(restored, schema="jp_mlit.observations").sort("time"), direct)
     pl_testing.assert_frame_equal(restored.to_polars(annotations=True).sort("time"), projected)
+
+
+def test_jp_mlit_daily_public_fetch_cache_reuse_and_bundle_roundtrip(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    feb_pairs = [("1.10", " "), ("", "$"), ("", "-")] + [("1.20", " ")] * 25
+    dat_bytes = _daily_dat(2023, [(2, feb_pairs, None)], kind=3)
+    html_bytes = _html_page(3, _STATION, dat_path="/dat/dload/download/test2023_daily.dat")
+
+    class _Transport:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def send(self, request: TransportRequest) -> TransportResponse:
+            if request.url.endswith(".dat"):
+                self.calls.append("dat")
+                return TransportResponse(dat_bytes, 200, _RETRIEVED_AT, "text/plain", request.url, {})
+            self.calls.append("html")
+            return TransportResponse(html_bytes, 200, _RETRIEVED_AT, "text/html", request.url, dict(request.params))
+
+    transport = _Transport()
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+
+    selection = rr.find(provider="jp_mlit", station=_STATION, quantity="stage", frequency="daily")
+    result = rr.fetch(selection, start="2023-02-01", end="2023-02-05", cache="reuse", on_issue="ignore")
+    assert transport.calls == ["html", "dat"]
+    assert result.data.height == 3
+    direct = rr.annotations(result, schema="jp_mlit.observations").sort("time")
+    assert direct["measured"].to_list() == [True, False, False, True, True]
+    assert direct["flag"].to_list() == [None, "$", "-", None, None]
+
+    chosen = rr.pick(selection, series_id=rr.series(result)["series_id"].item())
+    before = len(transport.calls)
+    reused = rr.fetch(chosen, start="2023-02-01", end="2023-02-05", cache="reuse", on_issue="ignore")
+    assert len(transport.calls) == before
+    pl_testing.assert_frame_equal(rr.annotations(reused, schema="jp_mlit.observations").sort("time"), direct)
+
+    restored = rr.from_bundle(rr.to_bundle(result))
+    pl_testing.assert_frame_equal(rr.annotations(restored, schema="jp_mlit.observations").sort("time"), direct)

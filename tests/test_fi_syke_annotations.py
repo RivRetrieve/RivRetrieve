@@ -134,6 +134,14 @@ def test_fi_syke_rejects_boolean_or_non_int64_lippu_id(bad_flag: object) -> None
         parse(_payload("discharge_reported", [_row(1, 12.5, flag=bad_flag)]), config())
 
 
+@pytest.mark.parametrize("product", ["discharge_reported", "stage_reported"])
+def test_fi_syke_rejects_missing_lippu_id_key_on_annotated_products(product: str) -> None:
+    row = _row(1, 12.5)
+    del row["Lippu_id"]
+    with pytest.raises(UnsupportedSourceStructureError, match="Lippu_id"):
+        parse(_payload(product, [row]), config())
+
+
 def test_fi_syke_public_mixed_routes_clipping_refresh_and_bundles(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

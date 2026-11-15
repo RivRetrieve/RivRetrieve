@@ -360,7 +360,9 @@ def _value(observation: dict[str, object], index: int) -> float | None:
 
 
 def _code(observation: dict[str, object], name: str, index: int) -> int | None:
-    value = observation.get(name)
+    if name not in observation:
+        raise SourceStructureError(f"no_nve observation {index} is missing its {name}")
+    value = observation[name]
     if value is None:
         return None
     if type(value) is not int or not (_INT64_MIN <= value <= _INT64_MAX):

@@ -144,9 +144,10 @@ window. See [Source annotations](../usage.md#source-annotations) for general
 options.
 
 RivRetrieve makes no quality judgement of its own. A number without a marker does
-not establish that MLIT has formally verified it. Invalid calendar slots in daily
-tables (for example February 29 through 31) are excluded from observation
-annotations. A failed request is reported separately in `result.issues`. See
+not establish that MLIT has formally verified it. Daily month rows carry only the
+valid calendar days of each month (for example 28 days in a non-leap February),
+so non-existent dates never appear as observation or annotation slots. A failed
+request is reported separately in `result.issues`. See
 [Usage](../usage.md#issues) for interpreting issues and empty results.
 
 ## Automated access and caching

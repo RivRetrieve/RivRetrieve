@@ -94,8 +94,17 @@ def test_no_nve_annotation_schema_and_official_reference() -> None:
     for field in fields.values():
         assert field.description
         assert field.reference_url == NO_NVE_URL
-    assert "quality" in fields["quality"].description.lower()
-    assert "correction" in fields["correction"].description.lower()
+    for token in ("0 - unknown", "1 - uncontrolled", "2 - primary controlled", "3 - secondary controlled"):
+        assert token in fields["quality"].description
+    for token in (
+        "0: No changes",
+        "1: Manual- or ice correction",
+        "2: Interpolation",
+        "3: Value computed with models or/and other series",
+        "4: Daily mean computed with arithmetic mean",
+        "16: Value fetched from rejected period",
+    ):
+        assert token in fields["correction"].description
 
 
 def test_no_nve_parse_preserves_quality_correction_nulls_and_multi_version_identity() -> None:
@@ -145,6 +154,17 @@ def test_no_nve_rejects_invalid_quality_or_correction_without_partial_annotation
 ) -> None:
     obs: dict[str, object] = {"time": "2025-07-02T11:00:00Z", "value": 12.5, "correction": 0, "quality": 3}
     obs[field] = bad_value
+    parsed = parse(_payload("discharge_daily_mean", [_series_block(version=1, observations=[obs])]), config())
+
+    assert parsed.rows.is_empty()
+    assert parsed.annotations.is_empty
+    assert parsed.outcomes[0].status is OutcomeStatus.UNSUPPORTED
+
+
+@pytest.mark.parametrize("field", ["quality", "correction"])
+def test_no_nve_rejects_missing_quality_or_correction_key(field: str) -> None:
+    obs: dict[str, object] = {"time": "2025-07-02T11:00:00Z", "value": 12.5, "correction": 0, "quality": 3}
+    del obs[field]
     parsed = parse(_payload("discharge_daily_mean", [_series_block(version=1, observations=[obs])]), config())
 
     assert parsed.rows.is_empty()

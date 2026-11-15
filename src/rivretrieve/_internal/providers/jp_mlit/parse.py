@@ -213,14 +213,7 @@ def _daily(
             raise UnsupportedSourceStructureError("jp_mlit daily row does not contain the exact calendar-day pairs")
         for day in range(1, expected_days + 1):
             raw, flag = cells[2 * day - 1], cells[2 * day]
-            try:
-                time = datetime(year, month, day)
-            except ValueError as error:
-                if raw.strip() or flag.strip():
-                    raise UnsupportedSourceStructureError(
-                        "jp_mlit invalid calendar day contains an observation"
-                    ) from error
-                continue
+            time = datetime(year, month, day)
             _cell(raw, flag, station, product, f"{year}年{month}月{day}日", rows, slots, time)
     if year is None:
         raise UnsupportedSourceStructureError("jp_mlit daily DAT has no year marker")

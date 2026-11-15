@@ -125,12 +125,17 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                 "source_unit": fact.source_unit.value,
             }
         )
-        flag_code = raw_row.get("Lippu_id")
-        if flag_code is not None and (
-            isinstance(flag_code, bool) or not isinstance(flag_code, int) or not (_INT64_MIN <= flag_code <= _INT64_MAX)
-        ):
-            raise UnsupportedSourceStructureError("fi_syke Lippu_id must be a signed 64-bit integer or null")
-        flag_values.append(flag_code)
+        if str(product) in _ANNOTATION_PRODUCTS:
+            if "Lippu_id" not in raw_row:
+                raise UnsupportedSourceStructureError("fi_syke observation row lacks Lippu_id")
+            flag_code = raw_row["Lippu_id"]
+            if flag_code is not None and (
+                isinstance(flag_code, bool)
+                or not isinstance(flag_code, int)
+                or not (_INT64_MIN <= flag_code <= _INT64_MAX)
+            ):
+                raise UnsupportedSourceStructureError("fi_syke Lippu_id must be a signed 64-bit integer or null")
+            flag_values.append(flag_code)
 
     combined = (
         pl.DataFrame(numeric_rows, schema=RowsSchema.polars_schema)

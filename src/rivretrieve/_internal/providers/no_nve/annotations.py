@@ -13,8 +13,8 @@ NO_NVE_OBSERVATIONS_SCHEMA = AnnotationSchema(
             name="quality",
             dtype="Int64",
             description=(
-                "NVE HydAPI observation quality control code "
-                "(0 unchecked, 1 preliminary checked, 2 asserted/adjusted, 3 quality-controlled)."
+                "NVE HydAPI Observation.quality code "
+                "(0 - unknown, 1 - uncontrolled, 2 - primary controlled, 3 - secondary controlled)."
             ),
             reference_url=NO_NVE_URL,
         ),
@@ -22,8 +22,16 @@ NO_NVE_OBSERVATIONS_SCHEMA = AnnotationSchema(
             name="correction",
             dtype="Int64",
             description=(
-                "NVE HydAPI observation correction code "
-                "(0 none, 1 manual, 2 linear interpolation, 3 offset/correction, 4 automatic/derived)."
+                "NVE HydAPI Observation.correction code "
+                "(0: No changes, 1: Manual- or ice correction, 2: Interpolation, "
+                "3: Value computed with models or/and other series, "
+                "4: Daily mean computed with arithmetic mean, 5: Smooth negative value, "
+                "6: Dry pipe, 7: Ice in pipe, 8: Damaged pipe, 9: Pumping, "
+                "11: Start/end value linear adjustment, 12: Incomplete data source, "
+                "13: Calculated from a similar or nearby station, "
+                "14: Missing, calculated from series statistics, "
+                "15: Calculation ended in NaN or +/-Inf, "
+                "16: Value fetched from rejected period)."
             ),
             reference_url=NO_NVE_URL,
         ),
