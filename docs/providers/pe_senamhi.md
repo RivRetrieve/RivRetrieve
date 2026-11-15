@@ -200,8 +200,11 @@ información corresponde a datos crudos registrados por la estación automática
 This applies to PHISIS automatic-station series; it does not generalize to the
 conventional station-archive series above.
 
-SENAMHI provides data without warranty of fitness for a particular purpose.
-RivRetrieve makes no quality judgements of its own.
+Neither PHISIS JSON payloads nor conventional station-archive HTML tables
+publish observation-level or series-level quality flags, so
+`rr.annotations(result)` is empty for `pe_senamhi`. SENAMHI provides data
+without warranty of fitness for a particular purpose. RivRetrieve makes no
+quality judgements of its own.
 
 ## Rate limits
 

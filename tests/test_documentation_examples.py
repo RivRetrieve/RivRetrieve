@@ -169,7 +169,7 @@ def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
     assert rr.series(scope["consistido"])["variant"].to_list() == ["consistido"]
     both = scope["brazil_result"]
     explicit = scope["consistido_result"]
-    expected_issues = {("info", "source_status"), ("info", "provenance.citation_not_established")}
+    expected_issues = {("info", "provenance.citation_not_established")}
     assert {(issue.severity, issue.code) for issue in both.issues} == expected_issues
     assert {(issue.severity, issue.code) for issue in explicit.issues} == expected_issues
     assert both.data.height == 22

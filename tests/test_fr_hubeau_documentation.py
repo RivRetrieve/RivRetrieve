@@ -39,6 +39,10 @@ def test_french_page_examples_and_displayed_outputs(
         assert output.getvalue() == expected, index
     if provider == "fr_hubeau":
         assert not namespace["result"].issues
+        assert "fr_hubeau.obs_elab" in page
+        assert "fr_hubeau.temperature_chronique" in page
+        assert namespace["rr"].annotations(namespace["result"])["schema"].unique().to_list() == ["fr_hubeau.obs_elab"]
+        assert "code_qualification" in namespace["result"].to_polars(annotations=True).columns
     else:
         assert [(issue.severity, issue.code) for issue in namespace["result"].issues] == [
             ("info", "provenance.license_not_established"),
