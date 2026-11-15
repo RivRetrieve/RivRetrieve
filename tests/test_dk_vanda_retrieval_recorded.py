@@ -25,6 +25,21 @@ _SCOPE = "maintenance/catalogue/dk_vanda/official/retrieval/web"
 _DISCHARGE_SCOPE = "maintenance/catalogue/dk_vanda/official/version-investigation/web"
 
 
+def _normalized_instant(value: str) -> datetime:
+    """Parse a VandA `from`/`to` ISO instant regardless of seconds precision.
+
+    `fetch.py` always sends whole-second precision (``...T00:00:00Z``). Some
+    retained captures were made by ad hoc research tooling during the
+    Program #351 version-investigation pass (Effort #799 follow-up) rather
+    than through `fetch.py` itself, and used minute precision
+    (``...T00:00Z``) instead. Both are the same VandA-accepted instant; this
+    compares the parsed value, not the exact character string, so the exact-
+    request check still fails on any real difference in station, examination
+    type or the requested instant itself.
+    """
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
 def _plan(coordinates: DkVandaSourceCoordinates, start: str, stop: str):
     from rivretrieve._internal.providers.dk_vanda.config import window_declarations
 
@@ -93,11 +108,19 @@ def test_retained_acquisition_preserves_exact_request_and_response(
     class Replay:
         def send(self, request):
             requested_url = urlsplit(request.url)
+            requested_parameters = {str(k): str(v) for k, v in request.params.items()}
             matching = (requested_url.scheme, requested_url.netloc, requested_url.path) == (
                 source_url.scheme,
                 source_url.netloc,
                 source_url.path,
-            ) and {str(k): str(v) for k, v in request.params.items()} == source_parameters
+            ) and requested_parameters.keys() == source_parameters.keys()
+            if matching:
+                for key, expected in source_parameters.items():
+                    actual = requested_parameters[key]
+                    if key in {"from", "to"}:
+                        matching = matching and _normalized_instant(actual) == _normalized_instant(expected)
+                    else:
+                        matching = matching and actual == expected
             assert matching, "Request does not match retained selector"
             calls.append(request)
             response = TransportResponse(
