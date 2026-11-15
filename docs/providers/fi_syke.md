@@ -142,13 +142,17 @@ does not state one. RivRetrieve returns the published wall-clock label in
 `time` paired with `time_zone="unknown"`. Do not assume these timestamps are
 UTC, Finnish local time, or any other specific zone.
 
-Some discharge and stage readings carry one of Syke's own flag codes
-(`Lippu`), covering a mix of meanings: data-quality notes (for example,
-interpolated or reduced values), statistical summaries, and model-simulated
-values. RivRetrieve reports a non-null flag as an `info`-severity
-`source.flag_code` issue alongside the value; it does not drop the value or
-rank one flag above another. Surface water temperature carries no flag field
-at all.
+Some discharge and stage readings carry Syke's integer flag key `Lippu_id`,
+which points into Syke's `Lippu` reference table covering mixed meanings:
+data-quality notes (for example, interpolated or reduced values), statistical
+summaries, model-simulated values, and device identifiers. RivRetrieve exposes
+`Lippu_id` verbatim on discharge and stage results in the `fi_syke.observations`
+annotation schema without dropping flagged rows or ranking one code above
+another. Pass `annotations=True` to `result.to_polars(...)` or
+`result.to_pandas(...)` to project `Lippu_id`, or call `rr.annotations(result)`
+to inspect schema metadata. Surface water temperature (`water_temperature_reported`)
+carries no `Lippu_id` field and emits no observation annotations. See
+[Source annotations](../usage.md#source-annotations) for general options.
 
 Some older discharge and stage readings also carry a published minimum and
 maximum alongside the daily value; current readings do not. RivRetrieve does

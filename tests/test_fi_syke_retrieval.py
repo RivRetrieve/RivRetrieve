@@ -103,10 +103,14 @@ def test_fetch_follows_nextlink_across_pages_and_never_sets_top() -> None:
     assert combined.height == 9
     assert combined["value"].to_list() == [float(i) for i in range(1, 10)]
 
-    issues = [issue for payload in result.value for issue in parse(payload, config()).issues]
-    assert len(issues) == 1
-    assert issues[0].code == "source.flag_code"
-    assert issues[0].details["source_flag_code"] == 1
+    parsed_pages = [parse(payload, config()) for payload in result.value]
+    assert [issue for parsed in parsed_pages for issue in parsed.issues] == []
+    flags = [
+        flag
+        for parsed in parsed_pages
+        for flag in parsed.annotations.observation_tables["fi_syke.observations"].rows["Lippu_id"].to_list()
+    ]
+    assert flags == [None] * 8 + [1]
 
 
 def test_fetch_never_follows_a_nextlink_to_a_different_entity_set() -> None:
