@@ -37,6 +37,14 @@ def on_pre_build(config: dict) -> None:
             "and build the frontend before building or serving the documentation."
         )
 
+    coverage_map = DOCS_DIR / "assets" / "coverage-map.png"
+    if not coverage_map.is_file():
+        raise RuntimeError(
+            "Coverage map asset is missing: docs/assets/coverage-map.png. "
+            "Run `uv run python docs/scripts/coverage_map.py --out docs/assets/coverage-map.png` "
+            "before building or serving the documentation."
+        )
+
     # 1. Sync README.md to docs/index.md
     if README_PATH.is_file():
         content = README_PATH.read_text(encoding="utf-8")
@@ -51,7 +59,7 @@ def on_pre_build(config: dict) -> None:
             content,
         )
 
-        # Add link to interactive map in coverage map section
+        # Add link to interactive map and use the locally generated coverage map
         map_note = (
             '\n\n!!! tip "Interactive Station Explorer"\n'
             "    Looking for specific gauges? Explore the available stations worldwide on our "
@@ -59,7 +67,7 @@ def on_pre_build(config: dict) -> None:
         )
         content = content.replace(
             "![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)",
-            "![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)"
+            "![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](assets/coverage-map.png)"
             + map_note,
         )
 

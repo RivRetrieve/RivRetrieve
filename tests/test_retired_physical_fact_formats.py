@@ -106,9 +106,9 @@ def test_explicit_bypass_and_cleanup_refetch_produce_only_current_facts(retained
     rr.clear_cache("fr_hubeau")
     refreshed = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="refresh", on_issue="ignore")
     assert all(facts.frequency.value == "daily" for series in refreshed.source_series for facts in series.facts)
-    assert json.loads((path / "manifest.json").read_text())["format_version"] == 8
+    assert json.loads((path / "manifest.json").read_text())["format_version"] == 9
     exported = rr.to_bundle(refreshed)
     with ZipFile(BytesIO(exported)) as archive:
-        assert json.loads(archive.read("manifest.json"))["version"] == 3
+        assert json.loads(archive.read("manifest.json"))["version"] == 4
     restored = rr.from_bundle(exported)
     assert restored.source_series == refreshed.source_series

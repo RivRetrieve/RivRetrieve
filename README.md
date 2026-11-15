@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from sixteen different providers in fifteen countries.
+from seventeen different providers in sixteen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -43,6 +43,7 @@ for how to supply them.
 | Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Bulk download |
 | Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | Open |
 | Denmark | Miljøstyrelsen (Danish Environmental Protection Agency) / Danmarks Miljøportal (VandA) | `dk_vanda` | 1,388 | Open |
+| Finland | Finnish Environment Institute (Syke), Hydrologiarajapinta | `fi_syke` | 2,543 | Open |
 | France | Hub'Eau | `fr_hubeau` | 7,347 | Open |
 | France | HydroPortail | `fr_hydroportail` | 6,409 | Open |
 | Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | Open |
@@ -70,8 +71,8 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Argentina, Australia, Belgium, Chile, Colombia, Estonia, Finland,
-Germany, Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Portugal, Rwanda,
+Afghanistan, Argentina, Australia, Belgium, Chile, Colombia, Estonia, Germany,
+Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Portugal, Rwanda,
 Slovenia, South Africa, South Korea, Spain, Sweden, Taiwan and the United Kingdom.
 
 Some of these have a fetcher in the legacy

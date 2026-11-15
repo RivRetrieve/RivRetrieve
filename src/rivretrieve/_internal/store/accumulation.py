@@ -3,16 +3,33 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import polars as pl
 
 from rivretrieve._internal.coverage import CoverageInterval, remainder
+from rivretrieve._internal.engine import RowsSchema
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.publication_identity import publication_identity_fields
+from rivretrieve._internal.source_annotations import (
+    AnnotationBundle,
+    AnnotationSchema,
+    ObservationAnnotationTable,
+    SeriesAnnotationTable,
+    anti_join_native_with_annotations,
+    concat_native_with_annotations,
+    decode_observation_table_from_parquet,
+    dump_annotation_schema,
+    dump_series_annotations,
+    encode_observation_table_for_parquet,
+    filter_native_with_annotations_by_expr,
+    merge_series_tables,
+    sort_native_by_station_with_annotations,
+    validate_bundle_for_result,
+)
 from rivretrieve._internal.source_series import (
     InventorySnapshot,
     OutcomeStatus,
@@ -45,6 +62,7 @@ class SuccessfulReplacement:
     coverage: CoverageInterval
     rows: pl.DataFrame
     replaced_facts_ids: tuple[str, ...] = ()
+    annotations: AnnotationBundle = field(default_factory=AnnotationBundle.empty)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +80,7 @@ class StoreUpdate:
     issues: tuple[Issue, ...] = ()
     source_calls: tuple[dict[str, object], ...] = ()
     supporting_outcomes: tuple[RetrievalOutcome, ...] = ()
+    series_annotations: tuple[SeriesAnnotationTable, ...] = ()
 
 
 def _coverage_json(item: CoverageInterval) -> dict[str, object]:
@@ -157,6 +176,9 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
         for item in held:
             held_by_series.setdefault(item.series_id, []).append(item)
         counts = {str(key): value for key, value in previous.partition_row_counts.items()} if previous else {}
+        ann_counts = (
+            {str(key): value for key, value in previous.annotation_partition_row_counts.items()} if previous else {}
+        )
         series = _merge_series(previous.series if previous else (), update.series)
         inventories = _merge_records(
             previous.inventories if previous else (), update.inventories, "snapshot_id", move_reobserved=True
@@ -275,6 +297,21 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                 snapshot_keys.update(identities)
             if (outcome.status is OutcomeStatus.EMPTY) != rows.is_empty():
                 raise FatalContractError("Successful empty and nonempty outcomes must match their native rows")
+            validate_bundle_for_result(replacement.annotations, rows, series)
+            for table in replacement.annotations.observation_tables.values():
+                if table.row_count > 0 and (
+                    table.rows.select(axis_time_expression(coverage.interval.axis).is_null().any()).item()
+                    or table.rows.filter(pl.col("series_id") != coverage.series_id).height
+                    or table.rows.filter(
+                        ~axis_time_expression(coverage.interval.axis).is_between(
+                            coverage.interval.start, coverage.interval.end
+                        )
+                    ).height
+                    or table.rows.filter(~pl.col("facts_id").is_in(coverage.facts_ids)).height
+                ):
+                    raise FatalContractError(
+                        "Replacement annotations exceed their successful series interval or physical facts"
+                    )
             replacements.append(replace(replacement, coverage=coverage))
         stage.mkdir()
         partition_updates: dict[str, list[SuccessfulReplacement]] = {}
@@ -310,11 +347,20 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             for year in range(coverage.interval.start.year - margin, coverage.interval.end.year + margin + 1):
                 identifier = f"product={definition.product_id}/year={year:04d}"
                 partition_updates.setdefault(identifier, []).append(replacement)
+        active_schemas: dict[str, AnnotationSchema] = (
+            {item.schema_id: item for item in previous.annotation_schemas} if previous else {}
+        )
         reused = {}
         remote_reused = {}
         materialized_updates: dict[PartitionIdentifier, Path] = {}
         if sealed is not None:
-            updated_keys = tuple(key for key in sealed.store.partition_files if str(key) in partition_updates)
+            obs_updated = tuple(key for key in sealed.store.partition_files if str(key) in partition_updates)
+            ann_updated = tuple(
+                key
+                for key in sealed.store.annotation_partition_files
+                if "/".join(str(key).split("/")[:2]) in partition_updates
+            )
+            updated_keys = (*obs_updated, *ann_updated)
             if is_remote:
                 from rivretrieve._internal.store.integrity import _fail as _integrity_fail
 
@@ -327,28 +373,85 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             else:
                 verify_files(sealed, updated_keys)
         if sealed is not None:
-            for identifier, source in sealed.store.partition_files.items():
-                if str(identifier) not in partition_updates:
+            for identifier, source in sealed.store.all_partition_files.items():
+                parent_id = "/".join(str(identifier).split("/")[:2])
+                if parent_id not in partition_updates:
+                    rel = source.relative_to(store).as_posix()
                     if is_remote:
-                        rel = source.relative_to(store).as_posix()
                         remote_reused[identifier] = (rel, sealed.files[rel])
                     else:
-                        destination = stage / str(identifier) / source.name
+                        destination = stage / rel
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         reused[identifier] = link_partition(sealed, identifier, destination)
             if isinstance(transaction, RemoteStoreTransaction):
                 transaction.set_reused_relpaths(rel for rel, _ in remote_reused.values())
+        schemas_by_id = {item.schema_id: item for item in previous.annotation_schemas} if previous else {}
         for identifier, changes in partition_updates.items():
+            product = identifier.split("/", 1)[0].removeprefix("product=")
             year = int(identifier.rsplit("=", 1)[1])
             key = PartitionIdentifier(identifier)
-            existing_rows = None
+            existing_rows = pl.DataFrame(schema=RowsSchema.polars_schema)
             if sealed is not None and key in sealed.store.partition_files:
                 source_parquet = materialized_updates[key] if is_remote else sealed.store.partition_files[key]
-                existing_rows = pl.read_parquet(source_parquet)
+                physical = pl.read_parquet(source_parquet)
+                existing_rows = physical.select(
+                    "station_id",
+                    pl.lit(product).alias("product_id"),
+                    "time",
+                    "value",
+                    "time_zone",
+                    "series_id",
+                    "facts_id",
+                    "source_unit",
+                )
+            existing_obs_tables: dict[str, ObservationAnnotationTable] = {}
+            if sealed is not None:
+                for ann_key, ann_path in sealed.store.annotation_partition_files.items():
+                    if "/".join(str(ann_key).split("/")[:2]) != identifier:
+                        continue
+                    ann_counts.pop(str(ann_key), None)
+                    schema_id = str(ann_key).split("/", 2)[2].removeprefix("annotations=")
+                    ann_source = materialized_updates[ann_key] if is_remote else ann_path
+                    existing_obs_tables[schema_id] = decode_observation_table_from_parquet(
+                        pl.read_parquet(ann_source), schemas_by_id[schema_id], existing_rows
+                    )
+            existing_bundle = AnnotationBundle(observation_tables=existing_obs_tables)
             for replacement in changes:
-                coverage, rows = replacement.coverage, replacement.rows
+                coverage = replacement.coverage
                 replaced_facts = replacement.replaced_facts_ids or coverage.facts_ids
-                additions = rows.filter(pl.col("time").dt.year() == year).select(
+                part_rows, part_bundle = filter_native_with_annotations_by_expr(
+                    replacement.rows,
+                    replacement.annotations,
+                    pl.col("time").dt.year() == year,
+                    allowed_series_ids={coverage.series_id},
+                )
+                part_obs_bundle = AnnotationBundle(observation_tables=part_bundle.observation_tables)
+                if outcome_by_id[coverage.outcome_id].coverage == "observations":
+                    existing_rows, existing_bundle = anti_join_native_with_annotations(
+                        existing_rows, existing_bundle, part_rows
+                    )
+                else:
+                    keep_expr = ~(
+                        (pl.col("series_id") == coverage.series_id)
+                        & pl.col("facts_id").is_in(replaced_facts)
+                        & axis_time_expression(coverage.interval.axis).is_between(
+                            coverage.interval.start, coverage.interval.end
+                        )
+                    )
+                    existing_rows, existing_bundle = filter_native_with_annotations_by_expr(
+                        existing_rows, existing_bundle, keep_expr
+                    )
+                existing_rows, existing_bundle = concat_native_with_annotations(
+                    [(existing_rows, existing_bundle), (part_rows, part_obs_bundle)],
+                    empty_schema=RowsSchema.polars_schema,
+                )
+            sorted_rows, sorted_bundle = sort_native_by_station_with_annotations(existing_rows, existing_bundle)
+            if sorted_rows.is_empty():
+                counts.pop(identifier, None)
+            else:
+                directory = stage / identifier
+                directory.mkdir(parents=True, exist_ok=True)
+                physical_out = sorted_rows.select(
                     "station_id",
                     "time",
                     "time_zone",
@@ -361,33 +464,32 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                     "facts_id",
                     "source_unit",
                 )
-                if existing_rows is not None:
-                    if outcome_by_id[coverage.outcome_id].coverage == "observations":
-                        retained_rows = existing_rows.join(
-                            additions.select("series_id", "facts_id", "time", "time_zone").unique(),
-                            on=["series_id", "facts_id", "time", "time_zone"],
-                            how="anti",
-                        )
-                    else:
-                        retained_rows = existing_rows.filter(
-                            ~(
-                                (pl.col("series_id") == coverage.series_id)
-                                & pl.col("facts_id").is_in(replaced_facts)
-                                & axis_time_expression(coverage.interval.axis).is_between(
-                                    coverage.interval.start, coverage.interval.end
-                                )
-                            )
-                        )
-                    additions = pl.concat([retained_rows, additions])
-                existing_rows = additions
-            assert existing_rows is not None
-            if existing_rows.is_empty():
-                counts.pop(identifier, None)
-                continue
-            directory = stage / identifier
-            directory.mkdir(parents=True, exist_ok=True)
-            existing_rows.sort("station_id", maintain_order=True).write_parquet(directory / "rows.parquet")
-            counts[identifier] = existing_rows.height
+                physical_out.write_parquet(directory / "rows.parquet")
+                counts[identifier] = physical_out.height
+            for schema_id, obs_table in sorted(sorted_bundle.observation_tables.items()):
+                if obs_table.row_count == 0:
+                    continue
+                ann_id = f"{identifier}/annotations={schema_id}"
+                ann_dir = stage / ann_id
+                ann_dir.mkdir(parents=True, exist_ok=True)
+                encode_observation_table_for_parquet(obs_table, sorted_rows).write_parquet(ann_dir / "rows.parquet")
+                ann_counts[ann_id] = obs_table.row_count
+                active_schemas[schema_id] = obs_table.schema
+        merged_series = merge_series_tables(
+            [
+                *(previous.series_annotations if previous else ()),
+                *update.series_annotations,
+                *(table for rep in replacements for table in rep.annotations.series_tables.values()),
+            ],
+            conflict="prefer_last",
+            allowed_series_ids=set(definitions),
+        )
+        for table in merged_series.values():
+            active_schemas[table.schema.schema_id] = table.schema
+        used_schema_ids = {ann_key.split("/", 2)[2].removeprefix("annotations=") for ann_key in ann_counts} | set(
+            merged_series
+        )
+        retained_schemas = [active_schemas[sid] for sid in sorted(used_schema_ids)]
         held = tuple(item for records in held_by_series.values() for item in records)
         all_issues = {item.model_dump_json(): item for item in (*(previous.issues if previous else ()), *update.issues)}
         all_calls = {
@@ -405,11 +507,14 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             new_inventory_ids=frozenset(item.snapshot_id for item in update.inventories),
         )
         manifest = {
-            "format_version": 8,
+            "format_version": 9,
             "provider_id": str(provider_id),
             "built_at": datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z"),
             "coverage": [_coverage_json(item) for item in held],
             "partition_row_counts": counts,
+            "annotation_schemas": [dump_annotation_schema(item) for item in retained_schemas],
+            "annotation_partition_row_counts": ann_counts,
+            "series_annotations": dump_series_annotations(merged_series),
             "series": [item.model_dump(mode="json") for item in series],
             "inventories": [item.model_dump(mode="json") for item in evidence.inventories],
             "outcomes": [item.model_dump(mode="json") for item in evidence.outcomes],

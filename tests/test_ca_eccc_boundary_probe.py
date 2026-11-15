@@ -215,8 +215,9 @@ def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hy
     excerpt = pl.read_parquet(BytesIO(receipt.content))
     assert excerpt["facts_id"].unique().to_list() == [selection.series[0].facts[0].facts_id]
     assert excerpt["value"].to_list() == [31.0, 19.299999237060547, 15.300000190734863, 15.899999618530272, 23.0]
-    assert excerpt["DLY_FLOWS.FLOW_SYMBOL1"].to_list() == [None] * 5
+    assert "DLY_FLOWS.FLOW_SYMBOL1" not in excerpt.columns
     assert excerpt["DLY_FLOWS.NO_DAYS"].to_list() == [31] * 5
+    assert result.to_polars(annotations="symbol")["symbol"].to_list() == [None] * 3
     assert result.provenance.publisher_artifact_urls == (_DERIVED_URL,)
     omitted = rr.fetch(selection, start="2020-01-01", end="2020-01-03", on_issue="raise")
     assert omitted.receipts.entries == ()
