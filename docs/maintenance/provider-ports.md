@@ -211,6 +211,19 @@ useful default, not a rigid requirement. Plot both hydrographs with explicit uni
 conversion and preserved gaps. Inspect for obvious errors and investigate meaningful
 discrepancies without filtering, shifting or fitting values to force agreement.
 
+A comparison window bounded to a published dataset's coverage, such as a CAMELS
+dataset's end date, is not evidence of the source's actual historical reach. Check
+each sampled station's own earliest-available-result metadata where the source
+publishes one, and test a genuine retrieval against a window near that claimed
+depth for at least one long-running station, not only the modern comparison
+window. A single failed attempt against a far-back window can be a transient,
+cold-query response rather than an absence of data; retry before concluding the
+data is not retrievable. Separately, a source may track an older, lower-frequency
+product (for example, manually-taken spot measurements) alongside the continuous
+product a provider retrieves, reaching further back than the continuous record
+does; note this as an open scope question when found, rather than assuming the
+continuous product's own history is the source's only route to older data.
+
 Retain the dataset version, station and date selection, comparison method, figures,
 findings and limitations through the existing evidence process. If no suitable
 dataset is available, record why; that absence alone does not block the port.
