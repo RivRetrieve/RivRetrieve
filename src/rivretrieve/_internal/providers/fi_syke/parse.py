@@ -8,10 +8,15 @@ from datetime import datetime
 import polars as pl
 
 from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema
-from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
+from rivretrieve._internal.providers.fi_syke.annotations import FI_SYKE_OBSERVATIONS_SCHEMA
 from rivretrieve._internal.providers.fi_syke.series import describe_series
+from rivretrieve._internal.source_annotations import (
+    OBSERVATION_STRUCTURAL_SCHEMA,
+    AnnotationBundle,
+    ObservationAnnotationTable,
+)
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -24,7 +29,9 @@ from rivretrieve._internal.source_series import (
     stable_id,
 )
 
-_PROVIDER_ID = ProviderId("fi_syke")
+_ANNOTATION_PRODUCTS = frozenset({"discharge_reported", "stage_reported"})
+_INT64_MIN = -(1 << 63)
+_INT64_MAX = (1 << 63) - 1
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
@@ -86,7 +93,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         )
 
     numeric_rows: list[dict[str, object]] = []
-    flag_occurrences: list[tuple[datetime, int]] = []
+    flag_values: list[int | None] = []
     for raw_row in rows:
         if not isinstance(raw_row, dict) or "Aika" not in raw_row or "Arvo" not in raw_row:
             raise UnsupportedSourceStructureError("fi_syke observation row lacks Aika or Arvo")
@@ -119,10 +126,11 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             }
         )
         flag_code = raw_row.get("Lippu_id")
-        if flag_code is not None:
-            if not isinstance(flag_code, int):
-                raise UnsupportedSourceStructureError("fi_syke Lippu_id is not an integer")
-            flag_occurrences.append((naive_time, flag_code))
+        if flag_code is not None and (
+            isinstance(flag_code, bool) or not isinstance(flag_code, int) or not (_INT64_MIN <= flag_code <= _INT64_MAX)
+        ):
+            raise UnsupportedSourceStructureError("fi_syke Lippu_id must be a signed 64-bit integer or null")
+        flag_values.append(flag_code)
 
     combined = (
         pl.DataFrame(numeric_rows, schema=RowsSchema.polars_schema)
@@ -152,24 +160,19 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         window=window,
         evidence=(evidence,),
     )
-    # Lippu is a mixed vocabulary (quality/processing, percentile, simulated-
-    # value, device-id codes -- research/fi-syke-series-identity.md); record
-    # each occurrence as a fact, never a ranking or exclusion (port guide
-    # step 3's explicit instruction).
-    issues = tuple(
-        Issue(
-            severity="info",
-            code="source.flag_code",
-            message=f"SYKE reports Lippu_id {code} for {station} {product} at {occurred_at.isoformat()}",
-            details={
-                "station_id": station,
-                "product_id": str(product),
-                "series_id": series.series_id,
-                "source_flag_code": code,
-                "source_time": occurred_at.isoformat(),
-            },
-            provider_id=_PROVIDER_ID,
+    if numeric_rows and str(product) in _ANNOTATION_PRODUCTS:
+        ann_frame = combined.select(
+            "series_id", "facts_id", "station_id", "product_id", "time", "time_zone"
+        ).with_columns(
+            pl.lit(True).cast(pl.Boolean()).alias("measured"),
+            pl.Series("Lippu_id", flag_values, dtype=pl.Int64()),
         )
-        for occurred_at, code in flag_occurrences
-    )
-    return ParsedSeries(combined, (series,), (inventory,), (outcome,), issues)
+        ann_table = ObservationAnnotationTable.from_rows(
+            schema=FI_SYKE_OBSERVATIONS_SCHEMA,
+            rows=ann_frame.select(*OBSERVATION_STRUCTURAL_SCHEMA, *FI_SYKE_OBSERVATIONS_SCHEMA.polars_schema()),
+            measurement_indices=list(range(combined.height)),
+        )
+        annotations = AnnotationBundle(observation_tables={FI_SYKE_OBSERVATIONS_SCHEMA.schema_id: ann_table})
+    else:
+        annotations = AnnotationBundle.empty()
+    return ParsedSeries(combined, (series,), (inventory,), (outcome,), (), annotations)

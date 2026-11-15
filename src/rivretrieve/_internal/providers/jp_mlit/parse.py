@@ -6,18 +6,25 @@ Contributed by: Thiago von Däniken
 import csv
 import re
 from calendar import monthrange
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from math import isfinite
 
 import polars as pl
 
 from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, RowsSchema, WithIssues
-from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
+from rivretrieve._internal.providers.jp_mlit.annotations import JP_MLIT_OBSERVATIONS_SCHEMA
 from rivretrieve._internal.providers.jp_mlit.config import SERIES_MAPPINGS, JpMlitSourceCoordinates
 from rivretrieve._internal.providers.jp_mlit.fetch import JpMlitPayloadCoordinates, _page
-from rivretrieve._internal.source_series import ParsedSeries
+from rivretrieve._internal.source_annotations import (
+    OBSERVATION_STRUCTURAL_SCHEMA,
+    AnnotationBundle,
+    ObservationAnnotationTable,
+)
+from rivretrieve._internal.source_series import OutcomeStatus, ParsedSeries
 
 _TITLES = {2: "時刻水位月表検索結果", 3: "日水位年表検索結果", 6: "時刻流量月表検索結果", 7: "日流量年表検索結果"}
 _LEGENDS = {
@@ -26,47 +33,17 @@ _LEGENDS = {
     6: "#  フラグの意味： *:暫定値, $:欠測, #:閉局, -:未登録",
     7: "#  フラグの意味： $:欠測, -:未登録",
 }
-_FLAG_CODES = {"*": "source_tentative", "$": "source_missing", "#": "source_closed_station", "-": "source_unregistered"}
+
+
+@dataclass(frozen=True, slots=True)
+class _SlotAnnotation:
+    time: datetime
+    flag: str | None
+    measured: bool
 
 
 def _empty() -> Rows:
     return pl.DataFrame(schema=NATIVE_SCHEMA)
-
-
-def _issue(code: str, station: str, product: str, label: str) -> Issue:
-    return Issue(
-        severity="info",
-        code=code,
-        provider_id=ProviderId("jp_mlit"),
-        message=f"jp_mlit {code}: {station} {product} {label}",
-        details={"station_id": station, "product_id": product, "source_label": label},
-    )
-
-
-def _source_label(issue: Issue) -> object:
-    if issue.details is None:
-        raise AssertionError("jp_mlit internal issue lacks details")
-    return issue.details["source_label"]
-
-
-def _aggregate(issues: list[Issue]) -> tuple[Issue, ...]:
-    grouped: dict[str, list[Issue]] = {}
-    for issue in issues:
-        grouped.setdefault(issue.code, []).append(issue)
-    return tuple(
-        Issue(
-            severity="info",
-            code=code,
-            provider_id=ProviderId("jp_mlit"),
-            message=f"jp_mlit {code}: {len(members)} source slots",
-            details={
-                "count": len(members),
-                "first_source_label": _source_label(members[0]),
-                "last_source_label": _source_label(members[-1]),
-            },
-        )
-        for code, members in grouped.items()
-    )
 
 
 def _payload_identity(
@@ -88,7 +65,12 @@ def _payload_identity(
     return coordinates, station_id, product_id
 
 
-def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
+def _parse_native(
+    payload: Payload,
+    provider_config: ProviderConfig,
+    *,
+    annotations_out: list[_SlotAnnotation] | None = None,
+) -> WithIssues[Rows]:
     coordinates, station_id, product_id = _payload_identity(payload, provider_config)
     if coordinates.role == "html":
         _page(payload.content, coordinates.kind, station_id)
@@ -122,8 +104,8 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
     if header != expected_header:
         raise UnsupportedSourceStructureError("jp_mlit DAT value/flag header is malformed")
     if coordinates.kind in (2, 6):
-        return _hourly(lines[header_index + 1 :], station_id, product_id, count)
-    return _daily(lines[header_index + 1 :], station_id, product_id, count)
+        return _hourly(lines[header_index + 1 :], station_id, product_id, count, annotations_out=annotations_out)
+    return _daily(lines[header_index + 1 :], station_id, product_id, count, annotations_out=annotations_out)
 
 
 def _cell(
@@ -133,7 +115,7 @@ def _cell(
     product: str,
     label: str,
     rows: list[dict[str, object]],
-    issues: list[Issue],
+    slots: list[_SlotAnnotation],
     time: datetime,
 ) -> None:
     raw = value.strip()
@@ -141,7 +123,7 @@ def _cell(
     if flag not in ("", "*", "$", "#", "-"):
         raise UnsupportedSourceStructureError(f"jp_mlit unknown native flag {flag!r} at {label}")
     if flag in ("$", "#", "-"):
-        issues.append(_issue(_FLAG_CODES[flag], station, product, label))
+        slots.append(_SlotAnnotation(time=time, flag=flag, measured=False))
         return
     if not raw:
         raise UnsupportedSourceStructureError(f"jp_mlit usable cell is blank at {label}")
@@ -153,14 +135,20 @@ def _cell(
         ) from error
     if not isfinite(number):
         raise UnsupportedSourceStructureError(f"jp_mlit usable cell must be finite at {label}")
-    if flag == "*":
-        issues.append(_issue(_FLAG_CODES[flag], station, product, label))
+    slots.append(_SlotAnnotation(time=time, flag="*" if flag == "*" else None, measured=True))
     rows.append({"station_id": station, "product_id": product, "time": time, "value": number, "time_zone": "unknown"})
 
 
-def _hourly(lines: list[str], station: str, product: str, count: int) -> WithIssues[Rows]:
+def _hourly(
+    lines: list[str],
+    station: str,
+    product: str,
+    count: int,
+    *,
+    annotations_out: list[_SlotAnnotation] | None = None,
+) -> WithIssues[Rows]:
     rows: list[dict[str, object]] = []
-    issues: list[Issue] = []
+    slots: list[_SlotAnnotation] = []
     for line in lines:
         if not line.strip():
             continue
@@ -180,16 +168,25 @@ def _hourly(lines: list[str], station: str, product: str, count: int) -> WithIss
                 product,
                 f"{cells[0].strip()} {hour}時",
                 rows,
-                issues,
+                slots,
                 time,
             )
     frame = pl.DataFrame(rows, schema=NATIVE_SCHEMA)
-    return WithIssues(frame, _aggregate(issues))
+    if annotations_out is not None:
+        annotations_out.extend(slots)
+    return WithIssues(frame, ())
 
 
-def _daily(lines: list[str], station: str, product: str, count: int) -> WithIssues[Rows]:
+def _daily(
+    lines: list[str],
+    station: str,
+    product: str,
+    count: int,
+    *,
+    annotations_out: list[_SlotAnnotation] | None = None,
+) -> WithIssues[Rows]:
     rows: list[dict[str, object]] = []
-    issues: list[Issue] = []
+    slots: list[_SlotAnnotation] = []
     year: int | None = None
     for line in lines:
         if not line.strip():
@@ -224,11 +221,13 @@ def _daily(lines: list[str], station: str, product: str, count: int) -> WithIssu
                         "jp_mlit invalid calendar day contains an observation"
                     ) from error
                 continue
-            _cell(raw, flag, station, product, f"{year}年{month}月{day}日", rows, issues, time)
+            _cell(raw, flag, station, product, f"{year}年{month}月{day}日", rows, slots, time)
     if year is None:
         raise UnsupportedSourceStructureError("jp_mlit daily DAT has no year marker")
     frame = pl.DataFrame(rows, schema=NATIVE_SCHEMA)
-    return WithIssues(frame, _aggregate(issues))
+    if annotations_out is not None:
+        annotations_out.extend(slots)
+    return WithIssues(frame, ())
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
@@ -242,6 +241,53 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             if links:
                 # A valid HTML prerequisite is not a successful empty observation series.
                 return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), ())
-    return parse_mapped_series(
-        payload, provider_config, provider="jp_mlit", mappings=SERIES_MAPPINGS, native_parse=_parse_native
+    captured_slots: list[_SlotAnnotation] = []
+    parsed = parse_mapped_series(
+        payload,
+        provider_config,
+        provider="jp_mlit",
+        mappings=SERIES_MAPPINGS,
+        native_parse=lambda tagged, cfg: _parse_native(tagged, cfg, annotations_out=captured_slots),
+    )
+    if (
+        not parsed.series
+        or not parsed.outcomes
+        or parsed.outcomes[0].status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+        or not captured_slots
+    ):
+        return parsed
+    series = parsed.series[0]
+    facts_id = series.facts[0].facts_id
+    measurement_indices: list[int | None] = []
+    next_idx = 0
+    for slot in captured_slots:
+        if slot.measured:
+            measurement_indices.append(next_idx)
+            next_idx += 1
+        else:
+            measurement_indices.append(None)
+    if next_idx != parsed.rows.height:
+        raise FatalContractError("jp_mlit parsed rows and measured slot count mismatch")
+    count = len(captured_slots)
+    ann_frame = pl.DataFrame(
+        {
+            "series_id": [series.series_id] * count,
+            "facts_id": [facts_id] * count,
+            "station_id": [series.station_id] * count,
+            "product_id": [series.product_id] * count,
+            "time": [slot.time for slot in captured_slots],
+            "time_zone": ["unknown"] * count,
+            "measured": [slot.measured for slot in captured_slots],
+            "flag": [slot.flag for slot in captured_slots],
+        },
+        schema={**OBSERVATION_STRUCTURAL_SCHEMA, **JP_MLIT_OBSERVATIONS_SCHEMA.polars_schema()},
+    )
+    table = ObservationAnnotationTable.from_rows(
+        schema=JP_MLIT_OBSERVATIONS_SCHEMA,
+        rows=ann_frame,
+        measurement_indices=measurement_indices,
+    )
+    return replace(
+        parsed,
+        annotations=AnnotationBundle(observation_tables={JP_MLIT_OBSERVATIONS_SCHEMA.schema_id: table}),
     )

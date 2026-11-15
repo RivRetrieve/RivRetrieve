@@ -34,7 +34,8 @@ preview = result.data.select("time", "time_zone", "value", "unit")
 print(preview.write_csv(), end="")
 
 print(result.data.height)
-print([(issue.severity, issue.code) for issue in result.issues])
+print(rr.annotations(result).select("schema", "name", "dtype").rows())
+print(result.to_polars(annotations=True).select("value", "unit", "flag").rows())
 ```
 
 Output:
@@ -44,12 +45,15 @@ time,time_zone,value,unit
 2020-01-10T00:00:00.000000,unknown,34.39,m3/s
 2020-01-11T00:00:00.000000,unknown,32.14,m3/s
 2
-[('info', 'source_missing')]
+[('jp_mlit.observations', 'flag', 'String')]
+[(34.39, 'm3/s', None), (32.14, 'm3/s', None)]
 ```
 
-The two rows give discharge in m³/s for January 10 and 11. Both days have a value.
-The `source_missing` issue refers to other dates in the annual file that MLIT
-supplies, not to these two days. RivRetrieve returns only the requested dates.
+The two rows give discharge in m³/s for January 10 and 11. Both days have a
+measured value and no cell flag (`flag=null`). Unmeasured days elsewhere in the
+annual file remain excluded from `result.data` and outside the clipped
+`2020-01-10` to `2020-01-11` annotation table. RivRetrieve returns only the
+requested dates.
 
 The time zone is `unknown`, so these timestamps should not be read as UTC or Japan
 Standard Time. See [Time](#time) for how the source labels are represented, and
@@ -120,23 +124,30 @@ registered later as definitive values (shown in black), and MLIT asks users to u
 those values.
 
 MLIT marks provisional values and reasons for missing observations in its download
-files. RivRetrieve reads those markers using MLIT's stated meanings:
+files. RivRetrieve preserves those cell-level symbols in observation-grain
+annotations (`jp_mlit.observations`, field `flag`):
 
-- A number marked `*` (provisional) is returned, with a `source_tentative` issue.
-- A cell marked `$` (missing), `#` (station closed), or `-` (unregistered) produces
-  no observation row. RivRetrieve reports `source_missing`,
-  `source_closed_station`, or `source_unregistered`, respectively.
+- A measured value with no flag carries `measured=True` and `flag=null`.
+- A measured value marked `*` (provisional) carries `measured=True` and
+  `flag="*"`.
+- A calendar slot marked `$` (missing), `#` (station closed), or `-`
+  (unregistered) produces no numeric observation row in `result.data` and is
+  retained as an unmeasured annotation slot (`measured=False`, `flag="$"`,
+  `"#"`, or `"-"`).
 
 The hourly files define all four markers; the daily files define only `$` and `-`.
-RivRetrieve does not attach these markers to individual observations or offer them
-as selectable variants. It summarizes each marker type in `result.issues`, with a
-count and the first and last affected source labels. Those summaries cannot reliably
-identify every provisional observation for filtering.
+Use `result.to_polars(annotations=True)` or `result.to_pandas(annotations=True)`
+to join measured flags onto observation rows, or call
+`rr.annotations(result, schema="jp_mlit.observations")` to inspect both
+measured rows and unmeasured (`measured=False`) slots within the requested
+window. See [Source annotations](../usage.md#source-annotations) for general
+options.
 
 RivRetrieve makes no quality judgement of its own. A number without a marker does
-not establish that MLIT has formally verified it. Missing observations are absent
-rows, not rows containing null values; a failed request is reported separately.
-See [Usage](../usage.md#issues) for interpreting issues and empty results.
+not establish that MLIT has formally verified it. Invalid calendar slots in daily
+tables (for example February 29 through 31) are excluded from observation
+annotations. A failed request is reported separately in `result.issues`. See
+[Usage](../usage.md#issues) for interpreting issues and empty results.
 
 ## Automated access and caching
 
@@ -160,9 +171,8 @@ warns of slower responses during floods and directs real-time users to
 リアルタイム川の防災情報.
 
 Daily retrieval downloads annual files, and hourly retrieval downloads monthly
-files, even for a short requested period. Issues can therefore refer to dates
-outside that period. In the first example, `source_missing` summarizes 17 missing
-dates in the annual file, from April 30 to July 1, 2020.
+files, even for a short requested period. Returned rows and observation
+annotations are clipped to the requested period before return.
 
 Live retrieval defaults to `cache="bypass"`, which neither reads nor writes the
 observation cache. To reuse a download, select the specific series and use
@@ -181,22 +191,23 @@ repeated_result = rr.fetch(
 )
 
 print(repeated_result.data.select("value", "unit").rows())
-print([(issue.severity, issue.code) for issue in repeated_result.issues])
+print(repeated_result.to_polars(annotations=True).select("value", "flag").rows())
 ```
 
 Output:
 
 ```text
 [(34.39, 'm3/s'), (32.14, 'm3/s')]
-[('info', 'source_missing')]
+[(34.39, None), (32.14, None)]
 ```
 
 With an initially empty cache, the first `reuse` call retrieves and stores this
-series and period. The repeated covered request reads locally and retains the
-missing-data issue. The earlier `bypass` call did not populate the cache.
-Selecting the specific series tells RivRetrieve exactly which record to reuse.
-Repeating the broader `selection` alone can require another source request because
-RivRetrieve has not established whether other matching series exist.
+series, period, and its cell annotations. The repeated covered request reads
+locally and preserves the attached annotations. The earlier `bypass` call did not
+populate the cache. Selecting the specific series tells RivRetrieve exactly
+which record to reuse. Repeating the broader `selection` alone can require another
+source request because RivRetrieve has not established whether other matching
+series exist.
 
 The saved acquisition history includes both the HTML page and its linked DAT
 download, with their original request details and retrieval times. A local read

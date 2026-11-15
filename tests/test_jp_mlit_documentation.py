@@ -53,12 +53,8 @@ def test_japan_page_examples_and_displayed_outputs(monkeypatch, tmp_path, retain
     assert_frame_equal(result.data, cached.data)
     assert_frame_equal(cached.data, repeated.data)
     assert len(calls) == 4
-    assert result.issues == cached.issues == repeated.issues
-    assert result.issues[0].details == {
-        "count": 17,
-        "first_source_label": "2020年4月30日",
-        "last_source_label": "2020年7月1日",
-    }
+    assert result.issues == cached.issues == repeated.issues == ()
+    assert result.to_polars(annotations=True).select("value", "flag").rows() == [(34.39, None), (32.14, None)]
     assert [outcome.status for outcome in result.outcomes] == ["success"]
 
 

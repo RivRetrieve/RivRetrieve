@@ -16,10 +16,15 @@ import polars as pl
 
 from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema
 from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import IssueSeverity, ProviderId
+from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.no_nve.annotations import NO_NVE_OBSERVATIONS_SCHEMA
 from rivretrieve._internal.providers.no_nve.config import NoNveSourceCoordinates
-from rivretrieve._internal.providers.no_nve.issue_codes import NoNveObservationIssueCodes
 from rivretrieve._internal.providers.no_nve.series import NVE_EVIDENCE, describe_series
+from rivretrieve._internal.source_annotations import (
+    OBSERVATION_STRUCTURAL_SCHEMA,
+    AnnotationBundle,
+    ObservationAnnotationTable,
+)
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -35,6 +40,8 @@ from rivretrieve._internal.source_series import (
 PROVIDER_ID = ProviderId("no_nve")
 _TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 _SOURCE_ZONE = "+00:00"
+_INT64_MIN = -(1 << 63)
+_INT64_MAX = (1 << 63) - 1
 
 
 class SourceStructureError(ValueError):
@@ -60,6 +67,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
     definitions = []
     rows = []
+    ann_rows = []
     outcomes = []
     issues = []
 
@@ -190,8 +198,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             if type(raw.get("observationCount")) is not int or raw["observationCount"] != len(observations):
                 raise SourceStructureError("HydAPI observationCount differs from its observations")
             native = []
-            quality_codes = {}
-            correction_codes = {}
+            native_ann = []
             for index, observation in enumerate(observations):
                 if not isinstance(observation, dict):
                     raise SourceStructureError("HydAPI observation is not an object")
@@ -199,8 +206,6 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                 label = _time(observation, index)
                 quality = _code(observation, "quality", index)
                 correction = _code(observation, "correction", index)
-                quality_codes.setdefault(quality, []).append(label.isoformat())
-                correction_codes.setdefault(correction, []).append(label.isoformat())
                 facts = definition.facts[0]
                 native.append(
                     {
@@ -214,7 +219,21 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                         "source_unit": unit,
                     }
                 )
+                native_ann.append(
+                    {
+                        "series_id": definition.series_id,
+                        "facts_id": facts.facts_id,
+                        "station_id": station,
+                        "product_id": product,
+                        "time": label,
+                        "time_zone": _SOURCE_ZONE,
+                        "measured": True,
+                        "quality": quality,
+                        "correction": correction,
+                    }
+                )
             rows.extend(native)
+            ann_rows.extend(native_ann)
             outcomes.append(
                 RetrievalOutcome(
                     outcome_id=stable_id(
@@ -232,12 +251,6 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                     facts_ids=(definition.facts[0].facts_id,),
                     retrieved_at=retrieved,
                 )
-            )
-            issues.extend(
-                _code_issues(NoNveObservationIssueCodes.SOURCE_QUALITY_CODE, "quality", quality_codes, station)
-            )
-            issues.extend(
-                _code_issues(NoNveObservationIssueCodes.SOURCE_CORRECTION_CODE, "correction", correction_codes, station)
             )
         except SourceStructureError as exc:
             unsupported(str(exc), definition)
@@ -286,12 +299,27 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         evidence=(NVE_EVIDENCE,),
         reason="An observation response establishes its requested versions, not a complete current or historical version inventory",
     )
+    frame = pl.DataFrame(rows, schema=RowsSchema.polars_schema)
+    if rows:
+        ann_frame = pl.DataFrame(
+            ann_rows,
+            schema={**OBSERVATION_STRUCTURAL_SCHEMA, **NO_NVE_OBSERVATIONS_SCHEMA.polars_schema()},
+        )
+        ann_table = ObservationAnnotationTable.from_rows(
+            schema=NO_NVE_OBSERVATIONS_SCHEMA,
+            rows=ann_frame,
+            measurement_indices=list(range(frame.height)),
+        )
+        annotations = AnnotationBundle(observation_tables={NO_NVE_OBSERVATIONS_SCHEMA.schema_id: ann_table})
+    else:
+        annotations = AnnotationBundle.empty()
     return ParsedSeries(
-        pl.DataFrame(rows, schema=RowsSchema.polars_schema),
+        frame,
         tuple(definitions),
         (inventory,),
         tuple(outcomes),
         tuple(issues),
+        annotations,
     )
 
 
@@ -331,46 +359,10 @@ def _value(observation: dict[str, object], index: int) -> float | None:
     return number
 
 
-def _code(observation: dict[str, object], name: str, index: int) -> int:
+def _code(observation: dict[str, object], name: str, index: int) -> int | None:
     value = observation.get(name)
-    if type(value) is not int:
-        raise SourceStructureError(f"no_nve observation {index} {name} must be an integer source code")
+    if value is None:
+        return None
+    if type(value) is not int or not (_INT64_MIN <= value <= _INT64_MAX):
+        raise SourceStructureError(f"no_nve observation {index} {name} must be a signed 64-bit integer or null")
     return value
-
-
-def _code_issues(
-    code: NoNveObservationIssueCodes,
-    name: str,
-    labels_by_code: dict[int, list[str]],
-    station_id: str,
-) -> list[Issue]:
-    return [
-        _issue(
-            code,
-            "info",
-            f"no_nve published source {name} code {source_code} without RivRetrieve interpretation",
-            {
-                "station_id": station_id,
-                f"source_{name}_code": source_code,
-                "count": len(labels),
-                "first_source_time": labels[0],
-                "last_source_time": labels[-1],
-            },
-        )
-        for source_code, labels in sorted(labels_by_code.items())
-    ]
-
-
-def _issue(
-    code: NoNveObservationIssueCodes,
-    severity: IssueSeverity,
-    message: str,
-    details: dict[str, object],
-) -> Issue:
-    return Issue(
-        severity=severity,
-        code=code,
-        message=message,
-        details=details,
-        provider_id=PROVIDER_ID,
-    )
