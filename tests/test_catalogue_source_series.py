@@ -83,7 +83,7 @@ def test_scoped_materialization_constructs_only_selected_coordinates(monkeypatch
     assert {series.identity.published_id for series in selected} == {"1", "2"}
 
 
-@pytest.mark.parametrize("provider", ["no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["at_ehyd", "no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis"])
 def test_catalogue_fact_identity_includes_exact_facts_and_evidence(provider):
     from rivretrieve._internal.source_series import stable_id
 

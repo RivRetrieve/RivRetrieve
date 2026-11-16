@@ -486,14 +486,11 @@ def test_public_repeated_nve_metadata_origins_have_bounded_explicit_dependencies
         active_calls = {identity for item in document["outcomes"] for identity in item["calls"]}
         assert all(call["call_id"] in active_calls for call in observation_calls)
         if with_observations:
-            assert all("acquisition_ids" not in (issue.details or {}) for issue in result.issues)
-            assert {
-                issue["details"]["source_quality_code"]
-                for issue in document["issues"]
-                if "source_quality_code" in (issue["details"] or {})
-            } == {day}
-            active_ids = {call for item in document["outcomes"] for call in item["calls"]}
-            assert all(set(issue["details"]["acquisition_ids"]).issubset(active_ids) for issue in document["issues"])
+            assert result.issues == ()
+            assert document["issues"] == []
+            assert rr.annotations(result, schema="no_nve.observations").select("quality", "correction").rows() == [
+                (day, 1)
+            ] * len(versions)
 
     assert counts == [counts[0]] * 4
     assert len(requests) == 4 * (len(versions) + 1)

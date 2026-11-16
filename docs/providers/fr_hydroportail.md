@@ -174,11 +174,55 @@ Its exact selection algorithm has not been established. The combined selector
 includes pre-validated and validated records. This public route does not provide
 corrected-only or pre-validated-only histories.
 
-The selector chooses which records HydroPortail returns. Individual observations
-can also carry processing-status metadata supplied by HydroPortail. Its
-[glossary](https://hydro.eaufrance.fr/glossaire) explains the status vocabulary. See [Usage](../usage.md#series-inspection-and-result-views) to
-interpret series outcomes and issues, and [optional receipts](../usage.md#receipts-optional)
-to inspect the source metadata.
+The `variant` selector chooses which record stream HydroPortail returns. Each
+returned observation also carries HydroPortail's point-level numeric codes in the
+`fr_hydroportail.series` annotation schema (`Int64`, nullable):
+
+- `s`: processing status (*statut*, such as `4` raw, `8` corrected, `12` pre-validated, `16` validated).
+- `q`: qualification (*qualification*, such as `12` doubtful, `16` unqualified, `20` good).
+- `m`: observation method (*méthode*, such as `0` measured, `4` reconstituted, `8` calculated, `10` expert-reviewed).
+- `c`: continuity (*continuité*, such as `0` continuous, `1` discontinuous, `4` weak discontinuity, `8` strong discontinuity).
+
+The requested `variant` and per-point codes play different roles. Mixed selectors
+such as `pre_validated_and_validated` and `most_valid` can combine points with
+different statuses (for example `s=4` raw points alongside `s=16` validated points)
+within one stream, and even a `validated` stream can mark individual points
+doubtful (`q=12`). RivRetrieve preserves the published integer codes without
+ranking or filtering observations. HydroPortail's
+[glossary](https://hydro.eaufrance.fr/glossaire) defines the underlying concepts.
+
+Inspect the annotation field catalog on `result` and project those columns onto
+the validated discharge rows fetched above:
+
+```python
+print(rr.annotations(result).select("schema", "name", "dtype").rows())
+
+annotated = result.to_polars(annotations=True)
+print(annotated.select("s", "q", "m", "c").head(2).rows())
+```
+
+Output:
+
+```text
+[('fr_hydroportail.series', 's', 'Int64'), ('fr_hydroportail.series', 'q', 'Int64'), ('fr_hydroportail.series', 'm', 'Int64'), ('fr_hydroportail.series', 'c', 'Int64')]
+[(16, 12, 10, 0), (16, 12, 10, 0)]
+```
+
+The first output lists the four nullable integer fields attached to `result`. In
+the two projected discharge rows (`13.500` and `13.300` m³/s from `validated`),
+each observation carries validated status (`s=16`), doubtful qualification
+(`q=12`), expert-reviewed method (`m=10`), and continuous continuity (`c=0`).
+
+Pass `annotations="q"` or `annotations=["s", "q"]` to `result.to_polars(...)` or
+`result.to_pandas(...)` when you only want specific columns, or call
+`rr.annotations(result, schema="fr_hydroportail.series")` for the native schema
+table. Window-level response summaries and chart overlays (such as `statistics`
+and `correctionCurves`), as well as unpopulated `md` fields, are omitted from
+observation annotations. Retain full response bytes with
+[optional receipts](../usage.md#receipts-optional) when raw payload records
+matter. See [Source annotations](../usage.md#source-annotations) and
+[Series inspection and result views](../usage.md#series-inspection-and-result-views)
+for general result and issue inspection.
 
 ## Terms and citation
 

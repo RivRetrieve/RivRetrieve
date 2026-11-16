@@ -2,7 +2,7 @@
 
 Reproduce from the checkout catalogue and Natural Earth 1:50m Admin 0 Countries:
 
-    uv run --with geopandas --with matplotlib python docs/scripts/coverage_map.py \
+    uv run python docs/scripts/coverage_map.py \
         --out docs/assets/coverage-map.png
 
 The default boundary URL is public. For offline regeneration, pass --world with a
@@ -28,16 +28,20 @@ from rivretrieve._internal.providers.registration import CatalogueOnly, load_man
 
 BOUNDARIES = "https://naturalearth.s3.amazonaws.com/50m_cultural/ne_50m_admin_0_countries.zip"
 PROVIDER_COUNTRY = {
+    "at_ehyd": "AUT",
     "ba_fhmzbih": "BIH",
     "br_ana": "BRA",
     "ca_eccc": "CAN",
     "ch_foen": "CHE",
     "cz_chmi": "CZE",
+    "dk_vanda": "DNK",
+    "fi_syke": "FIN",
     "fr_hubeau": "FRA",
     "fr_hydroportail": "FRA",
     "jp_mlit": "JPN",
     "lt_lhmt": "LTU",
     "no_nve": "NOR",
+    "pe_senamhi": "PER",
     "pl_imgw": "POL",
     "th_thaiwater": "THA",
     "usgs_nwis": "USA",
@@ -45,14 +49,11 @@ PROVIDER_COUNTRY = {
 PLANNED_COUNTRY = {
     "ARG": "Argentina",
     "AUS": "Australia",
-    "AUT": "Austria",
     "BEL": "Belgium (Flanders, Wallonia)",
     "CHL": "Chile",
     "DEU": "Germany (Berlin)",
-    "DNK": "Denmark",
     "ESP": "Spain",
     "EST": "Estonia",
-    "FIN": "Finland",
     "GBR": "United Kingdom (EA, NRFA, SEPA)",
     "GRC": "Greece",
     "IRL": "Ireland (OPW)",
@@ -73,7 +74,6 @@ RESEARCHED_COUNTRY = {
     "ISR": "Israel",
     "MEX": "Mexico",
     "NZL": "New Zealand",
-    "PER": "Peru",
 }
 PLANNED_COUNTRY |= RESEARCHED_COUNTRY
 ROBINSON = "ESRI:54030"
