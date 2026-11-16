@@ -206,7 +206,9 @@ def test_hour_24_month_end_survives_failed_or_empty_neighbor_and_reuse(retained_
     result = retrieve(datetime(2023, 2, 1), "refresh")
     assert result.data.height == 697
     assert result.data["time"].max() == datetime(2023, 2, 1)
-    stored = pl.concat([pl.read_parquet(path) for path in (tmp_path / "jp_mlit/store").rglob("*.parquet")])
+    stored = pl.concat(
+        [pl.read_parquet(path) for path in (tmp_path / "jp_mlit/store").glob("product=*/year=*/rows.parquet")]
+    )
     assert stored.height == result.data.height
     assert stored["time"].max() == datetime(2023, 2, 1)
     before = len(transport.calls)

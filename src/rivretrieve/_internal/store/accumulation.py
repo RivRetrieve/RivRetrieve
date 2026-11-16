@@ -97,6 +97,9 @@ def _coverage_json(item: CoverageInterval) -> dict[str, object]:
     }
 
 
+_IDENTITY_ORIGIN_RANK = {"mapping": 0, "catalogue": 1, "response": 2}
+
+
 def _merge_series(held: tuple[SourceSeries, ...], additions: tuple[SourceSeries, ...]) -> tuple[SourceSeries, ...]:
     definitions = {item.series_id: item for item in held}
     for item in additions:
@@ -117,7 +120,13 @@ def _merge_series(held: tuple[SourceSeries, ...], additions: tuple[SourceSeries,
             if fact.facts_id in facts and fact != facts[fact.facts_id]:
                 raise FatalContractError("Store update reinterprets existing physical facts")
             facts[fact.facts_id] = fact
-        definitions[item.series_id] = item.model_copy(update={"facts": tuple(facts.values())})
+        base = (
+            previous
+            if _IDENTITY_ORIGIN_RANK.get(previous.identity.origin, -1)
+            > _IDENTITY_ORIGIN_RANK.get(item.identity.origin, -1)
+            else item
+        )
+        definitions[item.series_id] = base.model_copy(update={"facts": tuple(facts.values())})
     return tuple(definitions.values())
 
 

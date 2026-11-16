@@ -99,10 +99,8 @@ def test_public_fetch_surfaces_lippu_flag_without_dropping_the_value(monkeypatch
     result = rr.fetch(selection, start="2026-09-01", end="2026-09-01", cache="bypass", on_issue="ignore")
 
     assert result.data["value"].to_list() == [pytest.approx(110.17)]
-    flag_issues = [issue for issue in result.issues if issue.code == "source.flag_code"]
-    assert len(flag_issues) == 1
-    assert flag_issues[0].severity == "info"
-    assert flag_issues[0].details["source_flag_code"] == 1
+    assert result.issues == ()
+    assert result.to_polars(annotations=True)["Lippu_id"].to_list() == [1]
 
 
 def test_public_fetch_an_empty_range_is_an_empty_outcome(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -7,20 +7,26 @@ import hashlib
 import json
 import re
 from calendar import monthrange
-from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from math import isfinite
 from typing import cast
 
 import polars as pl
 
-from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, RowsSchema, WithIssues
+from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, RowsSchema
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.br_ana.annotations import (
+    BR_ANA_DAILY_COTAS_SCHEMA,
+    BR_ANA_DAILY_VAZAO_SCHEMA,
+    BR_ANA_TELEMETRY_COTA_SCHEMA,
+    BR_ANA_TELEMETRY_VAZAO_SCHEMA,
+)
 from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, BrAnaSourceCoordinates
 from rivretrieve._internal.providers.br_ana.issue_codes import BrAnaObservationIssueCodes
 from rivretrieve._internal.providers.br_ana.series import _DAILY_EVIDENCE, _TELEMETRY_EVIDENCE, describe_series
+from rivretrieve._internal.source_annotations import AnnotationBundle, ObservationAnnotationTable
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -41,7 +47,14 @@ class SourceStructureError(ValueError):
     """A publisher series cannot be decoded without unsupported interpretation."""
 
 
-def _parse_one(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
+@dataclass(frozen=True, slots=True)
+class _DecodedObservations:
+    rows: Rows
+    issues: tuple[Issue, ...]
+    annotations: tuple[dict[str, str | None], ...]
+
+
+def _parse_one(payload: Payload, config: ProviderConfig) -> _DecodedObservations:
     if len(payload.station_products) != 1:
         raise FatalContractError("ANA payload requires exactly one station-product pair")
     station, product = payload.station_products[0]
@@ -54,55 +67,43 @@ def _parse_one(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
     observations = _observations(payload.content)
     if isinstance(coordinates, BrAnaDailySourceCoordinates):
         return _daily_rows(observations, station, product, coordinates)
-    rows: list[dict[str, object]] = []
-    statuses: Counter[str | None] = Counter()
+    entries: list[tuple[dict[str, object], dict[str, str | None]]] = []
+    status_field = f"{coordinates.field}_Status"
     for index, observation in enumerate(observations):
         if observation.get("codigoestacao") != station:
             raise SourceStructureError(f"ANA observation {index} station differs from the requested station")
         label = _time(observation.get("Data_Hora_Medicao"), index)
-        if coordinates.field not in observation or f"{coordinates.field}_Status" not in observation:
+        if coordinates.field not in observation or status_field not in observation:
             raise SourceStructureError(f"ANA observation {index} is missing an adopted value or status field")
-        status = observation[f"{coordinates.field}_Status"]
+        status = observation[status_field]
         if status is not None and not isinstance(status, str):
             raise SourceStructureError(f"ANA observation {index} adopted status must be a source string or null")
-        statuses[status] += 1
-        rows.append(
-            {
-                "station_id": station,
-                "product_id": product,
-                "time": label,
-                "value": _value(observation[coordinates.field], index),
-                "time_zone": "unknown",
-            }
+        entries.append(
+            (
+                {
+                    "station_id": station,
+                    "product_id": product,
+                    "time": label,
+                    "value": _value(observation[coordinates.field], index),
+                    "time_zone": "unknown",
+                },
+                {status_field: status},
+            )
         )
     # Unordered source arrays are not chronology. Retain duplicate multiplicity and
     # differing values: neither the status nor the update label authorizes selection.
+    entries.sort(key=lambda item: cast(datetime, item[0]["time"]))
     frame = pl.DataFrame(
-        rows,
+        [row for row, _ in entries],
         schema={
             key: value
             for key, value in RowsSchema.polars_schema.items()
             if key not in {"series_id", "facts_id", "source_unit"}
         },
-    ).sort("time", maintain_order=True)
-    issues = tuple(
-        Issue(
-            severity="info",
-            code=BrAnaObservationIssueCodes.SOURCE_STATUS,
-            message="ANA published adopted telemetry status without RivRetrieve interpretation",
-            details={
-                "station_id": station,
-                "product_id": product,
-                "source_field": f"{coordinates.field}_Status",
-                "source_status": status,
-                "count": count,
-            },
-            provider_id=_PROVIDER,
-        )
-        for status, count in sorted(statuses.items(), key=lambda item: (item[0] is not None, item[0] or ""))
     )
+    issues: tuple[Issue, ...] = ()
     if not observations:
-        issues += (
+        issues = (
             Issue(
                 severity="warning",
                 code=BrAnaObservationIssueCodes.MISSING_DATA,
@@ -111,7 +112,7 @@ def _parse_one(payload: Payload, config: ProviderConfig) -> WithIssues[Rows]:
                 provider_id=_PROVIDER,
             ),
         )
-    return WithIssues(frame, issues)
+    return _DecodedObservations(frame, issues, tuple(annotation for _, annotation in entries))
 
 
 def _daily_rows(
@@ -119,11 +120,11 @@ def _daily_rows(
     station: str,
     product: ProductId,
     coordinates: BrAnaDailySourceCoordinates,
-) -> WithIssues[Rows]:
+) -> _DecodedObservations:
     """Decode monthly source day slots for one exact mean/consistency variant."""
-    rows: list[dict[str, object]] = []
-    statuses: Counter[tuple[str, str | None]] = Counter()
+    entries: list[tuple[dict[str, object], dict[str, str | None]]] = []
     consistency_field = "nivelconsistencia" if coordinates.field_prefix == "Cota" else "Nivel_Consistencia"
+    method_field = "Tipo_Medicao_Cotas" if coordinates.field_prefix == "Cota" else "Metodo_Obtencao_Vazoes"
     for index, observation in enumerate(observations):
         if observation.get("codigoestacao") != station:
             raise SourceStructureError(f"ANA observation {index} station differs from the requested station")
@@ -138,6 +139,11 @@ def _daily_rows(
         header = _time(observation.get("Data_Hora_Dado"), index)
         if header.day != 1 or header != datetime(header.year, header.month, 1):
             raise SourceStructureError(f"ANA observation {index} daily mean requires a midnight first-of-month header")
+        if method_field not in observation:
+            raise SourceStructureError(f"ANA observation {index} is missing daily method field {method_field}")
+        method_value = observation[method_field]
+        if method_value is not None and not isinstance(method_value, str):
+            raise SourceStructureError(f"ANA observation {index} daily method field must be a source string or null")
         last_day = monthrange(header.year, header.month)[1]
         for day in range(1, 32):
             field = f"{coordinates.field_prefix}_{day:02d}"
@@ -154,45 +160,34 @@ def _daily_rows(
                 if raw not in (None, "") or status not in (None, "", "0"):
                     raise SourceStructureError(f"ANA observation {index} has a nonempty invalid calendar slot {field}")
                 continue
-            statuses[(status_field, status)] += 1
-            rows.append(
-                {
-                    "station_id": station,
-                    "product_id": product,
-                    "time": datetime(header.year, header.month, day),
-                    "value": None if raw == "" else _value(raw, index),
-                    "time_zone": "unknown",
-                }
+            entries.append(
+                (
+                    {
+                        "station_id": station,
+                        "product_id": product,
+                        "time": datetime(header.year, header.month, day),
+                        "value": None if raw == "" else _value(raw, index),
+                        "time_zone": "unknown",
+                    },
+                    {
+                        f"{coordinates.field_prefix}_Status": status,
+                        method_field: method_value,
+                    },
+                )
             )
     # Source duplicates are observations, not authorization to choose a winner.
+    entries.sort(key=lambda item: cast(datetime, item[0]["time"]))
     frame = pl.DataFrame(
-        rows,
+        [row for row, _ in entries],
         schema={
             key: value
             for key, value in RowsSchema.polars_schema.items()
             if key not in {"series_id", "facts_id", "source_unit"}
         },
-    ).sort("time", maintain_order=True)
-    issues = tuple(
-        Issue(
-            severity="info",
-            code=BrAnaObservationIssueCodes.SOURCE_STATUS,
-            message="ANA published daily status without RivRetrieve interpretation",
-            details={
-                "station_id": station,
-                "product_id": product,
-                "source_field": field,
-                "source_status": status,
-                "count": count,
-            },
-            provider_id=_PROVIDER,
-        )
-        for (field, status), count in sorted(
-            statuses.items(), key=lambda item: (item[0][0], item[0][1] is not None, item[0][1] or "")
-        )
     )
-    if not rows:
-        issues += (
+    issues: tuple[Issue, ...] = ()
+    if not entries:
+        issues = (
             Issue(
                 severity="warning",
                 code=BrAnaObservationIssueCodes.MISSING_DATA,
@@ -201,7 +196,7 @@ def _daily_rows(
                 provider_id=_PROVIDER,
             ),
         )
-    return WithIssues(frame, issues)
+    return _DecodedObservations(frame, issues, tuple(annotation for _, annotation in entries))
 
 
 def _observations(content: bytes) -> list[dict[str, object]]:
@@ -255,6 +250,9 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         raise FatalContractError("ANA payload coordinates differ from the requested source product")
     definitions = []
     frames = []
+    part_bundles: list[AnnotationBundle] = []
+    row_offsets: list[int] = []
+    running_rows = 0
     outcomes = []
     issues = []
     window = SeriesWindow(
@@ -395,13 +393,38 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 )
             )
             continue
-        frames.append(
-            decoded.value.with_columns(
-                pl.lit(definition.series_id).alias("series_id"),
-                pl.lit(facts.facts_id).alias("facts_id"),
-                pl.lit(facts.source_unit.value).alias("source_unit"),
-            )
+        annotated_rows = decoded.rows.with_columns(
+            pl.lit(definition.series_id).alias("series_id"),
+            pl.lit(facts.facts_id).alias("facts_id"),
+            pl.lit(facts.source_unit.value).alias("source_unit"),
         )
+        frames.append(annotated_rows)
+        if not annotated_rows.is_empty():
+            if isinstance(native, BrAnaDailySourceCoordinates):
+                schema = BR_ANA_DAILY_COTAS_SCHEMA if native.field_prefix == "Cota" else BR_ANA_DAILY_VAZAO_SCHEMA
+            else:
+                schema = (
+                    BR_ANA_TELEMETRY_COTA_SCHEMA if native.field == "Cota_Adotada" else BR_ANA_TELEMETRY_VAZAO_SCHEMA
+                )
+            if len(decoded.annotations) != annotated_rows.height:
+                raise FatalContractError("ANA parsed rows and observation annotations count mismatch")
+            ann_frame = annotated_rows.select(
+                "series_id", "facts_id", "station_id", "product_id", "time", "time_zone"
+            ).with_columns(
+                pl.lit(True).cast(pl.Boolean()).alias("measured"),
+                *(
+                    pl.Series(field.name, [item[field.name] for item in decoded.annotations], dtype=pl.String())
+                    for field in schema.fields
+                ),
+            )
+            ann_table = ObservationAnnotationTable.from_rows(
+                schema=schema,
+                rows=ann_frame,
+                measurement_indices=list(range(annotated_rows.height)),
+            )
+            part_bundles.append(AnnotationBundle(observation_tables={schema.schema_id: ann_table}))
+            row_offsets.append(running_rows)
+            running_rows += annotated_rows.height
         issues.extend(decoded.issues)
         outcomes.append(
             RetrievalOutcome(
@@ -417,7 +440,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 station_id=station,
                 product_id=emitted_product,
                 window=window,
-                status=OutcomeStatus.EMPTY if decoded.value.is_empty() else OutcomeStatus.SUCCESS,
+                status=OutcomeStatus.EMPTY if decoded.rows.is_empty() else OutcomeStatus.SUCCESS,
                 facts_ids=(facts.facts_id,),
                 retrieved_at=retrieved,
                 calls=calls,
@@ -425,7 +448,11 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         )
     observed_ids = tuple(item.series_id for item in definitions)
     if isinstance(coordinates, BrAnaDailySourceCoordinates) and coordinates.consistency not in present:
-        candidate = describe_series(station, product, coordinates, origin="mapping")
+        default_candidate = describe_series(station, product, coordinates, origin="mapping")
+        candidate = next(
+            (item for item in payload.known_series if item.series_id == default_candidate.series_id),
+            default_candidate,
+        )
         definitions.append(candidate)
         reason = f"Requested ANA consistency {coordinates.consistency} is not published in this response; availability remains unresolved"
         outcomes.append(
@@ -518,6 +545,20 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         reason=reason,
     )
     rows = pl.concat(frames) if frames else pl.DataFrame(schema=RowsSchema.polars_schema)
+    bundle = (
+        AnnotationBundle.merge_sorted(
+            part_bundles,
+            row_offsets=row_offsets,
+            old_to_new={index: index for index in range(rows.height)},
+        )
+        if part_bundles
+        else AnnotationBundle.empty()
+    )
     return ParsedSeries(
-        rows.select(list(RowsSchema.polars_schema)), tuple(definitions), (inventory,), tuple(outcomes), tuple(issues)
+        rows.select(list(RowsSchema.polars_schema)),
+        tuple(definitions),
+        (inventory,),
+        tuple(outcomes),
+        tuple(issues),
+        annotations=bundle,
     )

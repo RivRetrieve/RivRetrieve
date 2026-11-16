@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
 from math import isfinite
@@ -15,6 +16,7 @@ from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
+from rivretrieve._internal.providers.at_ehyd.annotations import AT_EHYD_SERIES_SCHEMA
 from rivretrieve._internal.providers.at_ehyd.config import (
     AtEhydInfoCoordinates,
     AtEhydOwfCoordinates,
@@ -30,6 +32,7 @@ from rivretrieve._internal.providers.at_ehyd.series import (
     parse_owf_header_facts,
     source_series,
 )
+from rivretrieve._internal.source_annotations import AnnotationBundle, SeriesAnnotationTable
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -83,6 +86,24 @@ _EMPTY_PEGEL_LONGTERM_KEYS: frozenset[str] = frozenset(
 )
 
 
+def _series_annotation_bundle(
+    definition: SourceSeries, outcomes: Sequence[RetrievalOutcome], label: str
+) -> AnnotationBundle:
+    if not any(
+        item.series_id == definition.series_id and item.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+        for item in outcomes
+    ):
+        return AnnotationBundle()
+    table = SeriesAnnotationTable.from_rows(
+        schema=AT_EHYD_SERIES_SCHEMA,
+        rows=pl.DataFrame(
+            {"series_id": [definition.series_id], "data_quality": [label]},
+            schema={"series_id": pl.String(), "data_quality": pl.String()},
+        ),
+    )
+    return AnnotationBundle(series_tables={AT_EHYD_SERIES_SCHEMA.schema_id: table})
+
+
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     """Parse one eHYD payload while confining malformed publisher bytes to bounded failures."""
     if not payload.station_products:
@@ -101,6 +122,9 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         inventories: list[InventorySnapshot] = []
         outcomes: list[RetrievalOutcome] = []
         issues: list[Issue] = []
+        annotation_bundles: list[AnnotationBundle] = []
+        annotation_offsets: list[int] = []
+        offset = 0
         for station, product in payload.station_products:
             pair_scope = (
                 payload.scope.model_copy(update={"station_ids": (station,), "product_ids": (str(product),)})
@@ -109,20 +133,34 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             )
             narrowed = replace(payload, station_products=((station, product),), scope=pair_scope)
             part = _parse_single_pair(narrowed, provider_config)
+            if not part.annotations.is_empty:
+                annotation_bundles.append(part.annotations)
+                annotation_offsets.append(offset)
             if not part.rows.is_empty():
                 frames.append(part.rows)
+                offset += part.rows.height
             for item in part.series:
                 definitions[item.series_id] = item
             inventories.extend(part.inventories)
             outcomes.extend(part.outcomes)
             issues.extend(part.issues)
         combined = pl.concat(frames) if frames else pl.DataFrame(schema=RowsSchema.polars_schema)
+        annotations = (
+            AnnotationBundle.merge_sorted(
+                annotation_bundles,
+                row_offsets=annotation_offsets,
+                old_to_new={i: i for i in range(combined.height)},
+            )
+            if annotation_bundles
+            else AnnotationBundle()
+        )
         return ParsedSeries(
             combined,
             tuple(definitions.values()),
             tuple(inventories),
             tuple(outcomes),
             tuple(issues),
+            annotations=annotations,
         )
 
     return _parse_single_pair(payload, provider_config)
@@ -582,6 +620,7 @@ def _parse_owf_csv(
         (inventory,),
         tuple(outcomes),
         tuple(issues),
+        annotations=_series_annotation_bundle(definition, outcomes, "Geprüfte Daten"),
     )
 
 
@@ -871,6 +910,7 @@ def _parse_pegel_bgis_rows(
         (definition,),
         (inventory,),
         tuple(outcomes),
+        annotations=_series_annotation_bundle(definition, outcomes, "ungeprüfte Rohdaten!"),
     )
 
 
@@ -997,6 +1037,7 @@ def _parse_pegel_longterm_rows(
         (definition,),
         (inventory,),
         tuple(outcomes),
+        annotations=_series_annotation_bundle(definition, outcomes, "ungeprüfte Rohdaten!"),
     )
 
 

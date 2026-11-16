@@ -472,6 +472,9 @@ def _scope_for_pair(scope: SeriesScope, provider: str, station: str, product: st
     return scope.model_copy(update={"provider_ids": (provider,), "station_ids": (station,), "product_ids": (product,)})
 
 
+_IDENTITY_ORIGIN_RANK = {"mapping": 0, "catalogue": 1, "response": 2}
+
+
 def _merge_definitions(definitions: dict[str, SourceSeries], additions: tuple[SourceSeries, ...]) -> None:
     for item in additions:
         previous = definitions.get(item.series_id)
@@ -491,7 +494,13 @@ def _merge_definitions(definitions: dict[str, SourceSeries], additions: tuple[So
             if fact.facts_id in facts and facts[fact.facts_id] != fact:
                 raise FatalContractError("A physical-facts identifier changed its meaning")
             facts[fact.facts_id] = fact
-        definitions[item.series_id] = item.model_copy(update={"facts": tuple(facts.values())})
+        base = (
+            previous
+            if _IDENTITY_ORIGIN_RANK.get(previous.identity.origin, -1)
+            > _IDENTITY_ORIGIN_RANK.get(item.identity.origin, -1)
+            else item
+        )
+        definitions[item.series_id] = base.model_copy(update={"facts": tuple(facts.values())})
 
 
 def _validate_parsed_series(parsed: ParsedSeries) -> None:
