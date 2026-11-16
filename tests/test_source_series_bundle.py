@@ -254,3 +254,81 @@ def test_failed_explicit_identity_remains_inspectable_without_claiming_unknown_p
     assert failed["quantity"].to_list() == [None]
     assert failed["published_id"].to_list() == [None]
     assert failed["outcomes"].to_list() == [["failed"]]
+
+
+@pytest.mark.parametrize("origin", [[], {}], ids=["array", "object"])
+@pytest.mark.parametrize("record_kind", ["series", "inventory"])
+def test_bundle_record_origins_reach_model_validation(record_kind, origin):
+    from pydantic import ValidationError
+
+    from rivretrieve._internal.export_bundle import _decode_inventories_list, _decode_series_list
+    from rivretrieve._internal.source_series import (
+        InventorySnapshot,
+        PhysicalFacts,
+        SeriesScope,
+        SourceIdentity,
+        SourceSeries,
+    )
+
+    if record_kind == "series":
+        record = SourceSeries(
+            series_id="series",
+            provider_id="synthetic",
+            station_id="station",
+            product_id="product",
+            identity=SourceIdentity(namespace="synthetic", origin="catalogue", evidence=("authored",)),
+            facts=(PhysicalFacts(facts_id="facts"),),
+        ).model_dump(mode="json")
+        record["identity"]["origin"] = origin
+        decode = _decode_series_list
+        model = SourceSeries
+    else:
+        record = InventorySnapshot(
+            snapshot_id="inventory",
+            scope=SeriesScope(),
+            members=(),
+            completeness="complete",
+            access="product",
+            origin="catalogue",
+            evidence=("authored",),
+        ).model_dump(mode="json")
+        record["origin"] = origin
+        decode = _decode_inventories_list
+        model = InventorySnapshot
+
+    with pytest.raises(ValidationError) as expected:
+        model.model_validate(record)
+    with pytest.raises(ValidationError) as actual:
+        decode([record])
+    assert actual.value.errors() == expected.value.errors()
+
+
+@pytest.mark.parametrize("check_date", ["20260101", "2026-W01-1", "2026-01-01", "2026-01-01T00:00:00"])
+def test_bundle_inventory_date_matches_model_validation(check_date):
+    from pydantic import ValidationError
+
+    from rivretrieve._internal.export_bundle import _decode_inventories_list
+    from rivretrieve._internal.source_series import InventorySnapshot, SeriesScope
+
+    record = InventorySnapshot(
+        snapshot_id="inventory",
+        scope=SeriesScope(),
+        members=(),
+        completeness="complete",
+        access="product",
+        origin="catalogue",
+        evidence=("authored",),
+    ).model_dump(mode="json")
+    record["catalogue_check_date"] = check_date
+    if check_date in {"20260101", "2026-W01-1"}:
+        with pytest.raises(ValidationError) as expected:
+            InventorySnapshot.model_validate(record)
+        with pytest.raises(ValidationError) as actual:
+            _decode_inventories_list([record])
+        assert actual.value.errors() == expected.value.errors()
+    else:
+        from datetime import date
+
+        decoded = _decode_inventories_list([record])[0]
+        assert decoded.catalogue_check_date == date(2026, 1, 1)
+        assert decoded == InventorySnapshot.model_validate(record)

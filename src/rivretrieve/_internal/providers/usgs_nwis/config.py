@@ -101,7 +101,8 @@ _DATE_WINDOW = WindowDeclaration(
 )
 _CONTINUOUS_WINDOW = WindowDeclaration(
     granularity=WindowGranularity("capped-span"),
-    size=1100,
+    # USGS recommends yearly continuous queries; capped-span sizes are days.
+    size=365,
     rendering=WindowRenderingVocabulary.ISO_INSTANT,
     stop_convention=StopConvention.INCLUSIVE,
 )

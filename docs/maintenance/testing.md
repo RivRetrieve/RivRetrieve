@@ -85,10 +85,11 @@ contributor's compiled store. Keep registry and monkeypatch state local to each
 test. Share expensive unchanged package inputs only through the existing detached,
 fingerprint-aware fixtures. Changed or corrupt files must still reach validation.
 
-Reuse the existing installed wheel and sdist-wheel fixtures. Their verification
-processes have separate working directories and homes. Keep planted-file exclusion
-checks: inspecting a clean package alone cannot prove that private files would be
-excluded from a build.
+Reuse the existing installed wheel and sdist-wheel fixtures. Under `pytest-xdist`,
+workers share one read-only wheel and sdist-wheel build per test run, while each
+verification process gets a separate working directory and home. Keep planted-file
+exclusion checks: inspecting a clean package alone cannot prove that private files
+would be excluded from a build.
 
 Do not add a second validator, downloader, fixture registry or test coordinator.
 A helper should remove repetition without making a parallel implementation of the
@@ -106,6 +107,12 @@ Run source-independent checks with:
 
 ```sh
 uv run pytest --logic-only
+```
+
+To run source-independent checks across multiple worker processes:
+
+```sh
+uv run pytest --logic-only -n auto --dist worksteal
 ```
 
 Tests that consume retained material declare exact consumer scopes and their

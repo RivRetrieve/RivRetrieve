@@ -66,7 +66,7 @@ def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, 
     pt.assert_frame_equal(result.data, reused.data)
     assert reused.provenance.served_intervals
     assert reused.outcomes
-    native = pl.read_parquet(next(rr.cache_status("usgs_nwis").store.rglob("*.parquet")))
+    native = pl.read_parquet(next(rr.cache_status("usgs_nwis").store.rglob("product=*/year=*/rows.parquet")))
     pt.assert_frame_equal(native.select("value").sort("value"), pl.DataFrame({"value": expected_native}))
     assert set(native["source_unit"]) == {"ft^3/s"}
     bundle = tmp_path / "result.rrbundle"

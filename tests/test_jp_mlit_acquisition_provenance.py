@@ -18,8 +18,9 @@ from rivretrieve._internal.providers.jp_mlit.origins import build_acquisition_pr
 from tests._provenance import assert_evidence_equal, legacy_provenance, remove_binding_fact
 
 
-def test_japan_provenance_is_shared_by_catalogue_result_and_selection() -> None:
-    artifact = load_packaged_catalogue_artifact(declaration.catalogue)
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+def test_japan_provenance_is_shared_by_catalogue_result_and_selection(packaged_catalogue_inputs) -> None:
+    artifact = packaged_catalogue_inputs.load(declaration.catalogue)
     assert artifact.acquisition_provenance is not None
     result = CatalogueReader(artifact, ProviderId(artifact.acquisition_provenance.header.provider_id)).read_stations()
     selection = rr.find(
@@ -40,6 +41,7 @@ def test_japan_provenance_is_shared_by_catalogue_result_and_selection() -> None:
     assert frame["inventory_status"].to_list() == [["incomplete"]]
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_japan_source_and_fact_groups_are_externally_observable() -> None:
     selection = rr.find(provider="jp_mlit", station="301011281104010")
     provenance = legacy_provenance(selection.acquisition_provenance[0])

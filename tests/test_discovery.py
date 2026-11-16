@@ -52,6 +52,19 @@ EXPECTED_PRODUCT_IDS = [
 ]
 
 EXPECTED_PRODUCTS_BY_PROVIDER = {
+    "at_ehyd": [
+        "owf_abfl_monatsmaxima",
+        "owf_abfl_monatsminima",
+        "owf_abfl_tagesmittel",
+        "owf_wasserst_monatsmaxima",
+        "owf_wasserst_monatsminima",
+        "owf_wasserst_tagesmittel",
+        "owf_wassertemp_monatsmittel",
+        "pegel_bgis_abfluss",
+        "pegel_bgis_wasserstand",
+        "pegel_longterm_abfluss",
+        "pegel_longterm_wasserstand",
+    ],
     "au_bom": [
         "discharge_daily_max",
         "discharge_daily_mean_09hr",
@@ -114,6 +127,16 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "stage_hourly_mean",
         "water_temperature_daily_mean",
     ],
+    "dk_vanda": [
+        "discharge",
+        "stage",
+        "temperature",
+    ],
+    "fi_syke": [
+        "discharge_reported",
+        "stage_reported",
+        "water_temperature_reported",
+    ],
     "fr_hubeau": [
         "discharge_daily_max",
         "discharge_daily_mean",
@@ -142,6 +165,23 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "water_temperature_hourly_mean",
         "water_temperature_instantaneous",
     ],
+    "pe_senamhi": [
+        "monthly_archive_n_niv_inst_00",
+        "monthly_archive_n_niv_inst_10",
+        "monthly_archive_n_nivelagua",
+        "monthly_archive_n_nivelmedio",
+        "monthly_archive_nivel_del_rio_06h",
+        "monthly_archive_nivel_del_rio_10h",
+        "monthly_archive_nivel_del_rio_14h",
+        "monthly_archive_nivel_del_rio_18h",
+        "monthly_archive_nivel_del_rio_promedio",
+        "phisis_daily_flow",
+        "phisis_daily_level",
+        "phisis_daily_level_above_sea_level",
+        "phisis_hourly_flow",
+        "phisis_hourly_level",
+        "phisis_hourly_level_above_sea_level",
+    ],
     "pl_imgw": [
         "discharge_daily",
         "stage_daily",
@@ -162,7 +202,14 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
 }
 
 
-EXPECTED_PRODUCT_IDS = sorted(set(EXPECTED_PRODUCT_IDS) | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"]))
+EXPECTED_PRODUCT_IDS = sorted(
+    set(EXPECTED_PRODUCT_IDS)
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["at_ehyd"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["pe_senamhi"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["dk_vanda"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["fi_syke"])
+)
 
 
 def _issue_policy_error_chain(exc: BaseException) -> list[IssuePolicyError]:
@@ -191,17 +238,21 @@ def _disable_default_provider_registration(monkeypatch: pytest.MonkeyPatch) -> N
 def test_providers_empty_registry_returns_default_providers() -> None:
     result = rr.providers()
     assert result.get_column("provider_id").to_list() == [
+        "at_ehyd",
         "au_bom",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
         "ch_foen",
         "cz_chmi",
+        "dk_vanda",
+        "fi_syke",
         "fr_hubeau",
         "fr_hydroportail",
         "jp_mlit",
         "lt_lhmt",
         "no_nve",
+        "pe_senamhi",
         "pl_imgw",
         "th_thaiwater",
         "usgs_nwis",

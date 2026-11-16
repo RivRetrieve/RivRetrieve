@@ -42,6 +42,7 @@ def test_lithuania_page_examples_match_recorded_responses(retained_evidence_root
     ]
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_lithuania_page_catalogue_count_units_and_index():
     assert len(rr.find(provider="lt_lhmt").locations) == 97
     candidates = rr.series(rr.find(provider="lt_lhmt", station="nemajunu-vms", frequency="daily", statistic="mean"))

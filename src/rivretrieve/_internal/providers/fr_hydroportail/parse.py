@@ -14,15 +14,25 @@ import polars as pl
 from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
+from rivretrieve._internal.providers.fr_hydroportail.annotations import FR_HYDROPORTAIL_SERIES_SCHEMA
 from rivretrieve._internal.providers.fr_hydroportail.config import (
     SERIES_MAPPINGS,
     FrHydroportailSourceCoordinates,
     series_mapping,
 )
+from rivretrieve._internal.source_annotations import AnnotationBundle, ObservationAnnotationTable
 from rivretrieve._internal.source_series import ParsedSeries
 
+_INT64_MIN = -(1 << 63)
+_INT64_MAX = (1 << 63) - 1
 
-def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
+
+def _parse_native(
+    payload: Payload,
+    provider_config: ProviderConfig,
+    *,
+    annotations_out: list[dict[str, int | None]] | None = None,
+) -> WithIssues[Rows]:
     if len(payload.station_products) != 1:
         raise FatalContractError("fr_hydroportail payload must contain one station-product pair")
     station, product = payload.station_products[0]
@@ -60,7 +70,7 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
     raw_rows = series.get("data")
     if not isinstance(raw_rows, list):
         raise UnsupportedSourceStructureError("fr_hydroportail payload has no observation data list")
-    rows: list[dict[str, object]] = []
+    entries: list[tuple[datetime, dict[str, object], dict[str, int | None]]] = []
     for raw in raw_rows:
         if not isinstance(raw, dict):
             raise UnsupportedSourceStructureError("fr_hydroportail observation must be an object")
@@ -70,11 +80,19 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
             raise UnsupportedSourceStructureError("fr_hydroportail timestamp must end in Z")
         timestamp = _naive(raw_time[:-1])
         value = _value(row, "v")
+        ann_codes = {field.name: _annotation_code(row, field.name) for field in FR_HYDROPORTAIL_SERIES_SCHEMA.fields}
         zone = "+00:00"
-        rows.append(
-            {"station_id": station, "product_id": product, "time": timestamp, "value": value, "time_zone": zone}
+        entries.append(
+            (
+                timestamp,
+                {"station_id": station, "product_id": product, "time": timestamp, "value": value, "time_zone": zone},
+                ann_codes,
+            )
         )
-    frame = pl.DataFrame(rows, schema=NATIVE_SCHEMA).sort("time")
+    entries.sort(key=lambda item: item[0])
+    frame = pl.DataFrame([item[1] for item in entries], schema=NATIVE_SCHEMA)
+    if annotations_out is not None:
+        annotations_out.extend(item[2] for item in entries)
     return WithIssues(frame)
 
 
@@ -109,18 +127,53 @@ def _value(row: dict[str, object], field: str) -> float | None:
     return number
 
 
+def _annotation_code(row: dict[str, object], field: str) -> int | None:
+    if field not in row:
+        raise UnsupportedSourceStructureError(f"fr_hydroportail observation is missing its {field} annotation")
+    value = row[field]
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not (_INT64_MIN <= value <= _INT64_MAX):
+        raise UnsupportedSourceStructureError(
+            f"fr_hydroportail observation {field} annotation must be a signed 64-bit integer or null"
+        )
+    return value
+
+
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     coordinates = payload.source_coordinates.value
     if not isinstance(coordinates, FrHydroportailSourceCoordinates):
         raise FatalContractError("fr_hydroportail payload has invalid source coordinates")
+    captured_annotations: list[dict[str, int | None]] = []
     parsed = parse_mapped_series(
         payload,
         provider_config,
         provider="fr_hydroportail",
         mappings={product: series_mapping(product, coordinates.variant) for product in SERIES_MAPPINGS},
-        native_parse=_parse_native,
+        native_parse=lambda tagged, cfg: _parse_native(tagged, cfg, annotations_out=captured_annotations),
+    )
+    series = tuple(item.model_copy(update={"variant": coordinates.variant}) for item in parsed.series)
+    if parsed.rows.is_empty():
+        return replace(parsed, series=series, annotations=AnnotationBundle.empty())
+    if len(captured_annotations) != parsed.rows.height:
+        raise FatalContractError("fr_hydroportail parsed rows and observation annotations count mismatch")
+    schema = FR_HYDROPORTAIL_SERIES_SCHEMA
+    ann_frame = parsed.rows.select(
+        "series_id", "facts_id", "station_id", "product_id", "time", "time_zone"
+    ).with_columns(
+        pl.lit(True).cast(pl.Boolean()).alias("measured"),
+        *(
+            pl.Series(field.name, [item[field.name] for item in captured_annotations], dtype=pl.Int64())
+            for field in schema.fields
+        ),
+    )
+    ann_table = ObservationAnnotationTable.from_rows(
+        schema=schema,
+        rows=ann_frame,
+        measurement_indices=list(range(parsed.rows.height)),
     )
     return replace(
         parsed,
-        series=tuple(item.model_copy(update={"variant": coordinates.variant}) for item in parsed.series),
+        series=series,
+        annotations=AnnotationBundle(observation_tables={schema.schema_id: ann_table}),
     )

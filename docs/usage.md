@@ -189,6 +189,35 @@ print(restored_result.data.height, len(restored_result.issues))
 `fetch_by_provider` returns separate results keyed by provider.
 See the [API reference](reference.md) for returned fields and export methods.
 
+### Source annotations
+
+`result.data` keeps its ten canonical columns without interpreting publisher flags.
+Providers that declare source annotations attach them alongside the result with
+plain Polars types. Use `rr.annotations(result)` to list each attached field's
+scope, schema, Polars dtype, row count, description and reference URL, and use
+`annotations=` on `to_polars`, `to_pandas`, or `rr.series` to project them:
+
+```python
+print(rr.annotations(result).select("schema", "name", "dtype").rows())
+
+# Output:
+# [('usgs_nwis.daily', 'approval_status', 'String'), ('usgs_nwis.daily', 'qualifier', 'List(String)')]
+
+print(result.to_polars(annotations=True).select("station_id", "approval_status", "qualifier").rows())
+
+# Output:
+# [('07374000', 'Approved', None)]
+```
+
+Pass `annotations=True`, a single field name, or a list of field names to
+`result.to_polars(...)` or `result.to_pandas(...)` for observation-grain fields.
+Use `rr.series(result, annotations=...)` to join non-identity series-grain
+attributes by `series_id`. Call `rr.annotations(result, schema=...)` to read
+one declared schema table directly without cross-route null padding, including
+any unmeasured source slots marked `measured=False`. Annotations stay attached
+across `pick`, `to_utc`, offline cache reuse, manual `cache="refresh"`, and
+`.rrbundle` exports.
+
 ### When an agency publishes more than one version
 
 Brazil's ANA publishes `bruto` (raw) and `consistido` (quality-checked) daily records.
@@ -329,14 +358,19 @@ Stations and routes in one request share preparation. This avoids a national
 observation audit for each small request. Metadata inspection still depends on
 store size, and checking a selected file reads all its bytes. Damage confined to
 unselected observation bytes can remain undiscovered until a relevant read or
-complete audit.
+complete audit. When a complete cache is copied to another directory or machine
+so its local file identities change, the first local read, status check, audit
+or update verifies every saved file and observation against the original seal
+and records the new local file witnesses in `integrity.json`. Later reads use
+the normal selective check.
 
 Set `RIVRETRIEVE_CACHE_DIR` to override the platform's user cache directory.
 The following operations make no source request:
 
 - `cache_status(provider)` checks stored metadata and reports committed data,
   interrupted work, cleanup residue and active ownership separately. It does not
-  read every observation byte.
+  read every observation byte unless a copied store's local file witnesses need
+  initial verification.
 - `audit_cache(provider)` checks every saved file and observation. A returned
   `CacheAuditResult` identifies the generation checked and reports partition, row
   and byte counts. Missing or damaged data raises an error. This local check does

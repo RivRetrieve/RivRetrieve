@@ -89,6 +89,12 @@ scope, available routes, access conditions, terms and attribution. Obtain small
 genuine examples of metadata and observations. Distinguish unavailable access from
 an empty response and from evidence that has not yet been collected.
 
+A terms or licence page that automated tools cannot read, such as one requiring
+JavaScript, is not the same as terms that do not exist. Ask a person to open it
+directly before drafting external correspondence; a publisher's own data catalogue
+often states a licence, in seconds, where a support request would take much
+longer.
+
 [`ProviderDeclaration`](../../src/rivretrieve/_internal/providers/registration.py)
 selects `LiveStages` for on-demand acquisition, `BulkStore` for explicit download
 and compilation, or `CatalogueOnly` for discovery without observation retrieval.
@@ -132,6 +138,15 @@ keep identity and physical interpretation separate.
 [`SeriesMapping`](../../src/rivretrieve/_internal/provider_series.py)
 can share supported mappings between catalogue publication and parsing; it is not
 a substitute for response-specific identities when the source requires them.
+
+Preserve observation qualifiers, approval statuses, method notes, unmeasured source
+slots, and non-identity series attributes through declared
+[`AnnotationSchema`](../../src/rivretrieve/_internal/source_annotations.py) definitions
+with plain Polars types, verified descriptions (never placeholders such as
+`"unknown"`), and official `http` or `https` `reference_url` links. Do not alter
+`ObservationResult.data`, create stream variants solely for annotation changes, or
+emit per-row informational quality-code issues when annotations carry those source
+fields.
 
 **Outcome:** each adopted fact has supporting evidence, and remaining unknowns are
 explicit. Admission requires established quantity, source unit and valid conversion.
@@ -188,6 +203,34 @@ Use genuine retained responses for distinct supported routes and independently
 established expected results. Check identities, timestamps and values together.
 Verify relevant cache/store behavior, catalogue lineage and distribution contents.
 
+When a suitable published observational dataset is available, usually a regional
+CAMELS dataset, require a bounded comparison with values retrieved through
+RivRetrieve's public API. Match stations confidently and select overlapping dates.
+Use a reproducible random sample without selecting for agreement; ten gauges is a
+useful default, not a rigid requirement. Plot both hydrographs with explicit unit
+conversion and preserved gaps. Inspect for obvious errors and investigate meaningful
+discrepancies without filtering, shifting or fitting values to force agreement.
+
+A comparison window bounded to a published dataset's coverage, such as a CAMELS
+dataset's end date, is not evidence of the source's actual historical reach. Check
+each sampled station's own earliest-available-result metadata where the source
+publishes one, and test a genuine retrieval against a window near that claimed
+depth for at least one long-running station, not only the modern comparison
+window. A single failed attempt against a far-back window can be a transient,
+cold-query response rather than an absence of data; retry before concluding the
+data is not retrievable. Separately, a source may track an older, lower-frequency
+product (for example, manually-taken spot measurements) alongside the continuous
+product a provider retrieves, reaching further back than the continuous record
+does; note this as an open scope question when found, rather than assuming the
+continuous product's own history is the source's only route to older data.
+
+Retain the dataset version, station and date selection, comparison method, figures,
+findings and limitations through the existing evidence process. If no suitable
+dataset is available, record why; that absence alone does not block the port.
+This is a sanity check alongside source verification, not proof of identical source
+definitions or independent measurement accuracy. Unresolved semantics remain
+caveats unless they make the comparison misleading.
+
 Follow the [testing](testing.md) and
 [evidence](evidence.md) guides. The private archive
 owns intake, retained inputs and source-certification tooling. Review exact code
@@ -203,13 +246,33 @@ limits. Missing mandatory genuine inputs block acceptance.
 verified practical example.
 
 Explain who publishes the data, what users can retrieve, access requirements, source
-series distinctions, time and units, availability limits, terms and unresolved facts
-that affect interpretation. State consequences clearly rather than publishing the
-whole investigation. Keep detailed research and correspondence in the private record.
+series distinctions, declared source-annotation schemas and fields where applicable,
+time and units, availability limits, terms and unresolved facts that affect interpretation.
+State consequences clearly rather than publishing the whole investigation. Keep detailed
+research and correspondence in the private record.
 
 Follow [documentation guidance](../AGENTS.md) and use existing
 [provider pages](../providers/) for scope. Link general usage rather
 than repeat it. Do not present a successful example as proof of continuous coverage.
+
+Reuse shared layout verbatim rather than inventing a new shape per provider.
+In particular, the "What you can retrieve" table uses this exact header, in
+every provider page that has one, whether or not the data needs every column:
+
+```
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+```
+
+Before writing a new provider page, grep the other pages in `../providers/`
+for the section headers and table shapes you are about to use, and try hard
+to follow them. Existing pages already show how to handle a column that does
+not obviously apply: `ba_fhmzbih` fills `Frequency`/`Statistic` with
+`Unknown` rather than dropping the column. Difficulty fitting one provider's
+data into the shared shape is not by itself evidence that the shape is
+wrong; look for how another page handled a similar gap before concluding the
+table itself needs to change. If you still think it does, raise that for
+review rather than quietly adding, removing, or renaming a column on just
+the new page.
 
 **Outcome:** users can understand the result and its limits without reconstructing
 the investigation. Documentation and implemented behavior agree.

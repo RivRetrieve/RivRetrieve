@@ -1841,3 +1841,43 @@ def test_explicit_projection_matches_converted_station_and_preserves_non_exposur
     else:
         products = _publish_explicit_metadata(components)
         assert_frame_equal(pl.read_parquet(BytesIO(products["station_metadata.parquet"])), components[-1])
+
+
+@pytest.mark.parametrize("logical", [False, True], ids=["normalized", "logical"])
+def test_file_loader_requires_normalized_build_input_representation(tmp_path, logical):
+    from rivretrieve._internal.catalogues.artifact import _read_provenance_json
+
+    original = _supported_provenance()
+    evidence = _normalize(original)
+    files = encode_catalogue_evidence(evidence)
+    if logical:
+        payload = json.loads(files["provenance.json"])
+        payload["build_inputs"] = original.build_inputs.model_dump(mode="json")
+        files["provenance.json"] = json.dumps(payload).encode()
+    for name, content in files.items():
+        (tmp_path / name).write_bytes(content)
+    if logical:
+        from rivretrieve._internal.catalogues.artifact import CorruptCatalogArtifactError
+
+        with pytest.raises(CorruptCatalogArtifactError, match="encoding_version"):
+            _read_provenance_json(tmp_path / "provenance.json")
+    else:
+        restored = _read_provenance_json(tmp_path / "provenance.json")
+        assert isinstance(restored, CatalogueEvidence)
+        assert reconstruct_provenance(restored) == original
+
+
+def test_normalized_file_header_does_not_repeat_canonical_validation(tmp_path, monkeypatch):
+    from rivretrieve._internal.catalogues.artifact import _read_provenance_json
+
+    evidence = _normalize(_supported_provenance())
+    for name, content in encode_catalogue_evidence(evidence).items():
+        (tmp_path / name).write_bytes(content)
+
+    def repeated_validation(*args, **kwargs):
+        raise AssertionError("validated file header was serialized for validation again")
+
+    monkeypatch.setattr(EvidenceHeader, "model_dump_json", repeated_validation)
+    restored = _read_provenance_json(tmp_path / "provenance.json")
+    assert isinstance(restored, CatalogueEvidence)
+    assert restored.header == evidence.header

@@ -551,8 +551,9 @@ def test_committed_poland_private_statement_is_redacted_forwarded_evidence() -> 
     assert statement.exact_text is None
 
 
-def test_packaged_poland_provenance_propagates_with_source_series_context() -> None:
-    artifact = load_packaged_catalogue_artifact(declaration.catalogue, on_issue="raise")
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+def test_packaged_poland_provenance_propagates_with_source_series_context(packaged_catalogue_inputs) -> None:
+    artifact = packaged_catalogue_inputs.load(declaration.catalogue)
     assert artifact.acquisition_provenance is not None
     assert len(artifact.acquisition_provenance.header.source_records) == 2
     result = CatalogueReader(artifact, ProviderId("pl_imgw")).read_stations(on_issue="raise")
@@ -569,6 +570,7 @@ def test_packaged_poland_provenance_propagates_with_source_series_context() -> N
     assert next(location for location in selection.locations if location.station_id == "149180010").crs == "unknown"
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_poland_observation_result_propagates_two_sources_and_series_context(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

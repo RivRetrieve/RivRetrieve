@@ -119,9 +119,9 @@ def test_station_geometry_remains_separate_from_series_physics() -> None:
         {
             "provider_id": ["usgs_nwis"],
             "station_id": ["01646500"],
-            "latitude": [38.94977778],
-            "longitude": [-77.12763889],
-            "crs": ["EPSG:4269"],
+            "latitude": [38.949777777777776],
+            "longitude": [-77.12763888888888],
+            "crs": ["EPSG:4326"],
         }
     )
     pl_testing.assert_frame_equal(frame, expected)
