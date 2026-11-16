@@ -7,6 +7,7 @@ BUILTIN_PROVIDER_IDS = (
     "ca_eccc",
     "ch_foen",
     "cz_chmi",
+    "dk_vanda",
     "fi_syke",
     "fr_hubeau",
     "fr_hydroportail",
