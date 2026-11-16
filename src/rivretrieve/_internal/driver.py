@@ -2781,7 +2781,15 @@ def drive(
                 for item in parsed.outcomes
                 if item.series_id is not None and item.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
             } | set(native["series_id"].to_list())
-            native_ann = _narrow_series_tables(native_ann, selected_ids & positive_parsed_ids)
+            # A prerequisite payload (e.g. a series lookup) can identify a series and publish
+            # a series-scope annotation for it while carrying no outcome of its own; the child
+            # payload that fetches observations owns that outcome. Keep such a payload's own
+            # published series annotations instead of discarding them for lacking an outcome
+            # this payload never claims to have.
+            self_published_ids = {item.series_id for item in parsed.series} & {
+                sid for table in native_ann.series_tables.values() for sid in table.rows["series_id"].to_list()
+            }
+            native_ann = _narrow_series_tables(native_ann, selected_ids & (positive_parsed_ids | self_published_ids))
             result_parts.append((native, native_ann))
             identity_scope = pair_scope.model_copy(update={"predicates": ()})
             requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
