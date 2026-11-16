@@ -1295,6 +1295,15 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 "maintenance/catalogue/dk_vanda/official/selection.json",
             )
         )
+    if adapter.provider_id == "dk_vanda":
+        arguments.extend(
+            (
+                "--evidence-root",
+                str(retained_evidence_root),
+                "--selection",
+                "maintenance/catalogue/dk_vanda/official/selection.json",
+            )
+        )
     if adapter.provider_id == "br_ana":
         arguments.extend(
             (
