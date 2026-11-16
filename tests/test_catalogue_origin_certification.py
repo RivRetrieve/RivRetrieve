@@ -1082,6 +1082,7 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             marks=pytest.mark.governing(
                 "src/rivretrieve/_internal/providers/uk_nrfa/catalogue/native.parquet",
                 "maintenance/catalogue/uk_nrfa/inputs",
+                "maintenance/catalogue/uk_nrfa/inputs/crs-clarification.eml",
                 "maintenance/catalogue/uk_nrfa/series-identity",
                 "maintenance/catalogue/station_metadata/review.json",
             ),

@@ -373,7 +373,7 @@ def _parse_label(label: object, label_kind: Literal["date", "year_month", "datet
 
 def _parse_entry(entry: object, product_id: str) -> tuple[float | None, str | None]:
     if isinstance(entry, list):
-        if len(entry) != 2 or not isinstance(entry[1], str) or not entry[1]:
+        if len(entry) != 2 or not isinstance(entry[1], str) or not entry[1].strip():
             raise UnsupportedSourceStructureError(f"Malformed NRFA flagged data-stream entry for {product_id!r}")
         raw_value, flag = entry[0], entry[1]
     else:
@@ -383,7 +383,10 @@ def _parse_entry(entry: object, product_id: str) -> tuple[float | None, str | No
         return None, flag
     if isinstance(raw_value, bool) or not isinstance(raw_value, int | float):
         raise UnsupportedSourceStructureError(f"NRFA {product_id!r} value must be numeric or null")
-    numeric = float(raw_value)
+    try:
+        numeric = float(raw_value)
+    except OverflowError as exc:
+        raise UnsupportedSourceStructureError(f"NRFA {product_id!r} value overflows IEEE float") from exc
     if not math.isfinite(numeric):
         raise UnsupportedSourceStructureError(f"NRFA {product_id!r} value must be finite")
     return numeric, flag
@@ -557,11 +560,17 @@ def build_peak_rejection_annotations(
     excluded_years = _parse_rejected_amax_years(station_row["peak-flow-rejected-amax-years"], station_id)
     rejected_periods = _parse_rejected_periods(station_row["peak-flow-rejected-periods"], station_id)
 
-    unique_series = list(
-        {
-            item.series_id: item for item in series if item.provider_id == "uk_nrfa" and item.station_id == station_id
-        }.values()
-    )
+    seen_series: dict[str, SourceSeries] = {}
+    for item in series:
+        if item.provider_id != "uk_nrfa" or item.station_id != station_id:
+            continue
+        previous = seen_series.get(item.series_id)
+        if previous is not None and previous != item:
+            raise UnsupportedSourceStructureError(
+                f"Conflicting NRFA series definitions share series_id {item.series_id!r}"
+            )
+        seen_series[item.series_id] = item
+    unique_series = list(seen_series.values())
     tables: dict[str, SeriesAnnotationTable] = {}
 
     amax_series = [item for item in unique_series if item.product_id in AMAX_PRODUCTS]

@@ -410,10 +410,12 @@ def test_daily_calendar_clipping_flags_nulls_peaks_and_empty_stream() -> None:
         ("gdf", {"data-stream": ["2020-01-01", True]}, "39001", "gdf"),  # bool scalar
         ("gdf", {"data-stream": ["2020-01-01", [False, "E"]]}, "39001", "gdf"),  # bool flagged
         ("gdf", {"data-stream": ["2020-01-01", float("nan")]}, "39001", "gdf"),
+        ("gdf", {"data-stream": ["2020-01-01", 10**400]}, "39001", "gdf"),
         ("gmf", {"data-stream": ["2020-13", 1.0]}, "39001", "gmf"),
         ("gdf", {"data-stream": ["2020-02-30", 1.0]}, "39001", "gdf"),
         ("amax-stage", {"data-stream": ["2020-01-01", 1.0]}, "39001", "amax-stage"),  # missing T00:00:00
         ("gdf", {"data-stream": ["2020-01-01", [1.0, ""]]}, "39001", "gdf"),
+        ("gdf", {"data-stream": ["2020-01-01", [1.0, " "]]}, "39001", "gdf"),
         ("gdf", {"data-stream": ["2020-01-01", [1.0, "E", "extra"]]}, "39001", "gdf"),
         ("gdf", {"data-type": {**EXPECTED_HEADERS["gdf"], "units": "l/s"}}, "39001", "gdf"),
         ("gdf", {}, "6007", "gdf"),  # station mismatch
@@ -452,67 +454,75 @@ def test_peak_rejection_annotations_preserve_null_empty_populated_narrowing_and_
         source_series,
     )
 
-    all_82001 = tuple(source_series("82001", pid, origin="response") for pid in PRODUCT_IDS)
+    all_synth = tuple(source_series("99001", pid, origin="response") for pid in PRODUCT_IDS)
     non_peak = tuple(
-        s for s in all_82001 if s.product_id in {"gdf", "ndf", "gmf", "nmf", "gauging-flow", "gauging-stage"}
+        s for s in all_synth if s.product_id in {"gdf", "ndf", "gmf", "nmf", "gauging-flow", "gauging-stage"}
     )
     assert (
         build_peak_rejection_annotations(
-            {"id": 82001, "peak-flow-rejected-amax-years": None, "peak-flow-rejected-periods": None},
+            {"id": 99001, "peak-flow-rejected-amax-years": None, "peak-flow-rejected-periods": None},
             series=non_peak,
         )
         == {}
     )
 
     for bad_row in (
-        {"id": 82001, "peak-flow-rejected-amax-years": None},
-        {"id": 82001, "peak-flow-rejected-amax-years": {"excluded-years": [True]}, "peak-flow-rejected-periods": None},
-        {"id": 82001, "peak-flow-rejected-amax-years": None, "peak-flow-rejected-periods": {"rejected-periods": [""]}},
+        {"id": 99001, "peak-flow-rejected-amax-years": None},
+        {"id": 99001, "peak-flow-rejected-amax-years": {"excluded-years": [True]}, "peak-flow-rejected-periods": None},
+        {"id": 99001, "peak-flow-rejected-amax-years": None, "peak-flow-rejected-periods": {"rejected-periods": [""]}},
     ):
         with pytest.raises(UnsupportedSourceStructureError):
-            build_peak_rejection_annotations(bad_row, series=all_82001)
+            build_peak_rejection_annotations(bad_row, series=all_synth)
+
+    # Conflicting SourceSeries objects sharing one series_id must fail instead of silently overwriting.
+    conflicting_amax = source_series("99001", "amax-stage", origin="catalogue")
+    with pytest.raises(UnsupportedSourceStructureError, match="Conflicting"):
+        build_peak_rejection_annotations(
+            {"id": 99001, "peak-flow-rejected-amax-years": None, "peak-flow-rejected-periods": None},
+            series=(source_series("99001", "amax-stage", origin="response"), conflicting_amax),
+        )
 
     # Populated vs empty vs null distinction across result, rr.series, rr.annotations, rr.pick, and bundles.
     row_populated = {
-        "id": 82001,
-        "peak-flow-rejected-amax-years": {"excluded-years": [1962, 1963]},
-        "peak-flow-rejected-periods": {"rejected-periods": ["1963-09-05/1982-05-31"]},
+        "id": 99001,
+        "peak-flow-rejected-amax-years": {"excluded-years": [1971, 1972]},
+        "peak-flow-rejected-periods": {"rejected-periods": ["1975-02-01/1978-11-30"]},
     }
     row_empty = {
-        "id": 82001,
+        "id": 99001,
         "peak-flow-rejected-amax-years": {"excluded-years": []},
         "peak-flow-rejected-periods": {"rejected-periods": []},
     }
     row_null = {
-        "id": 82001,
+        "id": 99001,
         "peak-flow-rejected-amax-years": None,
         "peak-flow-rejected-periods": None,
     }
 
-    tables_empty = build_peak_rejection_annotations(row_empty, series=all_82001)
+    tables_empty = build_peak_rejection_annotations(row_empty, series=all_synth)
     assert tables_empty[UK_NRFA_AMAX_REJECTION_SCHEMA.schema_id].rows["rejected_amax_years"].to_list() == [[], []]
     assert tables_empty[UK_NRFA_PEAK_REJECTED_PERIODS_SCHEMA.schema_id].rows["rejected_periods"].to_list() == [[]] * 4
 
-    tables_null = build_peak_rejection_annotations(row_null, series=all_82001)
+    tables_null = build_peak_rejection_annotations(row_null, series=all_synth)
     assert tables_null[UK_NRFA_AMAX_REJECTION_SCHEMA.schema_id].rows["rejected_amax_years"].to_list() == [None, None]
     assert tables_null[UK_NRFA_PEAK_REJECTED_PERIODS_SCHEMA.schema_id].rows["rejected_periods"].to_list() == [None] * 4
 
-    # Build a combined ObservationResult for amax-stage + pot-flow + gdf on station 82001.
+    # Build a combined ObservationResult for amax-stage + pot-flow + gdf on synthetic station 99001.
     cfg = _provider_config()
     win = _requested_window("1963-01-01", "2001-12-31")
     amax_def, amax_rows, amax_bundle = decode_time_series_response(
-        _payload("amax-stage", ["1963-11-10T00:00:00", 2.1], station_id=82001),
-        expected_station_id="82001",
+        _payload("amax-stage", ["1963-11-10T00:00:00", 2.1], station_id=99001),
+        expected_station_id="99001",
         expected_product_id="amax-stage",
     )
     pot_def, pot_rows, pot_bundle = decode_time_series_response(
-        _payload("pot-flow", ["1964-02-01T12:00:00", 58.5], station_id=82001),
-        expected_station_id="82001",
+        _payload("pot-flow", ["1964-02-01T12:00:00", 58.5], station_id=99001),
+        expected_station_id="99001",
         expected_product_id="pot-flow",
     )
     gdf_def, gdf_rows, gdf_bundle = decode_time_series_response(
-        _payload("gdf", ["1964-02-01", 20.0], station_id=82001),
-        expected_station_id="82001",
+        _payload("gdf", ["1964-02-01", 20.0], station_id=99001),
+        expected_station_id="99001",
         expected_product_id="gdf",
     )
     combined_defs = (amax_def, pot_def, gdf_def)
@@ -548,10 +558,10 @@ def test_peak_rejection_annotations_preserve_null_empty_populated_narrowing_and_
     result = _result_for_decoded(combined_defs, combined_canonical, full_bundle)
     series_df = rr.series(result, annotations=True)
     by_prod = {row["product_id"]: row for row in series_df.iter_rows(named=True)}
-    assert by_prod["amax-stage"]["rejected_amax_years"] == [1962, 1963]
-    assert by_prod["amax-stage"]["rejected_periods"] == ["1963-09-05/1982-05-31"]
+    assert by_prod["amax-stage"]["rejected_amax_years"] == [1971, 1972]
+    assert by_prod["amax-stage"]["rejected_periods"] == ["1975-02-01/1978-11-30"]
     assert by_prod["pot-flow"]["rejected_amax_years"] is None
-    assert by_prod["pot-flow"]["rejected_periods"] == ["1963-09-05/1982-05-31"]
+    assert by_prod["pot-flow"]["rejected_periods"] == ["1975-02-01/1978-11-30"]
     assert by_prod["gdf"]["rejected_amax_years"] is None
     assert by_prod["gdf"]["rejected_periods"] is None
 
@@ -560,9 +570,9 @@ def test_peak_rejection_annotations_preserve_null_empty_populated_narrowing_and_
     restored = rr.from_bundle(rr.to_bundle(result))
     assert isinstance(restored, ObservationResult)
     narrowed_pot = rr.pick(restored, series_id=pot_def.series_id)
-    assert rr.series(narrowed_pot, annotations=True)["rejected_periods"].to_list() == [["1963-09-05/1982-05-31"]]
+    assert rr.series(narrowed_pot, annotations=True)["rejected_periods"].to_list() == [["1975-02-01/1978-11-30"]]
     narrowed_stage = rr.pick(restored, vertical_reference="gauge_zero")
-    assert rr.series(narrowed_stage, annotations=True)["rejected_amax_years"].to_list() == [[1962, 1963]]
+    assert rr.series(narrowed_stage, annotations=True)["rejected_amax_years"].to_list() == [[1971, 1972]]
     assert narrowed_stage.data["value"].to_list() == [2.1]
 
     # Offline StoreRoot reuse preserves series rejection lists.
@@ -570,7 +580,7 @@ def test_peak_rejection_annotations_preserve_null_empty_populated_narrowing_and_
     out = RetrievalOutcome(
         outcome_id="o-amax-1",
         series_id=amax_def.series_id,
-        station_id="82001",
+        station_id="99001",
         product_id="amax-stage",
         window=SeriesWindow(start=datetime(1963, 1, 1), end=datetime(1963, 12, 31, 23, 59, 59)),
         status=OutcomeStatus.SUCCESS,
@@ -606,7 +616,7 @@ def test_peak_rejection_annotations_preserve_null_empty_populated_narrowing_and_
         StoreQuery(
             store,
             ProviderId("uk_nrfa"),
-            ("82001",),
+            ("99001",),
             (ProductId("amax-stage"),),
             datetime(1963, 1, 1),
             datetime(1963, 12, 31, 23, 59, 59),
@@ -614,7 +624,7 @@ def test_peak_rejection_annotations_preserve_null_empty_populated_narrowing_and_
     )
     assert loaded.annotations.series_tables[UK_NRFA_AMAX_REJECTION_SCHEMA.schema_id].rows[
         "rejected_amax_years"
-    ].to_list() == [[1962, 1963]]
+    ].to_list() == [[1971, 1972]]
     assert loaded.annotations.series_tables[UK_NRFA_PEAK_REJECTED_PERIODS_SCHEMA.schema_id].rows[
         "rejected_periods"
-    ].to_list() == [["1963-09-05/1982-05-31"]]
+    ].to_list() == [["1975-02-01/1978-11-30"]]
