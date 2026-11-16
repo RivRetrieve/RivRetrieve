@@ -213,8 +213,10 @@ def test_recorded_nrfa_peak_metadata_and_feh_correspondence(retained_evidence_ro
         row_82001,
         series=tuple(source_series("82001", pid, origin="response") for pid in PRODUCT_IDS),
     )
-    excluded_years = tables_82001[UK_NRFA_AMAX_REJECTION_SCHEMA.schema_id].rows["rejected_amax_years"][0]
-    rejected_periods = tables_82001[UK_NRFA_PEAK_REJECTED_PERIODS_SCHEMA.schema_id].rows["rejected_periods"][0]
+    excluded_years = tables_82001[UK_NRFA_AMAX_REJECTION_SCHEMA.schema_id].rows["rejected_amax_years"].to_list()[0]
+    rejected_periods = (
+        tables_82001[UK_NRFA_PEAK_REJECTED_PERIODS_SCHEMA.schema_id].rows["rejected_periods"].to_list()[0]
+    )
     assert excluded_years == [int(line.split(",", 1)[0]) for line in feh_am["am_rejected"]]
     expected_from_feh = [
         "/".join(datetime.strptime(part.strip(), "%d %b %Y").date().isoformat() for part in line.split(",", 1))
