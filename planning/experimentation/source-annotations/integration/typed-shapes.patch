@@ -1,0 +1,839 @@
+diff --git a/src/rivretrieve/_internal/catalogues/source_series.py b/src/rivretrieve/_internal/catalogues/source_series.py
+index bbcec8c8..3084f7ec 100644
+--- a/src/rivretrieve/_internal/catalogues/source_series.py
++++ b/src/rivretrieve/_internal/catalogues/source_series.py
+@@ -277,6 +277,7 @@ def _fast_series(
+             "identity": identity,
+             "variant": variant,
+             "facts": facts,
++            "annotation_fields": (),
+         },
+     )
+     object.__setattr__(inst, "__pydantic_fields_set__", _SERIES_FIELDS_SET.copy())
+diff --git a/src/rivretrieve/_internal/conversion.py b/src/rivretrieve/_internal/conversion.py
+index effd1cde..591f0241 100644
+--- a/src/rivretrieve/_internal/conversion.py
++++ b/src/rivretrieve/_internal/conversion.py
+@@ -21,6 +21,7 @@ from rivretrieve._internal.engine import (
+ from rivretrieve._internal.issues import FatalContractError
+ from rivretrieve._internal.physical_window import native_window
+ from rivretrieve._internal.primitives import ProductId
++from rivretrieve._internal.source_annotations import row_schema
+ from rivretrieve._internal.source_series import SourceSeries, admission, validate_series_rows
+ 
+ 
+@@ -49,8 +50,8 @@ def convert(
+                 "unit": decision.target_unit,
+             }
+         )
+-    canonical = pl.DataFrame(output, schema=CanonicalRowsSchema.polars_schema)
+-    validate_catalogue(canonical, CanonicalRowsSchema, on_issue="raise")
++    canonical = pl.DataFrame(output, schema=row_schema(CanonicalRowsSchema, rows).polars_schema)
++    validate_catalogue(canonical, row_schema(CanonicalRowsSchema, rows), on_issue="raise")
+     return WithIssues(canonical)
+ 
+ 
+@@ -61,7 +62,7 @@ def _endpoint_datetime(endpoint: WindowEndpoint) -> datetime:
+ def validate_native_rows(
+     rows: Rows, products: Mapping[ProductId, ProductConfig], *, series: tuple[SourceSeries, ...]
+ ) -> None:
+-    validate_catalogue(rows, RowsSchema, on_issue="raise")
++    validate_catalogue(rows, row_schema(RowsSchema, rows), on_issue="raise")
+     validate_series_rows(rows, series)
+     for product_id in rows["product_id"].unique():
+         if ProductId(product_id) not in products:
+diff --git a/src/rivretrieve/_internal/discovery.py b/src/rivretrieve/_internal/discovery.py
+index d8c7200a..7b21226d 100644
+--- a/src/rivretrieve/_internal/discovery.py
++++ b/src/rivretrieve/_internal/discovery.py
+@@ -1539,6 +1539,8 @@ def _merge_provider_results(
+ 
+ 
+ def _merge_series_definitions(results: tuple[ObservationResult, ...]) -> tuple[SourceSeries, ...]:
++    from rivretrieve._internal.source_annotations import merge_fields
++
+     definitions: dict[str, SourceSeries] = {}
+     for result in results:
+         for item in result.source_series:
+@@ -1546,14 +1548,21 @@ def _merge_series_definitions(results: tuple[ObservationResult, ...]) -> tuple[S
+             if existing is None:
+                 definitions[item.series_id] = item
+                 continue
+-            if existing.model_dump(exclude={"facts"}) != item.model_dump(exclude={"facts"}):
++            if existing.model_dump(exclude={"facts", "annotation_fields"}) != item.model_dump(
++                exclude={"facts", "annotation_fields"}
++            ):
+                 raise FatalContractError("Source-series identity changed while merging result partitions")
+             facts = {fact.facts_id: fact for fact in existing.facts}
+             for fact in item.facts:
+                 if fact.facts_id in facts and facts[fact.facts_id] != fact:
+                     raise FatalContractError("Physical facts changed under the same fact-segment identity")
+                 facts[fact.facts_id] = fact
+-            definitions[item.series_id] = item.model_copy(update={"facts": tuple(facts.values())})
++            definitions[item.series_id] = item.model_copy(
++                update={
++                    "facts": tuple(facts.values()),
++                    "annotation_fields": merge_fields(existing.annotation_fields, item.annotation_fields),
++                }
++            )
+     return tuple(definitions.values())
+ 
+ 
+diff --git a/src/rivretrieve/_internal/driver.py b/src/rivretrieve/_internal/driver.py
+index 6d8ef43c..623dffc8 100644
+--- a/src/rivretrieve/_internal/driver.py
++++ b/src/rivretrieve/_internal/driver.py
+@@ -58,6 +58,7 @@ from rivretrieve._internal.observations import (
+ from rivretrieve._internal.physical_window import native_window, native_window_envelope
+ from rivretrieve._internal.primitives import CacheMode, ProductId, ProviderId
+ from rivretrieve._internal.source_acquisition import SourceResponseMeaning
++from rivretrieve._internal.source_annotations import align_annotations, merge_fields, row_schema
+ from rivretrieve._internal.source_series import (
+     ClippingAxis,
+     InventoryCompleteness,
+@@ -126,7 +127,7 @@ def _require_canonical_rows_within_requested(
+     requested_window: RequestedWindow,
+ ) -> None:
+     """Validate converted output against admitted facts and the caller's physical window."""
+-    validate_catalogue(rows, CanonicalRowsSchema, on_issue="raise")
++    validate_catalogue(rows, row_schema(CanonicalRowsSchema, rows), on_issue="raise")
+     validate_series_rows(rows, series)
+     facts = {fact.facts_id: fact for definition in series for fact in definition.facts}
+     for row in rows.iter_rows(named=True):
+@@ -482,7 +483,12 @@ def _merge_definitions(definitions: dict[str, SourceSeries], additions: tuple[So
+             if fact.facts_id in facts and facts[fact.facts_id] != fact:
+                 raise FatalContractError("A physical-facts identifier changed its meaning")
+             facts[fact.facts_id] = fact
+-        definitions[item.series_id] = item.model_copy(update={"facts": tuple(facts.values())})
++        definitions[item.series_id] = item.model_copy(
++            update={
++                "facts": tuple(facts.values()),
++                "annotation_fields": merge_fields(previous.annotation_fields, item.annotation_fields),
++            }
++        )
+ 
+ 
+ def _validate_parsed_series(parsed: ParsedSeries) -> None:
+@@ -2886,7 +2892,7 @@ def drive(
+     pending = _authorize_fact_retirement(
+         pending, tuple(retirement_definitions.values()), fresh_inventories, fresh_outcomes
+     )
+-    combined = pl.concat(rows)
++    combined = pl.concat(align_annotations([frame for frame in rows if frame.height] or rows[-1:]))
+     # A rolling publication establishes only its explicit observation keys.
+     # Preserve older snapshot rows absent from the new publication, without
+     # presenting their dates as reusable interval coverage.
+diff --git a/src/rivretrieve/_internal/observations.py b/src/rivretrieve/_internal/observations.py
+index 7402b533..4a258329 100644
+--- a/src/rivretrieve/_internal/observations.py
++++ b/src/rivretrieve/_internal/observations.py
+@@ -25,6 +25,7 @@ from rivretrieve._internal.issues import (
+     ObservationDataSchemaError,
+ )
+ from rivretrieve._internal.primitives import ProviderId
++from rivretrieve._internal.source_annotations import row_schema, validate_annotations
+ from rivretrieve._internal.source_series import (
+     InventorySnapshot,
+     RetrievalOutcome,
+@@ -347,6 +348,7 @@ class ObservationResult(BaseModel):
+ 
+     @model_validator(mode="after")
+     def _validate_series_context(self) -> Self:
++        validate_annotations(self.data, self.source_series)
+         definitions = {item.series_id: item for item in self.source_series}
+         if len(definitions) != len(self.source_series):
+             raise ObservationDataSchemaError("Result contains duplicate source-series identities")
+@@ -436,7 +438,7 @@ def validate_observation_data(data: object) -> None:
+ 
+     expected = {column.name for column in ObservationDataSchema.columns}
+     actual = set(data.columns)
+-    extra = actual - expected
++    extra = actual - expected - {"occurrence_id", "source_annotations"}
+     if extra:
+         raise ObservationDataSchemaError(f"{ObservationDataSchema.name} has extra columns: {sorted(extra)}")
+ 
+@@ -455,7 +457,7 @@ def validate_observation_data(data: object) -> None:
+             )
+ 
+     try:
+-        validate_catalogue(data, validation_schema, on_issue="raise")
++        validate_catalogue(data, row_schema(validation_schema, data), on_issue="raise")
+     except FatalContractError as exc:
+         raise ObservationDataSchemaError(str(exc)) from exc
+ 
+diff --git a/src/rivretrieve/_internal/source_annotations.py b/src/rivretrieve/_internal/source_annotations.py
+new file mode 100644
+index 00000000..14bfed0d
+--- /dev/null
++++ b/src/rivretrieve/_internal/source_annotations.py
+@@ -0,0 +1,133 @@
++"""Typed publisher field declarations and row-local annotation contracts."""
++
++from typing import Literal
++
++import polars as pl
++from pydantic import BaseModel, ConfigDict
++
++from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueSchema
++from rivretrieve._internal.issues import FatalContractError
++
++
++class AnnotationField(BaseModel):
++    model_config = ConfigDict(frozen=True, extra="forbid")
++    source_name: str
++    native_type: Literal["string", "integer", "string_or_list"]
++    meaning: str | None = None
++    reference: str | None = None
++
++
++def native_dtype(kind):
++    return {
++        "string": pl.String,
++        "integer": pl.Int64,
++        "string_or_list": pl.Struct({"kind": pl.String, "string": pl.String, "strings": pl.List(pl.String)}),
++    }[kind]
++
++
++def annotation_dtype(fields):
++    return pl.Struct(
++        {
++            field.source_name: pl.Struct({"present": pl.Boolean, "value": native_dtype(field.native_type)})
++            for field in fields
++        }
++    )
++
++
++def merge_fields(held, additions):
++    fields = {field.source_name: field for field in held}
++    for field in additions:
++        if field.source_name in fields and fields[field.source_name] != field:
++            raise FatalContractError("Annotation field definition changed")
++        fields[field.source_name] = field
++    return tuple(fields.values())
++
++
++def row_schema(base, rows):
++    # Names alone permit schema inspection; validate_annotations checks declarations.
++    extra = []
++    for name in ("occurrence_id", "source_annotations"):
++        if name in rows.columns:
++            extra.append(CatalogueColumn(name, rows.schema[name]))
++    return CatalogueSchema(base.name, base.columns + tuple(extra), base.unique_keys, base.enum_values)
++
++
++def validate_annotations(rows, series):
++    declarations = {item.series_id: item.annotation_fields for item in series}
++    fields = [fields for fields in declarations.values() if fields]
++    has_columns = bool({"occurrence_id", "source_annotations"} & set(rows.columns))
++    if not fields and not has_columns:
++        return
++    if {"occurrence_id", "source_annotations"} - set(rows.columns):
++        raise FatalContractError("Declared annotations require occurrence and annotation columns")
++    if (
++        rows.schema["occurrence_id"] != pl.String
++        or rows["occurrence_id"].null_count()
++        or rows["occurrence_id"].n_unique() != rows.height
++    ):
++        raise FatalContractError("Annotation occurrence identifiers must be unique non-null strings")
++    if not fields:
++        raise FatalContractError("Annotation dtype does not match field declarations")
++    actual = {field.name: field.dtype for field in rows.schema["source_annotations"].fields}
++    required = [declarations[sid] for sid in rows["series_id"].unique() if sid in declarations]
++    for declaration in required:
++        for field in annotation_dtype(declaration).fields:
++            if actual.get(field.name) != field.dtype:
++                raise FatalContractError("Annotation dtype does not match field declarations")
++    for row in rows.iter_rows(named=True):
++        if row["series_id"] not in declarations:
++            raise FatalContractError("Annotation row references an unknown source series")
++        if not declarations[row["series_id"]] or row["source_annotations"] is None:
++            raise FatalContractError("Annotation row lacks declared source fields")
++        declared = {field.source_name: field for field in declarations[row["series_id"]]}
++        for name, cell in row["source_annotations"].items():
++            if name not in declared:
++                if cell is not None:
++                    raise FatalContractError("Undeclared source field has a value")
++                continue
++            if cell is None or cell["present"] is None or (not cell["present"] and cell["value"] is not None):
++                raise FatalContractError("Annotation field presence is invalid")
++            value = cell["value"]
++            if declared[name].native_type == "string_or_list" and value is not None:
++                scalar = value["kind"] == "string" and value["string"] is not None and value["strings"] is None
++                array = (
++                    value["kind"] == "list"
++                    and value["string"] is None
++                    and value["strings"] is not None
++                    and all(item is not None for item in value["strings"])
++                )
++                if not (scalar or array):
++                    raise FatalContractError("Annotation scalar/list tag contradicts its native value")
++
++
++def align_annotations(frames):
++    """Align only declared typed struct fields; never relax native value dtypes."""
++    fields = {}
++    for frame in frames:
++        if "source_annotations" in frame.columns:
++            for field in frame.schema["source_annotations"].fields:
++                if field.name in fields and fields[field.name] != field.dtype:
++                    raise FatalContractError("Conflicting annotation field dtypes")
++                fields[field.name] = field.dtype
++    if not fields:
++        return frames
++    output = []
++    for frame in frames:
++        if "source_annotations" not in frame.columns:
++            if frame.height:
++                raise FatalContractError("Mixed annotated and undeclared rows need explicit occurrence identities")
++            continue
++        present = {field.name for field in frame.schema["source_annotations"].fields}
++        output.append(
++            frame.with_columns(
++                pl.struct(
++                    [
++                        pl.col("source_annotations").struct.field(name)
++                        if name in present
++                        else pl.lit(None, dtype=dtype).alias(name)
++                        for name, dtype in fields.items()
++                    ]
++                ).alias("source_annotations")
++            )
++        )
++    return output
+diff --git a/src/rivretrieve/_internal/source_series.py b/src/rivretrieve/_internal/source_series.py
+index c946dda0..bcdc4b22 100644
+--- a/src/rivretrieve/_internal/source_series.py
++++ b/src/rivretrieve/_internal/source_series.py
+@@ -19,6 +19,7 @@ import polars as pl
+ from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
+ 
+ from rivretrieve._internal.issues import FatalContractError, Issue
++from rivretrieve._internal.source_annotations import AnnotationField, validate_annotations
+ from rivretrieve._internal.time_axis import TimeAxis
+ 
+ 
+@@ -287,6 +288,7 @@ class SourceSeries(BaseModel):
+     identity: SourceIdentity
+     variant: str | None = None
+     facts: tuple[PhysicalFacts, ...]
++    annotation_fields: tuple[AnnotationField, ...] = ()
+ 
+     @model_validator(mode="after")
+     def check(self) -> SourceSeries:
+@@ -589,6 +591,7 @@ class ParsedSeries:
+ 
+ 
+ def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -> None:
++    validate_annotations(rows, series)
+     definitions = {item.series_id: item for item in series}
+     if len(definitions) != len(series):
+         raise FatalContractError("Duplicate concrete series definitions")
+diff --git a/src/rivretrieve/_internal/store/accumulation.py b/src/rivretrieve/_internal/store/accumulation.py
+index e6335252..64fc6bda 100644
+--- a/src/rivretrieve/_internal/store/accumulation.py
++++ b/src/rivretrieve/_internal/store/accumulation.py
+@@ -13,6 +13,7 @@ from rivretrieve._internal.coverage import CoverageInterval, remainder
+ from rivretrieve._internal.issues import FatalContractError, Issue
+ from rivretrieve._internal.primitives import ProviderId
+ from rivretrieve._internal.publication_identity import publication_identity_fields
++from rivretrieve._internal.source_annotations import align_annotations, merge_fields
+ from rivretrieve._internal.source_series import (
+     InventorySnapshot,
+     OutcomeStatus,
+@@ -98,7 +99,12 @@ def _merge_series(held: tuple[SourceSeries, ...], additions: tuple[SourceSeries,
+             if fact.facts_id in facts and fact != facts[fact.facts_id]:
+                 raise FatalContractError("Store update reinterprets existing physical facts")
+             facts[fact.facts_id] = fact
+-        definitions[item.series_id] = item.model_copy(update={"facts": tuple(facts.values())})
++        definitions[item.series_id] = item.model_copy(
++            update={
++                "facts": tuple(facts.values()),
++                "annotation_fields": merge_fields(previous.annotation_fields, item.annotation_fields),
++            }
++        )
+     return tuple(definitions.values())
+ 
+ 
+@@ -360,6 +366,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
+                     "series_id",
+                     "facts_id",
+                     "source_unit",
++                    *[name for name in ("occurrence_id", "source_annotations") if name in rows.columns],
+                 )
+                 if existing_rows is not None:
+                     if outcome_by_id[coverage.outcome_id].coverage == "observations":
+@@ -378,7 +385,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
+                                 )
+                             )
+                         )
+-                    additions = pl.concat([retained_rows, additions])
++                    additions = pl.concat(align_annotations([retained_rows, additions]))
+                 existing_rows = additions
+             assert existing_rows is not None
+             if existing_rows.is_empty():
+@@ -405,7 +412,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
+             new_inventory_ids=frozenset(item.snapshot_id for item in update.inventories),
+         )
+         manifest = {
+-            "format_version": 8,
++            "format_version": 108,
+             "provider_id": str(provider_id),
+             "built_at": datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z"),
+             "coverage": [_coverage_json(item) for item in held],
+diff --git a/src/rivretrieve/_internal/store/manifest.schema.json b/src/rivretrieve/_internal/store/manifest.schema.json
+index 4ab3980a..62c30019 100644
+--- a/src/rivretrieve/_internal/store/manifest.schema.json
++++ b/src/rivretrieve/_internal/store/manifest.schema.json
+@@ -305,7 +305,7 @@
+       ],
+       "properties": {
+         "format_version": {
+-          "const": 8
++          "const": 108
+         },
+         "provider_id": {
+           "type": "string",
+diff --git a/src/rivretrieve/_internal/store/reader.py b/src/rivretrieve/_internal/store/reader.py
+index 6c32debb..a7a42777 100644
+--- a/src/rivretrieve/_internal/store/reader.py
++++ b/src/rivretrieve/_internal/store/reader.py
+@@ -435,6 +435,12 @@ def _empty_physical_rows(store: StoreRoot, manifest: StoreManifest | Accumulated
+                     f"source_schema.native_type:{item.source_column}",
+                 )
+             schema[item.source_column] = native_type
++    from rivretrieve._internal.source_annotations import annotation_dtype
++
++    fields = [item.annotation_fields for item in manifest.series if item.annotation_fields]
++    if fields:
++        schema["occurrence_id"] = pl.String
++        schema["source_annotations"] = annotation_dtype(fields[0])
+     schema["product"] = pl.String
+     schema["year"] = pl.Int64
+     return pl.DataFrame(schema=schema)
+@@ -536,7 +542,7 @@ def _scan(paths: tuple[Path, ...], executed: ExecutedStoreQuery) -> tuple[pl.Dat
+ 
+ 
+ def _engine_rows(physical_rows: pl.DataFrame) -> Rows:
+-    if physical_rows.is_empty():
++    if physical_rows.is_empty() and "source_annotations" not in physical_rows.columns:
+         return pl.DataFrame(schema=RowsSchema.polars_schema)
+     return physical_rows.select(
+         "station_id",
+@@ -547,4 +553,5 @@ def _engine_rows(physical_rows: pl.DataFrame) -> Rows:
+         "series_id",
+         "facts_id",
+         "source_unit",
++        *[name for name in ("occurrence_id", "source_annotations") if name in physical_rows.columns],
+     )
+diff --git a/src/rivretrieve/_internal/store/validation.py b/src/rivretrieve/_internal/store/validation.py
+index 02d9d05a..8e364a1c 100644
+--- a/src/rivretrieve/_internal/store/validation.py
++++ b/src/rivretrieve/_internal/store/validation.py
+@@ -146,7 +146,7 @@ class AccumulatedStoreManifest:
+         Exact physical row counts keyed by product/year.
+     """
+ 
+-    format_version: Literal[8]
++    format_version: Literal[108]
+     provider_id: ProviderId
+     built_at: datetime
+     coverage: tuple[CoverageInterval, ...]
+@@ -304,7 +304,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
+     version = raw["format_version"]
+     if type(version) is not int:
+         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "manifest.type:format_version")
+-    if version not in (5, 8):
++    if version not in (5, 108):
+         _refuse(
+             StoreRefusalKind.INCOMPATIBLE,
+             store,
+@@ -312,7 +312,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
+             f"unsupported format revision {version!r}",
+         )
+     if (
+-        version == 8
++        version == 108
+         and isinstance(raw.get("source_calls"), list)
+         and any(
+             isinstance(call, dict) and "call_id" in call and field not in call
+@@ -349,7 +349,7 @@ def _schema_error_path(error: Any, raw: dict[str, Any]) -> str:
+ def _validate_manifest_schema(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> None:
+     schema_resource = resources.files(__package__).joinpath("manifest.schema.json")
+     schema = json.loads(schema_resource.read_text(encoding="utf-8"))
+-    if raw["format_version"] == 8:
++    if raw["format_version"] == 108:
+         schema = schema["$defs"]["accumulated"]
+     Draft202012Validator.check_schema(schema)
+     validator = Draft202012Validator(schema, format_checker=FormatChecker())
+@@ -494,6 +494,7 @@ def _validate_partition(
+     provider_id: ProviderId,
+     *,
+     allowed_null_states: tuple[str, ...] = ("published_null", "published_blank"),
++    annotation_columns: tuple[str, ...] = (),
+ ) -> None:
+     try:
+         parquet = _open_parquet(path)
+@@ -525,7 +526,7 @@ def _validate_partition(
+     if not names_are_valid or not types_are_valid:
+         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"partition.schema:{identifier}")
+     native_columns = tuple(column for column in retained_columns if column not in _REQUIRED_FIELD_NAMES)
+-    expected_names = (*_REQUIRED_FIELD_NAMES, *native_columns)
++    expected_names = (*_REQUIRED_FIELD_NAMES, *native_columns, *annotation_columns)
+     source_types = {column["name"]: column["type"] for column in source_columns}
+     type_checks = {
+         "text": _is_utf8_string,
+@@ -674,7 +675,7 @@ def _validate_contents(
+     if raw["provider_id"] != str(provider_id):
+         _refuse(StoreRefusalKind.INCOMPATIBLE, store, provider_id, f"manifest.provider_id:{raw['provider_id']!r}")
+     _validate_metadata(raw, store, provider_id)
+-    if raw["format_version"] == 8:
++    if raw["format_version"] == 108:
+         return _validate_accumulated(raw, store, provider_id, checked_partitions)
+     _validate_source_contract(raw, store, provider_id)
+     partition_files = _discover_partitions(raw, store, provider_id)
+@@ -774,6 +775,9 @@ def _validate_accumulated(
+             store,
+             provider_id,
+             allowed_null_states=("published_null",),
++            annotation_columns=("occurrence_id", "source_annotations")
++            if any(item.annotation_fields for item in _metadata(raw)["series"])
++            else (),
+         )
+         for batch in _open_parquet(path).iter_batches(columns=["series_id", "facts_id", "time", "time_zone"]):
+             for series_id, facts_id, timestamp, time_zone in zip(
+@@ -794,9 +798,15 @@ def _validate_accumulated(
+                     and (series_id, facts_id, timestamp, time_zone) not in observed_keys
+                 ):
+                     _refuse(StoreRefusalKind.MALFORMED, store, provider_id, f"coverage.row:{identifier}")
++    import polars as pl
++
++    from rivretrieve._internal.source_annotations import validate_annotations
++
++    for path in checked_files.values():
++        validate_annotations(pl.read_parquet(path), tuple(_metadata(raw)["series"]))
+     _validate_series_partitions(raw, checked_files, store, provider_id)
+     manifest = AccumulatedStoreManifest(
+-        format_version=8,
++        format_version=108,
+         provider_id=provider_id,
+         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
+         coverage=tuple(coverage),
+diff --git a/tests/test_annotation_columns_experiment.py b/tests/test_annotation_columns_experiment.py
+new file mode 100644
+index 00000000..e97b30a2
+--- /dev/null
++++ b/tests/test_annotation_columns_experiment.py
+@@ -0,0 +1,152 @@
++"""Synthetic real-driver experiment. Not publisher evidence."""
++
++from dataclasses import replace
++
++import polars as pl
++import polars.testing as pt
++import pytest
++
++from rivretrieve._internal.issues import FatalContractError
++from rivretrieve._internal.source_annotations import AnnotationField
++from tests.test_independent_fact_cache import _fetch, _saved, fact_cache
++
++annotation_cache = fact_cache
++
++
++def attach(stages):
++    stages.definition = stages.definition.model_copy(
++        update={"annotation_fields": (AnnotationField(source_name="flag", native_type="string"),)}
++    )
++    parse = stages.parse
++
++    def annotated(payload, config):
++        parsed = parse(payload, config)
++        rows = pl.concat([parsed.rows, parsed.rows])
++        rows = rows.with_columns(
++            pl.Series(
++                "occurrence_id",
++                [payload.acquisition_id + ":0", payload.acquisition_id + ":1"][: rows.height],
++                dtype=pl.String,
++            ),
++            pl.Series(
++                "source_annotations",
++                [{"flag": {"present": True, "value": "one"}}, {"flag": {"present": True, "value": None}}][
++                    : rows.height
++                ],
++                dtype=pl.Struct({"flag": pl.Struct({"present": pl.Boolean, "value": pl.String})}),
++            ),
++        )
++        return replace(parsed, rows=rows)
++
++    stages.parse = annotated
++
++
++def test_real_driver_retains_annotation_columns_without_receipts(annotation_cache):
++    stages, selection, root = annotation_cache
++    attach(stages)
++    fresh = _fetch(selection)
++    expected = [
++        ("1-max:0", "max", "one"),
++        ("1-max:1", "max", None),
++        ("1-mean:0", "mean", "one"),
++        ("1-mean:1", "mean", None),
++    ]
++
++    def values(frame):
++        return (
++            frame.unnest("source_annotations")
++            .with_columns(pl.col("flag").struct.field("value").alias("flag"))
++            .select("occurrence_id", "facts_id", "flag")
++            .sort("occurrence_id")
++            .rows()
++        )
++
++    assert values(fresh.data) == expected
++    assert values(_saved(root)) == expected
++    stages.forbid_fetch = True
++    reused = _fetch(selection, cache="reuse")
++    pt.assert_frame_equal(reused.data.sort("occurrence_id"), fresh.data.sort("occurrence_id"))
++    assert values(reused.data) == expected
++    assert len(stages.calls) == 1
++    assert fresh.receipts.entries == reused.receipts.entries == ()
++    assert reused.source_series[0].annotation_fields == fresh.source_series[0].annotation_fields
++    assert [(out.outcome_id, out.retrieved_at, out.calls) for out in reused.outcomes] == [
++        (out.outcome_id, out.retrieved_at, out.calls) for out in fresh.outcomes
++    ]
++
++
++def test_declarations_survive_empty_success_and_reuse(annotation_cache):
++    from rivretrieve._internal.source_series import OutcomeStatus
++
++    stages, selection, root = annotation_cache
++    attach(stages)
++    stages.status = {"mean": OutcomeStatus.EMPTY, "max": OutcomeStatus.EMPTY}
++    fresh = _fetch(selection)
++    stages.forbid_fetch = True
++    reused = _fetch(selection, cache="reuse")
++    assert fresh.data.is_empty() and reused.data.is_empty()
++    assert reused.source_series[0].annotation_fields == (AnnotationField(source_name="flag", native_type="string"),)
++
++
++def test_declared_fields_require_carrier_even_with_ignore_policy(annotation_cache):
++    stages, selection, root = annotation_cache
++    stages.definition = stages.definition.model_copy(
++        update={"annotation_fields": (AnnotationField(source_name="flag", native_type="string"),)}
++    )
++    with pytest.raises(FatalContractError, match="require occurrence"):
++        _fetch(selection)
++
++
++def test_annotation_declaration_is_not_series_identity():
++    from rivretrieve._internal.driver import _merge_definitions
++    from tests.test_fetch import _test_definition
++
++    base = _test_definition("synthetic", "one", "level")
++    field = AnnotationField(source_name="flag", native_type="string", meaning="synthetic meaning")
++    annotated = base.model_copy(update={"annotation_fields": (field,)})
++    definitions = {base.series_id: base}
++    _merge_definitions(definitions, (annotated,))
++    sibling = _test_definition("synthetic", "two", "level").model_copy(update={"annotation_fields": (field,)})
++    _merge_definitions(definitions, (sibling,))
++    assert len(definitions) == 2
++    assert definitions[base.series_id].identity == base.identity
++    assert definitions[base.series_id].annotation_fields == (field,)
++    changed = annotated.model_copy(update={"annotation_fields": (field.model_copy(update={"meaning": "different"}),)})
++    with pytest.raises(FatalContractError, match="definition changed"):
++        _merge_definitions(definitions, (changed,))
++
++
++def test_partition_merge_enriches_declarations_without_changing_identity(annotation_cache):
++    from rivretrieve._internal.discovery import _merge_series_definitions
++
++    stages, selection, _ = annotation_cache
++    attach(stages)
++    result = _fetch(selection)
++    definition = result.source_series[0]
++    # Equal row schemas; one partition knows an explanation, another does not
++    # yet declare fields. Only the metadata merger is under test here.
++    earlier = result.model_copy(update={"source_series": (definition.model_copy(update={"annotation_fields": ()}),)})
++    merged = _merge_series_definitions((earlier, result))
++    assert merged == result.source_series
++    assert _merge_series_definitions((result, earlier)) == result.source_series
++    contradiction = definition.model_copy(
++        update={"annotation_fields": (AnnotationField(source_name="flag", native_type="integer"),)}
++    )
++    with pytest.raises(FatalContractError, match="definition changed"):
++        _merge_series_definitions((result, result.model_copy(update={"source_series": (contradiction,)})))
++
++
++@pytest.mark.parametrize("boundary", ["native", "public"])
++def test_unknown_annotated_series_is_fatal_contract_error(annotation_cache, boundary):
++    from rivretrieve._internal.observations import ObservationResult
++    from rivretrieve._internal.source_series import validate_series_rows
++
++    stages, selection, _ = annotation_cache
++    attach(stages)
++    result = _fetch(selection)
++    rows = result.data.with_columns(pl.lit("unknown-series").alias("series_id"))
++    with pytest.raises(FatalContractError, match="unknown source series"):
++        if boundary == "native":
++            validate_series_rows(rows, result.source_series)
++        else:
++            ObservationResult(**{**result.model_dump(), "data": rows})
+diff --git a/tests/test_annotation_shapes_experiment.py b/tests/test_annotation_shapes_experiment.py
+new file mode 100644
+index 00000000..960c8ca2
+--- /dev/null
++++ b/tests/test_annotation_shapes_experiment.py
+@@ -0,0 +1,155 @@
++"""Provider-shaped synthetic controls, not observations from those providers."""
++
++from dataclasses import replace
++
++import polars as pl
++import polars.testing as pt
++import pytest
++
++from rivretrieve._internal.source_annotations import AnnotationField
++from tests.test_independent_fact_cache import _fetch, _saved, fact_cache
++
++annotation_cache = fact_cache
++
++USGS_FIELDS = (
++    AnnotationField(source_name="approval_status", native_type="string"),
++    AnnotationField(source_name="qualifier", native_type="string_or_list"),
++)
++NVE_FIELDS = (
++    AnnotationField(source_name="quality", native_type="integer"),
++    AnnotationField(source_name="correction", native_type="integer"),
++)
++VARIANT = pl.Struct({"kind": pl.String, "string": pl.String, "strings": pl.List(pl.String)})
++USGS_TYPE = pl.Struct(
++    {
++        "approval_status": pl.Struct({"present": pl.Boolean, "value": pl.String}),
++        "qualifier": pl.Struct({"present": pl.Boolean, "value": VARIANT}),
++    }
++)
++NVE_TYPE = pl.Struct(
++    {name: pl.Struct({"present": pl.Boolean, "value": pl.Int64}) for name in ("quality", "correction")}
++)
++
++
++def typed_stages(stages):
++    parse = stages.parse
++
++    def annotated(payload, config):
++        parsed = parse(payload, config)
++        is_usgs = payload.content == b"mean"
++        old = parsed.series[0]
++        sid = old.series_id + (":strings" if is_usgs else ":integers")
++        cells = (
++            [
++                {
++                    "approval_status": {"present": True, "value": "Approved"},
++                    "qualifier": {"present": True, "value": {"kind": "string", "string": "ESTIMATED", "strings": None}},
++                },
++                {
++                    "approval_status": {"present": True, "value": "Approved"},
++                    "qualifier": {"present": True, "value": {"kind": "list", "string": None, "strings": ["ESTIMATED"]}},
++                },
++                {"approval_status": {"present": False, "value": None}, "qualifier": {"present": True, "value": None}},
++                {"approval_status": {"present": True, "value": None}, "qualifier": {"present": False, "value": None}},
++            ]
++            if is_usgs
++            else [
++                {"quality": {"present": True, "value": 2}, "correction": {"present": True, "value": 0}},
++                {"quality": {"present": True, "value": 1}, "correction": {"present": True, "value": 3}},
++            ]
++        )
++        rows = pl.concat([parsed.rows] * len(cells)).with_columns(
++            pl.lit(sid).alias("series_id"),
++            pl.Series("value", [10.0, 10.0, None, 12.0] if is_usgs else [20.0, 21.0]),
++            pl.Series("occurrence_id", [payload.acquisition_id + f":{i}" for i in range(len(cells))]),
++            pl.Series("source_annotations", cells, dtype=USGS_TYPE if is_usgs else NVE_TYPE),
++        )
++        outcomes = tuple(outcome.model_copy(update={"series_id": sid}) for outcome in parsed.outcomes)
++        inventories = tuple(
++            item.model_copy(
++                update={
++                    "members": (old.series_id + ":strings", old.series_id + ":integers"),
++                    "member_facts": ((old.series_id + ":strings", ("mean",)), (old.series_id + ":integers", ("max",))),
++                }
++            )
++            for item in parsed.inventories
++        )
++        return replace(
++            parsed,
++            rows=rows,
++            series=tuple(
++                old.model_copy(update={"series_id": old.series_id + suffix, "annotation_fields": fields})
++                for suffix, fields in ((":strings", USGS_FIELDS), (":integers", NVE_FIELDS))
++            ),
++            outcomes=outcomes,
++            inventories=inventories,
++        )
++
++    stages.parse = annotated
++
++
++def test_distinct_typed_series_keep_association_on_real_reuse(annotation_cache):
++    stages, selection, root = annotation_cache
++    typed_stages(stages)
++    fresh = _fetch(selection)
++    # Independent complete coordinate oracle, not a value multiset.
++    from tests.test_independent_fact_cache import ROW_TIME
++
++    base = stages.definition.series_id
++    assert fresh.data.select("occurrence_id", "series_id", "facts_id", "time", "value").sort(
++        "occurrence_id"
++    ).rows() == [
++        ("1-max:0", base + ":integers", "max", ROW_TIME, 20.0),
++        ("1-max:1", base + ":integers", "max", ROW_TIME, 21.0),
++        ("1-mean:0", base + ":strings", "mean", ROW_TIME, 10.0),
++        ("1-mean:1", base + ":strings", "mean", ROW_TIME, 10.0),
++        ("1-mean:2", base + ":strings", "mean", ROW_TIME, None),
++        ("1-mean:3", base + ":strings", "mean", ROW_TIME, 12.0),
++    ]
++    cells = fresh.data.sort("occurrence_id")["source_annotations"].to_list()
++    assert cells[0]["quality"] == {"present": True, "value": 2}
++    assert cells[0]["qualifier"] is None  # undeclared for this series, not an absent source field
++    assert cells[2]["qualifier"]["value"] == {"kind": "string", "string": "ESTIMATED", "strings": None}
++    assert cells[3]["qualifier"]["value"] == {"kind": "list", "string": None, "strings": ["ESTIMATED"]}
++    assert cells[4]["qualifier"] == {"present": True, "value": None}
++    assert cells[5]["qualifier"] == {"present": False, "value": None}
++    stages.forbid_fetch = True
++    reused = _fetch(selection, cache="reuse")
++    pt.assert_frame_equal(fresh.data.sort("occurrence_id"), reused.data.sort("occurrence_id"))
++    pt.assert_series_equal(
++        _saved(root).sort("occurrence_id")["source_annotations"], fresh.data.sort("occurrence_id")["source_annotations"]
++    )
++
++
++def test_same_name_incompatible_native_types_refused():
++    from rivretrieve._internal.issues import FatalContractError
++    from rivretrieve._internal.source_annotations import align_annotations
++
++    frames = [pl.DataFrame({"source_annotations": [{"code": {"present": True, "value": value}}]}) for value in (2, "2")]
++    with pytest.raises(FatalContractError, match="Conflicting annotation field dtypes"):
++        align_annotations(frames)
++
++
++def test_false_presence_and_inconsistent_scalar_list_tags_are_refused():
++    from rivretrieve._internal.issues import FatalContractError
++    from rivretrieve._internal.source_annotations import validate_annotations
++    from tests.test_fetch import _test_definition
++
++    definition = _test_definition("synthetic", "one", "level").model_copy(update={"annotation_fields": USGS_FIELDS})
++    for qualifier in (
++        {"present": False, "value": {"kind": "string", "string": "x", "strings": None}},
++        {"present": True, "value": {"kind": "string", "string": "x", "strings": ["x"]}},
++        {"present": True, "value": {"kind": "list", "string": None, "strings": None}},
++    ):
++        frame = pl.DataFrame(
++            {
++                "series_id": [definition.series_id],
++                "occurrence_id": ["a"],
++                "source_annotations": [
++                    {"approval_status": {"present": True, "value": "Approved"}, "qualifier": qualifier}
++                ],
++            },
++            schema_overrides={"source_annotations": USGS_TYPE},
++        )
++        with pytest.raises(FatalContractError):
++            validate_annotations(frame, (definition,))

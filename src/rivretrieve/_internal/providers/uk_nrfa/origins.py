@@ -110,6 +110,57 @@ _RECORDINGS = (
     ),
 )
 _INPUT_ROOT = "maintenance/catalogue/uk_nrfa/inputs/"
+_SERIES_IDENTITY_ROOT = "maintenance/catalogue/uk_nrfa/series-identity/"
+_SERIES_IDENTITY_RECORDINGS = (
+    (
+        "capture-03/annual-maximum.html",
+        "https://nrfa.ceh.ac.uk/data/about-data/peak-flow-data/data-types/annual-maximum",
+        "2026-11-16T10:24:47.139391+00:00",
+        "e2ed4c1a279a79565a58645605890a78fdd03eeaf7076d3daec7afb792451300",
+    ),
+    (
+        "capture-03/ratings-datums.html",
+        "https://nrfa.ceh.ac.uk/data/about-data/peak-flow-data/data-types/ratings-datums",
+        "2026-11-16T10:24:47.484847+00:00",
+        "a12a89f004757cef780f1b50190fc7d4a03437d4e1d4779ab8b704d6cfe8a6d7",
+    ),
+    (
+        "capture-04/derived-data-series.html",
+        "https://nrfa.ceh.ac.uk/data/about-data/daily-flow-data/derived-data-series",
+        "2026-11-16T10:57:13.635613+00:00",
+        "19521732e88e1979347b9c7fe4523bda75782c91232f5965ea8f82f3daa70c64",
+    ),
+    (
+        "capture-04/gauged-daily-flow-data.html",
+        "https://nrfa.ceh.ac.uk/data/about-data/daily-flow-data/gauged-daily-flow-data",
+        "2026-11-16T10:57:13.015196+00:00",
+        "57560d2ad800f9ea31d99ea7e1c3041efd1312bb0d2f4fdbd825c247c0a2848c",
+    ),
+    (
+        "capture-04/hydrometric-information.html",
+        "https://nrfa.ceh.ac.uk/data/about-data/gauging-station-information/hydrometric-information",
+        "2026-11-16T10:57:12.428213+00:00",
+        "858b4271bb74139d0127e27b1adef4302fe8a23db7e0311cd3e13e30e88d19a2",
+    ),
+    (
+        "capture-04/naturalised-flow-series.html",
+        "https://nrfa.ceh.ac.uk/data/about-data/daily-flow-data/naturalised-flow-series",
+        "2026-11-16T10:57:13.348444+00:00",
+        "b97df8b3567604e4ce81912535659d14e0a455678ca2fd4bbe7d75bd0d372420",
+    ),
+    (
+        "capture-04/nrfa-glossary.html",
+        "https://nrfa.ceh.ac.uk/help/nrfa-glossary",
+        "2026-11-16T10:57:12.718983+00:00",
+        "6b0284f47ed1f6921a9d025102db625423ff03fbb61ca439d8ce6a8aae59f56f",
+    ),
+    (
+        "capture-04/peaks-over-threshold-pot.html",
+        "https://nrfa.ceh.ac.uk/data/about-data/peak-flow-data/data-types/peaks-over-threshold-pot",
+        "2026-11-16T10:57:12.098209+00:00",
+        "6b782276adaeaf4acc18cd03a1e5012ef8dfdfb392c24f33e1250e11823e665b",
+    ),
+)
 NATIVE_TABLE_REPOSITORY_PATH = "src/rivretrieve/_internal/providers/uk_nrfa/catalogue/native.parquet"
 NATIVE_TABLE_REVISION = "10ba4ec8b4a31685b394c9e1e8eb66529616dd06"
 NATIVE_TABLE_SHA256 = "a7b1ad5f9bfd61d83ba34670522e1e9bea387a485e8e8a4817034946232fa017"
@@ -120,13 +171,14 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
     recordings = tuple(
         RecordingReference(
             recording_id=filename,
-            repository_path=_INPUT_ROOT + filename,
+            repository_path=root + filename,
             source_url=url,
             retrieved_at=datetime.fromisoformat(instant),
             media_type="application/json" if filename.endswith(".json") else "text/html",
             sha256=digest,
         )
-        for filename, url, instant, digest in _RECORDINGS
+        for root, group in ((_INPUT_ROOT, _RECORDINGS), (_SERIES_IDENTITY_ROOT, _SERIES_IDENTITY_RECORDINGS))
+        for filename, url, instant, digest in group
     )
     acquisitions = tuple(
         AcquisitionRecord(
@@ -162,6 +214,14 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
         "hydrometric-areas.html": ("source.station.uk_numbering",),
         "api-terms.html": ("source.provider.terms", "source.provider.attribution"),
         "crs-clarification": ("source.station.documented_crs",),
+        "capture-04/gauged-daily-flow-data.html": ("source.product.daily_flow_semantics",),
+        "capture-04/naturalised-flow-series.html": ("source.product.naturalised_flow_semantics",),
+        "capture-04/derived-data-series.html": ("source.product.monthly_flow_semantics",),
+        "capture-03/annual-maximum.html": ("source.product.amax_semantics",),
+        "capture-04/peaks-over-threshold-pot.html": ("source.product.pot_semantics",),
+        "capture-04/hydrometric-information.html": ("source.product.stage_gauge_reference",),
+        "capture-03/ratings-datums.html": ("source.product.peak_stage_datums",),
+        "capture-04/nrfa-glossary.html": ("source.product.stage_and_gauging_terms",),
     }
     bindings = tuple(
         FactBinding(fact_group=acquisition, facts=facts, source_id="uk_nrfa", acquisition_id=acquisition)
@@ -206,7 +266,17 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
     )
     support = {
         "station": ("source.station.native_metadata", "source.station.uk_inventory", "source.station.documented_crs"),
-        "product": ("source.product.quantity_units",),
+        "product": (
+            "source.product.quantity_units",
+            "source.product.daily_flow_semantics",
+            "source.product.naturalised_flow_semantics",
+            "source.product.monthly_flow_semantics",
+            "source.product.amax_semantics",
+            "source.product.pot_semantics",
+            "source.product.stage_gauge_reference",
+            "source.product.peak_stage_datums",
+            "source.product.stage_and_gauging_terms",
+        ),
         "station_product": ("source.station_product.advertised_associations",),
         "provider": ("source.provider.terms", "source.provider.attribution", "source.station.uk_inventory"),
     }
@@ -235,5 +305,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/uk_nrfa/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/uk_nrfa/generate_catalogue.py", "build_catalogue"),
     ("src/rivretrieve/_internal/providers/uk_nrfa/generate_catalogue.py", "prepare_native_table"),
+    ("src/rivretrieve/_internal/providers/uk_nrfa/series.py", "product_facts"),
+    ("src/rivretrieve/_internal/providers/uk_nrfa/series.py", "series_identity"),
     ("src/rivretrieve/_internal/providers/uk_nrfa/catalogue_series.py", "describe_catalogue"),
 )

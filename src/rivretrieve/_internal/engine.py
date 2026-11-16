@@ -163,7 +163,8 @@ class WindowDeclaration:
     ``timestamp_precision`` is an optional positive timedelta defining a tested
     filter grid for exclusive ISO-instant windows. The engine rounds acquisition
     bounds outward to this grid; final observation clipping remains unchanged.
-    Other renderings leave it unset.
+    Other renderings leave it unset. ``year_start_month`` selects the first
+    calendar month of annual date windows; the default is January.
     """
 
     granularity: WindowGranularity
@@ -172,8 +173,15 @@ class WindowDeclaration:
     size: int | None = None
     calendar_labels: CalendarLabelConvention = field(default=CalendarLabelConvention.CALENDAR_DATES, kw_only=True)
     timestamp_precision: timedelta | None = field(default=None, kw_only=True)
+    year_start_month: int = field(default=1, kw_only=True)
 
     def __post_init__(self) -> None:
+        if type(self.year_start_month) is not int or not 1 <= self.year_start_month <= 12:
+            raise ValueError("year start month must be an integer from 1 to 12")
+        if self.year_start_month != 1 and (
+            self.granularity != "year" or self.rendering is not WindowRenderingVocabulary.DATE
+        ):
+            raise ValueError("non-January year start month requires annual date windows")
         if self.timestamp_precision is not None and (
             self.timestamp_precision <= timedelta(0)
             or self.granularity != "iso-instant"

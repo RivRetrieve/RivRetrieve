@@ -18,8 +18,17 @@ from pydantic import ValidationError
 from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema, ZoneValue
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.usgs_nwis.annotations import (
+    USGS_NWIS_CONTINUOUS_SCHEMA,
+    USGS_NWIS_DAILY_SCHEMA,
+)
 from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
 from rivretrieve._internal.providers.usgs_nwis.metadata import NAMESPACE, source_series
+from rivretrieve._internal.source_annotations import (
+    OBSERVATION_STRUCTURAL_SCHEMA,
+    AnnotationBundle,
+    ObservationAnnotationTable,
+)
 from rivretrieve._internal.source_series import (
     OutcomeStatus,
     ParsedSeries,
@@ -100,6 +109,8 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     )
     definitions: dict[str, SourceSeries] = {}
     rows: dict[tuple[str, datetime], dict[str, object]] = {}
+    ann_rows: dict[tuple[str, datetime], dict[str, object]] = {}
+    schema = USGS_NWIS_DAILY_SCHEMA if coordinates.endpoint == "daily" else USGS_NWIS_CONTINUOUS_SCHEMA
     failures: dict[str | None, list[str]] = {}
     known = {item.series_id: item for item in payload.known_series}
     try:
@@ -157,15 +168,22 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             stamp, zone = parse_time_label(properties.get("time"), coordinates.endpoint == "daily")
             number = _value(properties)
             qualifier = properties.get("qualifier")
-            if (
-                qualifier is not None
-                and not isinstance(qualifier, str)
-                and not (isinstance(qualifier, list) and all(isinstance(item, str) for item in qualifier))
-            ):
+            if qualifier is None:
+                norm_qualifier: list[str] | None = None
+            elif isinstance(qualifier, str):
+                norm_qualifier = [qualifier]
+            elif isinstance(qualifier, list) and all(isinstance(item, str) for item in qualifier):
+                norm_qualifier = list(qualifier)
+            else:
                 raise ValueError("Qualifier must be a source string, string array or null")
             approval = properties.get("approval_status")
             if approval is not None and not isinstance(approval, str):
                 raise ValueError("Approval status must be a source string or null")
+            method_category: object = None
+            if coordinates.endpoint != "daily":
+                method_category = properties.get("method_category")
+                if method_category is not None and not isinstance(method_category, str):
+                    raise ValueError("Method category must be a source string or null")
             row: dict[str, object] = {
                 "station_id": station,
                 "product_id": product,
@@ -176,11 +194,25 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                 "facts_id": current_facts.facts_id,
                 "source_unit": current_facts.source_unit.value,
             }
+            ann_row: dict[str, object] = {
+                "series_id": sid,
+                "facts_id": current_facts.facts_id,
+                "station_id": station,
+                "product_id": str(product),
+                "time": stamp,
+                "time_zone": zone,
+                "measured": True,
+                "approval_status": approval,
+                "qualifier": norm_qualifier,
+            }
+            if coordinates.endpoint != "daily":
+                ann_row["method_category"] = method_category
             identity_time = stamp if zone == "unknown" else datetime.fromisoformat(f"{stamp.isoformat()}{zone}")
             key = (sid, identity_time)
-            if key in rows and rows[key] != row:
+            if key in rows and (rows[key] != row or ann_rows[key] != ann_row):
                 raise ValueError("Conflicting observations for the same series and time")
             rows[key] = row
+            ann_rows[key] = ann_row
         except ValidationError as error:
             raise FatalContractError("Invalid internal USGS source-series definition") from error
         except (KeyError, TypeError, ValueError) as error:
@@ -219,8 +251,25 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                 )
             )
     # Invalid rows cannot establish success for that concrete series. Valid siblings survive.
-    frame = pl.DataFrame(
-        [row for (sid, _), row in rows.items() if sid not in failures], schema=RowsSchema.polars_schema
-    )
+    surviving_rows: list[dict[str, object]] = []
+    surviving_ann: list[dict[str, object]] = []
+    for row_key, item_row in rows.items():
+        if row_key[0] not in failures:
+            surviving_rows.append(item_row)
+            surviving_ann.append(ann_rows[row_key])
+    frame = pl.DataFrame(surviving_rows, schema=RowsSchema.polars_schema)
     validate_series_rows(frame, tuple(definitions.values()))
-    return ParsedSeries(frame, tuple(definitions.values()), (), tuple(outcomes), tuple(issues))
+    if surviving_ann:
+        ann_frame = pl.DataFrame(
+            surviving_ann,
+            schema={**OBSERVATION_STRUCTURAL_SCHEMA, **schema.polars_schema()},
+        )
+        ann_table = ObservationAnnotationTable.from_rows(
+            schema=schema,
+            rows=ann_frame,
+            measurement_indices=list(range(frame.height)),
+        )
+        annotations = AnnotationBundle(observation_tables={schema.schema_id: ann_table})
+    else:
+        annotations = AnnotationBundle.empty()
+    return ParsedSeries(frame, tuple(definitions.values()), (), tuple(outcomes), tuple(issues), annotations=annotations)

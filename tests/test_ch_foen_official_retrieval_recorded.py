@@ -124,3 +124,36 @@ def test_original_responses_match_independent_rows_facts_and_outcomes(retained_e
             assert sorted(actual_outcomes, key=lambda item: (item["variant"] or "", item["status"])) == sorted(
                 case["expected_outcomes"], key=lambda item: (item["variant"] or "", item["status"])
             )
+        raw_records = json.loads(payload.content)["data"]["water"]["observations"][case["route"]]
+        if raw_records and "releaseState" in raw_records[0]:
+            assert set(parsed.annotations.observation_tables) == {"ch_foen.archive"}
+            ann_rows = parsed.annotations.observation_tables["ch_foen.archive"].rows
+
+            def _state_key(item: tuple[str | None, datetime, str | None]) -> tuple[str, datetime, tuple[int, str]]:
+                return (item[0] or "", item[1], (0, "") if item[2] is None else (1, item[2]))
+
+            actual_states = sorted(
+                (
+                    (names[row["series_id"]], row["time"], ann["releaseState"])
+                    for row, ann in zip(
+                        parsed.rows.iter_rows(named=True),
+                        ann_rows.iter_rows(named=True),
+                        strict=True,
+                    )
+                ),
+                key=_state_key,
+            )
+            expected_states = sorted(
+                (
+                    (
+                        row["tsName"],
+                        datetime.fromisoformat(row["timestamp"]).replace(tzinfo=None),
+                        row["releaseState"],
+                    )
+                    for row in raw_records
+                ),
+                key=_state_key,
+            )
+            assert actual_states == expected_states
+        else:
+            assert parsed.annotations.is_empty

@@ -65,8 +65,9 @@ def test_only_advertised_products_are_published_with_unknown_bounds():
     assert native.data["data-summary"][0]["data-types"][1]["first"] == "1970-01"
 
 
-def test_ten_products_keep_distinct_identity_without_inferred_temporal_facts():
+def test_ten_products_keep_distinct_identity_and_established_facts():
     from rivretrieve._internal.providers.uk_nrfa.catalogue_series import product_facts
+    from rivretrieve._internal.source_series import ClippingAxis, EvidenceState, stable_id
 
     expected = {
         "gdf",
@@ -82,14 +83,37 @@ def test_ten_products_keep_distinct_identity_without_inferred_temporal_facts():
     }
     facts = product_facts()
     assert set(facts) == expected
+    assert len({physical.facts_id for physical in facts.values()}) >= 5
     for product, physical in facts.items():
         stage = product.endswith("stage")
+        assert physical.facts_id == stable_id(physical.model_dump_json(exclude={"facts_id"}))
         assert physical.quantity.value == ("stage" if stage else "discharge")
         assert physical.source_unit.value == ("m" if stage else "m3/s")
-        assert physical.frequency.value is None
-        assert physical.statistic.value is None
-        assert physical.vertical_datum.value is None
-        assert physical.vertical_reference.value is None
+        assert physical.vertical_datum.state == EvidenceState.NOT_ESTABLISHED
+        assert physical.temporal_support.state == EvidenceState.NOT_ESTABLISHED
+        assert physical.day_definition.state == EvidenceState.NOT_ESTABLISHED
+        assert physical.timestamp_anchor.state == EvidenceState.NOT_ESTABLISHED
+        assert physical.time_zone.state == EvidenceState.NOT_ESTABLISHED
+        if product in {"gdf", "ndf"}:
+            assert physical.frequency.value == "daily"
+            assert physical.statistic.value == "mean"
+            assert physical.clipping_axis == ClippingAxis.CALENDAR_DATE
+        elif product in {"gmf", "nmf"}:
+            assert physical.frequency.value == "monthly"
+            assert physical.statistic.value == "mean"
+            assert physical.clipping_axis == ClippingAxis.SOURCE_TIMESTAMP
+        elif product == "amax-flow":
+            assert physical.frequency.state == EvidenceState.NOT_ESTABLISHED
+            assert physical.statistic.value == "max"
+            assert physical.clipping_axis == ClippingAxis.SOURCE_TIMESTAMP
+        else:
+            assert physical.frequency.state == EvidenceState.NOT_ESTABLISHED
+            assert physical.statistic.state == EvidenceState.NOT_ESTABLISHED
+            assert physical.clipping_axis == ClippingAxis.SOURCE_TIMESTAMP
+        if stage:
+            assert physical.vertical_reference.value == "gauge_zero"
+        else:
+            assert physical.vertical_reference.state == EvidenceState.NOT_ESTABLISHED
 
 
 def test_native_preparation_preserves_source_fields_and_reconciles_inventory():

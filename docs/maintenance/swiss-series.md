@@ -57,8 +57,9 @@ filters requiring established facts.
 ## Parser handoff
 
 Keep null values, zero, absent rows and failed requests distinct. These definitions
-do not parse or replace observation values. Preserve archive `releaseState` and
-recent `releaseStatus` under their own field names, including original nulls.
+do not parse or replace observation values. The official parser preserves archive
+`releaseState` in annotation schema `ch_foen.archive` and recent `releaseStatus` in
+`ch_foen.recent`, keeping explicit nulls and native types distinct from `0`.
 `RELEASE_STATUS_MEANINGS` records publisher vocabulary separately: null and 0 mean
 raw, 1 unreleased/prechecked, 2 released/checked and 3 released/definitive. Status 3
 includes corrections from status 2 and definitive stage–discharge relations. This
