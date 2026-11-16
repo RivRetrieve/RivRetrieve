@@ -38,6 +38,11 @@ print(preview.write_csv(), end="")
 
 print(result.data.height)
 print(sorted({(issue.severity, issue.code) for issue in result.issues}))
+print(
+    result.to_polars(annotations=True)
+    .select("Vazao_Status", "Metodo_Obtencao_Vazoes")
+    .rows()
+)
 ```
 
 Output:
@@ -48,16 +53,17 @@ time,time_zone,value,unit
 2020-01-11T00:00:00.000000,unknown,31789.021,m3/s
 2020-01-12T00:00:00.000000,unknown,31553.52,m3/s
 3
-[('info', 'provenance.citation_not_established'), ('info', 'source_status')]
+[('info', 'provenance.citation_not_established')]
+[('1', '1'), ('1', '1'), ('1', '1')]
 ```
 
-The three rows contain source-published daily means in m³/s. Both endpoint dates
-are included. RivRetrieve does not calculate these means.
-`cache="bypass"` requests the source rather than cached observations. The example
-prints each distinct issue severity and code, rather than repeating the daily
-status notices. `source_status` reports ANA's source metadata without a quality
-judgement. The other notice means that RivRetrieve has not established a standard
-citation. Neither notice means that this observation request failed.
+The three rows contain source-published daily means in m³/s, and each row
+carries `Vazao_Status='1'` and `Metodo_Obtencao_Vazoes='1'` from
+`br_ana.daily_vazao`. Both endpoint dates are included. RivRetrieve does not
+calculate these means.
+`cache="bypass"` requests the source rather than cached observations. The
+citation issue means that RivRetrieve has not established a standard citation,
+rather than indicating a failed observation request.
 
 The time zone is `unknown`; midnight labels do not establish the hours covered by
 each mean. Source values can change, so a later request may not reproduce this output
@@ -187,7 +193,7 @@ Output:
 ```text
 [('bruto',), ('consistido',)]
 3 1
-[('info', 'provenance.citation_not_established'), ('info', 'source_status'), ('warning', 'source.unresolved_inventory')]
+[('info', 'provenance.citation_not_established'), ('warning', 'source.unresolved_inventory')]
 ```
 
 The second line shows 3 rows from 1 series: the response supplied three
@@ -211,12 +217,19 @@ Read those columns together. RivRetrieve has not established the source time zon
 or the interval covered by a daily mean. It does not infer either from station
 location or the midnight representation of a daily date.
 
-ANA also supplies status fields for observations. RivRetrieve retains their source
-values in informational `source_status` issues without interpreting them as a
-quality judgement. These statuses are distinct from the selectable daily consistency
-levels. Status notices can refer to the full monthly response, including dates
-outside the requested period. They are not per-row quality flags in the returned
-observation table.
+ANA also supplies verbatim status and method fields for observations. RivRetrieve
+attaches them in four observation-grain annotation schemas (`String`) without
+interpreting them as a quality ranking:
+
+- `br_ana.daily_cotas`: `Cota_Status` and `Tipo_Medicao_Cotas`.
+- `br_ana.daily_vazao`: `Vazao_Status` and `Metodo_Obtencao_Vazoes`.
+- `br_ana.telemetry_cota`: `Cota_Adotada_Status`.
+- `br_ana.telemetry_vazao`: `Vazao_Adotada_Status`.
+
+These attached fields are distinct from the selectable daily consistency levels.
+Use `rr.annotations(result)` to inspect attached schemas and
+`result.to_polars(annotations=True)` or `result.to_pandas(annotations=True)` to
+project them onto returned rows; see [Usage](../usage.md#source-annotations).
 
 A blank or null daily value remains a row with `value=null`. An absent source
 record remains absent, and a failed request is reported separately in issues.

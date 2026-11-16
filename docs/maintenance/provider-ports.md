@@ -89,6 +89,12 @@ scope, available routes, access conditions, terms and attribution. Obtain small
 genuine examples of metadata and observations. Distinguish unavailable access from
 an empty response and from evidence that has not yet been collected.
 
+A terms or licence page that automated tools cannot read, such as one requiring
+JavaScript, is not the same as terms that do not exist. Ask a person to open it
+directly before drafting external correspondence; a publisher's own data catalogue
+often states a licence, in seconds, where a support request would take much
+longer.
+
 [`ProviderDeclaration`](../../src/rivretrieve/_internal/providers/registration.py)
 selects `LiveStages` for on-demand acquisition, `BulkStore` for explicit download
 and compilation, or `CatalogueOnly` for discovery without observation retrieval.
@@ -132,6 +138,15 @@ keep identity and physical interpretation separate.
 [`SeriesMapping`](../../src/rivretrieve/_internal/provider_series.py)
 can share supported mappings between catalogue publication and parsing; it is not
 a substitute for response-specific identities when the source requires them.
+
+Preserve observation qualifiers, approval statuses, method notes, unmeasured source
+slots, and non-identity series attributes through declared
+[`AnnotationSchema`](../../src/rivretrieve/_internal/source_annotations.py) definitions
+with plain Polars types, verified descriptions (never placeholders such as
+`"unknown"`), and official `http` or `https` `reference_url` links. Do not alter
+`ObservationResult.data`, create stream variants solely for annotation changes, or
+emit per-row informational quality-code issues when annotations carry those source
+fields.
 
 **Outcome:** each adopted fact has supporting evidence, and remaining unknowns are
 explicit. Admission requires established quantity, source unit and valid conversion.
@@ -196,6 +211,19 @@ useful default, not a rigid requirement. Plot both hydrographs with explicit uni
 conversion and preserved gaps. Inspect for obvious errors and investigate meaningful
 discrepancies without filtering, shifting or fitting values to force agreement.
 
+A comparison window bounded to a published dataset's coverage, such as a CAMELS
+dataset's end date, is not evidence of the source's actual historical reach. Check
+each sampled station's own earliest-available-result metadata where the source
+publishes one, and test a genuine retrieval against a window near that claimed
+depth for at least one long-running station, not only the modern comparison
+window. A single failed attempt against a far-back window can be a transient,
+cold-query response rather than an absence of data; retry before concluding the
+data is not retrievable. Separately, a source may track an older, lower-frequency
+product (for example, manually-taken spot measurements) alongside the continuous
+product a provider retrieves, reaching further back than the continuous record
+does; note this as an open scope question when found, rather than assuming the
+continuous product's own history is the source's only route to older data.
+
 Retain the dataset version, station and date selection, comparison method, figures,
 findings and limitations through the existing evidence process. If no suitable
 dataset is available, record why; that absence alone does not block the port.
@@ -218,9 +246,10 @@ limits. Missing mandatory genuine inputs block acceptance.
 verified practical example.
 
 Explain who publishes the data, what users can retrieve, access requirements, source
-series distinctions, time and units, availability limits, terms and unresolved facts
-that affect interpretation. State consequences clearly rather than publishing the
-whole investigation. Keep detailed research and correspondence in the private record.
+series distinctions, declared source-annotation schemas and fields where applicable,
+time and units, availability limits, terms and unresolved facts that affect interpretation.
+State consequences clearly rather than publishing the whole investigation. Keep detailed
+research and correspondence in the private record.
 
 Follow [documentation guidance](../AGENTS.md) and use existing
 [provider pages](../providers/) for scope. Link general usage rather

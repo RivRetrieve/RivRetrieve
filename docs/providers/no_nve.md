@@ -36,8 +36,8 @@ preview = result.data.select("time", "time_zone", "value", "unit").head(3)
 print(preview.write_csv(float_precision=3), end="")
 
 print(result.data.height)
-for issue in result.issues:
-    print(f"{issue.severity}: {issue.message}")
+print(rr.annotations(result).select("schema", "name", "dtype").rows())
+print(result.to_polars(annotations=True).select("quality", "correction").head(3).rows())
 ```
 
 Output:
@@ -48,17 +48,18 @@ time,time_zone,value,unit
 2024-01-02T11:00:00.000000,+00:00,415.396,m3/s
 2024-01-03T11:00:00.000000,+00:00,444.500,m3/s
 7
-info: no_nve published source quality code 2 without RivRetrieve interpretation
-info: no_nve published source correction code 0 without RivRetrieve interpretation
+[('no_nve.observations', 'quality', 'Int64'), ('no_nve.observations', 'correction', 'Int64')]
+[(2, 0), (2, 0), (2, 0)]
 ```
 
 The request returned seven daily means in m³/s. The preview shows three values
 rounded to three decimal places. Both endpoint dates are included. RivRetrieve
 reads the published means; it does not calculate them from more frequent observations.
-The two informational messages report source metadata, not retrieval problems.
-NVE calls quality code `2` **PrimaryControlled** and correction code `0` **No changes**.
-These are NVE’s descriptions of the observations, not a RivRetrieve quality
-judgement. They are separate from the series version, which is `1` in this example.
+The annotation columns preserve HydAPI's per-observation integers verbatim: NVE
+calls quality code `2` **PrimaryControlled** and correction code `0` **No
+changes**. These are NVE’s descriptions of the observations, not a RivRetrieve
+quality judgement. They are separate from the series version, which is `1` in
+this example.
 
 `cache="bypass"` requests HydAPI rather than a local cache. This output was checked
 on 2026-09-23. NVE can revise historical observations, so later retrievals may
@@ -201,13 +202,15 @@ at 11:00 UTC. That clock label does not establish the averaging interval or its
 start and end. NVE's documentation gives conflicting wording for the daily time
 basis; RivRetrieve leaves exact daily boundaries and interval anchors unknown.
 
-HydAPI observations carry `quality` and `correction` codes. RivRetrieve does not
-filter observations by those codes, interpret them as a quality ranking, or add
-per-row quality columns to `result.data`. Informational issues summarize the
-published codes, their counts and first and last source timestamps. Those summaries
-can include the extra dates requested around the selected period, so their counts
-need not equal the returned row count. Optional [receipts](../usage.md#receipts-optional)
-retain the observation response bytes when the original per-row codes are needed.
+HydAPI observations carry integer `quality` and `correction` codes. RivRetrieve
+preserves both columns verbatim in the `no_nve.observations` annotation schema
+without filtering observations, ranking codes, or modifying default `result.data`
+columns. Call `result.to_polars(annotations=True)` or
+`result.to_pandas(annotations=True)` to join `quality` and `correction` onto
+observations, or `rr.annotations(result)` to inspect schema metadata. See
+[Source annotations](../usage.md#source-annotations) for general options, or
+[optional receipts](../usage.md#receipts-optional) when raw response bytes are
+needed.
 
 A published null remains a row with `value=null`. An absent observation supplies
 no row. A failed request remains an issue and an identified outcome alongside

@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 # Older caches from these acquisition routes omitted necessary support. Other
-# providers retain their existing revision-8 compatibility.
+# providers retain their existing revision-9 compatibility.
 _REQUIRED_SOURCE_CALL_FIELDS: Mapping[str, tuple[str, ...]] = MappingProxyType(
     {"jp_mlit": ("prerequisite_acquisition_ids",)}
 )
