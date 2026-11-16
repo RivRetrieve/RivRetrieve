@@ -308,7 +308,10 @@ def test_validators_fail_closed_on_upstream_contract_contradictions() -> None:
         "date_range": {"data_availability": "C"},
     }
     assert set(DATA_AVAILABILITY_CODES) >= {"H", "C", "RT", "NRT", "S", "N"}
-    assert validate_series_record_metadata(valid_series_row, qmd_spec, series_id=26605, proc_id=1) == "m^3/s"
+    assert validate_series_record_metadata(valid_series_row, qmd_spec, series_id=26605, proc_id=1) == ("m^3/s", "C")
+    assert validate_series_record_metadata(
+        {**valid_series_row, "date_range": {}}, qmd_spec, series_id=26605, proc_id=1
+    ) == ("m^3/s", None)
 
     with pytest.raises(FatalContractError, match="data_availability"):
         validate_series_record_metadata(

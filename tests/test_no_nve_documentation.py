@@ -40,10 +40,8 @@ def test_norway_page_examples_match_recorded_responses(retained_evidence_root, m
     ]
     result = namespace["result"]
     assert result.data["value"].null_count() == 0
-    assert [(issue.severity, issue.code) for issue in result.issues] == [
-        ("info", "source_quality_code"),
-        ("info", "source_correction_code"),
-    ]
+    assert result.issues == ()
+    assert result.to_polars(annotations=True).select("quality", "correction").unique().rows() == [(2, 0)]
     assert [call["url"].rsplit("/", 1)[-1] for call in result.provenance.calls_made] == ["Series", "Observations"]
     assert result.provenance.calls_made[-1]["request_parameters"]["VersionNumber"] == 1
 

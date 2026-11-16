@@ -444,6 +444,7 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
                 {
                     "usgs_nwis": "maintenance/catalogue/usgs_nwis",
                     "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
+                    "dk_vanda": "maintenance/catalogue/dk_vanda/official/native.parquet",
                 }.get(provider, f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet")
             ),
         )

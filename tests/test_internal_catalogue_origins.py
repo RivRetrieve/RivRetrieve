@@ -284,6 +284,8 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
             ProviderId("ca_eccc"),
             ProviderId("ch_foen"),
             ProviderId("cz_chmi"),
+            ProviderId("dk_vanda"),
+            ProviderId("fi_syke"),
             ProviderId("fr_hubeau"),
             ProviderId("fr_hydroportail"),
             ProviderId("jp_mlit"),
