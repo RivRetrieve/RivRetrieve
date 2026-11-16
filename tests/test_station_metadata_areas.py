@@ -44,6 +44,7 @@ SOURCE_FIELDS = {
     "br_ana": ("codigoestacao", {"Area_Drenagem": None}),
     "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": "km2", "DRAINAGE_AREA_EFFECT": "km2"}),
     "ch_foen": ("name", {}),
+    "co_ideam": ("Codigo", {}),
     "cz_chmi": ("objID", {"PLO_STA": "km²"}),
     "dk_vanda": ("stationId", {"catchmentAreaKm2": "km2"}),
     "fr_hubeau": ("code_station", {"superficie_topo": None, "superficie_reelle": None}),
@@ -128,7 +129,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
     assert overlapping.height > 0
-    for provider in ("lt_lhmt", "th_thaiwater"):
+    for provider in ("co_ideam", "lt_lhmt", "th_thaiwater"):
         absent = result.filter(pl.col("provider_id") == provider)
         assert set(absent["state"]) == {"no_metadata"}
         assert (
@@ -149,6 +150,8 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
                 if provider == "at_ehyd"
                 else "maintenance/catalogue/usgs_nwis"
                 if provider == "usgs_nwis"
+                else "maintenance/catalogue/co_ideam/official/native.parquet"
+                if provider == "co_ideam"
                 else "maintenance/catalogue/dk_vanda/official"
                 if provider == "dk_vanda"
                 else f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"
@@ -165,6 +168,8 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         if provider == "at_ehyd"
         else retained_evidence_root / "maintenance/catalogue/usgs_nwis/legacy-native.parquet"
         if provider == "usgs_nwis"
+        else retained_evidence_root / "maintenance/catalogue/co_ideam/official/native.parquet"
+        if provider == "co_ideam"
         else retained_evidence_root / "maintenance/catalogue/dk_vanda/official/native.parquet"
         if provider == "dk_vanda"
         else retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"

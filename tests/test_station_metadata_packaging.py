@@ -82,6 +82,7 @@ for provider_id in provider_ids:
         "at_ehyd",
         "br_ana",
         "ca_eccc",
+        "co_ideam",
         "cz_chmi",
         "fr_hubeau",
         "jp_mlit",
