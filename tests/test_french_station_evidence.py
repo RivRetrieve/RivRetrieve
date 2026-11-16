@@ -5,6 +5,8 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal.catalogues.evidence_graph import FactSelection, resolve_evidence
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 @pytest.mark.parametrize(
     "provider,required_acquisitions",

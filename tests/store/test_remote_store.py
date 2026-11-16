@@ -77,6 +77,7 @@ def s3_server():
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+        disable_nagle_algorithm = True
 
         def _parse(self) -> tuple[str, str, dict[str, list[str]]]:
             parsed = urlparse(self.path)
@@ -268,7 +269,7 @@ def s3_server():
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     state.endpoint_url = f"http://127.0.0.1:{server.server_port}"
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     thread.start()
     try:
         yield state
@@ -688,10 +689,12 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
     transport = _Spans(continuous.identity.published_id)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
-    # 1. Initial fetch for 1996..1999 populates year=1999 in S3, and 2000..2003 adds year=2003.
+    # With two-day padding, Jan 5 starts on Jan 3; the 365-day boundary
+    # falls on Jan 3 of the next non-leap year, keeping both offset rows there.
+    # 1. Initial fetch for 1998..1999 populates year=1999 in S3, and 2002..2003 adds year=2003.
     early = rr.fetch(
         selected,
-        start="1996-01-03",
+        start="1998-01-05",
         end="1999-02-01",
         cache="reuse",
         receipts=True,
@@ -706,7 +709,7 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
 
     first = rr.fetch(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="reuse",
         receipts=True,
@@ -727,7 +730,7 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
     s3_server.requests.clear()
     reused = rr.fetch(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="reuse",
         receipts=True,
@@ -752,7 +755,7 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
     transport.value = 25
     by_provider = rr.fetch_by_provider(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="refresh",
         on_issue="raise",
@@ -764,10 +767,33 @@ def test_public_fetch_and_fetch_by_provider_remote_s3_cache_reuse_refresh_and_bu
     transport.failed_second = True
     partial = rr.fetch(
         selected,
-        start="2000-01-03",
+        start="2002-01-05",
         end="2003-02-01",
         cache="refresh",
         on_issue="ignore",
     )
     assert partial.data.height == 2
     pl_testing.assert_frame_equal(partial.data, by_provider["usgs_nwis"].data)
+
+
+def test_usage_remote_cache_example(monkeypatch, tmp_path, s3_server):
+    """Execute the documented S3 block with authored data, not publisher evidence."""
+    from tests.test_documentation_examples import execute_block, remote_cache_example
+    from tests.test_usgs_observation_acquisition import STATION, Transport, feature, page
+
+    monkeypatch.chdir(tmp_path)
+    s3_server.configure_env(monkeypatch, bucket="hydro-archive", prefix="rivretrieve")
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge", frequency="daily", statistic="mean")
+    selected = rr.pick(selected, series_id=selected.series[0].series_id)
+    transport = Transport(page(feature(selected.series[0].identity.published_id, day="2023-01-15")))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    scope = {"rr": rr, "chosen_gauges": selected}
+    block = remote_cache_example()
+    assert execute_block(block, scope, "docs/usage.md:S3-compatible object storage")
+    first = scope["result"]
+    assert first.data["value"].item() == pytest.approx(12.25 * 0.028316846592)
+    assert s3_server.get_keys("hydro-archive")
+    assert len(transport.requests) == 1
+    execute_block(block, scope, "docs/usage.md:S3-compatible object storage")
+    assert len(transport.requests) == 1
+    pl_testing.assert_frame_equal(scope["result"].data, first.data)

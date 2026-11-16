@@ -13,7 +13,7 @@ from zipfile import ZipFile
 
 import pytest
 
-from tests._distribution import InstalledDistribution
+from tests._distribution import InstalledDistribution, _uv_executable
 
 _FORBIDDEN_PARTS = {
     "web",
@@ -48,6 +48,8 @@ def _assert_payload(names: list[str]) -> None:
             or path.name.startswith(".env.")
             or path.suffix in {".env", ".pem", ".key", ".pyc"}
             or name.endswith("/catalogue/native.parquet")
+            or name == "docs/assets/coverage-map.png"
+            or name.endswith("/docs/assets/coverage-map.png")
             or "/docs/assets/station-explorer/" in name
             or "/tests/test_data/" in name
             or "/tests/recordings/" in name
@@ -108,6 +110,7 @@ def test_distributions_exclude_local_files(distribution: str) -> None:
         local_paths = [
             "web/station-explorer/src/App.tsx",
             "web/station-explorer/.env.local",
+            "docs/assets/coverage-map.png",
             "docs/assets/station-explorer/assets/index.js",
             "web/station-explorer/node_modules/example/index.js",
             "web/station-explorer/public/catalogue.json",
@@ -142,7 +145,7 @@ def test_distributions_exclude_local_files(distribution: str) -> None:
         # exclusion assertions below still inspect the actual PEP 517 artifact.
         _run(
             [
-                "uv",
+                _uv_executable(),
                 "build",
                 "--offline",
                 "--force-pep517",

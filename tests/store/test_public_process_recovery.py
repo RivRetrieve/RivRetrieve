@@ -249,3 +249,85 @@ with store_lease(Path(sys.argv[1])):
             child.kill()
             child.communicate(timeout=10)
     assert rr.cache_status(str(provider)).ownership is Ownership.IDLE
+
+
+@pytest.mark.skipif(os.name == "nt", reason="SIGKILL process-boundary test requires POSIX")
+def test_killed_or_failed_copied_store_witness_replacement_preserves_lifecycle_safety(tmp_path, monkeypatch):
+    import shutil
+    from datetime import datetime
+    from pathlib import Path
+
+    from rivretrieve._internal.store import ObservationStoreRefusedError
+    from rivretrieve._internal.store.accumulation import accumulate
+    from rivretrieve._internal.store.integrity import inspect_integrity
+    from tests.test_accumulated_store import _coverage, _rows, _rows_update
+
+    provider = ProviderId("fixture_live")
+    source_root = StoreRoot(tmp_path / "source" / "store")
+    source_root.parent.mkdir(parents=True)
+    accumulate(
+        source_root,
+        provider,
+        _rows_update(provider, _rows([datetime(2020, 1, 1)], [1.0]), _coverage("2020-01-01", "2020-01-02")),
+    )
+
+    # 1. In-process OSError during witness replacement leaves pre-copy seal intact and requires recovery.
+    failed_root = StoreRoot(tmp_path / "failed_copy" / "store")
+    shutil.copytree(source_root, failed_root)
+    before_seal = (failed_root / "integrity.json").read_bytes()
+    real_replace = os.replace
+
+    def fail_seal_replace(src, dst):
+        if Path(dst) == failed_root / "integrity.json":
+            raise OSError("simulated witness replace failure")
+        return real_replace(src, dst)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "replace", fail_seal_replace)
+        with pytest.raises(OSError, match="simulated witness replace failure"):
+            inspect_integrity(failed_root, provider)
+    assert (failed_root / "integrity.json").read_bytes() == before_seal
+    assert (failed_root / ".integrity.pending").is_file()
+    with pytest.raises(ObservationStoreRefusedError, match="unlisted_or_unsafe"):
+        inspect_integrity(failed_root, provider)
+
+    # 2. Out-of-process SIGKILL during witness replacement on a copied store.
+    killed_root = StoreRoot(tmp_path / "killed_copy" / "store")
+    shutil.copytree(source_root, killed_root)
+    before_killed_seal = (killed_root / "integrity.json").read_bytes()
+    kill_script = """
+import os, signal, sys
+from pathlib import Path
+from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.store import StoreRoot
+from rivretrieve._internal.store import integrity
+
+root = StoreRoot(Path(sys.argv[1]))
+def kill_on_replace(src, dst):
+    if Path(dst) == Path(root) / "integrity.json":
+        os.kill(os.getpid(), signal.SIGKILL)
+    return os.replace(src, dst)
+integrity.os.replace = kill_on_replace
+integrity.inspect_integrity(root, ProviderId("fixture_live"))
+"""
+    result = subprocess.run([sys.executable, "-c", kill_script, str(killed_root)], check=False)
+    assert result.returncode == -signal.SIGKILL
+    pending = killed_root / ".integrity.pending"
+    assert pending.is_file()
+    assert (killed_root / "integrity.json").read_bytes() == before_killed_seal
+
+    monkeypatch.setattr(bulk, "_cache_registration", lambda _: (provider, killed_root))
+    status = rr.cache_status(str(provider))
+    assert status.exists and pending in status.cleanup_paths
+    assert status.ownership is Ownership.ABANDONED
+    with pytest.raises(ObservationStoreRefusedError, match="unlisted_or_unsafe"):
+        rr.audit_cache(str(provider))
+
+    recovered = rr.recover_cache(str(provider))
+    assert recovered.status.generation_id == status.generation_id
+    assert recovered.status.ownership is Ownership.IDLE
+    assert not pending.exists()
+    assert rr.audit_cache(str(provider)).rows_checked == 1
+    restored = inspect_integrity(killed_root, provider)
+    for name, item in restored.files.items():
+        assert item.inode == (killed_root / name).stat().st_ino

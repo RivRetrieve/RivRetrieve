@@ -10,6 +10,7 @@ import sqlite3
 from dataclasses import replace
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 from rivretrieve._internal.recordings import ReplayTransport, UnmatchedRequestError, read_recording
@@ -37,7 +38,24 @@ def _decoded_sparse_rows(tmp_path: Path, evidence_root: Path):
     connection.commit()
     connection.close()
     decoded = _compile_rows(database)
-    return decoded.filter(decoded["station_id"] == "07HF001")
+    annotations = pl.concat(
+        [
+            pl.read_parquet(path).select(
+                "station_id",
+                pl.col("product_id").alias("product"),
+                "time",
+                "symbol",
+                "precision_code",
+            )
+            for path in sorted(
+                (tmp_path / "compiled").glob(
+                    "product=stage_daily_mean/year=*/annotations=ca_eccc.dly_levels/rows.parquet"
+                )
+            )
+        ]
+    )
+    joined = decoded.join(annotations, on=["station_id", "product", "time"], how="left")
+    return joined.filter(joined["station_id"] == "07HF001"), witnesses
 
 
 @pytest.mark.parametrize("period", ("2013-03", "2014-05"))
@@ -54,7 +72,7 @@ def test_official_daily_csv_replay_matches_sparse_hydat_cells(
     )
     response = ReplayTransport((recording,)).send(request)
     official = tuple(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
-    all_sparse = _decoded_sparse_rows(tmp_path, no_days_evidence_root)
+    all_sparse, witnesses = _decoded_sparse_rows(tmp_path, no_days_evidence_root)
     decoded = all_sparse.filter(
         (all_sparse["product"] == "stage_daily_mean") & (all_sparse["time"].dt.strftime("%Y-%m") == period)
     )
@@ -62,11 +80,13 @@ def test_official_daily_csv_replay_matches_sparse_hydat_cells(
 
     assert [row["Date"] for row in official] == [value.strftime("%Y-%m-%d") for value in published["time"]]
     assert [float(row["Value/Valeur"]) for row in official] == pytest.approx(published["value"].to_list(), abs=0.0005)
-    paired_symbols = [
-        row[f"DLY_LEVELS.LEVEL_SYMBOL{timestamp.day}"]
-        for row, timestamp in zip(published.to_dicts(), published["time"], strict=True)
-    ]
-    assert [row["Symbol/Symbole"] or None for row in official] == paired_symbols
+    assert [row["Symbol/Symbole"] or None for row in official] == published["symbol"].to_list()
+    expected_precision = next(
+        row["PRECISION_CODE"]
+        for row in witnesses
+        if row["YEAR"] == int(period[:4]) and row["MONTH"] == int(period[5:7])
+    )
+    assert decoded["precision_code"].unique().to_list() == [expected_precision]
     assert decoded.height == 31
 
     with pytest.raises(UnmatchedRequestError):

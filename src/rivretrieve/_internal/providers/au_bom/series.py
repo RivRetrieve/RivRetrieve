@@ -265,7 +265,7 @@ def _label_time(definition: ProductDefinition) -> str | None:
 
 
 def _variant(definition: ProductDefinition) -> str | None:
-    """"24hr"/"09hr" for discharge's two daily means, BoM's own named alternative.
+    """ "24hr"/"09hr" for discharge's two daily means, BoM's own named alternative.
 
     Every other au_bom product is already unambiguous under quantity,
     frequency and statistic alone and keeps variant unset, matching

@@ -1,7 +1,10 @@
 """Content identities for one local observation-store generation.
 
-Inspection hashes metadata, inventories paths, and checks file identities. It never
-reads observation bytes. Selected reads and complete audits verify content hashes.
+Inspection hashes metadata, inventories paths, and checks file identities without
+reading observation bytes when recorded witnesses match. When device, inode, size
+or mtime witnesses differ on a complete committed store, inspection verifies every
+sealed file digest and store semantic rule under the writer lease before recording
+the new local witnesses. Selected reads and complete audits verify content hashes.
 Hardlink reuse preserves those hashes; it does not certify changed bytes. The cheap
 witness includes ctime. Owned hardlink operations advance this witness under the
 writer lease. Interrupted transitions require verification against the old digest.
@@ -24,7 +27,7 @@ from datetime import UTC, datetime, timedelta
 from itertools import islice
 from pathlib import Path
 from types import MappingProxyType
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.source_series import OutcomeStatus, RetrievalOutcome
@@ -43,6 +46,9 @@ from rivretrieve._internal.store.validation import (
     validate_store,
 )
 from rivretrieve._internal.time_axis import TimeAxis
+
+if TYPE_CHECKING:
+    from rivretrieve._internal.store.lifecycle import StoreLease
 
 SEAL_NAME = "integrity.json"
 
@@ -170,21 +176,64 @@ def _check_identity(root: StoreRoot, provider: ProviderId, name: str, identity: 
         _fail(root, provider, f"file_identity:{name}")
 
 
-def inspect_integrity(root: StoreRoot, provider_id: ProviderId, *, allow_pending: bool = False) -> SealedStore:
-    """Check the closed inventory and metadata without opening observations.
+def _verify_all_contents(
+    root: StoreRoot,
+    provider_id: ProviderId,
+    files: Mapping[str, FileIdentity],
+    *,
+    allow_pending: bool = False,
+) -> tuple[ValidatedStore, dict[str, tuple[int, int, int, int, int]]]:
+    pending = {".integrity.pending"} if allow_pending and (Path(root) / ".integrity.pending").exists() else set()
+    _closed_files(root, provider_id, {*files, SEAL_NAME, *pending})
+    observed: dict[str, tuple[int, int, int, int, int]] = {}
+    for name in files:
+        try:
+            observed[name] = _witness(Path(root) / name)
+        except (OSError, ValueError):
+            _fail(root, provider_id, f"file_identity:{name}")
+    for name, identity in files.items():
+        path = Path(root) / name
+        if observed[name][2] != identity.size or _digest(path) != identity.sha256 or _witness(path) != observed[name]:
+            _fail(root, provider_id, f"digest:{name}")
+    checked = validate_store(root, provider_id)
+    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in checked.all_partition_files.values())}
+    if set(files) != expected:
+        _fail(root, provider_id, "manifest_inventory")
+    _closed_files(root, provider_id, {*files, SEAL_NAME, *pending})
+    for name, witness in observed.items():
+        try:
+            current = _witness(Path(root) / name)
+        except (OSError, ValueError):
+            _fail(root, provider_id, "generation_changed")
+        if current != witness:
+            _fail(root, provider_id, "generation_changed")
+    return checked, observed
 
-    Published stores require a seal. Inspection checks device, inode, size and
-    mtime. A ctime-only change is retained as an unverified transition: writers
-    must verify the original digest before reuse. Inspection never establishes
-    observation-byte integrity; selected verification and audit do that.
-    ``allow_pending`` is only for lifecycle inspection after it has identified
-    the exact regular pending-seal entry. It never accepts links or pending data.
+
+def inspect_integrity(
+    root: StoreRoot,
+    provider_id: ProviderId,
+    *,
+    allow_pending: bool = False,
+    lease: StoreLease | None = None,
+) -> SealedStore:
+    """Check the closed inventory and metadata, or validate and re-witness a copied store.
+
+    Published stores require a seal. When recorded device, inode, size and mtime
+    witnesses match, inspection hashes only ``manifest.json`` without opening
+    observations, retaining a ctime-only change as an unverified transition for
+    writers to verify against the original digest before reuse. When those
+    witnesses differ on a complete committed store, inspection verifies every
+    sealed file digest and all store semantics under the writer lease before
+    atomically recording the new local witnesses. ``allow_pending`` is only for
+    lifecycle inspection after it has identified the exact regular pending-seal
+    entry. It never accepts links or pending data.
     """
     from rivretrieve._internal.store.remote import RemoteStoreRoot, inspect_remote_integrity
 
     if isinstance(root, RemoteStoreRoot):
         return inspect_remote_integrity(root, provider_id, allow_pending=allow_pending)
-    return _inspect_integrity(root, provider_id, allow_ctime_drift=True, allow_pending=allow_pending)
+    return _inspect_integrity(root, provider_id, allow_ctime_drift=True, allow_pending=allow_pending, lease=lease)
 
 
 def _inspect_integrity(
@@ -193,6 +242,7 @@ def _inspect_integrity(
     *,
     allow_ctime_drift: bool,
     allow_pending: bool = False,
+    lease: StoreLease | None = None,
 ) -> SealedStore:
     seal_path = Path(root) / SEAL_NAME
     try:
@@ -246,16 +296,31 @@ def _inspect_integrity(
         _fail(root, provider_id, f"seal:{error}")
     pending = {".integrity.pending"} if allow_pending and (Path(root) / ".integrity.pending").exists() else set()
     _closed_files(root, provider_id, {*files, SEAL_NAME, *pending})
+    mismatched: str | None = None
     for name, identity in files.items():
-        if allow_ctime_drift:
-            if _witness(Path(root) / name)[:-1] != identity.witness[:-1]:
-                _fail(root, provider_id, f"file_identity:{name}")
-        else:
-            _check_identity(root, provider_id, name, identity)
+        try:
+            current = _witness(Path(root) / name)
+        except (OSError, ValueError):
+            _fail(root, provider_id, f"file_identity:{name}")
+        matched = current[:-1] == identity.witness[:-1] if allow_ctime_drift else current == identity.witness
+        if not matched and mismatched is None:
+            mismatched = name
+    if mismatched is not None:
+        from rivretrieve._internal.store.lifecycle import _residue, _root, store_lease
+
+        if Path(root).name.startswith(".") or (lease is None and bool(_residue(_root(Path(root))))):
+            _fail(root, provider_id, f"file_identity:{mismatched}")
+        if allow_pending:
+            checked, _ = _verify_all_contents(root, provider_id, files, allow_pending=True)
+            return SealedStore(checked, generation, files, _supporting_outcomes(_read_raw_manifest(root, provider_id)))
+        with store_lease(Path(root), lease=lease):
+            checked, observed = _verify_all_contents(root, provider_id, files)
+            restored = {name: FileIdentity(identity.sha256, *observed[name]) for name, identity in files.items()}
+            return _write_seal(checked, restored, _supporting_outcomes(_read_raw_manifest(root, provider_id)))
     if _digest(Path(root) / "manifest.json") != files["manifest.json"].sha256:
         _fail(root, provider_id, "digest:manifest.json")
     store = _validate_store_contents(root, provider_id, frozenset())
-    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in store.partition_files.values())}
+    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in store.all_partition_files.values())}
     if set(files) != expected:
         _fail(root, provider_id, "manifest_inventory")
     return SealedStore(store, generation, files, _supporting_outcomes(_read_raw_manifest(root, provider_id)))
@@ -285,8 +350,9 @@ def verify_inspected_files(sealed: SealedStore, identifiers: Iterable[PartitionI
     reusing this preparation. This function never grants path-only trust.
     """
     current = sealed
+    all_files = current.store.all_partition_files
     for identifier in set(identifiers):
-        path = current.store.partition_files[identifier]
+        path = all_files[identifier]
         name = path.relative_to(current.store.root).as_posix()
         before = _witness(path)
         if _digest(path) != current.files[name].sha256 or _witness(path) != before:
@@ -300,7 +366,7 @@ def link_partition(previous: SealedStore, identifier: PartitionIdentifier, desti
     inherited digest remains authoritative. A changed ctime triggers a digest
     check against the previous seal before reuse, including restored-mtime edits.
     """
-    source = previous.store.partition_files[identifier]
+    source = previous.store.all_partition_files[identifier]
     name = source.relative_to(previous.store.root).as_posix()
     identity = previous.files[name]
     before = _witness(source)
@@ -330,7 +396,8 @@ def _preserves_support(previous: ValidatedStore, candidate: ValidatedStore, reus
     new_outcomes = {item.outcome_id: item for item in new.outcomes}
     years: dict[str, set[int]] = defaultdict(set)
     for identifier in reused:
-        product, year = str(identifier).split("/")
+        parts = str(identifier).split("/")
+        product, year = parts[0], parts[1]
         years[product.removeprefix("product=")].add(int(year.removeprefix("year=")))
     for definition in old.series:
         if definition.product_id not in years:
@@ -438,29 +505,31 @@ def seal_store(
     except OSError as error:
         _fail(root, provider_id, f"inventory_io:{error}")
     candidate = _validate_store_contents(root, provider_id, frozenset())
-    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in candidate.partition_files.values())}
+    candidate_files = candidate.all_partition_files
+    expected = {"manifest.json", *(path.relative_to(root).as_posix() for path in candidate_files.values())}
     _closed_files(root, provider_id, expected | ({SEAL_NAME} if (Path(root) / SEAL_NAME).exists() else set()))
     if reused:
-        if previous is None or not set(reused).issubset(candidate.partition_files):
+        if previous is None or not set(reused).issubset(candidate_files):
             _fail(root, provider_id, "reuse_prior")
+        previous_files = previous.store.all_partition_files
+        prev_counts = previous.store.manifest.all_partition_row_counts
+        cand_counts = candidate.manifest.all_partition_row_counts
         for identifier, item in reused.items():
             if item.generation_id != previous.generation_id or item.identifier != identifier:
                 _fail(root, provider_id, "reuse_generation")
-            path = candidate.partition_files[identifier]
+            path = candidate_files[identifier]
             if item.destination != path or _witness(path) != item.identity.witness:
                 _fail(root, provider_id, "reuse_identity")
-            name = previous.store.partition_files[identifier].relative_to(previous.store.root).as_posix()
+            name = previous_files[identifier].relative_to(previous.store.root).as_posix()
             if (item.identity.sha256, item.identity.witness[:-1]) != (
                 previous.files[name].sha256,
                 previous.files[name].witness[:-1],
-            ) or candidate.manifest.partition_row_counts[identifier] != previous.store.manifest.partition_row_counts[
-                identifier
-            ]:
+            ) or cand_counts[identifier] != prev_counts[identifier]:
                 _fail(root, provider_id, "reuse_record")
         _preserves_support(previous.store, candidate, set(reused))
-    candidate = _validate_store_contents(root, provider_id, frozenset(set(candidate.partition_files) - set(reused)))
+    candidate = _validate_store_contents(root, provider_id, frozenset(set(candidate_files) - set(reused)))
     inherited = {
-        candidate.partition_files[key].relative_to(root).as_posix(): value.identity for key, value in reused.items()
+        candidate.all_partition_files[key].relative_to(root).as_posix(): value.identity for key, value in reused.items()
     }
     files: dict[str, FileIdentity] = {}
     for name in sorted(expected):
@@ -527,6 +596,10 @@ def refresh_witnesses(sealed: SealedStore, root: StoreRoot | None = None) -> Sea
         root,
         sealed.store.manifest,
         {key: Path(root) / path.relative_to(sealed.store.root) for key, path in sealed.store.partition_files.items()},
+        {
+            key: Path(root) / path.relative_to(sealed.store.root)
+            for key, path in sealed.store.annotation_partition_files.items()
+        },
     )
     return _write_seal(store, files, sealed.supporting_outcomes)
 
@@ -543,11 +616,7 @@ def audit_store(root: StoreRoot, provider_id: ProviderId, *, allow_pending: bool
     if isinstance(root, RemoteStoreRoot):
         return audit_remote_store(root, provider_id, allow_pending=allow_pending)
     sealed = _inspect_integrity(root, provider_id, allow_ctime_drift=True, allow_pending=allow_pending)
-    observed = {name: _witness(Path(root) / name) for name in sealed.files}
-    for name, identity in sealed.files.items():
-        if _digest(Path(root) / name) != identity.sha256 or _witness(Path(root) / name) != observed[name]:
-            _fail(root, provider_id, f"digest:{name}")
-    checked = validate_store(root, provider_id)
+    checked, observed = _verify_all_contents(root, provider_id, sealed.files, allow_pending=allow_pending)
     after = _inspect_integrity(root, provider_id, allow_ctime_drift=True, allow_pending=allow_pending)
     if after.generation_id != sealed.generation_id or any(
         _witness(Path(root) / name) != witness for name, witness in observed.items()

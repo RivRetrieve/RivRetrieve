@@ -119,4 +119,7 @@ def test_source_terms_are_once_and_explicitly_linked_from_every_selected_acquisi
         assert len(matches) == 1
         for identity, node in nodes.items():
             if identity.startswith("acquisition/"):
-                assert {"@id": matches[0]["@id"]} in node[statement.kind]
+                if node["creator"]["name"] == source.issuer:
+                    assert {"@id": matches[0]["@id"]} in node[statement.kind]
+                else:
+                    assert statement.kind not in node

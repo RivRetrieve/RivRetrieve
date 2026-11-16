@@ -211,6 +211,8 @@ def test_real_cross_origin_redirect_never_forwards_exchange_or_bearer_credential
     target_credentials: list[tuple[str | None, str | None, str | None]] = []
 
     class Target(BaseHTTPRequestHandler):
+        disable_nagle_algorithm = True
+
         def do_GET(self):
             target_credentials.append(
                 (self.headers.get("Identificador"), self.headers.get("Senha"), self.headers.get("Authorization"))
@@ -222,11 +224,13 @@ def test_real_cross_origin_redirect_never_forwards_exchange_or_bearer_credential
             pass
 
     target = ThreadingHTTPServer(("127.0.0.1", 0), Target)
-    target_thread = Thread(target=target.serve_forever, daemon=True)
+    target_thread = Thread(target=target.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     target_thread.start()
     target_url = f"http://127.0.0.1:{target.server_port}/target"
 
     class Source(BaseHTTPRequestHandler):
+        disable_nagle_algorithm = True
+
         def do_GET(self):
             if (redirected_call == "exchange" and self.path == "/token") or (
                 redirected_call == "data" and self.path == "/data"
@@ -248,7 +252,7 @@ def test_real_cross_origin_redirect_never_forwards_exchange_or_bearer_credential
             pass
 
     source = ThreadingHTTPServer(("127.0.0.1", 0), Source)
-    source_thread = Thread(target=source.serve_forever, daemon=True)
+    source_thread = Thread(target=source.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     source_thread.start()
     origin = f"http://127.0.0.1:{source.server_port}"
 

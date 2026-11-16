@@ -181,32 +181,71 @@ resolve the conflicting limits for recent GraphQL readings.
 
 ## Data status
 
-BAFU publishes a status alongside its values to describe their release and
-checking stage. The field is called `releaseState` in archive responses and
-`releaseStatus` in recent responses. The meanings below help interpret the
-original source response; they are not RivRetrieve quality rankings.
+BAFU publishes a release and validation status alongside its observations.
+RivRetrieve keeps the default observation table in `result.data` unchanged and
+preserves those source status fields as observation annotations:
+
+| Route group | Annotation schema | Field | Type |
+|---|---|---|---|
+| Archive (`10min`, `hourly`, `daily`, `monthly`, `yearly`) | `ch_foen.archive` | `releaseState` | `String` |
+| Recent (`discharge_recent`, `stage_recent`, `water_temperature_recent`) | `ch_foen.recent` | `releaseStatus` | `Int64` |
+
+Inspect available annotation fields and join them onto the observations fetched
+at the start of this page:
+
+```python
+print(
+    rr.annotations(result)
+    .select("schema", "name", "dtype", "row_count")
+    .write_csv(),
+    end="",
+)
+
+annotated = result.to_polars(annotations=True).select(
+    "time", "value", "unit", "releaseState"
+)
+print(annotated.head(3).write_csv(float_precision=3), end="")
+```
+
+Output:
+
+```text
+schema,name,dtype,row_count
+ch_foen.archive,releaseState,String,7
+time,value,unit,releaseState
+2023-12-31T23:00:00.000000,113.624,m3/s,3
+2024-01-01T23:00:00.000000,107.088,m3/s,3
+2024-01-02T23:00:00.000000,114.261,m3/s,3
+```
+
+Every daily value in that week carries archive `releaseState` `'3'`. Call
+`rr.annotations(result, schema="ch_foen.archive")` or
+`rr.annotations(result, schema="ch_foen.recent")` to inspect one route schema on
+its own. Keeping archive and recent tables separate prevents a missing recent or
+archive column in a combined query from looking like a published `null` status.
 
 | Source status | Publisher meaning |
 |---|---|
-| null or `0` | Raw |
+| `null` or `0` | Raw |
 | `1` | Unreleased / prechecked |
 | `2` | Released / checked |
 | `3` | Released / definitive |
 
-BAFU explains that a null status has the same meaning as `0`, raw. RivRetrieve
-still preserves the published null rather than rewriting it as zero. Another
-source term, `ersetzt`, remains unresolved: it does not tell us which values
-replaced others or which record to prefer. These status meanings therefore do
-not provide a rule for choosing between variants, and RivRetrieve makes no
-such choice.
+BAFU explains that a `null` status has the same meaning as `0`, raw. RivRetrieve
+keeps explicit `null`, string `'0'`, and integer `0` as published rather than
+converting one into another. Published observations whose `value` is `null`
+still retain their status annotations.
 
-These status fields are available in the original API responses, but RivRetrieve
-does not include them in its returned observation table or cached rows. There is
-no quality column or filter for selecting observations by status. If the
-analysis needs these fields, retain the original API response using
-[Receipts](../usage.md#receipts-optional) when fetching from the source. A receipt
-made from cached rows contains only those cached data, so it cannot supply the
-original status fields.
+BAFU's German documentation also writes `ersetzt` (replaced) beside status `3`,
+without defining which series replaced another. RivRetrieve therefore uses these
+fields only to report source status: it does not filter observations by status,
+convert codes into a cross-provider quality score, or rank `tsName` variants.
+
+Status annotations travel with local cache entries, manual `cache="refresh"`
+updates, UTC conversion, subsetting, and exported bundles. See
+[Source annotations](../usage.md#source-annotations) for general options, or
+[Receipts](../usage.md#receipts-optional) when you need the original HTTP
+response payload.
 
 ## Time
 

@@ -146,6 +146,7 @@ def test_source_capture_receipt_tamper_refused(retained_evidence_root, tmp_path)
         read_inventory(retained_evidence_root / EVIDENCE / "national-tests.body", path)
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 @pytest.mark.parametrize("quantity", ["discharge", "stage"])
 def test_packaged_catalogue_exposes_independent_source_variants(quantity):
     import rivretrieve as rr

@@ -649,9 +649,14 @@ def inspect_remote_integrity(
         identifier: root.child(path.relative_to(tmp_path).as_posix())
         for identifier, path in validated_local.partition_files.items()
     }
+    remote_ann_partitions = {
+        identifier: root.child(path.relative_to(tmp_path).as_posix())
+        for identifier, path in validated_local.annotation_partition_files.items()
+    }
     expected_manifest_files = {
         "manifest.json",
         *(path.relative_to(root).as_posix() for path in remote_partitions.values()),
+        *(path.relative_to(root).as_posix() for path in remote_ann_partitions.values()),
     }
     if set(files) != expected_manifest_files:
         _fail(store_root, provider_id, "manifest_inventory")
@@ -660,6 +665,7 @@ def inspect_remote_integrity(
         root=store_root,
         manifest=validated_local.manifest,
         partition_files=remote_partitions,
+        annotation_partition_files=remote_ann_partitions,
     )
     return SealedStore(
         validated_remote,
@@ -680,8 +686,9 @@ def verify_remote_files(sealed: SealedStore, identifiers: Iterable[PartitionIden
     current = inspect_remote_integrity(root, provider)
     if current.generation_id != sealed.generation_id:
         _fail(root, provider, "generation_changed")
+    current_files = current.store.all_partition_files
     for identifier in set(identifiers):
-        part_path = current.store.partition_files[identifier]
+        part_path = current_files[identifier]
         name = part_path.relative_to(root).as_posix()
         try:
             data = root.client.get_bytes(root.child(name).prefix)
@@ -705,8 +712,9 @@ def materialize_verified_remote_partitions(
     local_paths: dict[PartitionIdentifier, Path] = {}
     unique_identifiers: list[PartitionIdentifier] = list(dict.fromkeys(identifiers))
     unique_identifiers.sort(key=lambda item: str(item).encode("utf-8"))
+    sealed_files = sealed.store.all_partition_files
     for identifier in unique_identifiers:
-        part_path = sealed.store.partition_files[identifier]
+        part_path = sealed_files[identifier]
         name = part_path.relative_to(root).as_posix()
         try:
             data = root.client.get_bytes(root.child(name).prefix)
@@ -799,21 +807,24 @@ def seal_remote_stage(
     except ObservationStoreRefusedError as error:
         raise _rewrite_refusal_store(error, remote_store) from error
 
+    meta_files = candidate_meta.all_partition_files
     if reused_map:
-        if previous is None or not set(reused_map).issubset(candidate_meta.partition_files):
+        if previous is None or not set(reused_map).issubset(meta_files):
             _fail(remote_store, provider_id, "reuse_prior")
+        prev_files = previous.store.all_partition_files
+        prev_counts = previous.store.manifest.all_partition_row_counts
+        cand_counts = candidate_meta.manifest.all_partition_row_counts
         for identifier, (rel_name, identity) in reused_map.items():
-            prev_rel = previous.store.partition_files[identifier].relative_to(previous.store.root).as_posix()
+            prev_rel = prev_files[identifier].relative_to(previous.store.root).as_posix()
             if (
                 rel_name != prev_rel
                 or (identity.sha256, identity.size) != (previous.files[prev_rel].sha256, previous.files[prev_rel].size)
-                or candidate_meta.manifest.partition_row_counts[identifier]
-                != previous.store.manifest.partition_row_counts[identifier]
+                or cand_counts[identifier] != prev_counts[identifier]
             ):
                 _fail(remote_store, provider_id, "reuse_record")
         _preserves_support(previous.store, candidate_meta, set(reused_map))
 
-    checked_subset = frozenset(set(candidate_meta.partition_files) - set(reused_map))
+    checked_subset = frozenset(set(meta_files) - set(reused_map))
     try:
         candidate = _validate_store_contents(stage_store, provider_id, checked_subset)
     except ObservationStoreRefusedError as error:
@@ -821,7 +832,7 @@ def seal_remote_stage(
 
     expected_names = {
         "manifest.json",
-        *(path.relative_to(stage_dir).as_posix() for path in candidate.partition_files.values()),
+        *(path.relative_to(stage_dir).as_posix() for path in candidate.all_partition_files.values()),
     }
     inherited_by_name = dict(reused_map.values())
     files: dict[str, FileIdentity] = {}
@@ -851,10 +862,15 @@ def seal_remote_stage(
         identifier: remote_root.child(path.relative_to(stage_dir).as_posix())
         for identifier, path in candidate.partition_files.items()
     }
+    remote_ann_partitions = {
+        identifier: remote_root.child(path.relative_to(stage_dir).as_posix())
+        for identifier, path in candidate.annotation_partition_files.items()
+    }
     validated_remote = ValidatedStore(
         root=remote_store,
         manifest=candidate.manifest,
         partition_files=remote_partitions,
+        annotation_partition_files=remote_ann_partitions,
     )
     return SealedStore(
         validated_remote,

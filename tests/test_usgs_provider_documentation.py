@@ -50,7 +50,7 @@ def test_usgs_provider_page_exact_snippets_and_displayed_outputs(retained_eviden
     monkeypatch.setattr(discovery, "HttpClient", Replay)
     namespace = {}
     examples = re.findall(r"```python\n(.*?)```\s+Output:\s+```text\n(.*?)```", PAGE.read_text(), re.S)
-    assert len(examples) == 3
+    assert len(examples) == 4
     for code, output in examples:
         exec(compile(code, str(PAGE), "exec"), namespace)
         assert capsys.readouterr().out == output
@@ -63,6 +63,7 @@ def test_usgs_provider_page_exact_snippets_and_displayed_outputs(retained_eviden
         result = namespace[name]
         assert result.data["unit"].unique().to_list() == ["m3/s"]
         assert result.data["time_zone"].unique().to_list() == ["unknown"]
+        assert result.to_polars(annotations="approval_status")["approval_status"].is_not_null().all()
         assert not result.receipts.entries
         assert not result.issues
 
@@ -76,12 +77,12 @@ def test_usgs_provider_offline_prevalence_and_singleton(monkeypatch):
     groups = frame.group_by("station_id", "quantity", "frequency", "statistic").agg(
         pl.col("variant").n_unique().alias("series_count")
     )
-    assert frame["station_id"].n_unique() == 27679
-    assert groups.filter(pl.col("series_count") > 1)["station_id"].n_unique() == 638
+    assert frame["station_id"].n_unique() == 29387
+    assert groups.filter(pl.col("series_count") > 1)["station_id"].n_unique() == 717
     daily = groups.filter(
         (pl.col("quantity") == "discharge") & (pl.col("frequency") == "daily") & (pl.col("statistic") == "mean")
     )
-    assert daily.height == 25342
+    assert daily.height == 25343
     assert daily.filter(pl.col("series_count") > 1).height == 147
     singleton = rr.find(
         provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
