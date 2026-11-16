@@ -277,8 +277,22 @@ AQUARIUS approval status:
 Separate AQUARIUS `Grade` markers in IDEAM's open exports remain unpopulated
 (`50 - INDEFINIDO`). Following RivRetrieve's library-wide convention, `rr.fetch`
 returns observations across all `nivelAprobacion` states without filtering or
-modifying values; the original source CSVs retain those per-row approval labels
-if future flag support or direct source inspection is needed. Missing dates and
+modifying values. The `nivelAprobacion` value is preserved per row as a source
+annotation (schema `co_ideam.s3`, observation scope):
+
+```python
+result = rr.fetch(sel, start="2010-01-01", end="2010-01-07")
+
+# Field catalogue
+print(rr.annotations(result).select("schema", "name", "dtype").rows())
+# [('co_ideam.s3', 'nivelAprobacion', 'String')]
+
+# Append to the canonical frame
+annotated = result.to_polars(annotations=True)
+print(annotated.select("time", "value", "nivelAprobacion").head(3).rows())
+```
+
+Missing dates and
 hours are simply absent from IDEAM's CSV files rather than written as placeholder
 rows.
 

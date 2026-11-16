@@ -14,11 +14,17 @@ from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
+from rivretrieve._internal.providers.co_ideam.annotations import CO_IDEAM_S3_SCHEMA
 from rivretrieve._internal.providers.co_ideam.config import CoIdeamS3CsvCoordinates
 from rivretrieve._internal.providers.co_ideam.series import (
     CSV_HEADER,
     SPECS_BY_ETIQUETA,
     source_series,
+)
+from rivretrieve._internal.source_annotations import (
+    OBSERVATION_STRUCTURAL_SCHEMA,
+    AnnotationBundle,
+    ObservationAnnotationTable,
 )
 from rivretrieve._internal.source_series import (
     ClippingAxis,
@@ -58,6 +64,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         inventories: list[InventorySnapshot] = []
         outcomes: list[RetrievalOutcome] = []
         issues: list[Issue] = []
+        approval_values: list[pl.Series] = []
         for station, product in payload.station_products:
             pair_scope = (
                 payload.scope.model_copy(update={"station_ids": (station,), "product_ids": (str(product),)})
@@ -68,18 +75,26 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             part = _parse_single_pair(narrowed, provider_config)
             if not part.rows.is_empty():
                 frames.append(part.rows)
+                for table in part.annotations.observation_tables.values():
+                    approval_values.append(table.rows["nivelAprobacion"])
             for item in part.series:
                 definitions[item.series_id] = item
             inventories.extend(part.inventories)
             outcomes.extend(part.outcomes)
             issues.extend(part.issues)
         combined = pl.concat(frames) if frames else pl.DataFrame(schema=RowsSchema.polars_schema)
+        if combined.is_empty():
+            annotations = AnnotationBundle.empty()
+        else:
+            all_approval = pl.concat(approval_values)
+            annotations = _build_annotations(combined, all_approval)
         return ParsedSeries(
             combined,
             tuple(definitions.values()),
             tuple(inventories),
             tuple(outcomes),
             tuple(issues),
+            annotations,
         )
 
     return _parse_single_pair(payload, provider_config)
@@ -370,7 +385,23 @@ def _parse_s3_csv(
         (definition,),
         (inventory,),
         tuple(outcomes),
+        (),
+        _build_annotations(rows_df, raw_df["nivelAprobacion"]),
     )
+
+
+def _build_annotations(rows_df: pl.DataFrame, approval_col: pl.Series) -> AnnotationBundle:
+    """Attach the ``nivelAprobacion`` column as an observation-scope annotation."""
+    ann_frame = rows_df.select("series_id", "facts_id", "station_id", "product_id", "time", "time_zone").with_columns(
+        pl.lit(True).cast(pl.Boolean()).alias("measured"),
+        approval_col.alias("nivelAprobacion"),
+    )
+    ann_table = ObservationAnnotationTable.from_rows(
+        schema=CO_IDEAM_S3_SCHEMA,
+        rows=ann_frame.select(*OBSERVATION_STRUCTURAL_SCHEMA, *CO_IDEAM_S3_SCHEMA.polars_schema()),
+        measurement_indices=list(range(rows_df.height)),
+    )
+    return AnnotationBundle(observation_tables={CO_IDEAM_S3_SCHEMA.schema_id: ann_table})
 
 
 def _append_disjoint_unresolved_bounds(

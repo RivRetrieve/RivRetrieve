@@ -64,7 +64,7 @@ def test_co_ideam_page_selection_discovery_and_catalogue_claims_are_offline(
         assert internal_token not in page
 
     blocks = re.findall(r"```python\n(.*?)```", page, re.DOTALL)
-    assert len(blocks) == 2
+    assert len(blocks) == 3
 
     tree = ast.parse(blocks[0])
     fetch_index = next(
