@@ -269,7 +269,7 @@ def station_native_table_and_associations(
             if _is_excluded_estacion(embedded):
                 continue
 
-            unit_abrev = validate_series_record_metadata(
+            unit_abrev, _data_availability = validate_series_record_metadata(
                 raw_series,
                 spec,
                 series_id=series_id,

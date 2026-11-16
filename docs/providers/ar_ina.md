@@ -264,10 +264,30 @@ and stage (`H`), `time` marks the measurement instant
 timestamps (such as `:10` seconds) where recorded by automatic loggers.
 
 Alerta5 serves operational real-time telemetry and historical gauge archives
-through the same API without per-observation quality-assurance flags; series
-metadata codes (`H`, `C`, `RT`, `NRT`) describe operational feed latency rather
-than data validation grades, and RivRetrieve makes no quality judgement of its
-own.
+through the same API without per-observation quality-assurance flags. It does
+publish a series-level operational-availability code (`H`, `C`, `RT`, `NRT`,
+`S`, and the `H+S`/`C+S`/`RT+S`/`NRT+S` combinations, or `N` for no
+observations available), documented on the a5-portal-home map. RivRetrieve
+keeps the default series frame unchanged and preserves that code as a
+series-scope annotation, under schema `ar_ina.series`:
+
+| Field | Type |
+|---|---|
+| `data_availability` | `String` |
+
+Inspect it alongside the series it describes:
+
+```python
+print(rr.annotations(result).select("schema", "name", "dtype", "row_count").write_csv(), end="")
+
+annotated = rr.series(result, annotations=True).select("series_id", "variant", "data_availability")
+print(annotated.write_csv(), end="")
+```
+
+This describes operational feed latency, not a data validation grade, and
+RivRetrieve makes no quality judgement of its own. It is only known when
+Alerta5's series-lookup endpoint was actually queried during this request; a
+series already established from the packaged catalogue may not carry it.
 
 Keep missing-data cases distinct when inspecting results:
 

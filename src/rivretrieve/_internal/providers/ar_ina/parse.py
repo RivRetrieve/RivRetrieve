@@ -12,6 +12,7 @@ from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
+from rivretrieve._internal.providers.ar_ina.annotations import AR_INA_SERIES_SCHEMA
 from rivretrieve._internal.providers.ar_ina.config import (
     ArInaSeriesLookupCoordinates,
     ArInaSourceCoordinates,
@@ -23,6 +24,7 @@ from rivretrieve._internal.providers.ar_ina.series import (
     source_series,
     validate_observation_row,
 )
+from rivretrieve._internal.source_annotations import AnnotationBundle
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -106,7 +108,7 @@ def _parse_series_lookup(
         product_ids=(str(product),),
     )
     try:
-        discovered = resolve_series_lookup(
+        discovered, series_annotations = resolve_series_lookup(
             payload.content,
             station,
             product,
@@ -128,7 +130,14 @@ def _parse_series_lookup(
 
     if discovered:
         # Child /observaciones payloads or FailedSourceRequest records own observation outcomes.
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), discovered, (), (), ())
+        annotations = (
+            AnnotationBundle(series_tables={AR_INA_SERIES_SCHEMA.schema_id: series_annotations})
+            if series_annotations.row_count
+            else AnnotationBundle.empty()
+        )
+        return ParsedSeries(
+            pl.DataFrame(schema=RowsSchema.polars_schema), discovered, (), (), (), annotations=annotations
+        )
 
     reason = (
         f"INA Alerta5 /obs/puntual/series publishes no observational series for station {station} product {product}"
