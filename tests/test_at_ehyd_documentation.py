@@ -171,6 +171,8 @@ def test_at_ehyd_page_selection_discovery_and_catalogue_claims_are_offline(
     assert "providers/at_ehyd.md" in (ROOT / "mkdocs.yml").read_text()
     assert "[`at_ehyd`](providers/at_ehyd.md)" in (ROOT / "docs/station-metadata.md").read_text()
     assert "https://rivretrieve.github.io/providers/at_ehyd/" in (ROOT / "README.md").read_text()
+    assert "at_ehyd.series" in page
+    assert "data_quality" in page
 
 
 @pytest.mark.recorded(_SCOPE)
@@ -211,6 +213,10 @@ def test_at_ehyd_page_retrieval_example_matches_recorded_responses(
     result = namespace["result"]
     assert result.provenance.license == "CC BY 4.0"  # type: ignore[attr-defined]
     assert result.provenance.citation == "Datenquelle: ehyd.gv.at"  # type: ignore[attr-defined]
+    assert rr.annotations(result).select("scope", "schema", "name").rows() == [  # type: ignore[arg-type]
+        ("series", "at_ehyd.series", "data_quality")
+    ]
+    assert rr.series(result, annotations=True)["data_quality"].to_list() == ["Geprüfte Daten"]  # type: ignore[arg-type]
 
     # Also verify the documented sub-hourly telemetry (variant="data") MEZ (+01:00) preservation and rr.to_utc (+00:00).
     all_q = rr.find(provider="at_ehyd", station="209486", quantity="discharge")

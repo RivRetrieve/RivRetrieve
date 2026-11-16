@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from operator import attrgetter
-from typing import Literal, Protocol, cast
+from typing import TYPE_CHECKING, Literal, Protocol, cast
+
+if TYPE_CHECKING:
+    from rivretrieve._internal.source_annotations import AnnotationSelection
 
 import polars as pl
 
@@ -113,6 +116,7 @@ class _Selection:
     locations: tuple[StationLocation, ...] = ()
     acquisition_provenance: tuple[CatalogueEvidence, ...] = ()
     empty_reason: _EmptyReason | None = None
+    series_annotations: object | None = None
 
     def __post_init__(self) -> None:
         seen: set[str] = set()
@@ -417,6 +421,7 @@ def _coordinate_selection(selection: _Selection, scope: SeriesScope) -> _Selecti
         issues=selection.issues,
         locations=locations,
         acquisition_provenance=evidence,
+        series_annotations=selection.series_annotations,
     )
 
 
@@ -477,6 +482,14 @@ def _with_selection_diagnostics(selection: _Selection, on_issue: OnIssue) -> _Se
                 )
             )
     result = replace(selection, issues=tuple(issues), empty_reason=reason)
+    if result.series_annotations is not None:
+        from rivretrieve._internal.source_annotations import AnnotationBundle
+
+        bundle = result.series_annotations
+        if isinstance(bundle, AnnotationBundle) and bundle.series_tables:
+            allowed_series_ids = {item.series_id for item in result.known_series if result.scope.matches(item)}
+            narrowed = bundle.narrow(old_to_new={}, allowed_series_facts=set(), allowed_series_ids=allowed_series_ids)
+            result = replace(result, series_annotations=None if narrowed.is_empty else narrowed)
     apply_on_issue(result.issues, on_issue)
     return result
 
@@ -994,9 +1007,17 @@ def _series_frame(
     return pl.concat(frames)
 
 
-def _as_frame(selection: _Selection) -> pl.DataFrame:
+def _as_frame(selection: _Selection, *, annotations: AnnotationSelection = False) -> pl.DataFrame:
+    from rivretrieve._internal.source_annotations import AnnotationBundle
+
     _require_selection(selection)
-    return _series_frame(selection.known_series, selection.scope, selection.inventories)
+    frame = _series_frame(selection.known_series, selection.scope, selection.inventories)
+    bundle = (
+        selection.series_annotations
+        if isinstance(selection.series_annotations, AnnotationBundle)
+        else AnnotationBundle.empty()
+    )
+    return bundle.join_series_columns(frame, annotations)
 
 
 def _station_keys(selection: _Selection) -> pl.DataFrame:

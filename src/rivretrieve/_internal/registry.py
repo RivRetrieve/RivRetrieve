@@ -34,6 +34,7 @@ from rivretrieve._internal.primitives import CacheMode, OnIssue, ProductId, Prov
 from rivretrieve._internal.provider_info import ProviderInfo
 from rivretrieve._internal.provider_module import ProviderModule
 from rivretrieve._internal.results import CatalogResult
+from rivretrieve._internal.source_annotations import with_annotations
 from rivretrieve._internal.source_series import (
     InventorySnapshot,
     OutcomeStatus,
@@ -261,16 +262,19 @@ class _ProviderHandle:
             store=store,
             reader=self._reader,
         )
-        return ObservationResult(
-            data=assembled.canonical_rows,
-            source_series=assembled.source_series,
-            inventories=assembled.inventories,
-            outcomes=assembled.outcomes,
-            supporting_outcomes=assembled.supporting_outcomes,
-            scope=assembled.scope,
-            provenance=assembled.provenance,
-            issues=(*assembled.issues, *provenance_issues),
-            receipts=assembled.receipts,
+        return with_annotations(
+            ObservationResult(
+                data=assembled.canonical_rows,
+                source_series=assembled.source_series,
+                inventories=assembled.inventories,
+                outcomes=assembled.outcomes,
+                supporting_outcomes=assembled.supporting_outcomes,
+                scope=assembled.scope,
+                provenance=assembled.provenance,
+                issues=(*assembled.issues, *provenance_issues),
+                receipts=assembled.receipts,
+            ),
+            assembled.annotations,
         )
 
     def _drive_store(
@@ -430,16 +434,19 @@ class _ProviderHandle:
             reader=self._reader,
         )
         provenance_issues = _unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation)
-        return ObservationResult(
-            data=assembled.canonical_rows,
-            source_series=assembled.source_series,
-            inventories=assembled.inventories,
-            outcomes=assembled.outcomes,
-            supporting_outcomes=assembled.supporting_outcomes,
-            scope=assembled.scope,
-            provenance=assembled.provenance,
-            issues=(*assembled.issues, *provenance_issues),
-            receipts=assembled.receipts,
+        return with_annotations(
+            ObservationResult(
+                data=assembled.canonical_rows,
+                source_series=assembled.source_series,
+                inventories=assembled.inventories,
+                outcomes=assembled.outcomes,
+                supporting_outcomes=assembled.supporting_outcomes,
+                scope=assembled.scope,
+                provenance=assembled.provenance,
+                issues=(*assembled.issues, *provenance_issues),
+                receipts=assembled.receipts,
+            ),
+            assembled.annotations,
         )
 
     def __getattr__(self, name: str) -> object:

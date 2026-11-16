@@ -33,6 +33,7 @@ planning/visions/*
 # Documentation build outputs
 site/
 docs/index.md
+docs/assets/coverage-map.png
 docs/assets/stations_map.html
 
 # Station explorer generated assets and local tools

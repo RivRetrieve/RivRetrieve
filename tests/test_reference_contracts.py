@@ -60,14 +60,16 @@ def documentation_site(tmp_path_factory, documentation_workspace):
             name
             for name in names
             if name == "__pycache__"
-            or Path(directory) / name in (ROOT / "docs/index.md", ROOT / "docs/assets/station-explorer")
+            or Path(directory) / name
+            in (ROOT / "docs/index.md", ROOT / "docs/assets/coverage-map.png", ROOT / "docs/assets/station-explorer")
         },
     )
-    # Reference rendering needs prepared asset paths, not a real browser bundle.
+    # Reference rendering needs prepared asset paths, not a real browser bundle or map render.
     app = docs / "assets/station-explorer"
     app.mkdir(parents=True)
     (app / "index.html").write_text("<html></html>")
     (app / "catalogue.json").write_text("{}")
+    (docs / "assets/coverage-map.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     outputs = [ROOT / "docs/index.md"]
     before = {path: path.read_bytes() if path.exists() else None for path in outputs}
     config = load_config(str(ROOT / "mkdocs.yml"), strict=True, site_dir=str(site), docs_dir=str(docs))
@@ -116,12 +118,28 @@ def test_reference_observation_result_fields(reference):
 
 
 def test_reference_all_provider_access_kinds(reference):
+    from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
+    from rivretrieve._internal.providers.registration import BulkStore, CatalogueOnly, LiveStages, load_manifest
+
     table = reference.split('id="shipped-software-capabilities"', 1)[1].split('id="packaged-access-coordinates"', 1)[0]
     rows = re.findall(r"<tr>(.*?)</tr>", table, re.DOTALL)[1:]
-    assert len(rows) == 16
-    assert sum("<td>live</td>" in row for row in rows) == 14
-    assert sum("<td>bulk store</td>" in row for row in rows) == 2
-    assert sum("<td>catalogue-only</td>" in row for row in rows) == 0
+    rendered = []
+    for row in rows:
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL)
+        rendered.append((html.unescape(re.sub(r"<[^>]+>", "", cells[0])).strip(), cells[1].strip()))
+    expected = []
+    for declared in load_manifest(BUILTIN_PROVIDER_IDS):
+        kind = declared.declaration.observations
+        if isinstance(kind, LiveStages):
+            label = "live"
+        elif isinstance(kind, BulkStore):
+            label = "bulk store"
+        elif isinstance(kind, CatalogueOnly):
+            label = "catalogue-only"
+        else:
+            raise AssertionError(f"Unexpected observation kind: {kind!r}")
+        expected.append((declared.provider_id, label))
+    assert rendered == expected
 
 
 def test_reference_renders_methods_and_signature_only_properties(reference):

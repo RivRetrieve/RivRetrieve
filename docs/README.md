@@ -19,6 +19,8 @@ Provider pages explain their agencies and source-specific conditions:
 - [Canada: Environment and Climate Change Canada](providers/ca_eccc.md)
 - [Colombia: IDEAM](providers/co_ideam.md)
 - [Czechia: CHMI](providers/cz_chmi.md)
+- [Denmark: VandA](providers/dk_vanda.md)
+- [Finland: Syke](providers/fi_syke.md)
 - [France: Hub'Eau (`fr_hubeau`)](providers/fr_hubeau.md)
 - [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
 - [Japan: MLIT](providers/jp_mlit.md)
