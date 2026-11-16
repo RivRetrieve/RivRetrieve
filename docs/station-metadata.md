@@ -63,6 +63,8 @@ of the source view.
 | [`ch_foen`](providers/ch_foen.md) | `data-name`, `name` | `data-hydro-body`, `riverName` | `Catchment size` (km2) | `Station altitude` (m) |
 | [`co_ideam`](providers/co_ideam.md) | `Nombre` | `Corriente` | — | `Altitud` |
 | [`cz_chmi`](providers/cz_chmi.md) | `STATION_NAME` | `STREAM_NAME` | `PLO_STA` (km²) | — |
+| [`dk_vanda`](providers/dk_vanda.md) | `name` | — | `catchmentAreaKm2` (km2) | — |
+| [`fi_syke`](providers/fi_syke.md) | `Nimi` | `PaaVesalNimi`, `VesalNimi` | — | — |
 | [`fr_hubeau`](providers/fr_hubeau.md) | `libelle_station` | `libelle_cours_eau`, `libelle_masse_eau` | `superficie_reelle`, `superficie_topo`; `surface_bv` (km²) | `altitude`, `altitude_site`; `altitude_ref_alti_station` (m) |
 | [`fr_hydroportail`](providers/fr_hydroportail.md) | — | — | — | — |
 | [`jp_mlit`](providers/jp_mlit.md) | `観測所名` | `河川名` | `流域面積` (km2) | `零点高` (m) |

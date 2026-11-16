@@ -262,7 +262,14 @@ def test_japan_published_missing_flag_remains_absent_not_invalid_numeric(retaine
     result = parse(replace(source, content=content), config)
     assert result.rows.height == baseline.rows.height - 1
     assert result.outcomes[0].status == "success"
-    assert any(issue.code == "source_missing" for issue in result.issues)
+    assert result.issues == ()
+    ann = result.annotations.observation_tables["jp_mlit.observations"]
+    unmeasured = [
+        flag
+        for flag, measured in zip(ann.rows["flag"].to_list(), ann.rows["measured"].to_list(), strict=True)
+        if not measured
+    ]
+    assert unmeasured == ["$"]
 
 
 @pytest.mark.parametrize("wire_format", ["owf_csv", "pegel_bgis_json", "pegel_longterm_json"])

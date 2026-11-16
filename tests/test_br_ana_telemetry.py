@@ -262,7 +262,9 @@ def test_invalid_values_fail_loud_from_corrupted_recording(retained_evidence_roo
 def test_real_null_values_and_status_are_retained(retained_evidence_root) -> None:
     result = _run(retained_evidence_root, ProductId("stage_instantaneous"), "2023-11-18", "2023-12-03", ("2023-12-05",))
     assert result.canonical_rows["value"].null_count() > 0
-    assert any(issue.details["source_status"] is None for issue in result.issues if issue.code == "source_status")
+    assert not result.issues
+    ann = result.annotations.observation_tables["br_ana.telemetry_cota"].rows
+    assert None in ann["Cota_Adotada_Status"].to_list()
 
 
 @pytest.mark.recorded("tests/recordings/br_ana")

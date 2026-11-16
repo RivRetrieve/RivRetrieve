@@ -52,6 +52,22 @@ jobs:
       - name: Export public station catalogue offline
         run: uv run python docs/scripts/generate_station_catalogue.py
 
+      - name: Cache Natural Earth boundaries
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ne_50m_admin_0_countries.zip
+          key: ne-50m-admin-0-countries-5fed433373581fa648920435f937d95f2d3c0200e067409c6478dcdf1b853139
+
+      - name: Render coverage map
+        run: |
+          BOUNDARIES_ZIP="${{ runner.temp }}/ne_50m_admin_0_countries.zip"
+          EXPECTED_SHA="5fed433373581fa648920435f937d95f2d3c0200e067409c6478dcdf1b853139"
+          if [ ! -f "$BOUNDARIES_ZIP" ]; then
+            curl -fsSL "https://naturalearth.s3.amazonaws.com/50m_cultural/ne_50m_admin_0_countries.zip" -o "$BOUNDARIES_ZIP"
+          fi
+          echo "$EXPECTED_SHA  $BOUNDARIES_ZIP" | sha256sum -c -
+          uv run python docs/scripts/coverage_map.py --world "$BOUNDARIES_ZIP" --out docs/assets/coverage-map.png
+
       - name: Build station explorer
         env:
           VITE_CARTO_BASEMAP_API_KEY: ${{ secrets.CARTO_BASEMAP_API_KEY }}

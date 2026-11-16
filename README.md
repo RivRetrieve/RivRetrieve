@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from sixteen different providers in fifteen countries.
+from eighteen different providers in seventeen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -43,6 +43,8 @@ for how to supply them.
 | Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Bulk download |
 | Colombia | Instituto de Hidrología, Meteorología y Estudios Ambientales (IDEAM) | `co_ideam` | 1,372 | Open |
 | Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | Open |
+| Denmark | Miljøstyrelsen (Danish Environmental Protection Agency) / Danmarks Miljøportal (VandA) | `dk_vanda` | 1,388 | Open |
+| Finland | Finnish Environment Institute (Syke), Hydrologiarajapinta | `fi_syke` | 2,543 | Open |
 | France | Hub'Eau | `fr_hubeau` | 7,347 | Open |
 | France | HydroPortail | `fr_hydroportail` | 6,409 | Open |
 | Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | Open |
@@ -57,6 +59,8 @@ for how to supply them.
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
 Austria's `at_ehyd` catalogue retains 746 river station identities; 744 have selectable series in this snapshot.
 See the [Austrian provider guide](https://rivretrieve.github.io/providers/at_ehyd/) for catalogue coverage and limitations.
+Denmark's `dk_vanda` catalogue retains 1,565 stations; 1,388 have selectable series in this snapshot.
+See the [Danish provider guide](https://rivretrieve.github.io/providers/dk_vanda/) for catalogue coverage and limitations.
 Switzerland's `ch_foen` catalogue retains 1,341 stations; 558 have selectable official series in this snapshot.
 See the [Swiss provider guide](https://rivretrieve.github.io/providers/ch_foen/) for catalogue coverage and limitations.
 The USGS catalogue retains 29,642 station identities; 29,387 have selectable series in this snapshot.
@@ -68,7 +72,7 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Argentina, Australia, Belgium, Chile, Denmark, Estonia, Finland,
+Afghanistan, Argentina, Australia, Belgium, Chile, Estonia,
 Germany, Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Portugal, Rwanda,
 Slovenia, South Africa, South Korea, Spain, Sweden, Taiwan and the United Kingdom.
 

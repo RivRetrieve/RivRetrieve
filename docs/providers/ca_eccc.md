@@ -92,7 +92,7 @@ instruction to run `download`.
 
 The July 17, 2026 compressed SQLite archive was listed as approximately 266 MB
 by the publisher. Compilation also needs space for the extracted database and
-working files. The verified compiled store occupied about 413 MB; that is not
+working files. The verified compiled store occupied about 383 MB; that is not
 its peak working-space requirement. The fresh download and compilation took
 about an hour on the verification machine. Size and duration vary by edition
 and computer. RivRetrieve checks its configured free-space requirement before
@@ -152,10 +152,55 @@ record returned here.
 ECCC describes review and finalization before records enter its national
 historical database. Values can still carry source symbols, including `B` for
 ice conditions and `E` for estimates, and can be revised. RivRetrieve preserves
-native symbol cells in its compiled store but does not add a per-row quality
-column to `result.data` or interpret symbols as a quality ranking. Optional
-[receipts](../usage.md#receipts-optional) retain selected stored source cells;
-a store excerpt is not the original national ZIP archive.
+HYDAT daily qualifier symbols and water-level recording precision codes as
+attached observation annotations without adding quality columns to
+`result.data`, ranking symbols, or filtering observations:
+
+- `ca_eccc.dly_flows`: `symbol` (`String`).
+- `ca_eccc.dly_levels`: `symbol` (`String`) and `precision_code` (`Int64`).
+
+HYDAT defines daily qualifier codes in `DATA_SYMBOLS` (`A` partial day, `B` ice
+conditions, `D` dry, `E` estimated, and `S` sample collected this day). Some
+historical months also store single-space strings `" "` in symbol cells.
+RivRetrieve preserves `" "` verbatim, distinct from `null` when no symbol cell
+value was published.
+
+For daily water levels, `precision_code` preserves `PRECISION_CODES` (`8` for
+metres recorded to millimetres, `9` for metres recorded to centimetres). Because
+HYDAT records `PRECISION_CODE` per monthly table row and a station's precision
+code can change mid-year, RivRetrieve attaches each month's code to every
+daily row of that month.
+
+Inspect the annotation field catalogue on `result` and project `symbol` onto
+the March 1991 discharge rows fetched above:
+
+```python
+print(rr.annotations(result).select("schema", "name", "dtype").rows())
+
+annotated = result.to_polars(annotations=True)
+symbol_preview = annotated.select("time", "value", "symbol").head(3)
+print(symbol_preview.write_csv(float_precision=3), end="")
+```
+
+Output:
+
+```text
+[('ca_eccc.dly_flows', 'symbol', 'String')]
+time,value,symbol
+1991-03-01T00:00:00.000000,0.090,B
+1991-03-02T00:00:00.000000,0.090,B
+1991-03-03T00:00:00.000000,0.090,B
+```
+
+Notice that all three shown March 1991 discharge means carry symbol `B` for
+ice conditions even though `result.issues` was empty. Pass
+`annotations="symbol"` to `result.to_polars(...)` or `result.to_pandas(...)` when
+you want specific annotation columns, or call
+`rr.annotations(result, schema="ca_eccc.dly_flows")` for the native schema
+table. Monthly summary fields (`FULL_MONTH`, `NO_DAYS`, `MONTHLY_MEAN`,
+`MONTHLY_TOTAL`, `FIRST_DAY_MIN`, `MIN`, `FIRST_DAY_MAX`, `MAX`) remain in
+optional store-excerpt [receipts](../usage.md#receipts-optional); a store
+excerpt is not the original national ZIP archive.
 
 A published null daily cell remains a row with `value=null`. An absent monthly
 source record supplies no daily rows. A missing store or failed request is
@@ -193,7 +238,7 @@ reuse terms.
 Publisher pages checked on 2026-09-22:
 
 - [WSC overview](https://www.canada.ca/en/environment-climate-change/services/water-overview/quantity/monitoring/survey.html), [Water Office FAQ](https://wateroffice.ec.gc.ca/contactus/faq_e.html): responsibilities, daily means and symbols, citation guidance.
-- [HYDAT archive](https://www.canada.ca/en/environment-climate-change/services/water-overview/quantity/monitoring/survey/data-products-services/national-archive-hydat.html), [download directory](https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/): archive contents, publication and edition.
+- [HYDAT archive](https://www.canada.ca/en/environment-climate-change/services/water-overview/quantity/monitoring/survey/data-products-services/national-archive-hydat.html), [download directory](https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/), [HYDAT definition](https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/HYDAT_Definition_EN.pdf): archive contents, table definitions, publication and edition.
 - [Historical Hydrometric Data record](https://open.canada.ca/data/en/dataset/1ee9e14d-0814-5201-a3be-705809d8ee0e), [Open Government Licence](https://open.canada.ca/en/open-government-licence-canada), [ECCC Data Services End-use Licence](https://eccc-msc.github.io/open-data/licence/readme_en/): terms and attribution.
 
 The station count describes the packaged catalogue. Fresh national acquisition

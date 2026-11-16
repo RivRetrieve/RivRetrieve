@@ -738,3 +738,52 @@ def test_copied_native_cache_verifies_unselected_partitions_before_acceptance(
         # Request only 2002..2003; unselected 1999 partition must still be verified before acceptance.
         rr.fetch(selected, start="2002-01-05", end="2003-02-01", cache="reuse", on_issue="raise")
     assert (relocated_store / "integrity.json").read_bytes() == before_seal
+
+
+def test_reuse_preserves_response_identity_when_failed_update_supplies_mapping_identity(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from rivretrieve._internal.store.integrity import inspect_integrity
+
+    store = StoreRoot(tmp_path / "store")
+    rows = _rows([datetime(2020, 1, 1)], [1.0])
+    coverage = _coverage("2020-01-01", "2020-12-31")
+    first = _rows_update(_PROVIDER, rows, coverage)
+    response_series = first.series[0].model_copy(
+        update={
+            "identity": SourceIdentity(
+                namespace="controlled fixture",
+                published_id="1",
+                description="Bruto",
+                origin="response",
+                evidence=("response",),
+            )
+        }
+    )
+    accumulate(store, _PROVIDER, replace(first, series=(response_series,)))
+
+    mapping_series = response_series.model_copy(
+        update={
+            "identity": SourceIdentity(
+                namespace="controlled fixture",
+                published_id="1",
+                description=None,
+                origin="mapping",
+                evidence=("mapping",),
+            )
+        }
+    )
+    failed_outcome = RetrievalOutcome(
+        outcome_id="failed-refresh",
+        series_id=response_series.series_id,
+        station_id="a",
+        product_id="level",
+        window=first.outcomes[0].window,
+        status=OutcomeStatus.FAILED,
+        reason="source unavailable",
+    )
+    manifest = accumulate(store, _PROVIDER, StoreUpdate((mapping_series,), (), (failed_outcome,), ()))
+    retained = next(item for item in manifest.series if item.series_id == response_series.series_id)
+    assert retained.identity.origin == "response"
+    assert retained.identity.description == "Bruto"
+    inspect_integrity(store, _PROVIDER)

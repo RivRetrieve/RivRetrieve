@@ -109,6 +109,8 @@ nav:
       - Canada (ECCC): providers/ca_eccc.md
       - Colombia (IDEAM): providers/co_ideam.md
       - Czechia (CHMI): providers/cz_chmi.md
+      - Denmark (VandA): providers/dk_vanda.md
+      - Finland (Syke): providers/fi_syke.md
       - France (Hub'Eau): providers/fr_hubeau.md
       - France (HydroPortail): providers/fr_hydroportail.md
       - Japan (MLIT): providers/jp_mlit.md
