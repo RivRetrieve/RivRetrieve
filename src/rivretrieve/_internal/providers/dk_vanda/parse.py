@@ -19,17 +19,18 @@ richer response shape (`ResultResponse`), not on `/water-flows`'s or
 `WaterLevelResultStreamlineResponse` -- checked directly against
 `swagger.json` and real retained bytes in step 4; discharge and stage simply
 carry no such field to surface. When present (temperature, via
-`/measurements/results/current`), a non-null `reasonSc`/`reason` becomes an
-`info`-severity `Issue` carrying VandA's own published `reason` text verbatim
--- `/config/examination-types`' `reasonCodesSc` vocabulary has no published
-textual meaning for any code (every `description` is `null`), so this port
-does not invent one.
+`/measurements/results/current`), `reasonSc`/`reason` are preserved verbatim
+in the declared `dk_vanda.temperature` observation-annotation schema
+(`annotations.py`), never as a per-row `Issue` -- `/config/examination-types`'
+`reasonCodesSc` vocabulary has no published textual meaning for any code
+(every `description` is `null`), so this port does not invent one.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from datetime import datetime
 from math import isfinite
 from typing import cast
@@ -40,8 +41,10 @@ from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema, Wi
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
+from rivretrieve._internal.providers.dk_vanda.annotations import DK_VANDA_TEMPERATURE_SCHEMA
 from rivretrieve._internal.providers.dk_vanda.config import DkVandaSourceCoordinates, series_mapping
 from rivretrieve._internal.providers.dk_vanda.series import STAGE_FIELDS, stage_facts, stage_identity
+from rivretrieve._internal.source_annotations import AnnotationBundle, ObservationAnnotationTable
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -58,6 +61,8 @@ from rivretrieve._internal.source_series import (
 
 _PROVIDER_ID = ProviderId("dk_vanda")
 _INSTANT_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?Z$")
+_INT64_MIN = -(1 << 63)
+_INT64_MAX = (1 << 63) - 1
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
@@ -74,16 +79,31 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
 
     if product == "stage":
         return _parse_stage(payload, station, coordinates)
-    return parse_mapped_series(
+    if product != "temperature":
+        return parse_mapped_series(
+            payload,
+            provider_config,
+            provider="dk_vanda",
+            mappings={product: series_mapping(product)},
+            native_parse=_native_parse_single_field,
+        )
+    captured_annotations: list[dict[str, int | str | None]] = []
+    parsed = parse_mapped_series(
         payload,
         provider_config,
         provider="dk_vanda",
         mappings={product: series_mapping(product)},
-        native_parse=_native_parse_single_field,
+        native_parse=lambda tagged, cfg: _native_parse_single_field(tagged, cfg, annotations_out=captured_annotations),
     )
+    return _attach_temperature_annotations(parsed, captured_annotations)
 
 
-def _native_parse_single_field(payload: Payload, provider_config: ProviderConfig) -> WithIssues[pl.DataFrame]:
+def _native_parse_single_field(
+    payload: Payload,
+    provider_config: ProviderConfig,
+    *,
+    annotations_out: list[dict[str, int | str | None]] | None = None,
+) -> WithIssues[pl.DataFrame]:
     del provider_config
     if len(payload.station_products) != 1:
         raise FatalContractError("dk_vanda mapped payload must identify exactly one station-product pair")
@@ -94,7 +114,6 @@ def _native_parse_single_field(payload: Payload, provider_config: ProviderConfig
 
     raw_rows = _station_results(payload.content, station)
     rows: list[dict[str, object]] = []
-    issues: list[Issue] = []
     for index, raw_row in enumerate(raw_rows):
         timestamp, number = _validated_result_row(raw_row, coordinates.examination_type_sc, "result", index)
         if number is None:
@@ -108,11 +127,31 @@ def _native_parse_single_field(payload: Payload, provider_config: ProviderConfig
                 "time_zone": "+00:00",
             }
         )
-        reason_issue = _reason_issue(raw_row, station, str(product), timestamp, index)
-        if reason_issue is not None:
-            issues.append(reason_issue)
+        if annotations_out is not None:
+            annotations_out.append(_reason_annotation(raw_row, index))
     frame = pl.DataFrame(rows, schema=NATIVE_SCHEMA) if rows else pl.DataFrame(schema=NATIVE_SCHEMA)
-    return WithIssues(value=frame, issues=tuple(issues))
+    return WithIssues(frame)
+
+
+def _attach_temperature_annotations(parsed: ParsedSeries, captured: list[dict[str, int | str | None]]) -> ParsedSeries:
+    if parsed.rows.is_empty():
+        return replace(parsed, annotations=AnnotationBundle.empty())
+    if len(captured) != parsed.rows.height:
+        raise FatalContractError("dk_vanda parsed rows and observation annotations count mismatch")
+    schema = DK_VANDA_TEMPERATURE_SCHEMA
+    ann_frame = parsed.rows.select(
+        "series_id", "facts_id", "station_id", "product_id", "time", "time_zone"
+    ).with_columns(
+        pl.lit(True).cast(pl.Boolean()).alias("measured"),
+        pl.Series("reasonSc", [item["reasonSc"] for item in captured], dtype=pl.Int64()),
+        pl.Series("reason", [item["reason"] for item in captured], dtype=pl.String()),
+    )
+    ann_table = ObservationAnnotationTable.from_rows(
+        schema=schema,
+        rows=ann_frame,
+        measurement_indices=list(range(parsed.rows.height)),
+    )
+    return replace(parsed, annotations=AnnotationBundle(observation_tables={schema.schema_id: ann_table}))
 
 
 def _parse_stage(payload: Payload, station: str, coordinates: object) -> ParsedSeries:
@@ -390,31 +429,20 @@ def _parse_instant(label: str, index: int) -> datetime:
         ) from error
 
 
-def _reason_issue(
-    raw_row: dict[str, object], station: str, product: str, timestamp: datetime, index: int
-) -> Issue | None:
-    """Surface a non-null published `reasonSc`/`reason` verbatim, never interpreted.
+def _reason_annotation(raw_row: dict[str, object], index: int) -> dict[str, int | str | None]:
+    """Extract one row's `reasonSc`/`reason` pair, verbatim and type-checked.
 
     Only `/measurements/results/current` (temperature) carries these fields;
     `/water-flows` and `/water-levels` never do (checked against swagger.json
-    and real retained bytes, step 4), so `raw_row.get(...)` safely no-ops for
-    discharge and stage.
+    and real retained bytes, step 4), so this helper is only ever invoked from
+    temperature's native parse (see `parse`'s dispatch).
     """
     reason_sc = raw_row.get("reasonSc")
+    if reason_sc is not None and (
+        isinstance(reason_sc, bool) or not isinstance(reason_sc, int) or not (_INT64_MIN <= reason_sc <= _INT64_MAX)
+    ):
+        raise UnsupportedSourceStructureError(f"dk_vanda result {index} reasonSc must be an integer or null")
     reason = raw_row.get("reason")
-    if reason_sc is None and reason is None:
-        return None
-    return Issue(
-        severity="info",
-        code="source.reason_flag",
-        message=f"VandA reports reasonSc {reason_sc!r} ({reason!r}) for {station} {product} at {timestamp.isoformat()}",
-        details={
-            "station_id": station,
-            "product_id": product,
-            "source_reason_sc": reason_sc,
-            "source_reason": reason,
-            "source_time": timestamp.isoformat(),
-            "source_row_index": index,
-        },
-        provider_id=_PROVIDER_ID,
-    )
+    if reason is not None and not isinstance(reason, str):
+        raise UnsupportedSourceStructureError(f"dk_vanda result {index} reason must be a string or null")
+    return {"reasonSc": reason_sc, "reason": reason}

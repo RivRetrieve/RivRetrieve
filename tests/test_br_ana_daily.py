@@ -245,7 +245,10 @@ def test_adversarial_published_blank_is_null_not_zero(retained_evidence_root, bl
 
 
 @pytest.mark.recorded("tests/recordings/br_ana")
-@pytest.mark.parametrize("field", ["Mediadiaria", "nivelconsistencia", "Data_Hora_Dado", "Cota_15", "Cota_15_Status"])
+@pytest.mark.parametrize(
+    "field",
+    ["Mediadiaria", "nivelconsistencia", "Data_Hora_Dado", "Cota_15", "Cota_15_Status", "Tipo_Medicao_Cotas"],
+)
 def test_adversarial_missing_daily_fields_fail_loud(retained_evidence_root, field: str) -> None:
     payload = _payload(retained_evidence_root, "stage_daily_mean_bruto")
     document = json.loads(payload.content)
@@ -266,7 +269,9 @@ def test_daily_status_does_not_select_or_discard_a_published_value(retained_evid
     original = parse(payload, config()).rows
     changed = parse(replace(payload, content=json.dumps(document).encode()), config())
     pl_testing.assert_frame_equal(original, changed.rows)
-    assert any(issue.details is not None and issue.details.get("source_status") == "3" for issue in changed.issues)
+    assert not changed.issues
+    ann = changed.annotations.observation_tables["br_ana.daily_cotas"].rows
+    assert "3" in ann["Cota_Status"].to_list()
 
 
 @pytest.mark.recorded("tests/recordings/br_ana")
@@ -435,10 +440,9 @@ def test_independent_year_boundary_no_variant_fallback(
 def test_real_null_daily_status_does_not_discard_published_value(retained_evidence_root) -> None:
     result = _run(retained_evidence_root, "stage_daily_mean_bruto", "2023-12-31", "2024-01-01", ("2023-12", "2024-01"))
     assert result.canonical_rows.filter(pl.col("time") == datetime(2023, 12, 31)).item(0, "value") == 7.595
-    assert any(
-        issue.code == "source_status" and issue.details is not None and issue.details["source_status"] is None
-        for issue in result.issues
-    )
+    assert not result.issues
+    ann = result.annotations.observation_tables["br_ana.daily_cotas"].rows
+    assert None in ann["Cota_Status"].to_list()
 
 
 @pytest.mark.recorded("tests/recordings/br_ana")

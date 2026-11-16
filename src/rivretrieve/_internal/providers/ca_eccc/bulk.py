@@ -26,7 +26,17 @@ from typing import Final
 import polars as pl
 
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.providers.ca_eccc.annotations import (
+    CA_ECCC_DLY_FLOWS_SCHEMA,
+    CA_ECCC_DLY_LEVELS_SCHEMA,
+)
 from rivretrieve._internal.providers.ca_eccc.series import source_series
+from rivretrieve._internal.source_annotations import (
+    OBSERVATION_STRUCTURAL_SCHEMA,
+    AnnotationBundle,
+    AnnotationSchema,
+    ObservationAnnotationTable,
+)
 from rivretrieve._internal.source_series import SourceSeries
 from rivretrieve._internal.store import (
     ArtifactChecksum,
@@ -66,11 +76,12 @@ class HydatTable:
     product_id: ProductId
     value_prefix: str
     symbol_prefix: str
+    annotation_schema: AnnotationSchema
 
 
 HYDAT_TABLES: Final = (
-    HydatTable("DLY_FLOWS", ProductId("discharge_daily_mean"), "FLOW", "FLOW_SYMBOL"),
-    HydatTable("DLY_LEVELS", ProductId("stage_daily_mean"), "LEVEL", "LEVEL_SYMBOL"),
+    HydatTable("DLY_FLOWS", ProductId("discharge_daily_mean"), "FLOW", "FLOW_SYMBOL", CA_ECCC_DLY_FLOWS_SCHEMA),
+    HydatTable("DLY_LEVELS", ProductId("stage_daily_mean"), "LEVEL", "LEVEL_SYMBOL", CA_ECCC_DLY_LEVELS_SCHEMA),
 )
 
 
@@ -275,6 +286,7 @@ def decode_hydat_batches(
                                 tuple(units),
                                 tuple(contributions),
                                 _batch_series(rows),
+                                annotations=_hydat_annotation_bundle(table, rows),
                             )
                             rows = []
                             units = []
@@ -285,6 +297,7 @@ def decode_hydat_batches(
                             tuple(units),
                             tuple(contributions),
                             _batch_series(rows),
+                            annotations=_hydat_annotation_bundle(table, rows),
                         )
             finally:
                 connection.close()
@@ -417,6 +430,12 @@ def _unpivot_month(
         raise ValueError(f"{table.table_name} has an invalid STATION_NUMBER")
     if type(year) is not int or type(month) is not int or type(no_days) is not int:
         raise TypeError(f"{table.table_name} YEAR, MONTH and NO_DAYS must be SQLite integers")
+    precision_code: int | None = None
+    if table.table_name == "DLY_LEVELS":
+        raw_precision = source["PRECISION_CODE"]
+        if raw_precision is not None and type(raw_precision) is not int:
+            raise TypeError("DLY_LEVELS.PRECISION_CODE must be an SQLite integer or null")
+        precision_code = raw_precision
     try:
         valid_days = calendar.monthrange(year, month)[1]
     except (ValueError, OverflowError) as error:
@@ -436,9 +455,9 @@ def _unpivot_month(
         if qualified in retained:
             retained[qualified] = source[column]
 
+    definition = source_series(station, str(table.product_id))
+    facts = definition.facts[0]
     for day in range(1, valid_days + 1):
-        definition = source_series(station, str(table.product_id))
-        facts = definition.facts[0]
         raw_value = source[f"{table.value_prefix}{day}"]
         if raw_value is None:
             value = None
@@ -456,21 +475,52 @@ def _unpivot_month(
                     f"for station {station!r}, year {year}, month {month}"
                 )
             value_state = "published_value"
-        output.append(
-            {
-                "product": str(table.product_id),
-                "station_id": station,
-                "time": datetime(year, month, day),
-                "time_zone": "unknown",
-                "value": value,
-                "value_state": value_state,
-                "series_id": definition.series_id,
-                "facts_id": facts.facts_id,
-                "source_unit": facts.source_unit.value,
-                **retained,
-            }
-        )
+        raw_symbol = source[f"{table.symbol_prefix}{day}"]
+        if raw_symbol is not None and not isinstance(raw_symbol, str):
+            raise TypeError(f"{table.table_name}.{table.symbol_prefix}{day} must be SQLite text or null")
+        row_record: dict[str, object] = {
+            "product": str(table.product_id),
+            "station_id": station,
+            "time": datetime(year, month, day),
+            "time_zone": "unknown",
+            "value": value,
+            "value_state": value_state,
+            "series_id": definition.series_id,
+            "facts_id": facts.facts_id,
+            "source_unit": facts.source_unit.value,
+            **retained,
+            "__symbol": raw_symbol,
+        }
+        if table.table_name == "DLY_LEVELS":
+            row_record["__precision_code"] = precision_code
+        output.append(row_record)
     return valid_days
+
+
+def _hydat_annotation_bundle(table: HydatTable, rows: list[dict[str, object]]) -> AnnotationBundle:
+    ann_schema = table.annotation_schema
+    columns: dict[str, list[object]] = {
+        "series_id": [row["series_id"] for row in rows],
+        "facts_id": [row["facts_id"] for row in rows],
+        "station_id": [row["station_id"] for row in rows],
+        "product_id": [row["product"] for row in rows],
+        "time": [row["time"] for row in rows],
+        "time_zone": [row["time_zone"] for row in rows],
+        "measured": [True] * len(rows),
+        "symbol": [row["__symbol"] for row in rows],
+    }
+    if table.table_name == "DLY_LEVELS":
+        columns["precision_code"] = [row["__precision_code"] for row in rows]
+    frame = pl.DataFrame(
+        columns,
+        schema={**OBSERVATION_STRUCTURAL_SCHEMA, **ann_schema.polars_schema()},
+    )
+    obs_table = ObservationAnnotationTable.from_rows(
+        schema=ann_schema,
+        rows=frame,
+        measurement_indices=range(len(rows)),
+    )
+    return AnnotationBundle(observation_tables={ann_schema.schema_id: obs_table})
 
 
 def _declared_schema() -> _HydatSchema:
@@ -495,6 +545,30 @@ def _declared_schema() -> _HydatSchema:
                         reconstruction_rule=(
                             "Recover exactly from product, station_id, time, value and value_state; "
                             "group rows by the retained monthly native cells."
+                        ),
+                        rationale=None,
+                    )
+                )
+            elif name.startswith(table.symbol_prefix) and name[len(table.symbol_prefix) :].isdigit():
+                dispositions.append(
+                    SourceColumnDisposition(
+                        source_column=qualified,
+                        disposition=Disposition.RECONSTRUCTIBLE,
+                        reconstruction_rule=(
+                            f"Recover valid calendar day cells verbatim from symbol in annotations={table.annotation_schema.schema_id} "
+                            "matched by station_id and time; out-of-calendar day slots after calendar.monthrange(YEAR, MONTH)[1] are NULL."
+                        ),
+                        rationale=None,
+                    )
+                )
+            elif table.table_name == "DLY_LEVELS" and name == "PRECISION_CODE":
+                dispositions.append(
+                    SourceColumnDisposition(
+                        source_column=qualified,
+                        disposition=Disposition.RECONSTRUCTIBLE,
+                        reconstruction_rule=(
+                            "Recover verbatim from precision_code in annotations=ca_eccc.dly_levels "
+                            "grouped by station_id, time.year and time.month."
                         ),
                         rationale=None,
                     )

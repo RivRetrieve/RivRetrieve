@@ -2,7 +2,7 @@
 
 Reproduce from the checkout catalogue and Natural Earth 1:50m Admin 0 Countries:
 
-    uv run --with geopandas --with matplotlib python docs/scripts/coverage_map.py \
+    uv run python docs/scripts/coverage_map.py \
         --out docs/assets/coverage-map.png
 
 The default boundary URL is public. For offline regeneration, pass --world with a
@@ -35,6 +35,7 @@ PROVIDER_COUNTRY = {
     "ch_foen": "CHE",
     "cz_chmi": "CZE",
     "dk_vanda": "DNK",
+    "fi_syke": "FIN",
     "fr_hubeau": "FRA",
     "fr_hydroportail": "FRA",
     "jp_mlit": "JPN",
@@ -53,7 +54,6 @@ PLANNED_COUNTRY = {
     "DEU": "Germany (Berlin)",
     "ESP": "Spain",
     "EST": "Estonia",
-    "FIN": "Finland",
     "GBR": "United Kingdom (EA, NRFA, SEPA)",
     "GRC": "Greece",
     "IRL": "Ireland (OPW)",

@@ -117,6 +117,7 @@ def test_discharge_request_shape_and_success():
     ]
     assert [o.status.value for o in parsed.outcomes] == ["success"]
     assert not parsed.issues
+    assert parsed.annotations.is_empty
 
 
 def test_stage_request_shape_has_no_examination_type_sc_param():
@@ -173,29 +174,31 @@ def test_stage_null_result_elevation_corrected_is_preserved_as_none_not_coerced(
     assert rows_by_field["resultElevationCorrected"][0]["value"] is None
 
 
-def test_temperature_reason_flag_becomes_info_issue_but_stage_never_does():
+def test_temperature_reason_flag_becomes_annotation_but_stage_never_does():
     body = _envelope(
         "70000277",
         [_result_row(29, "2020-01-01T00:00:00.00Z", 5.2, reason_sc=3, reason="Is i vandløb")],
     )
     payload, _, cfg = _acquire("70000277", "temperature", body)
     parsed = parse(payload, cfg)
-    assert len(parsed.issues) == 1
-    assert parsed.issues[0].severity == "info"
-    assert parsed.issues[0].code == "source.reason_flag"
-    assert parsed.issues[0].details["source_reason_sc"] == 3
-    assert parsed.issues[0].details["source_reason"] == "Is i vandløb"
+    assert not parsed.issues
+    assert set(parsed.annotations.observation_tables) == {"dk_vanda.temperature"}
+    table = parsed.annotations.observation_tables["dk_vanda.temperature"]
+    assert table.rows["reasonSc"].to_list() == [3]
+    assert table.rows["reason"].to_list() == ["Is i vandløb"]
 
     # /water-levels never carries reasonSc/reason at all (step 4 research finding);
-    # even a row shaped with those keys set produces no Issue when parsed as stage,
-    # since the real endpoint never actually serves them -- this just proves the
-    # helper is correctly inert for the water-levels shape, not that the keys are read.
+    # even a row shaped with those keys set produces no annotation table when parsed
+    # as stage, since the real endpoint never actually serves them -- this just proves
+    # the dispatch is correctly inert for the water-levels shape, not that the keys
+    # are read.
     stage_body = _envelope(
         "19000468", [_result_row(25, "2020-01-01T00:00:00.00Z", 24.3, reason_sc=3, reason="Is i vandløb")]
     )
     stage_payload, _, stage_cfg = _acquire("19000468", "stage", stage_body)
     stage_parsed = parse(stage_payload, stage_cfg)
     assert not stage_parsed.issues
+    assert stage_parsed.annotations.is_empty
 
 
 def test_examination_type_mismatch_marks_unsupported_not_a_crash():

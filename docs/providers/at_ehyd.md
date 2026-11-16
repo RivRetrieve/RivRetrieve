@@ -36,6 +36,7 @@ print(preview.write_csv(), end="")
 
 print(result.data.height)
 print(result.issues)
+print(rr.series(result, annotations=True)["data_quality"].to_list())
 ```
 
 Output:
@@ -47,12 +48,15 @@ time,time_zone,value,unit
 2023-01-03T00:00:00.000000,unknown,0.109,m3/s
 7
 ()
+['Geprüfte Daten']
 ```
 
 The request returned seven published daily means in m³/s from eHYD's validated
 historical archive (`owf_abfl_tagesmittel`). The preview shows the first three
-days. `time_zone` is `unknown` because the exported CSV files do not state a UTC
-offset; see [Time and data status](#time-and-data-status). The empty tuple `()`
+days, and `rr.series(result, annotations=True)` shows the archive's
+`Geprüfte Daten` label from `at_ehyd.series`. `time_zone` is `unknown` because
+the exported CSV files do not state a UTC offset; see
+[Time and data status](#time-and-data-status). The empty tuple `()`
 means this retrieval reported no transport, parsing, or gap-marker issues.
 Attribution is still required when using the data; see
 [Terms and citation](#terms-and-citation).
@@ -287,8 +291,12 @@ eHYD labels its historical CSV downloads *Geprüfte Daten* (checked data) and
 displays `"ungeprüfte Rohdaten!"` (unchecked raw data) on *Pegel Aktuell*
 exports, noting that live telemetry can contain sensor faults, ice or weed
 effects, backwater, or transmission gaps. Neither stream carries
-per-observation quality flags, and RivRetrieve makes no quality judgement of
-its own.
+per-observation quality flags. RivRetrieve attaches the verbatim stream label in
+the series-grain annotation schema `at_ehyd.series` (`scope="series"`, field
+`data_quality` of type `String`) without making a quality judgement of its own.
+Use `rr.annotations(result)` to inspect attached metadata and
+`rr.series(result, annotations=True)` to join `data_quality` to the series table;
+see [Usage](../usage.md#source-annotations).
 
 Keep missing-data representations distinct when inspecting results:
 

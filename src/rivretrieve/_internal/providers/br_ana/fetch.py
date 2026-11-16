@@ -68,10 +68,15 @@ def fetch(
                         "Data de Busca (yyyy-MM-dd)": window.stop,
                         "Range Intervalo de busca": "DIAS_30",
                     }
+                default_target = describe_series(station, product, source)
+                target = next(
+                    (item for item in known_series if item.series_id == default_target.series_id),
+                    default_target,
+                )
                 response = attempt_series_request(
                     transport,
                     TransportRequest(method=HttpMethod.GET, url=url, params=parameters),
-                    describe_series(station, product, source),
+                    target,
                     SeriesWindow(
                         start=datetime.fromisoformat(window.bounds.start.isoformat()),
                         end=datetime.fromisoformat(window.bounds.end.isoformat()),

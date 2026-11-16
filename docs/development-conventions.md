@@ -38,10 +38,13 @@ directives when the supported public surface grows, without exposing private hel
 The homepage comes from the root README through `docs/hooks.py`. Edit that source,
 not the generated `docs/index.md`. Schema and provider tables come from
 `scripts/generate_reference.py`; regenerate them only when their underlying facts
-change and commit the updated tables.
+change and commit the updated tables. The coverage map (`docs/assets/coverage-map.png`)
+and station explorer (`docs/assets/station-explorer/`) are generated during documentation
+builds rather than committed; render the map locally before running `mkdocs build --strict`.
 
 ```sh
 uv run python scripts/generate_reference.py --check
+uv run python docs/scripts/coverage_map.py --out docs/assets/coverage-map.png
 uv run pytest --logic-only tests/test_documentation.py tests/test_reference_contracts.py
 uv run mkdocs build --strict
 ```

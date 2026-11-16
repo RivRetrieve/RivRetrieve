@@ -176,11 +176,37 @@ VandA publishes every timestamp as a UTC instant. RivRetrieve returns these in
 instant; readings are point-in-time values, not a stated average over a period.
 
 Water temperature readings can carry a non-null reason code (`reasonSc`) from
-VandA's own vocabulary. RivRetrieve reports a non-null reason as an
-`info`-severity `source.reason_flag` issue carrying VandA's own text verbatim;
-it does not interpret or rank the code, because VandA's own published reason-
-code vocabulary states no textual meaning for any code. Discharge and stage
-responses never carry this field.
+VandA's own vocabulary, paired with a free-text `reason`. RivRetrieve preserves
+both verbatim in the `dk_vanda.temperature` annotation schema (`Int64` and
+`String`, nullable); it does not interpret or rank the code, because VandA's
+own published reason-code vocabulary states no textual meaning for any code.
+Discharge and stage responses never carry this field.
+
+```python
+temp = rr.find(provider="dk_vanda", station="70000277", quantity="temperature")
+result = rr.fetch(temp, start="2026-11-08", end="2026-11-08T23:59:59", cache="bypass")
+print(rr.annotations(result).select("schema", "name", "dtype").rows())
+
+annotated = result.to_polars(annotations=True)
+print(annotated.select("value", "reasonSc", "reason").head(3).rows())
+```
+
+Output:
+
+```text
+[('dk_vanda.temperature', 'reasonSc', 'Int64'), ('dk_vanda.temperature', 'reason', 'String')]
+[(8.3, None, None), (8.3, None, None), (8.2, None, None)]
+```
+
+This station and window happen to carry no non-null reason; the columns are
+still present and nullable, so a flagged reading elsewhere carries the same
+shape without changing it. Checked live on 2026-11-15.
+
+Pass `annotations="reasonSc"` or `annotations=["reasonSc", "reason"]` to
+`result.to_polars(...)` or `result.to_pandas(...)` when you only want specific
+columns, or call `rr.annotations(result, schema="dk_vanda.temperature")` for
+the native schema table. See
+[Source annotations](../usage.md#source-annotations) for the general pattern.
 
 A published null remains a row with `value=null`. A period with no published
 reading supplies no row. A failed request remains an issue alongside any

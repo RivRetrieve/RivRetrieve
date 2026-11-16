@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -15,6 +15,12 @@ import polars as pl
 from rivretrieve._internal.coverage import CoverageInterval
 from rivretrieve._internal.engine import Rows, RowsSchema, WindowEndpoint
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.source_annotations import (
+    AnnotationBundle,
+    ObservationAnnotationTable,
+    SeriesAnnotationTable,
+    decode_observation_table_from_parquet,
+)
 from rivretrieve._internal.source_series import SeriesWindow
 from rivretrieve._internal.store.authority import CurrentEvidence
 from rivretrieve._internal.store.integrity import SealedStore
@@ -103,6 +109,7 @@ class StoreReadResult:
     rows: Rows
     physical_rows: pl.DataFrame
     optimized_plan: str
+    annotations: AnnotationBundle = field(default_factory=AnnotationBundle.empty)
 
     @property
     def root(self) -> StoreRoot:
@@ -326,30 +333,49 @@ class StoreReader:
         sealed = self._prepare(query.store, query.provider_id)
         validated = sealed.store
         executed = _executed_query(query)
+        executed_products = {str(product) for product in executed.products}
         candidates = {
             key: path
             for key, path in validated.partition_files.items()
-            if str(key).split("/")[0].removeprefix("product=") in executed.products
+            if str(key).split("/")[0].removeprefix("product=") in executed_products
             and int(str(key).split("/")[1].removeprefix("year=")) in executed.years
         }
+        ann_candidates = {
+            key: path
+            for key, path in validated.annotation_partition_files.items()
+            if str(key).split("/")[0].removeprefix("product=") in executed_products
+            and int(str(key).split("/")[1].removeprefix("year=")) in executed.years
+        }
+        all_candidates = {**candidates, **ann_candidates}
         if isinstance(query.store, RemoteStoreRoot):
-            if candidates:
+            if all_candidates:
                 with TemporaryDirectory() as tmp_dir:
-                    local_candidates = materialize_verified_remote_partitions(sealed, candidates.keys(), Path(tmp_dir))
-                    physical_rows, optimized_plan = _scan(tuple(local_candidates.values()), executed)
+                    local_all = materialize_verified_remote_partitions(sealed, all_candidates.keys(), Path(tmp_dir))
+                    obs_paths = tuple(local_all[key] for key in candidates)
+                    ann_paths = {key: local_all[key] for key in ann_candidates}
+                    if obs_paths:
+                        physical_rows, optimized_plan = _scan(obs_paths, executed)
+                    else:
+                        physical_rows = _empty_physical_rows(query.store, validated.manifest)
+                        optimized_plan = "EMPTY SCAN: no candidate partitions"
+                    rows = _engine_rows(physical_rows)
+                    annotations = _read_annotations(validated.manifest, executed, ann_paths, rows)
             else:
                 physical_rows = _empty_physical_rows(query.store, validated.manifest)
                 optimized_plan = "EMPTY SCAN: no candidate partitions"
+                rows = _engine_rows(physical_rows)
+                annotations = _read_annotations(validated.manifest, executed, {}, rows)
         else:
             verified = self._verified[(query.store, query.provider_id)]
-            verify_inspected_files(sealed, candidates.keys() - verified)
-            verified.update(candidates)
+            verify_inspected_files(sealed, all_candidates.keys() - verified)
+            verified.update(all_candidates)
             if candidates:
                 physical_rows, optimized_plan = _scan(tuple(candidates.values()), executed)
             else:
                 physical_rows = _empty_physical_rows(query.store, validated.manifest)
                 optimized_plan = "EMPTY SCAN: no candidate partitions"
-        rows = _engine_rows(physical_rows)
+            rows = _engine_rows(physical_rows)
+            annotations = _read_annotations(validated.manifest, executed, ann_candidates, rows)
         return StoreReadResult(
             store=query.store,
             provider_id=query.provider_id,
@@ -359,6 +385,7 @@ class StoreReader:
             rows=rows,
             physical_rows=physical_rows,
             optimized_plan=optimized_plan,
+            annotations=annotations,
         )
 
     def read(self, query: StoreQuery) -> StoreReadResult:
@@ -533,6 +560,85 @@ def _scan(paths: tuple[Path, ...], executed: ExecutedStoreQuery) -> tuple[pl.Dat
         )
     optimized_plan = scan.explain(optimized=True)
     return cast(pl.DataFrame, scan.collect()), optimized_plan
+
+
+def _annotation_filter(executed: ExecutedStoreQuery) -> pl.Expr:
+    predicate = (
+        pl.col("product_id").is_in(tuple(str(product) for product in executed.products))
+        & pl.col("time").dt.year().is_in(executed.years)
+        & pl.col("station_id").is_in(executed.stations)
+        & (pl.col("time") >= executed.start)
+        & (pl.col("time") <= executed.end)
+    )
+    if executed.series_ids:
+        predicate = predicate & pl.col("series_id").is_in(executed.series_ids)
+    if executed.facts_ids:
+        predicate = predicate & pl.col("facts_id").is_in(executed.facts_ids)
+    if executed.series_windows:
+        predicate = predicate & pl.any_horizontal(
+            [
+                (pl.col("series_id") == series_id) & pl.col("time").is_between(window.start, window.end)
+                for series_id, window in executed.series_windows
+            ]
+        )
+    return predicate
+
+
+def _read_annotations(
+    manifest: StoreManifest | AccumulatedStoreManifest,
+    executed: ExecutedStoreQuery,
+    ann_paths: Mapping[PartitionIdentifier, Path],
+    engine_rows: pl.DataFrame,
+) -> AnnotationBundle:
+    obs_tables: dict[str, ObservationAnnotationTable] = {}
+    if ann_paths:
+        schemas_by_id = {schema.schema_id: schema for schema in manifest.annotation_schemas}
+        by_schema: dict[str, list[Path]] = {}
+        for key in sorted(ann_paths):
+            schema_id = str(key).split("/", 2)[2].removeprefix("annotations=")
+            by_schema.setdefault(schema_id, []).append(ann_paths[key])
+        predicate = _annotation_filter(executed)
+        for schema_id, paths in by_schema.items():
+            filtered = cast(
+                pl.DataFrame,
+                pl.scan_parquet([str(path) for path in paths], hive_partitioning=False).filter(predicate).collect(),
+            )
+            if not filtered.is_empty():
+                obs_tables[schema_id] = decode_observation_table_from_parquet(
+                    filtered,
+                    schemas_by_id[schema_id],
+                    engine_rows,
+                )
+
+    ser_tables: dict[str, SeriesAnnotationTable] = {}
+    if manifest.series_annotations:
+        executed_products = {str(product) for product in executed.products}
+        executed_stations = set(executed.stations)
+        executed_series_ids = set(executed.series_ids)
+        executed_facts_ids = set(executed.facts_ids)
+        matched_series_ids = {
+            item.series_id
+            for item in manifest.series
+            if str(item.product_id) in executed_products
+            and item.station_id in executed_stations
+            and (not executed_series_ids or item.series_id in executed_series_ids)
+            and (not executed_facts_ids or any(fact.facts_id in executed_facts_ids for fact in item.facts))
+            and (
+                not executed.series_windows
+                or any(
+                    sid == item.series_id and window.start <= executed.end and window.end >= executed.start
+                    for sid, window in executed.series_windows
+                )
+            )
+        }
+        if matched_series_ids:
+            for table in manifest.series_annotations:
+                narrowed = table.narrow(matched_series_ids)
+                if narrowed.row_count > 0:
+                    ser_tables[table.schema.schema_id] = narrowed
+    if not obs_tables and not ser_tables:
+        return AnnotationBundle.empty()
+    return AnnotationBundle(observation_tables=obs_tables, series_tables=ser_tables)
 
 
 def _engine_rows(physical_rows: pl.DataFrame) -> Rows:
