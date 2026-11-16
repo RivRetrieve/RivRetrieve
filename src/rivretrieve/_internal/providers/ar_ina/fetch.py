@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import cast
 from uuid import uuid4
 
+import polars as pl
+
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
@@ -22,6 +24,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
+from rivretrieve._internal.providers.ar_ina.annotations import AR_INA_SERIES_SCHEMA
 from rivretrieve._internal.providers.ar_ina.config import (
     ArInaSeriesLookupCoordinates,
     ArInaSourceCoordinates,
@@ -38,6 +41,7 @@ from rivretrieve._internal.source_acquisition import (
     SourceRequestTarget,
     attempt_request,
 )
+from rivretrieve._internal.source_annotations import SERIES_STRUCTURAL_SCHEMA, SeriesAnnotationTable
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -101,7 +105,7 @@ def resolve_series_lookup(
     *,
     evidence: str,
     known_series: tuple[SourceSeries, ...] = (),
-) -> tuple[SourceSeries, ...]:
+) -> tuple[tuple[SourceSeries, ...], SeriesAnnotationTable]:
     """Validate an INA ``/obs/puntual/series`` JSON response for one station and product."""
     spec = SPECS_BY_PRODUCT_ID.get(str(product))
     if spec is None:
@@ -140,6 +144,7 @@ def resolve_series_lookup(
             )
 
     resolved: list[SourceSeries] = []
+    availability_rows: list[dict[str, object]] = []
     seen_ids: set[int] = set()
     for index, entry in enumerate(raw_rows):
         if not isinstance(entry, dict):
@@ -181,7 +186,7 @@ def resolve_series_lookup(
             )
 
         try:
-            unit_abrev = validate_series_record_metadata(
+            unit_abrev, data_availability = validate_series_record_metadata(
                 row_map,
                 spec,
                 series_id=raw_id,
@@ -199,8 +204,19 @@ def resolve_series_lookup(
             raise UnsupportedSourceStructureError(str(error)) from error
 
         resolved.append(reused_series(definition, known_series))
+        if data_availability is not None:
+            availability_rows.append({"series_id": definition.series_id, "data_availability": data_availability})
 
-    return tuple(sorted(resolved, key=lambda item: int(item.identity.published_id or "0")))
+    ordered = tuple(sorted(resolved, key=lambda item: int(item.identity.published_id or "0")))
+    if availability_rows:
+        availability_frame = pl.DataFrame(
+            availability_rows,
+            schema={**SERIES_STRUCTURAL_SCHEMA, **AR_INA_SERIES_SCHEMA.polars_schema()},
+        )
+        annotations = SeriesAnnotationTable.from_rows(schema=AR_INA_SERIES_SCHEMA, rows=availability_frame)
+    else:
+        annotations = SeriesAnnotationTable.empty(AR_INA_SERIES_SCHEMA)
+    return ordered, annotations
 
 
 def fetch(
@@ -339,7 +355,7 @@ def fetch(
                 )
                 payloads.append(lookup_payload)
                 try:
-                    discovered = resolve_series_lookup(
+                    discovered, _ = resolve_series_lookup(
                         lookup_response.content,
                         station,
                         product,

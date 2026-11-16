@@ -538,8 +538,12 @@ def validate_series_record_metadata(
     *,
     series_id: int,
     proc_id: int,
-) -> str:
-    """Validate embedded ``var``, ``procedimiento``, ``unidades``, and ``data_availability`` on one series row."""
+) -> tuple[str, str | None]:
+    """Validate embedded ``var``, ``procedimiento``, ``unidades``, and ``data_availability`` on one series row.
+
+    Returns the native unit abbreviation and the published ``data_availability``
+    code (or ``None`` when the source omits it), both already validated.
+    """
     if proc_id != spec.proc_id:
         raise FatalContractError(
             f"Unexpected observational procedure {proc_id} on INA var_id={spec.var_id} (series {series_id})"
@@ -574,13 +578,14 @@ def validate_series_record_metadata(
         )
 
     date_range = _as_json_object(raw_series.get("date_range"))
-    if (
-        date_range is not None
-        and (avail := date_range.get("data_availability")) is not None
-        and (not isinstance(avail, str) or avail not in DATA_AVAILABILITY_CODES)
-    ):
-        raise FatalContractError(f"Unrecognized INA data_availability code {avail!r} on series {series_id}")
-    return str(unit_abrev)
+    data_availability: str | None = None
+    if date_range is not None:
+        avail = date_range.get("data_availability")
+        if avail is not None:
+            if not isinstance(avail, str) or avail not in DATA_AVAILABILITY_CODES:
+                raise FatalContractError(f"Unrecognized INA data_availability code {avail!r} on series {series_id}")
+            data_availability = avail
+    return str(unit_abrev), data_availability
 
 
 def _parse_utc_instant(raw: object, field_name: str, *, series_id: int) -> datetime:

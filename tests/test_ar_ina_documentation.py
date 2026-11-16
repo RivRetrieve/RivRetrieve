@@ -59,7 +59,9 @@ def test_ar_ina_page_selection_discovery_and_catalogue_claims_are_offline(
     page = PAGE.read_text(encoding="utf-8")
     assert "\u2014" not in page
     blocks = re.findall(r"```python\n(.*?)```", page, re.DOTALL)
-    assert len(blocks) == 2
+    # The third block (the data_availability annotations example) needs a genuine
+    # fetch and is not offline-discoverable; this test covers only the first two.
+    assert len(blocks) == 3
 
     tree = ast.parse(blocks[0])
     fetch_index = next(
