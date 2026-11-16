@@ -11,6 +11,7 @@ from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
+from rivretrieve._internal.providers.au_bom.annotations import AU_BOM_QUALITY_SCHEMA
 from rivretrieve._internal.providers.au_bom.config import (
     NATIVE_UNIT_SYMBOLS,
     AuBomTimeseriesListCoordinates,
@@ -18,6 +19,11 @@ from rivretrieve._internal.providers.au_bom.config import (
 )
 from rivretrieve._internal.providers.au_bom.fetch import resolve_timeseries_list
 from rivretrieve._internal.providers.au_bom.series import PRODUCT_DEFINITIONS, describe_series
+from rivretrieve._internal.source_annotations import (
+    OBSERVATION_STRUCTURAL_SCHEMA,
+    AnnotationBundle,
+    ObservationAnnotationTable,
+)
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -170,7 +176,9 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
     definitions: dict[str, SourceSeries] = {}
     inventories: list[InventorySnapshot] = []
     outcomes: list[RetrievalOutcome] = []
-    issues: list[Issue] = []
+    ann_rows: list[dict[str, object]] = []
+    ann_measurement_indices: list[int] = []
+    row_offset = 0
 
     for block in blocks:
         if not isinstance(block, dict) or "ts_id" not in block or "columns" not in block or "data" not in block:
@@ -184,6 +192,11 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
             raise UnsupportedSourceStructureError("BoM getTimeseriesValues block lacks Timestamp or Value") from error
         quality_index = columns.index("Quality Code") if "Quality Code" in columns else None
         quality_name_index = columns.index("Quality Code Name") if "Quality Code Name" in columns else None
+        if (quality_index is None) != (quality_name_index is None):
+            raise UnsupportedSourceStructureError(
+                f"BoM getTimeseriesValues block for ts_id {ts_id} has Quality Code without Quality Code Name, or vice versa"
+            )
+        has_quality = quality_index is not None
         rows = block["data"]
         if not isinstance(rows, list):
             raise UnsupportedSourceStructureError("BoM getTimeseriesValues block data must be a list")
@@ -224,7 +237,6 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
             continue
 
         numeric_rows: list[dict[str, object]] = []
-        quality_occurrences: list[tuple[datetime, object, str]] = []
         for raw_row in rows:
             if not isinstance(raw_row, list) or len(raw_row) != len(columns):
                 raise UnsupportedSourceStructureError(f"BoM getTimeseriesValues row for ts_id {ts_id} is malformed")
@@ -261,14 +273,35 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
                     "source_unit": fact.source_unit.value,
                 }
             )
-            if quality_index is not None:
+            if has_quality:
                 code = raw_row[quality_index]
-                name = str(raw_row[quality_name_index]) if quality_name_index is not None else str(code)
-                if name != "quality-A":
-                    quality_occurrences.append((naive_time, code, name))
+                if code is not None and type(code) is not int:
+                    raise UnsupportedSourceStructureError(
+                        f"BoM getTimeseriesValues Quality Code for ts_id {ts_id} is not an integer or null"
+                    )
+                name = raw_row[quality_name_index]
+                if name is not None and not isinstance(name, str):
+                    raise UnsupportedSourceStructureError(
+                        f"BoM getTimeseriesValues Quality Code Name for ts_id {ts_id} is not a string or null"
+                    )
+                ann_rows.append(
+                    {
+                        "series_id": series.series_id,
+                        "facts_id": fact.facts_id,
+                        "station_id": station,
+                        "product_id": str(product),
+                        "time": naive_time,
+                        "time_zone": "+10:00",
+                        "measured": True,
+                        "Quality_Code": code,
+                        "Quality_Code_Name": name,
+                    }
+                )
+                ann_measurement_indices.append(row_offset + len(numeric_rows) - 1)
 
         if numeric_rows:
             frames.append(pl.DataFrame(numeric_rows, schema=RowsSchema.polars_schema))
+            row_offset += len(numeric_rows)
         outcomes.append(
             RetrievalOutcome(
                 outcome_id=stable_id(payload.acquisition_id, series.series_id, fact.facts_id, "interval"),
@@ -296,23 +329,24 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
                 evidence=(evidence,),
             )
         )
-        for occurred_at, code, name in quality_occurrences:
-            issues.append(
-                Issue(
-                    severity="info",
-                    code="source.quality_code",
-                    message=f"BoM reports quality code {code} ({name}) for {station} {product} at {occurred_at.isoformat()}",
-                    details={
-                        "station_id": station,
-                        "product_id": str(product),
-                        "series_id": series.series_id,
-                        "source_quality_code": code,
-                        "source_quality_code_name": name,
-                        "source_time": occurred_at.isoformat(),
-                    },
-                    provider_id=_PROVIDER_ID,
-                )
-            )
-
     combined = pl.concat(frames) if frames else pl.DataFrame(schema=RowsSchema.polars_schema)
-    return ParsedSeries(combined, tuple(definitions.values()), tuple(inventories), tuple(outcomes), tuple(issues))
+    if ann_rows:
+        ann_frame = pl.DataFrame(
+            ann_rows,
+            schema={**OBSERVATION_STRUCTURAL_SCHEMA, **AU_BOM_QUALITY_SCHEMA.polars_schema()},
+        )
+        ann_table = ObservationAnnotationTable.from_rows(
+            schema=AU_BOM_QUALITY_SCHEMA,
+            rows=ann_frame,
+            measurement_indices=ann_measurement_indices,
+        )
+        annotations = AnnotationBundle(observation_tables={AU_BOM_QUALITY_SCHEMA.schema_id: ann_table})
+    else:
+        annotations = AnnotationBundle.empty()
+    return ParsedSeries(
+        combined,
+        tuple(definitions.values()),
+        tuple(inventories),
+        tuple(outcomes),
+        annotations=annotations,
+    )

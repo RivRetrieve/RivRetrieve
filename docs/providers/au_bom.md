@@ -48,13 +48,6 @@ time,time_zone,value,unit
 2026-10-31T00:00:00.000000,+10:00,0.588,m
 2026-11-01T00:00:00.000000,+10:00,0.591,m
 5
-info: BoM reports quality code 140 (quality-E) for 410730 stage_daily_mean at 2026-10-27T00:00:00
-info: BoM reports quality code 140 (quality-E) for 410730 stage_daily_mean at 2026-10-28T00:00:00
-info: BoM reports quality code 140 (quality-E) for 410730 stage_daily_mean at 2026-10-29T00:00:00
-info: BoM reports quality code 140 (quality-E) for 410730 stage_daily_mean at 2026-10-30T00:00:00
-info: BoM reports quality code 140 (quality-E) for 410730 stage_daily_mean at 2026-10-31T00:00:00
-info: BoM reports quality code 140 (quality-E) for 410730 stage_daily_mean at 2026-11-02T00:00:00
-info: BoM reports quality code -1 (None) for 410730 stage_daily_mean at 2026-11-03T00:00:00
 ```
 
 The request returned five daily means in metres, each labelled with BoM's
@@ -232,12 +225,29 @@ itself is timezone-naive. BoM's service does not name a time zone (such as
 AEST) for this offset, so RivRetrieve does not supply one.
 
 BoM publishes a `Quality Code` and `Quality Code Name` per observation (for
-example `quality-A`, `quality-E`). RivRetrieve does not filter observations
-by this code or add a quality column to `result.data`. An informational
-issue reports every row whose quality code is not `quality-A`, naming the
-station, product, code and timestamp, as in the first example above. These
-are BoM's own descriptions of the observation's processing status, not a
-RivRetrieve quality judgement.
+example `10`/`quality-A`, `-1`/`quality-E`). RivRetrieve keeps the default
+observation table in `result.data` unchanged and preserves both fields as
+observation annotations, under schema `au_bom.quality`:
+
+| Field | Type |
+|---|---|
+| `Quality_Code` | `Int64` |
+| `Quality_Code_Name` | `String` |
+
+Inspect available annotation fields and join them onto the observations
+fetched at the start of this page:
+
+```python
+print(rr.annotations(result).select("schema", "name", "dtype", "row_count").write_csv(), end="")
+
+annotated = result.to_polars(annotations=True).select("time", "value", "unit", "Quality_Code", "Quality_Code_Name")
+print(annotated.write_csv(float_precision=3), end="")
+```
+
+Both fields are published together or not at all, and either can be null even
+when the other carries a value. These are BoM's own descriptions of the
+observation's processing status, not a RivRetrieve quality judgement:
+RivRetrieve does not filter observations by this code or rank them.
 
 A published null remains a row with `value=null` rather than being dropped.
 An absent observation supplies no row. A failed request remains an issue and
