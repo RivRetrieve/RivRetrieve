@@ -281,7 +281,7 @@ modifying values. The `nivelAprobacion` value is preserved per row as a source
 annotation (schema `co_ideam.s3`, observation scope):
 
 ```python
-result = rr.fetch(sel, start="2010-01-01", end="2010-01-07")
+result = rr.fetch(selection, start="2010-01-01", end="2010-01-07")
 
 # Field catalogue
 print(rr.annotations(result).select("schema", "name", "dtype").rows())
