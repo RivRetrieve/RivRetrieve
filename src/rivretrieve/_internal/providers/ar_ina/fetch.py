@@ -495,6 +495,52 @@ def fetch(
                     )
                 continue
 
+            if lookup_payload is None:
+                # Identity was already established (catalogue or known_series), so no
+                # /obs/puntual/series lookup has run yet. Issue one purely to harvest
+                # data_availability; its failure must not block the observation fetch below.
+                annotation_request = TransportRequest(
+                    method=HttpMethod.GET,
+                    url=_SERIES_URL,
+                    params={
+                        "estacion_id": station,
+                        "var_id": str(coords.var_id),
+                        "proc_id": str(coords.proc_id),
+                        "format": "json",
+                    },
+                    headers={"Accept": "application/json"},
+                )
+                annotation_response = attempt_request(transport, annotation_request)
+                if isinstance(annotation_response, (TransportFailure, CredentialExchangeError)):
+                    issues.append(
+                        Issue(
+                            severity="warning",
+                            code="source.annotation_unavailable",
+                            message=(
+                                "INA Alerta5 /obs/puntual/series metadata request failed; data_availability "
+                                "annotation is unavailable for this already-established series"
+                            ),
+                            details={"station_id": station, "product_id": str(product)},
+                            provider_id=_PROVIDER_ID,
+                        )
+                    )
+                else:
+                    payloads.append(
+                        Payload(
+                            source_coordinates=SourceCoordinates(
+                                ArInaSeriesLookupCoordinates(coords.var_id, coords.proc_id, best_effort=True)
+                            ),
+                            station_products=((station, product),),
+                            fetch_window=fetch_window,
+                            content=annotation_response.content,
+                            origin=_origin(annotation_response),
+                            prerequisite_calls=annotation_response.prerequisite_calls,
+                            scope=pair_scope,
+                            known_series=established_series,
+                            attempt_traces=annotation_response.attempt_traces,
+                        )
+                    )
+
             for target in targets:
                 published_id = target.identity.published_id
                 assert published_id is not None

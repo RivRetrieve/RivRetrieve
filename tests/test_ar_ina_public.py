@@ -142,12 +142,17 @@ def test_public_all_13_products_units_negative_stage_and_historical_dst(
     all_ar = rr.as_frame(base_selection)
     chosen_series_ids: list[str] = []
     payload_by_pub_id: dict[str, bytes] = {}
+    annotation_body_by_key: dict[tuple[int, int, int], bytes] = {}
     t1 = datetime(2009, 3, 14, 2, 0, tzinfo=UTC)  # Pre-2009 Argentina DST midnight (UTC-02:00)
     t2 = datetime(2009, 3, 15, 3, 0, tzinfo=UTC)  # Standard-time midnight (UTC-03:00)
     for index, spec in enumerate(IN_SCOPE_SERIES_SPECS):
         first_row = all_ar.filter(pl.col("product_id") == spec.product_id).sort("station_id").row(0, named=True)
         chosen_series_ids.append(str(first_row["series_id"]))
         pub_id = int(str(first_row["variant"]))
+        station_int = int(str(first_row["station_id"]))
+        annotation_body_by_key[(station_int, spec.var_id, spec.proc_id)] = _series_lookup_bytes(
+            station_id=station_int, product_id=spec.product_id, series_ids=(pub_id,)
+        )
         sample_val = -0.27 if spec.product_id == "stage_monthly_min" else (0.0 if index == 0 else 10.5 + index)
         rows = [
             _obs_row(
@@ -174,6 +179,16 @@ def test_public_all_13_products_units_negative_stage_and_historical_dst(
         def send(self, request: TransportRequest) -> TransportResponse:
             self.requests.append(request)
             params = dict(request.params or {})
+            if request.url == _SERIES_URL:
+                key = (int(params["estacion_id"]), int(params["var_id"]), int(params["proc_id"]))
+                return TransportResponse(
+                    annotation_body_by_key[key],
+                    200,
+                    _RETRIEVED_AT,
+                    "application/json; charset=utf-8",
+                    request.url,
+                    params,
+                )
             assert params.get("skip_nulls") == "true"
             parts = request.url.rstrip("/").split("/")
             assert parts[-1] == "observaciones"
@@ -200,8 +215,8 @@ def test_public_all_13_products_units_negative_stage_and_historical_dst(
         on_issue="raise",
     )
 
-    assert len(transport.requests) == 13
-    assert result.receipts is not None and len(result.receipts.entries) == 13
+    assert len(transport.requests) == 26
+    assert result.receipts is not None and len(result.receipts.entries) == 26
     assert set(result.data["product_id"].unique().to_list()) == expected_products
     assert result.data.height == 26
     assert result.data["time_zone"].unique().to_list() == ["+00:00"]
@@ -459,12 +474,12 @@ def test_public_sibling_failure_isolation_and_local_cache_lifecycle(
     replay.fail_stage = False
     replay.calls.clear()
     cached = rr.fetch(station_8, start="2024-03-01", end="2024-03-02", cache="reuse", on_issue="raise")
-    assert len(replay.calls) == 2
+    assert len(replay.calls) == 4
     assert cached.data.height == 4
 
     # Sub-window repeat query under cache="reuse" issues 0 HTTP calls.
     reused = rr.fetch(station_8, start="2024-03-01", end="2024-03-01", cache="reuse", on_issue="raise")
-    assert len(replay.calls) == 2
+    assert len(replay.calls) == 4
     assert reused.data.height == 2
 
     # cache_status and audit_cache validate the committed live store without network I/O.
