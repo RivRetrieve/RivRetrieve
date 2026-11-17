@@ -79,7 +79,9 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     )
 
     if isinstance(payload_coords, ArInaSeriesLookupCoordinates):
-        return _parse_series_lookup(payload, station, product, window, retrieved, scope)
+        return _parse_series_lookup(
+            payload, station, product, window, retrieved, scope, best_effort=payload_coords.best_effort
+        )
     return _parse_observations(payload, station, product, payload_coords, spec, window, retrieved, scope)
 
 
@@ -100,6 +102,8 @@ def _parse_series_lookup(
     window: SeriesWindow,
     retrieved: datetime | None,
     scope: SeriesScope,
+    *,
+    best_effort: bool = False,
 ) -> ParsedSeries:
     evidence = f"source-call:{payload.acquisition_id}"
     unrestricted_scope = SeriesScope(
@@ -116,6 +120,8 @@ def _parse_series_lookup(
             known_series=payload.known_series,
         )
     except UnsupportedSourceStructureError as error:
+        if best_effort:
+            return _annotation_unavailable_result(station, product, str(error))
         return _failed_result(
             payload,
             None,
@@ -137,6 +143,15 @@ def _parse_series_lookup(
         )
         return ParsedSeries(
             pl.DataFrame(schema=RowsSchema.polars_schema), discovered, (), (), (), annotations=annotations
+        )
+
+    if best_effort:
+        # The already-established series (catalogue/known_series) owns the real outcome;
+        # this best-effort probe only contributes the annotation when one is available.
+        return _annotation_unavailable_result(
+            station,
+            product,
+            f"INA Alerta5 /obs/puntual/series publishes no metadata for station {station} product {product}",
         )
 
     reason = (
@@ -175,6 +190,17 @@ def _parse_series_lookup(
         provider_id=_PROVIDER_ID,
     )
     return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (inventory,), (outcome,), (issue,))
+
+
+def _annotation_unavailable_result(station: str, product: ProductId, reason: str) -> ParsedSeries:
+    issue = Issue(
+        severity="info",
+        code="source.annotation_unavailable",
+        message=reason,
+        details={"station_id": station, "product_id": str(product)},
+        provider_id=_PROVIDER_ID,
+    )
+    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), (), (issue,))
 
 
 def _parse_observations(

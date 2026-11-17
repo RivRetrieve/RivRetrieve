@@ -19,7 +19,10 @@ from rivretrieve._internal.providers.ar_ina.annotations import AR_INA_SERIES_SCH
 from rivretrieve._internal.providers.ar_ina.config import ArInaSeriesLookupCoordinates, config
 from rivretrieve._internal.providers.ar_ina.fetch import resolve_series_lookup
 from rivretrieve._internal.providers.ar_ina.parse import parse
+from rivretrieve._internal.providers.ar_ina.series import source_series
 from rivretrieve._internal.source_annotations import AnnotationScope
+from rivretrieve._internal.source_series import OutcomeStatus
+from rivretrieve._internal.transport import TransportFailure, TransportFailureCategory, TransportFailureReason
 from tests.test_ar_ina_retrieval import (
     _SERIES_URL,
     _drive_ar_ina,
@@ -153,3 +156,101 @@ def test_driver_round_trip_carries_series_annotations_through_assembly() -> None
     table = result.annotations.series_tables["ar_ina.series"]
     assert table.row_count == 1
     assert table.rows["data_availability"].to_list() == ["C"]
+
+
+def test_driver_round_trip_carries_series_annotations_through_known_series_catalogue_path() -> None:
+    """Regression for #862: known_series skips identity lookup but must still surface data_availability."""
+    known = source_series("8", "discharge_daily_mean", published_series_id=26605)
+
+    def handler(request):
+        params = request.params or {}
+        if request.url == _SERIES_URL:
+            return _ok_response(
+                request,
+                _lookup_json(
+                    [
+                        _lookup_row(
+                            station_id=8,
+                            product_id="discharge_daily_mean",
+                            series_id=26605,
+                            data_availability="RT",
+                        )
+                    ]
+                ),
+            )
+        if request.url.endswith("/26605/observaciones"):
+            return _ok_response(
+                request,
+                json.dumps(
+                    [
+                        _obs_row(
+                            obs_id=501,
+                            series_id=26605,
+                            timestart="2024-01-01T03:00:00.000Z",
+                            timeend="2024-01-02T03:00:00.000Z",
+                            valor=839.95,
+                        )
+                    ]
+                ).encode("utf-8"),
+            )
+        raise AssertionError(f"Unexpected request: {request.url} {params}")
+
+    transport = _QueuedTransport(handler)
+    req = ObservationRequest(
+        provider_id=ProviderId("ar_ina"),
+        stations=("8",),
+        products=(ProductId("discharge_daily_mean"),),
+        window=_window(date(2024, 1, 1), date(2024, 1, 2)),
+        known_series=(known,),
+    )
+    result = _drive_ar_ina(req, transport=transport)
+    assert [o.status for o in result.outcomes] == [OutcomeStatus.SUCCESS]
+    table = result.annotations.series_tables["ar_ina.series"]
+    assert table.row_count == 1
+    assert table.rows["data_availability"].to_list() == ["RT"]
+
+
+def test_known_series_catalogue_path_keeps_measurements_when_annotation_lookup_fails() -> None:
+    """A failed best-effort annotation lookup must not block an already-established fetch."""
+    known = source_series("8", "discharge_daily_mean", published_series_id=26605)
+
+    def handler(request):
+        if request.url == _SERIES_URL:
+            raise TransportFailure(
+                request,
+                TransportFailureReason.HTTP_STATUS,
+                1,
+                status_code=503,
+                category=TransportFailureCategory.HTTP_STATUS,
+            )
+        assert request.url.endswith("/26605/observaciones")
+        return _ok_response(
+            request,
+            json.dumps(
+                [
+                    _obs_row(
+                        obs_id=501,
+                        series_id=26605,
+                        timestart="2024-01-01T03:00:00.000Z",
+                        timeend="2024-01-02T03:00:00.000Z",
+                        valor=839.95,
+                    )
+                ]
+            ).encode("utf-8"),
+        )
+
+    transport = _QueuedTransport(handler)
+    req = ObservationRequest(
+        provider_id=ProviderId("ar_ina"),
+        stations=("8",),
+        products=(ProductId("discharge_daily_mean"),),
+        window=_window(date(2024, 1, 1), date(2024, 1, 2)),
+        known_series=(known,),
+    )
+    result = _drive_ar_ina(req, transport=transport)
+    assert [o.status for o in result.outcomes] == [OutcomeStatus.SUCCESS]
+    assert result.canonical_rows["value"].to_list() == [839.95]
+    assert any(issue.code == "source.annotation_unavailable" for issue in result.issues)
+    assert result.annotations.series_tables.get("ar_ina.series") is None or (
+        result.annotations.series_tables["ar_ina.series"].row_count == 0
+    )

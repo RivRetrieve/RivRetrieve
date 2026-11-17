@@ -316,14 +316,25 @@ def test_config_and_window_declarations_cover_all_13_products_and_validate_coord
         ArInaSeriesLookupCoordinates(4, 1)
 
 
-def test_known_series_direct_fetch_skips_lookup_and_preserves_negative_stage_and_zero_discharge(
+def test_known_series_direct_fetch_skips_identity_lookup_fetches_availability_and_preserves_negative_stage_and_zero_discharge(
     tmp_path: Path,
 ) -> None:
     known_q = source_series("8", "discharge_daily_mean", published_series_id=26605)
     known_h = source_series("8", "stage_daily_mean", published_series_id=26100)
 
     def handler(request: TransportRequest) -> TransportResponse:
-        assert request.url != _SERIES_URL, "known_series must bypass /obs/puntual/series lookup"
+        if request.url == _SERIES_URL:
+            # known_series bypasses the identity lookup, but a best-effort call still
+            # runs once per pair to harvest the data_availability annotation (#862).
+            params = request.params or {}
+            series_id = 26605 if params.get("estacion_id") == "8" and params.get("var_id") == "40" else 26100
+            product_id = "discharge_daily_mean" if series_id == 26605 else "stage_daily_mean"
+            return _ok_response(
+                request,
+                _lookup_json(
+                    [_lookup_row(station_id=8, product_id=product_id, series_id=series_id, data_availability="C")]
+                ),
+            )
         assert request.params is not None
         assert request.params["skip_nulls"] == "true"
         if request.url.endswith("/26605/observaciones"):
@@ -383,7 +394,7 @@ def test_known_series_direct_fetch_skips_lookup_and_preserves_negative_stage_and
     )
     result = _drive_ar_ina(req, transport=transport, store=store, cache="reuse", receipts=ReceiptMode.INCLUDE)
 
-    assert len(transport.requests) == 2
+    assert len(transport.requests) == 4
     rows = result.canonical_rows.sort(["product_id", "time"]).to_dicts()
     assert [(r["product_id"], r["value"], r["unit"]) for r in rows] == [
         ("discharge_daily_mean", 0.0, "m3/s"),
@@ -391,10 +402,13 @@ def test_known_series_direct_fetch_skips_lookup_and_preserves_negative_stage_and
         ("stage_daily_mean", -0.35, "m"),
     ]
     assert {o.status for o in result.outcomes} == {OutcomeStatus.SUCCESS}
+    table = result.annotations.series_tables["ar_ina.series"]
+    assert table.row_count == 2
+    assert set(table.rows["data_availability"].to_list()) == {"C"}
 
     # Immediate cache="reuse" must issue zero network requests.
     reused = _drive_ar_ina(req, transport=transport, store=store, cache="reuse")
-    assert len(transport.requests) == 2
+    assert len(transport.requests) == 4
     assert reused.canonical_rows.equals(result.canonical_rows)
 
 
@@ -717,6 +731,14 @@ def test_multichunk_stop_extension_deduplication_held_data_survival_and_sibling_
     fail_refresh = False
 
     def handler(request: TransportRequest) -> TransportResponse:
+        if request.url == _SERIES_URL:
+            params = request.params or {}
+            station_id = int(params["estacion_id"])
+            series_id = 31605 if station_id == 52 else 39999
+            return _ok_response(
+                request,
+                _lookup_json([_lookup_row(station_id=station_id, product_id="stage_hourly", series_id=series_id)]),
+            )
         if request.url.endswith("/39999/observaciones"):
             raise TransportFailure(
                 request,
@@ -825,6 +847,11 @@ def test_partial_second_chunk_failure_disappeared_catalogue_series_lookup_failur
     fail_chunk2 = True
 
     def chunk_handler(request: TransportRequest) -> TransportResponse:
+        if request.url == _SERIES_URL:
+            return _ok_response(
+                request,
+                _lookup_json([_lookup_row(station_id=1741, product_id="stage_instantaneous", series_id=3346)]),
+            )
         assert request.params is not None
         if request.params["timestart"].startswith("2023-11-30"):
             return _ok_response(
@@ -878,7 +905,7 @@ def test_partial_second_chunk_failure_disappeared_catalogue_series_lookup_failur
     assert {o.status for o in partial.outcomes} == {OutcomeStatus.SUCCESS, OutcomeStatus.FAILED}
     assert partial.inventories[-1].completeness is InventoryCompleteness.INCOMPLETE
     assert "failed, unsupported or unresolved" in (partial.inventories[-1].reason or "")
-    assert len(transport.requests) == 2
+    assert len(transport.requests) == 3
 
     # Because chunk 2 failed, cache="reuse" must NOT treat the full window as covered!
     fail_chunk2 = False

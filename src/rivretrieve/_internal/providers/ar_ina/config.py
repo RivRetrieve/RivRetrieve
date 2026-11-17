@@ -58,10 +58,17 @@ class ArInaSourceCoordinates:
 
 @dataclass(frozen=True, slots=True)
 class ArInaSeriesLookupCoordinates:
-    """Prerequisite /obs/puntual/series lookup coordinates for one station and product."""
+    """/obs/puntual/series lookup coordinates for one station and product.
+
+    ``best_effort`` marks a lookup issued purely to harvest the
+    ``data_availability`` annotation for a series whose identity is already
+    established (catalogue or known_series); its absence or failure must
+    never affect that pair's retrieval outcome.
+    """
 
     var_id: int
     proc_id: int
+    best_effort: bool = False
 
     def __post_init__(self) -> None:
         if type(self.var_id) is not int or self.var_id not in SPECS_BY_VAR_ID:
