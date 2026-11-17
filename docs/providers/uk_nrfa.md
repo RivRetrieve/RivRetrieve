@@ -19,6 +19,7 @@ selection = rr.find(
     frequency="daily",
     statistic="mean",
 )
+
 gdf = rr.pick(selection, variant="gdf")
 
 result = rr.fetch(gdf, start="2020-01-01", end="2020-01-05", cache="bypass")
@@ -90,7 +91,7 @@ period endpoint inclusivity remain uninterpreted.
 Use is subject to the [NRFA API terms](https://eidc.ceh.ac.uk/licences/nrfa-data-terms-and-conditions-for-api-access-to-time-series-data-and-metadata/).
 NRFA limits client caching of API responses to temporary performance storage of no
 longer than 30 calendar days, so RivRetrieve evicts cached NRFA responses older
-than 30 days automatically.
+than 30 days on subsequent cached retrieval.
 Offline station metadata reflects NRFA's in-principle support (recommended six-month
 refresh) and does not establish a general licence to redistribute observations.
 Attribute the source as **“Data from the UK National River Flow Archive”** and

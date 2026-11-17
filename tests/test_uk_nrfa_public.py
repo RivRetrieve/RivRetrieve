@@ -386,7 +386,7 @@ def test_public_window_rules_monthly_clipping_and_shared_peak_station_info(
         else:
             assert params["start-date"] == "2020-01-13"
             assert params["end-date"] == "2020-03-17"
-            stream = _SAMPLE_STREAMS[product] if product == "gdf" else ["2020-02-01T10:00:00", 30.0]
+            stream = ["2020-02-01", 10.5] if product == "gdf" else ["2020-02-01T10:00:00", 30.0]
         return SenderResponse(_ts_payload(product, stream, station=82001), 200, "application/json")
 
     _, transport = _install_mock_env(monkeypatch, tmp_path, handler)
@@ -401,6 +401,8 @@ def test_public_window_rules_monthly_clipping_and_shared_peak_station_info(
     gmf_rows = clipped.data.filter(pl.col("product_id") == "gmf").sort("time")
     assert gmf_rows["time"].to_list() == [datetime(2020, 2, 1, 0, 0, 0), datetime(2020, 3, 1, 0, 0, 0)]
     assert gmf_rows["value"].to_list() == [11.0, 12.0]
+    gdf_rows = clipped.data.filter(pl.col("product_id") == "gdf")
+    assert gdf_rows["value"].to_list() == [10.5]
 
     # All four peak products for one station issue only one shared /station-info request.
     transport.calls.clear()
@@ -555,14 +557,16 @@ def test_uk_nrfa_public_provenance_terms(
 
     _install_mock_env(monkeypatch, tmp_path, handler)
 
+    expected_license = (
+        "Click-Through Licence for Access to UK National River Flow Archive Data "
+        "Available from the UK Centre for Ecology & Hydrology"
+    )
     info = rr.describe("uk_nrfa")
     assert info["citation"] == "Data from the UK National River Flow Archive"
+    assert info["license"] == expected_license
 
     sel = rr.pick(rr.find(provider="uk_nrfa", station="39001"), variant="gdf")
     result = rr.fetch(sel, start="2020-01-01", end="2020-01-05", cache="bypass", on_issue="raise")
     assert result.provenance.citation == "Data from the UK National River Flow Archive"
-    assert (
-        result.provenance.license
-        == "Click-Through Licence for Access to UK National River Flow Archive Data Available from the UK Centre for Ecology & Hydrology"
-    )
+    assert result.provenance.license == expected_license
     assert not any(issue.code == "provenance.license_not_established" for issue in result.issues)
