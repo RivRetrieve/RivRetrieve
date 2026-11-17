@@ -7,6 +7,7 @@ BUILTIN_PROVIDER_IDS = (
     "br_ana",
     "ca_eccc",
     "ch_foen",
+    "co_ideam",
     "cz_chmi",
     "dk_vanda",
     "fi_syke",

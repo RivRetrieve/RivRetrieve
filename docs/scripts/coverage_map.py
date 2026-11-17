@@ -34,6 +34,7 @@ PROVIDER_COUNTRY = {
     "br_ana": "BRA",
     "ca_eccc": "CAN",
     "ch_foen": "CHE",
+    "co_ideam": "COL",
     "cz_chmi": "CZE",
     "dk_vanda": "DNK",
     "fi_syke": "FIN",
@@ -70,7 +71,6 @@ PLANNED_COUNTRY = {
 # Countries with an open provider:port issue that are not legacy fetchers.
 RESEARCHED_COUNTRY = {
     "AFG": "Afghanistan",
-    "COL": "Colombia",
     "ISR": "Israel",
     "MEX": "Mexico",
     "NZL": "New Zealand",
