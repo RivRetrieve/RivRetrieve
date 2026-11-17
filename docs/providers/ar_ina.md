@@ -285,9 +285,13 @@ print(annotated.write_csv(), end="")
 ```
 
 This describes operational feed latency, not a data validation grade, and
-RivRetrieve makes no quality judgement of its own. It is only known when
-Alerta5's series-lookup endpoint was actually queried during this request; a
-series already established from the packaged catalogue may not carry it.
+RivRetrieve makes no quality judgement of its own. RivRetrieve issues a
+targeted series-lookup request to harvest it even for a station already
+established from the packaged catalogue, so it is not tied to needing that
+lookup to resolve series identity. If that request fails, or the publisher's
+response omits the code, the annotation is simply absent for that series and
+an informational `source.annotation_unavailable` issue is recorded; this
+never blocks or invalidates the observation rows themselves.
 
 Keep missing-data cases distinct when inspecting results:
 

@@ -75,6 +75,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "br_ana": (107_484, 0, 0),
         "ca_eccc": (16_114, 0, 0),
         "ch_foen": (48_276, 0, 0),
+        "co_ideam": (27_440, 0, 0),
         "cz_chmi": (4_155, 0, 0),
         # Native inventories acquired 2026-09-21; these are snapshot checks.
         "fr_hubeau": (20_297, 0, 0),
@@ -105,6 +106,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "co_ideam",
         "cz_chmi",
         "fr_hubeau",
         "fr_hydroportail",
@@ -120,6 +122,10 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     expected_provider_terms["ar_ina"] = ("Creative Commons Atribución 4.0 Internacional", None)
     expected_provider_terms["at_ehyd"] = ("CC BY 4.0", "Datenquelle: ehyd.gv.at")
     expected_provider_terms["ch_foen"] = ("Freie Nutzung. Quellenangabe ist Pflicht.", None)
+    expected_provider_terms["co_ideam"] = (
+        "Creative Commons Attribution | Share Alike 4.0 International",
+        "Instituto de Hidrología, Meteorología y Estudios Ambientales - IDEAM, Bogotá D.C.",
+    )
     expected_provider_terms["no_nve"] = (
         "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) "
         "which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
