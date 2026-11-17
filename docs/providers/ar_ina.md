@@ -284,6 +284,19 @@ annotated = rr.series(result, annotations=True).select("series_id", "variant", "
 print(annotated.write_csv(), end="")
 ```
 
+Output:
+
+```text
+schema,name,dtype,row_count
+ar_ina.series,data_availability,String,1
+series_id,variant,data_availability
+820d18989de6cb74eadc27b5686a24a8d09a051623953639e98272cd22e1fc4c,26605,NRT
+```
+
+Station `8`'s daily mean discharge series (`variant="26605"`) carries `NRT`
+(near-real-time) as its `data_availability` code. This output was checked live
+on 2026-11-17.
+
 This describes operational feed latency, not a data validation grade, and
 RivRetrieve makes no quality judgement of its own. RivRetrieve issues a
 targeted series-lookup request to harvest it even for a station already
