@@ -701,7 +701,7 @@ def test_recorded_public_fetch_across_all_ten_nrfa_products_and_shared_peaks(
             assert [urlsplit(call.url).path for call in replay.calls].count("/nrfa/ws/station-info") == 1
             amax_rej = rr.annotations(result, schema="uk_nrfa.amax_rejection")
             assert amax_rej.height == 1
-            assert amax_rej["rejected_amax_years"][0]
+            assert amax_rej["rejected_amax_years"].to_list()[0]
             assert rr.series(result).filter(pl.col("series_id").is_in(amax_rej["series_id"].to_list()))[
                 "product_id"
             ].to_list() == ["amax-flow"]
@@ -772,8 +772,13 @@ def test_recorded_public_gmf_unwindowed_preserves_trailing_partial_month_and_iso
     partial = rr.fetch(pair_sel, start="2020-01-01", end="2020-01-05", cache="bypass", on_issue="ignore")
     assert set(partial.data["product_id"].to_list()) == {"gdf"}
     assert partial.data.height == 5
-    outcomes = {outcome.product_id: outcome.status for outcome in partial.outcomes if outcome.series_id is not None}
+    outcomes = {
+        outcome.product_id: outcome.status
+        for outcome in partial.outcomes
+        if outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.FAILED)
+    }
     assert outcomes == {"gdf": OutcomeStatus.SUCCESS, "ndf": OutcomeStatus.FAILED}
+    assert any(issue.code == "source.unsupported_structure" for issue in partial.issues)
 
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
@@ -803,9 +808,9 @@ def test_recorded_public_thirty_day_cache_reuse_and_expiry_with_pinned_clock(
     initial_height = initial.data.height
     assert initial_height > 0
 
-    # Within 30 calendar days of 2026-11-16 acquisition: cache hit with zero HTTP calls and intact annotations.
+    # Within 30 calendar days of 2026-11-16T13:47Z acquisition: cache hit with zero HTTP calls and intact annotations.
     replay.calls.clear()
-    current_now = datetime(2026, 12, 16, 15, 0, 0, tzinfo=UTC)
+    current_now = datetime(2026, 12, 16, 13, 0, 0, tzinfo=UTC)
     reused = rr.fetch(sel, start="1962-01-01", end="1985-12-31", cache="reuse")
     assert replay.calls == []
     pl_testing.assert_frame_equal(reused.data, initial.data)
