@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from eighteen different providers in seventeen countries.
+from nineteen different providers in eighteen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
