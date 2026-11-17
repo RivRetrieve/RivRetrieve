@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
@@ -13,6 +13,7 @@ import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
+from rivretrieve._internal import discovery
 from rivretrieve._internal import driver as driver_module
 from rivretrieve._internal.engine import (
     ObservationRequest,
@@ -40,6 +41,7 @@ from rivretrieve._internal.transport import (
     TransportFailureReason,
     TransportRequest,
     TransportResponse,
+    _SystemClock,
 )
 from rivretrieve._internal.window_planning import plan_windows
 
@@ -623,3 +625,199 @@ def test_recorded_failures_remain_distinct_from_empty_and_microseconds_never_ren
     )
     planned = plan_windows(micro_fw, decls.products[ProductId("gdf")])
     assert planned == (RenderedWindow("2020-01-01", "2020-01-05"),)
+
+
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded(_EVIDENCE_SCOPE)
+def test_recorded_public_fetch_across_all_ten_nrfa_products_and_shared_peaks(
+    retained_evidence_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = retained_evidence_root / _EVIDENCE_SCOPE
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+
+    cases: tuple[tuple[str, tuple[str, ...], str, str, tuple[str, ...], int, bool], ...] = (
+        ("39001", ("gdf",), "2020-01-03", "2020-01-03", ("gdf-39001-2020-01.json",), 1, True),
+        ("39001", ("ndf",), "1995-01-03", "1995-01-08", ("ndf-39001-1995-01.json",), 1, True),
+        ("39001", ("gmf",), "2020-01-01", "2020-03-31", ("gmf-39001-full.json",), 1, True),
+        ("39001", ("nmf",), "2020-01-01", "2020-03-31", ("nmf-39001-full.json",), 1, True),
+        ("39001", ("gauging-flow",), "2024-07-09", "2024-07-09", ("gauging-flow-39001-2024-07-09.json",), 1, False),
+        ("39001", ("gauging-stage",), "2024-07-09", "2024-07-09", ("gauging-stage-39001-2024-07-09.json",), 1, False),
+        (
+            "39001",
+            ("pot-flow",),
+            "1883-01-01",
+            "2025-12-31",
+            ("station-info-peak-39001.json", "pot-flow-39001-1883-2025.json"),
+            2,
+            False,
+        ),
+        (
+            "82001",
+            ("amax-flow", "pot-stage"),
+            "1962-01-01",
+            "1985-12-31",
+            ("station-info-peak-82001.json", "amax-flow-82001-1962-1985.json", "pot-stage-82001-1962-1985.json"),
+            3,
+            False,
+        ),
+        (
+            "6007",
+            ("amax-stage",),
+            "2024-12-31",
+            "2024-12-31",
+            ("station-info-peak-6007.json", "amax-stage-6007-2024-12-31.json"),
+            2,
+            False,
+        ),
+    )
+
+    observed_products: set[str] = set()
+    for station, variants, start, end, artifacts, expected_calls, exact_query in cases:
+        entries = tuple(_pair(root, name) for name in artifacts)
+        replay = _ExactReceiptReplay(entries) if exact_query else _RouteReplay(entries)
+        monkeypatch.setattr(discovery, "HttpClient", lambda replay=replay: replay)
+        selection = rr.pick(rr.find(provider="uk_nrfa", station=station), variant=list(variants))
+        result = rr.fetch(selection, start=start, end=end, cache="bypass", receipts=True, on_issue="ignore")
+
+        assert len(replay.calls) == expected_calls
+        assert len(result.receipts.entries) == expected_calls
+        assert set(result.data["product_id"].to_list()) == set(variants)
+        assert set(result.data["station_id"].to_list()) == {station}
+        assert set(result.data["time_zone"].to_list()) == {"unknown"}
+        for variant in variants:
+            observed_products.add(variant)
+            expected_unit = "m" if variant.endswith("stage") else "m3/s"
+            rows = result.data.filter(pl.col("product_id") == variant)
+            assert set(rows["unit"].to_list()) == {expected_unit}
+            assert set(rows["source_unit"].to_list()) == {expected_unit}
+
+        meta = rr.annotations(result, schema="uk_nrfa.series_metadata")
+        assert meta.height == len(variants)
+
+        if station == "82001":
+            # Only amax-flow attaches uk_nrfa.amax_rejection; both peak products attach peak_rejected_periods.
+            assert [urlsplit(call.url).path for call in replay.calls].count("/nrfa/ws/station-info") == 1
+            amax_rej = rr.annotations(result, schema="uk_nrfa.amax_rejection")
+            assert amax_rej.height == 1
+            assert amax_rej["rejected_amax_years"][0]
+            assert rr.series(result).filter(pl.col("series_id").is_in(amax_rej["series_id"].to_list()))[
+                "product_id"
+            ].to_list() == ["amax-flow"]
+            periods_rej = rr.annotations(result, schema="uk_nrfa.peak_rejected_periods")
+            assert periods_rej.height == 2
+            assert set(
+                rr.series(result)
+                .filter(pl.col("series_id").is_in(periods_rej["series_id"].to_list()))["product_id"]
+                .to_list()
+            ) == {"amax-flow", "pot-stage"}
+        elif station == "6007":
+            amax_rej = rr.annotations(result, schema="uk_nrfa.amax_rejection")
+            assert amax_rej.is_empty() or all(not years for years in amax_rej["rejected_amax_years"].to_list())
+
+    assert len(observed_products) == 10
+
+
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded(_EVIDENCE_SCOPE)
+def test_recorded_public_gmf_unwindowed_preserves_trailing_partial_month_and_isolates_failure(
+    retained_evidence_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = retained_evidence_root / _EVIDENCE_SCOPE
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+
+    # Partial-end-month gmf (2020-01-15..2020-03-15) stays unwindowed and preserves 2020-02 and 2020-03.
+    gmf_replay = _ExactReceiptReplay((_pair(root, "gmf-39001-full.json"),))
+    monkeypatch.setattr(discovery, "HttpClient", lambda: gmf_replay)
+    gmf_sel = rr.pick(rr.find(provider="uk_nrfa", station="39001"), variant="gmf")
+    gmf_res = rr.fetch(gmf_sel, start="2020-01-15", end="2020-03-15", cache="bypass")
+    assert gmf_res.data.sort("time")["time"].to_list() == [
+        datetime(2020, 2, 1, 0, 0, 0),
+        datetime(2020, 3, 1, 0, 0, 0),
+    ]
+    assert rr.annotations(gmf_res, schema="uk_nrfa.observations").sort("time")["source_label"].to_list() == [
+        "2020-02",
+        "2020-03",
+    ]
+
+    # Genuine gdf success remains intact when ndf replays a retained 0-byte failure witness.
+    class _GdfOkNdfFailReplay(_RouteReplay):
+        def __init__(self) -> None:
+            super().__init__((_pair(root, "gdf-39001-2020-01.json"),))
+            self._fail_body, self._fail_receipt = (
+                root / "error-reversed-dates-39001.bin",
+                root / "error-reversed-dates-39001.bin.receipt.json",
+            )
+
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = {str(k): str(v) for k, v in (request.params or {}).items()}
+            if params.get("data-type") == "ndf":
+                self.calls.append(request)
+                receipt = json.loads(self._fail_receipt.read_bytes())
+                return TransportResponse(
+                    status_code=int(receipt["status"]),
+                    content=self._fail_body.read_bytes(),
+                    url=request.url,
+                    request_parameters=params,
+                    retrieved_at=datetime.fromisoformat(str(receipt["retrieved_at"])),
+                    content_type=_content_type(receipt),
+                )
+            return super().send(request)
+
+    monkeypatch.setattr(discovery, "HttpClient", _GdfOkNdfFailReplay)
+    pair_sel = rr.pick(rr.find(provider="uk_nrfa", station="39001"), variant=["gdf", "ndf"])
+    partial = rr.fetch(pair_sel, start="2020-01-01", end="2020-01-05", cache="bypass", on_issue="ignore")
+    assert set(partial.data["product_id"].to_list()) == {"gdf"}
+    assert partial.data.height == 5
+    outcomes = {outcome.product_id: outcome.status for outcome in partial.outcomes if outcome.series_id is not None}
+    assert outcomes == {"gdf": OutcomeStatus.SUCCESS, "ndf": OutcomeStatus.FAILED}
+
+
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.recorded(_EVIDENCE_SCOPE)
+def test_recorded_public_thirty_day_cache_reuse_and_expiry_with_pinned_clock(
+    retained_evidence_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    root = retained_evidence_root / _EVIDENCE_SCOPE
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+
+    current_now = datetime(2026, 11, 17, 0, 0, 0, tzinfo=UTC)
+    monkeypatch.setattr(_SystemClock, "utcnow", lambda self: current_now)
+
+    replay = _RouteReplay(
+        (
+            _pair(root, "station-info-peak-82001.json"),
+            _pair(root, "amax-flow-82001-1962-1985.json"),
+        )
+    )
+    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+    sel = rr.pick(rr.find(provider="uk_nrfa", station="82001"), variant="amax-flow")
+
+    initial = rr.fetch(sel, start="1962-01-01", end="1985-12-31", cache="reuse")
+    assert len(replay.calls) == 2
+    initial_height = initial.data.height
+    assert initial_height > 0
+
+    # Within 30 calendar days of 2026-11-16 acquisition: cache hit with zero HTTP calls and intact annotations.
+    replay.calls.clear()
+    current_now = datetime(2026, 12, 16, 15, 0, 0, tzinfo=UTC)
+    reused = rr.fetch(sel, start="1962-01-01", end="1985-12-31", cache="reuse")
+    assert replay.calls == []
+    pl_testing.assert_frame_equal(reused.data, initial.data)
+    assert set(rr.annotations(reused)["schema"].to_list()) == {
+        "uk_nrfa.observations",
+        "uk_nrfa.series_metadata",
+        "uk_nrfa.amax_rejection",
+        "uk_nrfa.peak_rejected_periods",
+    }
+
+    # Past 30 calendar days: stale entry is evicted and re-fetched via HTTP.
+    current_now = datetime(2026, 12, 17, 0, 0, 0, tzinfo=UTC)
+    expired = rr.fetch(sel, start="1962-01-01", end="1985-12-31", cache="reuse")
+    assert len(replay.calls) == 2
+    pl_testing.assert_frame_equal(expired.data, initial.data)

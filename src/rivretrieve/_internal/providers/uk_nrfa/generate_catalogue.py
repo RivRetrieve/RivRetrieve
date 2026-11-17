@@ -186,7 +186,10 @@ def build_catalogue(native_table: NativeTable, origins: OriginDeclarations) -> G
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": "false: catalogue-only; observation retrieval is not implemented",
+        "bulk_observations": (
+            "false: one NRFA time-series request per station-product, with shared per-station "
+            "station-info metadata for peak products; numbered bulk peak-flow releases are not used"
+        ),
         "catalogue_version": checked_at.date().isoformat(),
         "license": "https://eidc.ceh.ac.uk/licences/nrfa-data-terms-and-conditions-for-api-access-to-time-series-data-and-metadata/",
         "citation": "Data from the UK National River Flow Archive",

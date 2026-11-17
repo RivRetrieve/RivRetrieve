@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -46,6 +46,7 @@ from rivretrieve._internal.source_series import (
     stable_id,
 )
 from rivretrieve._internal.store import StoreReader, StoreRoot
+from rivretrieve._internal.transport import _SystemClock
 
 if TYPE_CHECKING:
     from rivretrieve._internal.providers.registration import (
@@ -234,7 +235,7 @@ class _ProviderHandle:
             known_series=known_series,
             inventories=inventories,
         )
-        requested_at = datetime.now(UTC)
+        requested_at = _SystemClock().utcnow()
         provider_info = self.info()
         provenance_issues = _unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation)
         assembled = drive(
@@ -297,7 +298,7 @@ class _ProviderHandle:
             known_series=known_series,
             inventories=inventories,
         )
-        requested_at = datetime.now(UTC)
+        requested_at = _SystemClock().utcnow()
         provider_info = self.info()
         from rivretrieve._internal.store.reader import require_readable_store
 

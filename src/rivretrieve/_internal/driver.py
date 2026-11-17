@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from types import MappingProxyType
 from typing import Protocol, cast, runtime_checkable
 
@@ -85,7 +85,13 @@ from rivretrieve._internal.source_series import (
     validate_series_rows,
 )
 from rivretrieve._internal.store import StoreQuery, StoreReader, StoreRoot
-from rivretrieve._internal.store.accumulation import StoreUpdate, SuccessfulReplacement, accumulate
+from rivretrieve._internal.store.accumulation import (
+    StoreUpdate,
+    SuccessfulReplacement,
+    accumulate,
+    evict_expired_retention,
+    manifest_has_expired_retention,
+)
 from rivretrieve._internal.store.authority import CurrentEvidence, project_evidence
 from rivretrieve._internal.store.provenance import encode_source_call
 from rivretrieve._internal.store.receipts import encode_store_excerpt
@@ -2004,6 +2010,16 @@ def drive(
     manifest: AccumulatedStoreManifest | None = None
     held_evidence: CurrentEvidence | None = None
     resolved_reader = reader or StoreReader()
+    retention_cutoff: datetime | None = None
+    if cache != "bypass" and config.cache is not None and config.cache.max_retention is not None:
+        reference_now = provenance.requested_at
+        if reference_now is None:
+            from rivretrieve._internal.transport import _SystemClock
+
+            reference_now = _SystemClock().utcnow()
+        if reference_now.tzinfo is None:
+            raise FatalContractError("Retention evaluation requires a timezone-aware requested_at instant")
+        retention_cutoff = reference_now.astimezone(UTC) - config.cache.max_retention
     if cache != "bypass":
         assert store is not None
         from rivretrieve._internal.store.reader import require_readable_store
@@ -2013,6 +2029,11 @@ def drive(
         if held is not None:
             if not isinstance(held, AccumulatedStoreManifest):
                 raise FatalContractError("Live retrieval requires an accumulated store")
+            if retention_cutoff is not None and manifest_has_expired_retention(held, retention_cutoff):
+                evict_expired_retention(store, request.provider_id, cutoff=retention_cutoff)
+                resolved_reader.invalidate()
+                held = resolved_reader.status(store, request.provider_id).manifest
+                assert isinstance(held, AccumulatedStoreManifest)
             manifest = held
             held_evidence = resolved_reader.evidence(store, request.provider_id)
     resolved_transport = HttpClient() if transport is None else transport
@@ -3123,6 +3144,11 @@ def drive(
             ),
         )
         resolved_reader.invalidate()
+        if retention_cutoff is not None and manifest_has_expired_retention(published, retention_cutoff):
+            evicted = evict_expired_retention(store, request.provider_id, cutoff=retention_cutoff)
+            if evicted is not None:
+                published = evicted
+            resolved_reader.invalidate()
         prior_diagnostics = (
             {
                 item.outcome_id

@@ -611,9 +611,21 @@ class ObservationStoreConfig:
 
 @dataclass(frozen=True, slots=True)
 class CacheConfig:
-    """A provider declaration that observations live in a compiled store."""
+    """Provider cache policy: a compiled store revision or a retention bound."""
 
     store: ObservationStoreConfig | None = None
+    max_retention: timedelta | None = None
+
+    def __post_init__(self) -> None:
+        if self.store is not None and not isinstance(self.store, ObservationStoreConfig):
+            raise TypeError("cache store must be ObservationStoreConfig or None")
+        if self.max_retention is not None:
+            if type(self.max_retention) is not timedelta:
+                raise TypeError("cache max_retention must be a timedelta or None")
+            if self.max_retention <= timedelta(0):
+                raise ValueError("cache max_retention must be a positive timedelta")
+        if self.store is not None and self.max_retention is not None:
+            raise ValueError("cache cannot declare both a compiled store and max_retention")
 
 
 @dataclass(frozen=True, slots=True)

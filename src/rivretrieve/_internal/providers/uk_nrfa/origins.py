@@ -253,6 +253,15 @@ def build_acquisition_provenance() -> AcquisitionProvenance:
                 ),
                 statements=(
                     SourceStatement(
+                        kind="license",
+                        exact_text=(
+                            "Click-Through Licence for Access to UK National River Flow Archive Data "
+                            "Available from the UK Centre for Ecology & Hydrology"
+                        ),
+                        recording_id="api-terms.html",
+                        fact="source.provider.terms",
+                    ),
+                    SourceStatement(
                         kind="citation",
                         exact_text="Data from the UK National River Flow Archive",
                         recording_id="api-terms.html",

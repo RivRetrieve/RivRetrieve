@@ -304,3 +304,37 @@ def test_exchange_declaration_refuses_invalid_contract(tmp_path, defect):
     declaration = replace(declaration, credential_exchange=exchange)
     with pytest.raises(FatalContractError):
         load_manifest(("xx_test",), declaration_loader=lambda _: declaration)
+
+
+def test_live_stages_rejects_compiled_store_but_accepts_max_retention(tmp_path: Path) -> None:
+    from datetime import timedelta
+
+    from rivretrieve._internal.engine import CacheConfig, ObservationStoreConfig, ProductWindowDeclarations
+
+    base_stages = cast("LiveStages", no_nve_declaration.declaration.observations).stages
+
+    class _WithStore:
+        observation_source = "live"
+        config = replace(base_stages.config, cache=CacheConfig(store=ObservationStoreConfig(format_version=1)))
+        window_declarations = ProductWindowDeclarations(base_stages.window_declarations.products)
+        fetch = staticmethod(base_stages.fetch)
+        parse = staticmethod(base_stages.parse)
+
+    with pytest.raises(FatalContractError, match="LiveStages cannot declare a compiled store"):
+        load_manifest(
+            ("xx_test",),
+            declaration_loader=lambda _: ProviderDeclaration(tmp_path / "catalogue", LiveStages(stages=_WithStore)),
+        )
+
+    class _WithRetention:
+        observation_source = "live"
+        config = replace(base_stages.config, cache=CacheConfig(max_retention=timedelta(days=30)))
+        window_declarations = ProductWindowDeclarations(base_stages.window_declarations.products)
+        fetch = staticmethod(base_stages.fetch)
+        parse = staticmethod(base_stages.parse)
+
+    loaded = load_manifest(
+        ("xx_test",),
+        declaration_loader=lambda _: ProviderDeclaration(tmp_path / "catalogue", LiveStages(stages=_WithRetention)),
+    )
+    assert len(loaded) == 1
