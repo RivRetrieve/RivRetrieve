@@ -58,6 +58,7 @@ for how to supply them.
 | United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 29,387 | Open |
 
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
+See the [Argentine provider guide](https://rivretrieve.github.io/providers/ar_ina/) for `ar_ina` network scope, stage references and limitations.
 Austria's `at_ehyd` catalogue retains 746 river station identities; 744 have selectable series in this snapshot.
 See the [Austrian provider guide](https://rivretrieve.github.io/providers/at_ehyd/) for catalogue coverage and limitations.
 SENAMHI retains 771 station identities; 270 have selectable series in this snapshot.
