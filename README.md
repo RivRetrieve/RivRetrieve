@@ -230,8 +230,8 @@ streamflow for several gauges at once.
   appears in a daily-mean search only when its values are known to be daily means. Two matching
   records can still differ in ways that matter for your study.
 - **No quality control or gap filling.** RivRetrieve does not assess scientific quality.
-  It converts units and formats, and reports retrieval and parsing issues. Provider-specific
-  observation quality flags are not added to harmonised output.
+  It converts units and formats, and reports retrieval and parsing issues. Published quality flags are preserved as optional source annotations.
+  RivRetrieve does not interpret or rank them.
 - **No aggregation.** RivRetrieve does not aggregate data (e.g., from hourly to daily). Data are
   returned at the time step the provider publishes: daily data are available only where the
   provider already publishes daily values.
