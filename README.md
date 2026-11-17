@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from eighteen different providers in seventeen countries.
+from nineteen different providers in eighteen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -37,6 +37,7 @@ for how to supply them.
 
 | Country | Agency | Provider | Stations | Access |
 |---|---|---|---:|---|
+| Argentina | Instituto Nacional del Agua (INA), Alerta5 | `ar_ina` | 829 | Open |
 | Austria | Federal Ministry of Agriculture and Forestry, Climate and Environmental Protection, Regions and Water Management / Bundesministerium für Land- und Forstwirtschaft, Klima- und Umweltschutz, Regionen und Wasserwirtschaft (BMLUK), eHYD | `at_ehyd` | 744 | Open |
 | Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | Open |
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
@@ -57,6 +58,7 @@ for how to supply them.
 | United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 29,387 | Open |
 
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
+See the [Argentine provider guide](https://rivretrieve.github.io/providers/ar_ina/) for `ar_ina` network scope, stage references and limitations.
 Austria's `at_ehyd` catalogue retains 746 river station identities; 744 have selectable series in this snapshot.
 See the [Austrian provider guide](https://rivretrieve.github.io/providers/at_ehyd/) for catalogue coverage and limitations.
 Denmark's `dk_vanda` catalogue retains 1,565 stations; 1,388 have selectable series in this snapshot.
@@ -72,7 +74,7 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Argentina, Australia, Belgium, Chile, Estonia, Germany,
+Afghanistan, Australia, Belgium, Chile, Estonia, Germany,
 Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Portugal, Rwanda,
 Slovenia, South Africa, South Korea, Spain, Sweden, Taiwan and the United Kingdom.
 

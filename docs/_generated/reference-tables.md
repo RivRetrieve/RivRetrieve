@@ -157,6 +157,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 
 | Provider | Observation kind | Required credential variables | Stations | Available pairs | Unknown pairs | Unavailable pairs |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
+| `ar_ina` | live | none | 829 | 2611 | 8166 | 0 |
 | `at_ehyd` | live | none | 746 | 4837 | 3369 | 0 |
 | `ba_fhmzbih` | live | none | 60 | 132 | 48 | 0 |
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
@@ -182,6 +183,19 @@ Access coordinates and declared units come from products.parquet. These are inte
 
 | Provider | Product | Canonical unit |
 | --- | --- | --- |
+| `ar_ina` | `discharge_daily_mean` | `m3/s` |
+| `ar_ina` | `discharge_instantaneous` | `m3/s` |
+| `ar_ina` | `discharge_monthly_max` | `m3/s` |
+| `ar_ina` | `discharge_monthly_mean` | `m3/s` |
+| `ar_ina` | `discharge_monthly_min` | `m3/s` |
+| `ar_ina` | `stage_4hourly` | `m` |
+| `ar_ina` | `stage_daily_mean` | `m` |
+| `ar_ina` | `stage_hourly` | `m` |
+| `ar_ina` | `stage_instantaneous` | `m` |
+| `ar_ina` | `stage_monthly_max` | `m` |
+| `ar_ina` | `stage_monthly_mean` | `m` |
+| `ar_ina` | `stage_monthly_min` | `m` |
+| `ar_ina` | `stage_weekly_mean` | `m` |
 | `at_ehyd` | `owf_abfl_monatsmaxima` | `m3/s` |
 | `at_ehyd` | `owf_abfl_monatsminima` | `m3/s` |
 | `at_ehyd` | `owf_abfl_tagesmittel` | `m3/s` |

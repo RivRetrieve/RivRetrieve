@@ -39,6 +39,7 @@ def _areas(selection) -> pl.DataFrame:
 
 # Independent source-column expectations, including established units only.
 SOURCE_FIELDS = {
+    "ar_ina": ("id", {}),
     "at_ehyd": ("hzbnr", {"orogr.Einzugsgebiet [km²]": "km²"}),
     "ba_fhmzbih": ("metadata_station_no", {"metadata_CATCHMENT_SIZE": None}),
     "br_ana": ("codigoestacao", {"Area_Drenagem": None}),
@@ -129,7 +130,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
     assert overlapping.height > 0
-    for provider in ("co_ideam", "lt_lhmt", "th_thaiwater"):
+    for provider in ("ar_ina", "co_ideam", "lt_lhmt", "pe_senamhi", "th_thaiwater"):
         absent = result.filter(pl.col("provider_id") == provider)
         assert set(absent["state"]) == {"no_metadata"}
         assert (
@@ -146,7 +147,9 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
         pytest.param(
             provider,
             marks=pytest.mark.derived(
-                "maintenance/catalogue/at_ehyd/official"
+                "maintenance/catalogue/ar_ina/official"
+                if provider == "ar_ina"
+                else "maintenance/catalogue/at_ehyd/official"
                 if provider == "at_ehyd"
                 else "maintenance/catalogue/usgs_nwis"
                 if provider == "usgs_nwis"
@@ -168,6 +171,8 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         if provider == "at_ehyd"
         else retained_evidence_root / "maintenance/catalogue/usgs_nwis/legacy-native.parquet"
         if provider == "usgs_nwis"
+        else retained_evidence_root / "maintenance/catalogue/ar_ina/official/native.parquet"
+        if provider == "ar_ina"
         else retained_evidence_root / "maintenance/catalogue/co_ideam/official/native.parquet"
         if provider == "co_ideam"
         else retained_evidence_root / "maintenance/catalogue/dk_vanda/official/native.parquet"

@@ -56,6 +56,7 @@ of the source view.
 <!-- fields-by-provider:start -->
 | Provider | Station name | Water body | Drainage area | Elevation |
 |---|---|---|---|---|
+| [`ar_ina`](providers/ar_ina.md) | `nombre` | `rio` | — | — |
 | [`at_ehyd`](providers/at_ehyd.md) | `messstelle`, `name` | `gewaesser`, `gewasser` | `orogr.Einzugsgebiet [km²]` (km²) | — |
 | [`ba_fhmzbih`](providers/ba_fhmzbih.md) | — | — | `metadata_CATCHMENT_SIZE` (km²) | — |
 | [`br_ana`](providers/br_ana.md) | `Estacao_Nome` | `Rio_Nome` | `Area_Drenagem` | `Altitude` |

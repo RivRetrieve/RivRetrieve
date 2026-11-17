@@ -41,6 +41,21 @@ EXPECTED_PRODUCT_IDS = [
 ]
 
 EXPECTED_PRODUCTS_BY_PROVIDER = {
+    "ar_ina": [
+        "discharge_daily_mean",
+        "discharge_instantaneous",
+        "discharge_monthly_max",
+        "discharge_monthly_mean",
+        "discharge_monthly_min",
+        "stage_4hourly",
+        "stage_daily_mean",
+        "stage_hourly",
+        "stage_instantaneous",
+        "stage_monthly_max",
+        "stage_monthly_mean",
+        "stage_monthly_min",
+        "stage_weekly_mean",
+    ],
     "at_ehyd": [
         "owf_abfl_monatsmaxima",
         "owf_abfl_monatsminima",
@@ -195,6 +210,7 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
 
 EXPECTED_PRODUCT_IDS = sorted(
     set(EXPECTED_PRODUCT_IDS)
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["ar_ina"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["at_ehyd"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["co_ideam"])
@@ -230,6 +246,7 @@ def _disable_default_provider_registration(monkeypatch: pytest.MonkeyPatch) -> N
 def test_providers_empty_registry_returns_default_providers() -> None:
     result = rr.providers()
     assert result.get_column("provider_id").to_list() == [
+        "ar_ina",
         "at_ehyd",
         "ba_fhmzbih",
         "br_ana",

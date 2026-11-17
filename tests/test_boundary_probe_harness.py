@@ -231,6 +231,19 @@ def test_probe_that_does_not_replay_its_recording_is_refused() -> None:
 def test_manifest_declarations_define_every_observation_product_obligation() -> None:
     obligations = manifest_boundary_obligations(load_manifest(BUILTIN_PROVIDER_IDS))
     assert obligations == (
+        (ProviderId("ar_ina"), ProductId("discharge_daily_mean")),
+        (ProviderId("ar_ina"), ProductId("discharge_instantaneous")),
+        (ProviderId("ar_ina"), ProductId("discharge_monthly_max")),
+        (ProviderId("ar_ina"), ProductId("discharge_monthly_mean")),
+        (ProviderId("ar_ina"), ProductId("discharge_monthly_min")),
+        (ProviderId("ar_ina"), ProductId("stage_4hourly")),
+        (ProviderId("ar_ina"), ProductId("stage_daily_mean")),
+        (ProviderId("ar_ina"), ProductId("stage_hourly")),
+        (ProviderId("ar_ina"), ProductId("stage_instantaneous")),
+        (ProviderId("ar_ina"), ProductId("stage_monthly_max")),
+        (ProviderId("ar_ina"), ProductId("stage_monthly_mean")),
+        (ProviderId("ar_ina"), ProductId("stage_monthly_min")),
+        (ProviderId("ar_ina"), ProductId("stage_weekly_mean")),
         (ProviderId("at_ehyd"), ProductId("owf_abfl_monatsmaxima")),
         (ProviderId("at_ehyd"), ProductId("owf_abfl_monatsminima")),
         (ProviderId("at_ehyd"), ProductId("owf_abfl_tagesmittel")),
