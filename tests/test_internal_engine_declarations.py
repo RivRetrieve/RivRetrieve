@@ -1,4 +1,5 @@
 from dataclasses import FrozenInstanceError, fields
+from datetime import timedelta
 from typing import Any, cast
 
 import pytest
@@ -113,10 +114,25 @@ def test_daily_label_time_rejects_ambiguous_or_invalid_clocks(raw: str) -> None:
 def test_cache_config_declares_only_the_compiled_store_revision() -> None:
     store = ObservationStoreConfig(format_version=1)
     cache = CacheConfig(store=store)
-    assert fields(CacheConfig)[0].name == "store"
+    assert tuple(field.name for field in fields(CacheConfig)) == ("store", "max_retention")
     assert cache.store is store
+    assert cache.max_retention is None
     for attribute in ("path", "expiry", "refresh", "lifecycle"):
         assert not hasattr(cache, attribute)
+
+    retained = CacheConfig(max_retention=timedelta(days=30))
+    assert retained.max_retention == timedelta(days=30)
+    assert retained.store is None
+
+    factory = cast("Any", CacheConfig)
+    with pytest.raises((TypeError, ValueError)):
+        factory(store=store, max_retention=timedelta(days=30))
+    for bad in (timedelta(0), timedelta(seconds=-1)):
+        with pytest.raises(ValueError):
+            CacheConfig(max_retention=bad)
+    for wrong_type in (30, True, "30d"):
+        with pytest.raises(TypeError):
+            factory(max_retention=wrong_type)
 
 
 def test_complete_product_declaration_preserves_required_typed_fields() -> None:

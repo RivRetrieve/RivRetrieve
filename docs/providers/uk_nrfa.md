@@ -1,19 +1,34 @@
 # United Kingdom (NRFA)
 
+[Documentation index](../README.md) · [Usage](../usage.md)
+
 The UK National River Flow Archive (NRFA), hosted by the UK Centre for Ecology &
-Hydrology, publishes river-flow and gauging-station information. RivRetrieve
-provides offline station discovery and metadata. Observation retrieval is not
-implemented; `rr.fetch` raises `ObservationsUnavailableError` for this provider.
+Hydrology, publishes river-flow, stage, and gauging-station records across the
+United Kingdom. RivRetrieve provides offline station discovery and live
+retrieval through the NRFA API for ten flow and stage products (`gdf`, `ndf`,
+`gmf`, `nmf`, `gauging-flow`, `gauging-stage`, `amax-flow`, `amax-stage`,
+`pot-flow`, and `pot-stage`).
 
 ```python
 import rivretrieve as rr
 
-stations = rr.find(provider="uk_nrfa")
-metadata = rr.metadata(stations)
+selection = rr.find(
+    provider="uk_nrfa",
+    station="39001",
+    quantity="discharge",
+    frequency="daily",
+    statistic="mean",
+)
+
+gdf = rr.pick(selection, variant="gdf")
+
+result = rr.fetch(gdf, start="2020-01-01", end="2020-01-05", cache="bypass")
 ```
 
-This selects advertised flow and stage products and returns station names,
-coordinates, river names, catchment areas and station altitudes. See
+This selects gauged daily mean flow (`gdf`) at station `39001` and returns the
+published values in `m3/s` with `time_zone="unknown"` and any NRFA quality flags
+attached under `uk_nrfa.observations`. Use `rr.metadata(selection)` for station
+names, coordinates, river names, catchment areas, and station altitudes. See
 [station metadata](../station-metadata.md) for the returned columns.
 
 ## Products and physical facts
@@ -74,9 +89,12 @@ Null and empty rejection lists stay distinct, and water-year integer encoding an
 period endpoint inclusivity remain uninterpreted.
 
 Use is subject to the [NRFA API terms](https://eidc.ceh.ac.uk/licences/nrfa-data-terms-and-conditions-for-api-access-to-time-series-data-and-metadata/).
-NRFA has expressed in-principle support for offline station metadata and recommends
-refreshing it every six months. This does not establish a general licence to
-redistribute observations. Attribute the source as **“Data from the UK National
-River Flow Archive”** and follow the terms' academic referencing requirements.
+NRFA limits client caching of API responses to temporary performance storage of no
+longer than 30 calendar days, so RivRetrieve evicts cached NRFA responses older
+than 30 days on subsequent cached retrieval.
+Offline station metadata reflects NRFA's in-principle support (recommended six-month
+refresh) and does not establish a general licence to redistribute observations.
+Attribute the source as **“Data from the UK National River Flow Archive”** and
+follow the terms' academic referencing requirements.
 
 [NRFA API help](https://nrfaapps.ceh.ac.uk/nrfa/nrfa-api.html)

@@ -38,6 +38,7 @@
       "name": "UK Centre for Ecology & Hydrology"
     }
   ],
+  "license": "Click-Through Licence for Access to UK National River Flow Archive Data Available from the UK Centre for Ecology & Hydrology",
   "citation": "Data from the UK National River Flow Archive",
   "distribution": [
     {
@@ -45,8 +46,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provider.json",
       "encodingFormat": "application/json",
-      "sha256": "7432fd305d01061aa454bf27ae8271d153d79af3cd0a574114d1da510424fc86",
-      "contentSize": "494 B"
+      "sha256": "c6b44c6eef2c545c2d0f9eaca50ea65915a0d59e97dcb5ba31c426dbe9724637",
+      "contentSize": "598 B"
     },
     {
       "@id": "products.parquet",
@@ -77,8 +78,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "da8e929e204a26f966a980e85df7ee81e8b3ec9290dd1356469dc7838992af81",
-      "contentSize": "24671 B"
+      "sha256": "62fffb47b1626087650ca7afdd590ad38bb2e8d01d6559876f26e80579e4b0a6",
+      "contentSize": "24943 B"
     },
     {
       "@id": "provenance_facts.parquet",

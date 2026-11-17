@@ -273,6 +273,12 @@ def load_manifest(
                     f"Provider {provider_id} has malformed LiveStages declaration: "
                     f"stages missing required members: {missing}"
                 )
+            stages_cache = getattr(getattr(value.observations.stages, "config", None), "cache", None)
+            if stages_cache is not None and stages_cache.store is not None:
+                raise FatalContractError(
+                    f"Provider {provider_id} has malformed LiveStages declaration: "
+                    "LiveStages cannot declare a compiled store"
+                )
         if isinstance(value.observations, BulkStore):
             non_callable_operations = tuple(
                 operation

@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from seventeen different providers in sixteen countries.
+from eighteen different providers in seventeen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -53,6 +53,7 @@ for how to supply them.
 | Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Bulk download |
 | Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 558 | Open |
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
+| United Kingdom | UK National River Flow Archive (UK Centre for Ecology & Hydrology) | `uk_nrfa` | 1,604 | Open |
 | United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 29,387 | Open |
 
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
@@ -73,7 +74,7 @@ A station can appear under both French services; their series remain separate.
 
 Afghanistan, Argentina, Australia, Belgium, Chile, Colombia, Estonia, Germany,
 Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Portugal, Rwanda,
-Slovenia, South Africa, South Korea, Spain, Sweden, Taiwan and the United Kingdom.
+Slovenia, South Africa, South Korea, Spain, Sweden and Taiwan.
 
 Some of these have a fetcher in the legacy
 [RivRetrieve-Python](https://github.com/kratzert/RivRetrieve-Python) that awaits porting; others

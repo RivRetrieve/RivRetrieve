@@ -44,6 +44,7 @@ PROVIDER_COUNTRY = {
     "pe_senamhi": "PER",
     "pl_imgw": "POL",
     "th_thaiwater": "THA",
+    "uk_nrfa": "GBR",
     "usgs_nwis": "USA",
 }
 PLANNED_COUNTRY = {
@@ -54,7 +55,6 @@ PLANNED_COUNTRY = {
     "DEU": "Germany (Berlin)",
     "ESP": "Spain",
     "EST": "Estonia",
-    "GBR": "United Kingdom (EA, NRFA, SEPA)",
     "GRC": "Greece",
     "IRL": "Ireland (OPW)",
     "ITA": "Italy (Tuscany)",

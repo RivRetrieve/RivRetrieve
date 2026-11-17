@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,6 +13,7 @@ import pytest
 import rivretrieve as rr
 from rivretrieve._internal import driver as driver_module
 from rivretrieve._internal.engine import (
+    CacheConfig,
     Daily,
     DailyLabelTime,
     DayDefinition,
@@ -36,7 +37,7 @@ from rivretrieve._internal.engine import (
     ZoneValue,
     _make_fetch_window,
 )
-from rivretrieve._internal.issues import FatalContractError, ObservationsUnavailableError
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import (
     ObservationProvenance,
     ObservationResult,
@@ -76,7 +77,7 @@ def test_uk_nrfa_config_and_window_declarations() -> None:
 
     cfg = config()
     assert cfg.zone == ZoneValue("unknown")
-    assert cfg.cache is None
+    assert cfg.cache == CacheConfig(max_retention=timedelta(days=30))
     assert tuple(cfg.products) == PRODUCT_IDS
 
     stage_products = {"gauging-stage", "amax-stage", "pot-stage"}
@@ -115,10 +116,17 @@ def test_uk_nrfa_config_and_window_declarations() -> None:
         UkNrfaSourceCoordinates(data_type="gdf", peak_metadata_content=b"{}")
 
 
-def test_uk_nrfa_public_fetch_remains_catalogue_only() -> None:
-    selection = rr.find(provider="uk_nrfa", station="39001")
-    with pytest.raises(ObservationsUnavailableError):
-        rr.fetch(selection, start="2020-01-01", end="2020-01-05")
+def test_uk_nrfa_declaration_wires_live_stages() -> None:
+    from rivretrieve._internal.providers.registration import LiveStages
+    from rivretrieve._internal.providers.uk_nrfa.config import SHARED_ACQUISITION_PRODUCTS
+    from rivretrieve._internal.providers.uk_nrfa.declaration import declaration
+
+    assert declaration.required_credentials == ()
+    assert isinstance(declaration.observations, LiveStages)
+    stages = declaration.observations.stages
+    assert stages.observation_source == "live"
+    assert stages.shared_acquisition_products == SHARED_ACQUISITION_PRODUCTS
+    assert stages.config.cache == CacheConfig(max_retention=timedelta(days=30))
 
 
 class _StubTransport:

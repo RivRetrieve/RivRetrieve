@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 from rivretrieve._internal.engine import (
+    CacheConfig,
     Daily,
     DailyLabelTime,
     DayDefinition,
@@ -70,7 +72,7 @@ _CONFIG = ProviderConfig(
         )
         for pid in PRODUCT_IDS
     },
-    cache=None,
+    cache=CacheConfig(max_retention=timedelta(days=30)),
 )
 
 # Inclusive YYYY-MM-DD covers intraday events and avoids HTTP 400 on microsecond ISO timestamps.

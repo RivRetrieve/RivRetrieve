@@ -29,6 +29,7 @@ Provider pages explain their agencies and source-specific conditions:
 - [Poland: IMGW-PIB](providers/pl_imgw.md)
 - [Switzerland: FOEN](providers/ch_foen.md)
 - [Thailand: ThaiWater](providers/th_thaiwater.md)
+- [United Kingdom: NRFA](providers/uk_nrfa.md)
 - [United States — USGS](providers/usgs_nwis.md)
 
 ## Contribute and develop

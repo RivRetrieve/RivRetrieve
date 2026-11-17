@@ -173,7 +173,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `pe_senamhi` | live | none | 771 | 1170 | 10395 | 0 |
 | `pl_imgw` | bulk store | none | 1301 | 0 | 3903 | 0 |
 | `th_thaiwater` | live | none | 825 | 1096 | 554 | 0 |
-| `uk_nrfa` | catalogue-only | none | 1604 | 9052 | 0 | 0 |
+| `uk_nrfa` | live | none | 1604 | 9052 | 0 | 0 |
 | `usgs_nwis` | live | none | 29642 | 63502 | 0 | 114350 |
 
 ### Packaged access coordinates
