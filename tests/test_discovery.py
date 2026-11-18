@@ -22,6 +22,7 @@ EXPECTED_PRODUCT_IDS = [
     "discharge_hourly",
     "discharge_hourly_mean",
     "discharge_instantaneous",
+    "discharge_monthly_mean",
     "discharge_reported",
     "stage_daily",
     "stage_daily_max",
@@ -75,6 +76,10 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
             "1year_min",
             "recent",
         )
+    ],
+    "cl_dga": [
+        "discharge_daily",
+        "discharge_monthly_mean",
     ],
     "cz_chmi": [
         "discharge_daily_mean",
@@ -164,6 +169,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "cl_dga",
         "cz_chmi",
         "fr_hubeau",
         "fr_hydroportail",
