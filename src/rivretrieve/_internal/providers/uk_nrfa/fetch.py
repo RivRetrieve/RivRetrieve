@@ -49,7 +49,7 @@ def extract_peak_metadata_row(content: bytes, station: str) -> Mapping[str, obje
     try:
         text = content.decode("utf-8")
         document = json.loads(text)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         raise UnsupportedSourceStructureError(
             f"NRFA station-info payload for station {station} is not valid JSON"
         ) from exc

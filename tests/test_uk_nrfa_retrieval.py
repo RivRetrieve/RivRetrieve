@@ -226,6 +226,7 @@ def test_extract_peak_metadata_row_validates_shape_identity_and_rejection_fields
     for bad_bytes, station in (
         (b"", "82001"),
         (b"\xff", "82001"),
+        (f'{{"data": [{{"id": {"9" * 5000}}}]}}'.encode(), "82001"),
         (b"[]", "82001"),
         (b'{"data": []}', "82001"),
         (b'{"data": [1, 2]}', "82001"),
@@ -519,7 +520,12 @@ def test_parse_handles_malformed_and_reversed_date_empty_bytes_as_failed_outcome
     cfg = config()
     fw = _fetch_window(datetime(2020, 1, 1), datetime(2020, 1, 5, 23, 59, 59))
 
-    for bad_content in (b"", b"<html>error</html>", json.dumps({"data-stream": ["2020-01-01", 1.0]}).encode()):
+    for bad_content in (
+        b"",
+        b"<html>error</html>",
+        json.dumps({"data-stream": ["2020-01-01", 1.0]}).encode(),
+        f'{{"data-stream": ["2020-01-01", {"9" * 5000}]}}'.encode(),
+    ):
         payload = Payload(
             source_coordinates=SourceCoordinates(UkNrfaSourceCoordinates(data_type="gdf")),
             station_products=(("39001", ProductId("gdf")),),
@@ -552,14 +558,15 @@ def test_parse_handles_malformed_and_reversed_date_empty_bytes_as_failed_outcome
     assert parsed_valid_meta.outcomes == ()
     assert parsed_valid_meta.issues == ()
 
-    bad_meta = replace(valid_meta, content=b'{"data": []}')
-    parsed_bad_meta = parse(bad_meta, cfg)
-    assert [(o.product_id, o.status) for o in parsed_bad_meta.outcomes] == [
-        ("amax-flow", OutcomeStatus.FAILED),
-        ("pot-stage", OutcomeStatus.FAILED),
-    ]
-    assert len(parsed_bad_meta.issues) == 2
-    assert {i.code for i in parsed_bad_meta.issues} == {"source.unsupported_structure"}
+    for bad_meta_content in (b'{"data": []}', f'{{"data": [{{"id": {"9" * 5000}}}]}}'.encode()):
+        bad_meta = replace(valid_meta, content=bad_meta_content)
+        parsed_bad_meta = parse(bad_meta, cfg)
+        assert [(o.product_id, o.status) for o in parsed_bad_meta.outcomes] == [
+            ("amax-flow", OutcomeStatus.FAILED),
+            ("pot-stage", OutcomeStatus.FAILED),
+        ]
+        assert len(parsed_bad_meta.issues) == 2
+        assert {i.code for i in parsed_bad_meta.issues} == {"source.unsupported_structure"}
 
 
 def test_parse_preserves_annotations_complete_inventory_and_scope_narrowing() -> None:

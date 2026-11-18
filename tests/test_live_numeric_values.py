@@ -369,3 +369,81 @@ def test_at_ehyd_numeric_guards_reject_unrepresentable_cells_across_wire_formats
         assert changed.rows.height == baseline.rows.height
         assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
         assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
+
+
+@pytest.mark.parametrize("cell_shape", ["scalar", "flagged"])
+@pytest.mark.parametrize(
+    "mutation",
+    [*BAD, "very_huge_integer", "boolean", "zero", "finite", "null"],
+)
+@pytest.mark.recorded("maintenance/observations/uk_nrfa/retrieval")
+def test_uk_nrfa_live_numeric_cell_validation(
+    retained_evidence_root: Path,
+    cell_shape: str,
+    mutation: str,
+) -> None:
+    from urllib.parse import parse_qsl, urlsplit
+
+    from rivretrieve._internal.providers.uk_nrfa.config import UkNrfaSourceCoordinates, config
+    from rivretrieve._internal.providers.uk_nrfa.parse import parse
+    from rivretrieve._internal.source_series import OutcomeStatus
+
+    root = retained_evidence_root / "maintenance/observations/uk_nrfa/retrieval"
+    if cell_shape == "scalar":
+        filename, product, start_dt, end_dt = (
+            "ndf-39001-1995-01.json",
+            ProductId("ndf"),
+            datetime(1995, 1, 1),
+            datetime(1995, 1, 10, 23, 59, 59),
+        )
+    else:
+        filename, product, start_dt, end_dt = (
+            "gdf-39001-2020-01.json",
+            ProductId("gdf"),
+            datetime(2020, 1, 1),
+            datetime(2020, 1, 5, 23, 59, 59),
+        )
+
+    body = (root / filename).read_bytes()
+    receipt = json.loads((root / f"{filename}.receipt.json").read_bytes())
+    parts = urlsplit(str(receipt["url"]))
+    cfg = config()
+    source = Payload(
+        SourceCoordinates(UkNrfaSourceCoordinates(data_type=str(product))),
+        (("39001", product),),
+        _make_fetch_window(WindowEndpoint.from_datetime(start_dt), WindowEndpoint.from_datetime(end_dt)),
+        body,
+        SourceCallOrigin(
+            f"{parts.scheme}://{parts.netloc}{parts.path}",
+            dict(parse_qsl(parts.query, keep_blank_values=True)),
+            int(receipt["status"]),
+            datetime.fromisoformat(str(receipt["retrieved_at"])),
+            "application/json",
+            UnknownOriginFact(),
+            UnknownOriginFact(),
+        ),
+        (),
+    )
+    baseline = parse(source, cfg)
+
+    doc = json.loads(body)
+    marker = "__NRFA_NUMERIC_CELL__"
+    if cell_shape == "scalar":
+        doc["data-stream"][1] = marker
+    else:
+        doc["data-stream"][1][0] = marker
+
+    token_map = {**TOKENS, "very_huge_integer": "9" * 5000, "boolean": "true"}
+    mutated_bytes = json.dumps(doc).encode().replace(json.dumps(marker).encode(), token_map[mutation].encode())
+    changed = parse(replace(source, content=mutated_bytes), cfg)
+
+    invalid_mutations = {*BAD, "very_huge_integer", "boolean"}
+    if mutation in invalid_mutations:
+        assert [item.status for item in changed.outcomes] == [OutcomeStatus.FAILED]
+        assert changed.rows.is_empty()
+        assert changed.issues and changed.issues[0].code == "source.unsupported_structure"
+    else:
+        assert [item.status for item in changed.outcomes] == [OutcomeStatus.SUCCESS]
+        assert changed.rows.height == baseline.rows.height
+        assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
+        assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))

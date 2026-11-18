@@ -87,6 +87,7 @@ for provider_id in provider_ids:
         "jp_mlit",
         "lt_lhmt",
         "no_nve",
+        "uk_nrfa",
         "usgs_nwis",
     }:
         expected_notice = import_module(f"rivretrieve._internal.providers.{provider_id}.origins").STATION_METADATA_NOTICE
@@ -190,6 +191,22 @@ for provider, station, role, field, raw, numeric, unit, datum in [
     assert summary[f"{role}_unit"][index] == source["source_unit"] == unit
     if role == "elevation":
         assert summary["elevation_datum"][index] == source["source_datum"] == datum
+
+thames = rr.find(provider="uk_nrfa", station="39001")
+thames_elev = rr.metadata(thames, view="source").filter(pl.col("attribute_role") == "elevation").row(0, named=True)
+assert thames_elev["source_field"] == "station-level"
+assert thames_elev["source_value"] == "4.7"
+assert thames_elev["source_datum"] == "Ordnance Datum"
+ni = rr.find(provider="uk_nrfa", station="201002")
+ni_elev = rr.metadata(ni, view="source").filter(pl.col("attribute_role") == "elevation").row(0, named=True)
+assert ni_elev["source_value"] == "61.0"
+assert ni_elev["source_datum"] == "Malin Head"
+null_elev = rr.metadata(rr.find(provider="uk_nrfa", station="15046"), view="source").filter(
+    pl.col("attribute_role") == "elevation"
+).row(0, named=True)
+assert null_elev["state"] == "source_null"
+assert null_elev["source_value"] is None
+assert null_elev["source_datum"] == "Ordnance Datum"
 
 empty = rr.pick(rr.pick(selection, quantity="discharge"), quantity="stage")
 assert_frame_equal(rr.metadata(empty, view="source"), pl.DataFrame(schema=schema))
