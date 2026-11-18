@@ -219,6 +219,7 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
         "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz": "declarations/fr_hubeau/governing_evidence.json.xz",
         "maintenance/catalogue/fr_hubeau/inventory/native_capture.json": "declarations/fr_hubeau/native_capture.json",
         "maintenance/catalogue/station_metadata/review.json": "declarations/station_metadata/review.json",
+        "maintenance/catalogue/cl_dga/official/selection.json": "declarations/cl_dga/catalogue.json",
         "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv": "declarations/th_thaiwater/governing_station_product_evidence.csv",
     }
     if declaration_locations is None:

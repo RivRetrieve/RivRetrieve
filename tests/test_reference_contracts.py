@@ -118,10 +118,10 @@ def test_reference_observation_result_fields(reference):
 def test_reference_all_provider_access_kinds(reference):
     table = reference.split('id="shipped-software-capabilities"', 1)[1].split('id="packaged-access-coordinates"', 1)[0]
     rows = re.findall(r"<tr>(.*?)</tr>", table, re.DOTALL)[1:]
-    assert len(rows) == 13
+    assert len(rows) == 14
     assert sum("<td>live</td>" in row for row in rows) == 11
     assert sum("<td>bulk store</td>" in row for row in rows) == 2
-    assert sum("<td>catalogue-only</td>" in row for row in rows) == 0
+    assert sum("<td>catalogue-only</td>" in row for row in rows) == 1
 
 
 def test_reference_renders_methods_and_signature_only_properties(reference):
