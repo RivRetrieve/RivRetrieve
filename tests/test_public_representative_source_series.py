@@ -1,7 +1,7 @@
 """Public source-series workflow replays exact engine-planned publisher interactions."""
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import polars as pl
@@ -165,6 +165,7 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
         ),
         pytest.param("br_ana", marks=pytest.mark.recorded("tests/recordings/br_ana")),
         pytest.param("at_ehyd", marks=pytest.mark.recorded("maintenance/observations/at_ehyd/retrieval")),
+        pytest.param("uk_nrfa", marks=pytest.mark.recorded("maintenance/observations/uk_nrfa/retrieval")),
     ],
 )
 def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, monkeypatch, tmp_path, request):
@@ -213,6 +214,17 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             variant="10MinMittel",
         )
         start, end = "2025-01-01T00:00:00", "2025-01-01T00:30:00"
+    elif provider == "uk_nrfa":
+        from rivretrieve._internal.transport import _SystemClock
+        from tests.test_uk_nrfa_retrieval_evidence import _ExactReceiptReplay, _pair
+
+        ret_root = retained_evidence_root / "maintenance/observations/uk_nrfa/retrieval"
+        monkeypatch.setattr(_SystemClock, "utcnow", lambda self: datetime(2026, 11, 17, 12, 0, 0, tzinfo=UTC))
+        monkeypatch.setattr(
+            discovery, "HttpClient", lambda: _ExactReceiptReplay((_pair(ret_root, "gdf-39001-2020-01.json"),))
+        )
+        selection = rr.pick(rr.find(provider="uk_nrfa", station="39001"), variant="gdf")
+        start = end = "2020-01-03"
     else:
         recording = read_recording(
             retained_evidence_root

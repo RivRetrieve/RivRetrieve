@@ -164,7 +164,7 @@ def _decode_json_object(content: bytes, *, station: str, product: ProductId) -> 
     try:
         text = content.decode("utf-8")
         document = json.loads(text)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         raise UnsupportedSourceStructureError(
             f"NRFA time-series body is not valid JSON for station {station} product {product}"
         ) from exc

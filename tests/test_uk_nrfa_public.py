@@ -570,3 +570,112 @@ def test_uk_nrfa_public_provenance_terms(
     assert result.provenance.citation == "Data from the UK National River Flow Archive"
     assert result.provenance.license == expected_license
     assert not any(issue.code == "provenance.license_not_established" for issue in result.issues)
+
+
+def test_public_oversized_json_integer_isolation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def handler(request: _ExecutableTransportRequest) -> SenderResponse:
+        params = request.params or {}
+        if params.get("data-type") == "ndf":
+            body = f'{{"data-stream": ["2020-01-03", {"9" * 5000}]}}'.encode()
+            return SenderResponse(body, 200, "application/json")
+        return SenderResponse(_ts_payload("gdf", ["2020-01-03", 10.5]), 200, "application/json")
+
+    _install_mock_env(monkeypatch, tmp_path, handler)
+
+    sel = rr.pick(rr.find(provider="uk_nrfa", station="39001"), variant=["gdf", "ndf"])
+    result = rr.fetch(sel, start="2020-01-03", end="2020-01-03", cache="bypass", on_issue="ignore")
+    assert result.data["product_id"].to_list() == ["gdf"]
+    assert result.data["value"].to_list() == [10.5]
+    outcome_pairs = {(outcome.product_id, outcome.status.value) for outcome in result.outcomes}
+    assert ("gdf", "success") in outcome_pairs
+    assert ("ndf", "failed") in outcome_pairs
+    assert [issue.code for issue in result.issues if issue.severity == "error"] == ["source.unsupported_structure"]
+
+    with pytest.raises(IssuePolicyError):
+        rr.fetch(sel, start="2020-01-03", end="2020-01-03", cache="bypass", on_issue="raise")
+
+
+def test_public_staggered_retention_partial_eviction_and_cache_lifecycle(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    fail_all = {"enabled": False}
+
+    def handler(request: _ExecutableTransportRequest) -> SenderResponse:
+        if fail_all["enabled"]:
+            return SenderResponse(b"Service Unavailable", 503, "text/plain")
+        params = request.params or {}
+        if request.url == _INFO_URL:
+            return SenderResponse(
+                _station_info_payload(int(params["station"]), excluded_years=[1976]),
+                200,
+                "application/json",
+            )
+        product = params["data-type"]
+        station = int(params["station"])
+        return SenderResponse(_ts_payload(product, _SAMPLE_STREAMS[product], station=station), 200, "application/json")
+
+    t0 = datetime(2026, 11, 1, 12, 0, 0, tzinfo=UTC)
+    clock, transport = _install_mock_env(monkeypatch, tmp_path, handler, now=t0)
+
+    sel_39001_gdf = rr.pick(rr.find(provider="uk_nrfa", station="39001"), variant="gdf")
+    sel_39001_gmf = rr.pick(rr.find(provider="uk_nrfa", station="39001"), variant="gmf")
+    sel_82001_amax = rr.pick(rr.find(provider="uk_nrfa", station="82001"), variant="amax-flow")
+    sel_6007_gdf = rr.pick(rr.find(provider="uk_nrfa", station="6007"), variant="gdf")
+
+    assert rr.cache_status("uk_nrfa").presence.value == "absent"
+
+    # Stagger acquisitions across T+0d, T+10d, T+20d.
+    res_39001_gdf = rr.fetch(sel_39001_gdf, start="2020-01-01", end="2020-01-05", cache="reuse", on_issue="raise")
+    clock.now = t0 + timedelta(days=10)
+    res_39001_gmf = rr.fetch(sel_39001_gmf, start="2020-01-01", end="2020-01-31", cache="reuse", on_issue="raise")
+    clock.now = t0 + timedelta(days=20)
+    res_82001_amax = rr.fetch(sel_82001_amax, start="2020-01-01", end="2020-01-05", cache="reuse", on_issue="raise")
+
+    sid_39001_gdf = res_39001_gdf.source_series[0].series_id
+    sid_39001_gmf = res_39001_gmf.source_series[0].series_id
+    sid_82001_amax = res_82001_amax.source_series[0].series_id
+
+    initial_status = rr.cache_status("uk_nrfa")
+    assert initial_status.presence.value == "present"
+    assert {entry.series_id for entry in initial_status.coverage} == {sid_39001_gdf, sid_39001_gmf, sid_82001_amax}
+    initial_audit = rr.audit_cache("uk_nrfa")
+    assert initial_audit.rows_checked == 3
+    assert initial_audit.bytes_checked > 0
+
+    # At T+30d+1s, 39001 gdf expires while 39001 gmf (20d+1s) and 82001 amax-flow (10d+1s) remain valid.
+    # Fetching 6007 gdf writes a fresh commit that evicts the expired 39001 gdf partition/coverage.
+    clock.now = t0 + timedelta(days=30, seconds=1)
+    res_6007_gdf = rr.fetch(sel_6007_gdf, start="2020-01-01", end="2020-01-05", cache="reuse", on_issue="raise")
+    sid_6007_gdf = res_6007_gdf.source_series[0].series_id
+
+    fail_all["enabled"] = True
+    transport.calls.clear()
+
+    cached_gmf = rr.fetch(sel_39001_gmf, start="2020-01-01", end="2020-01-31", cache="reuse", on_issue="raise")
+    cached_amax = rr.fetch(sel_82001_amax, start="2020-01-01", end="2020-01-05", cache="reuse", on_issue="raise")
+    assert transport.calls == []
+    assert cached_gmf.data["value"].to_list() == [12.0]
+    assert cached_amax.data["value"].to_list() == [55.0]
+    assert rr.annotations(cached_amax, schema="uk_nrfa.amax_rejection")["rejected_amax_years"].to_list() == [[1976]]
+
+    expired_gdf = rr.fetch(sel_39001_gdf, start="2020-01-01", end="2020-01-05", cache="reuse", on_issue="ignore")
+    assert expired_gdf.data.is_empty()
+    assert [o.status.value for o in expired_gdf.outcomes] == ["failed"]
+
+    after_status = rr.cache_status("uk_nrfa")
+    assert after_status.presence.value == "present"
+    covered_series = {entry.series_id for entry in after_status.coverage}
+    assert sid_39001_gdf not in covered_series
+    assert covered_series == {sid_39001_gmf, sid_82001_amax, sid_6007_gdf}
+
+    after_audit = rr.audit_cache("uk_nrfa")
+    assert after_audit.rows_checked == 3
+
+    cleared = rr.clear_cache("uk_nrfa")
+    assert cleared.existed is True
+    assert cleared.bytes_freed > 0
+    assert rr.cache_status("uk_nrfa").presence.value == "absent"
