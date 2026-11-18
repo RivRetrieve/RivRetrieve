@@ -9,9 +9,9 @@ RivRetrieve provides faithful, traceable access to river-gauge data from nationa
 Use `uv` exclusively for project dependencies and execution.
 
 - Add dependencies: `uv add <package>`; development dependencies: `uv add --dev <package>`.
-- Sync the environment: `uv sync`.
-- Keep `uv.lock` on public PyPI URLs (`https://pypi.org/simple` and `https://files.pythonhosted.org/`). If your local environment routes `uv` through an internal or private package mirror, rewrite `uv.lock` back to the upstream public registry URLs before committing so `uv sync --locked` works for external contributors.
-- Run commands: `uv run <command>`.
+- Sync the environment: `uv sync` (or `uv sync --frozen` when behind an internal package mirror so `uv.lock` is not rewritten).
+- Keep `uv.lock` on public PyPI URLs (`https://pypi.org/simple` and `https://files.pythonhosted.org/`). If your local environment routes `uv` through an internal or private package mirror, pass `--frozen` for routine `uv sync` and `uv run` commands and rewrite `uv.lock` back to the upstream public registry URLs after any dependency change so CI `uv lock --check` and external `uv sync --locked` pass.
+- Run commands: `uv run <command>` (or `uv run --frozen <command>` behind a package mirror).
 - Run source-independent tests: `uv run pytest --logic-only`.
 - Format: `uv run ruff format`.
 - Lint: `uv run ruff check --fix`.
