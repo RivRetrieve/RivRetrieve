@@ -146,6 +146,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
 | `ch_foen` | live | none | 1341 | 7008 | 41268 | 0 |
+| `cl_dga` | catalogue-only | none | 784 | 1568 | 0 | 0 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
@@ -209,6 +210,8 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `ch_foen` | `water_temperature_1year_mean` | `degC` |
 | `ch_foen` | `water_temperature_1year_min` | `degC` |
 | `ch_foen` | `water_temperature_recent` | `degC` |
+| `cl_dga` | `discharge_daily` | `m3/s` |
+| `cl_dga` | `discharge_monthly_mean` | `m3/s` |
 | `cz_chmi` | `discharge_daily_mean` | `m3/s` |
 | `cz_chmi` | `discharge_hourly_mean` | `m3/s` |
 | `cz_chmi` | `stage_daily_mean` | `m` |
