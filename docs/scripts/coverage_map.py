@@ -11,8 +11,8 @@ Counts are unique provider/station identities for observation-capable providers;
 they do not assert continuous observations or complete national network coverage.
 No station coordinates or station CRS assumptions enter this figure.
 Planned countries are fetchers in the legacy kratzert/RivRetrieve-Python repository,
-merged or in open pull requests, that have no provider here yet, plus countries with an open
-provider:port issue and South Africa.
+merged or in open pull requests, that have no provider here yet, plus unblocked candidate
+countries tracked in #870 and South Africa.
 """
 
 from __future__ import annotations
@@ -52,13 +52,13 @@ PLANNED_COUNTRY = {
     "AUS": "Australia",
     "BEL": "Belgium (Flanders, Wallonia)",
     "CHL": "Chile",
-    "DEU": "Germany (Berlin)",
+    "DEU": "Germany (federal waterways, Bavaria, Baden-Württemberg, Berlin, NRW)",
     "ESP": "Spain",
     "EST": "Estonia",
     "GBR": "United Kingdom (EA, NRFA, SEPA)",
     "GRC": "Greece",
-    "IRL": "Ireland (OPW)",
-    "ITA": "Italy (Tuscany)",
+    "IRL": "Ireland (OPW, EPA)",
+    "ITA": "Italy (Emilia-Romagna, Tuscany)",
     "KOR": "South Korea",
     "NLD": "Netherlands",
     "PRT": "Portugal",
@@ -68,12 +68,27 @@ PLANNED_COUNTRY = {
     "TWN": "Taiwan",
     "ZAF": "South Africa",
 }
-# Countries with an open provider:port issue that are not legacy fetchers.
+# Countries with unblocked open provider:port issues (#870) that are not legacy fetchers.
 RESEARCHED_COUNTRY = {
     "AFG": "Afghanistan",
+    "ARM": "Armenia",
+    "BEN": "Benin",
+    "BFA": "Burkina Faso",
+    "BGR": "Bulgaria",
+    "CIV": "Ivory Coast",
+    "CMR": "Cameroon",
+    "GIN": "Guinea",
+    "HRV": "Croatia",
+    "IDN": "Indonesia",
     "ISR": "Israel",
+    "LKA": "Sri Lanka",
     "MEX": "Mexico",
+    "MLI": "Mali",
+    "MYS": "Malaysia",
+    "NER": "Niger",
+    "NGA": "Nigeria",
     "NZL": "New Zealand",
+    "TCD": "Chad",
 }
 PLANNED_COUNTRY |= RESEARCHED_COUNTRY
 ROBINSON = "ESRI:54030"
