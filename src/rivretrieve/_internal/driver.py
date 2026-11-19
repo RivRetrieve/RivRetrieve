@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -586,16 +587,23 @@ def _exclude_intervals_keep_expr(
     daily_facts = tuple(
         facts.facts_id for item in series for facts in item.facts if facts.clipping_axis is ClippingAxis.CALENDAR_DATE
     )
+    monthly_facts = tuple(
+        facts.facts_id for item in series for facts in item.facts if facts.clipping_axis is ClippingAxis.CALENDAR_MONTH
+    )
     daily = pl.col("facts_id").is_in(daily_facts)
+    monthly = pl.col("facts_id").is_in(monthly_facts)
     keep = pl.lit(True)
     for series_id, facts_ids, interval in intervals:
+        month_start = interval.start.date().replace(day=1)
+        month_end = interval.end.date().replace(day=calendar.monthrange(interval.end.year, interval.end.month)[1])
         inside = (
             axis_time_expression(interval.axis).is_between(interval.start, interval.end, closed="both")
             if interval.axis is TimeAxis.UTC
             else (
                 daily & pl.col("time").dt.date().is_between(interval.start.date(), interval.end.date(), closed="both")
             )
-            | (~daily & pl.col("time").is_between(interval.start, interval.end, closed="both"))
+            | (monthly & pl.col("time").dt.date().is_between(month_start, month_end, closed="both"))
+            | (~daily & ~monthly & pl.col("time").is_between(interval.start, interval.end, closed="both"))
         )
         keep = keep & ~((pl.col("series_id") == series_id) & pl.col("facts_id").is_in(facts_ids) & inside)
     return keep
@@ -3049,18 +3057,22 @@ def drive(
         held_series = tuple(item for item in manifest.series if item.series_id in snapshot_ids and scope.matches(item))
         if held_series:
             _merge_definitions(definitions, held_series)
+            held_facts = tuple(fact for item in held_series for fact in item.facts if scope.matches_facts(fact))
+            held_scan = native_window_envelope(
+                datetime.fromisoformat(request.window.start.isoformat()),
+                datetime.fromisoformat(request.window.end.isoformat()),
+                held_facts,
+            )
             held_read = resolved_reader.query(
                 StoreQuery(
                     store,
                     request.provider_id,
                     request.stations,
                     request.products,
-                    datetime.fromisoformat(request.window.start.isoformat()) - _FETCH_WINDOW_PADDING,
-                    datetime.fromisoformat(request.window.end.isoformat()) + _FETCH_WINDOW_PADDING,
+                    held_scan.start - _FETCH_WINDOW_PADDING,
+                    held_scan.end + _FETCH_WINDOW_PADDING,
                     series_ids=tuple(item.series_id for item in held_series),
-                    facts_ids=tuple(
-                        fact.facts_id for item in held_series for fact in item.facts if scope.matches_facts(fact)
-                    ),
+                    facts_ids=tuple(dict.fromkeys(fact.facts_id for fact in held_facts)),
                 )
             )
             held_rows, held_ann = _clip_native_with_annotations(
@@ -3295,22 +3307,20 @@ def drive_store(
         for item in manifest.series
         if item.station_id in request.stations and item.product_id in request.products and scope.matches(item)
     )
-    matching_facts = tuple(
-        dict.fromkeys(
-            fact.facts_id for definition in selected for fact in definition.facts if scope.matches_facts(fact)
-        )
-    )
+    selected_facts = tuple(fact for definition in selected for fact in definition.facts if scope.matches_facts(fact))
+    matching_facts = tuple(dict.fromkeys(fact.facts_id for fact in selected_facts))
     start = datetime.fromisoformat(request.window.start.isoformat())
     end = datetime.fromisoformat(request.window.end.isoformat())
     if selected:
+        scan_window = native_window_envelope(start, end, selected_facts)
         read = resolved.query(
             StoreQuery(
                 store,
                 request.provider_id,
                 request.stations,
                 request.products,
-                start - _FETCH_WINDOW_PADDING,
-                end + _FETCH_WINDOW_PADDING,
+                scan_window.start - _FETCH_WINDOW_PADDING,
+                scan_window.end + _FETCH_WINDOW_PADDING,
                 series_ids=tuple(item.series_id for item in selected),
                 facts_ids=matching_facts,
             )

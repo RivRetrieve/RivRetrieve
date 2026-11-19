@@ -157,7 +157,7 @@ These types are not re-exported from `rivretrieve`. Their headings identify thei
 
 ::: rivretrieve._internal.source_series.ClippingAxis
     options:
-      members: [CALENDAR_DATE, SOURCE_TIMESTAMP]
+      members: [CALENDAR_DATE, CALENDAR_MONTH, SOURCE_TIMESTAMP]
 
 ### SourceUnitCodeDefinition
 
