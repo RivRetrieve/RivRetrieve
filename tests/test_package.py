@@ -75,6 +75,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "br_ana": (107_484, 0, 0),
         "ca_eccc": (16_114, 0, 0),
         "ch_foen": (48_276, 0, 0),
+        "cl_dga": (1_568, 0, 0),
         "co_ideam": (27_440, 0, 0),
         "cz_chmi": (4_155, 0, 0),
         # Native inventories acquired 2026-09-21; these are snapshot checks.
@@ -106,6 +107,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "cl_dga",
         "co_ideam",
         "cz_chmi",
         "fr_hubeau",
@@ -134,6 +136,10 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     expected_provider_terms["br_ana"] = (
         "Os dados abertos são disponibilizados livremente para a utilização de toda a sociedade, sem restrição de licenças, patentes ou mecanismos de controle.",
         None,
+    )
+    expected_provider_terms["cl_dga"] = (
+        None,
+        "Dirección General de Aguas (DGA), Ministerio de Obras Públicas (MOP), Chile — Estadística Hidrométrica (https://mapas2.mop.gob.cl/); condiciones de uso: https://www.mop.gob.cl/condiciones-de-uso/",
     )
     for provider_id in provider_ids:
         catalogue_path = providers_root / provider_id / "catalogue"

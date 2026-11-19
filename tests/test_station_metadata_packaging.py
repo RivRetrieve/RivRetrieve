@@ -83,6 +83,7 @@ for provider_id in provider_ids:
         "at_ehyd",
         "br_ana",
         "ca_eccc",
+        "cl_dga",
         "co_ideam",
         "cz_chmi",
         "fr_hubeau",
@@ -207,6 +208,35 @@ assert dict(ar_ina_source.select("attribute_role", "state").iter_rows()) == {
     "drainage_area": "no_metadata",
     "elevation": "no_metadata",
 }
+
+cl_dga_elev_gauge = rr.find(provider="cl_dga", station="01001001")
+cl_dga_elev_source = rr.metadata(cl_dga_elev_gauge, view="source")
+assert cl_dga_elev_source.filter(pl.col("attribute_role") == "station_name")["source_value"].to_list() == [
+    '"RIO CAQUENA EN NACIMIENTO"'
+]
+assert dict(cl_dga_elev_source.select("attribute_role", "state").iter_rows()) == {
+    "station_name": "value",
+    "water_body_name": "no_metadata",
+    "drainage_area": "no_metadata",
+    "elevation": "value",
+}
+cl_dga_elev_row = cl_dga_elev_source.filter(pl.col("attribute_role") == "elevation").row(0, named=True)
+assert cl_dga_elev_row["source_field"] == "ALTITUD"
+assert cl_dga_elev_row["source_value"] == "4385"
+assert cl_dga_elev_row["source_dtype"] == "Int64"
+assert cl_dga_elev_row["source_unit"] == "m"
+assert cl_dga_elev_row["source_datum"] is None
+
+cl_dga_null_gauge = rr.find(provider="cl_dga", station="01001002")
+cl_dga_null_elev = rr.metadata(cl_dga_null_gauge, view="source").filter(pl.col("attribute_role") == "elevation").row(
+    0, named=True
+)
+assert cl_dga_null_elev["source_field"] == "ALTITUD"
+assert cl_dga_null_elev["source_value"] is None
+assert cl_dga_null_elev["source_dtype"] == "Int64"
+assert cl_dga_null_elev["source_unit"] == "m"
+assert cl_dga_null_elev["state"] == "source_null"
+assert cl_dga_null_elev["source_datum"] is None
 
 empty = rr.pick(rr.pick(selection, quantity="discharge"), quantity="stage")
 assert_frame_equal(rr.metadata(empty, view="source"), pl.DataFrame(schema=schema))
