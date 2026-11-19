@@ -1,6 +1,8 @@
 """Chile DGA historical source-series definitions and physical facts."""
 
+from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import SeriesMapping
+from rivretrieve._internal.source_series import ClippingAxis, SourceSeries
 
 DAILY_ZIP_EVIDENCE = "catalogue:cl_dga:source.product.daily_discharge_zip"
 MONTHLY_ZIP_EVIDENCE = "catalogue:cl_dga:source.product.monthly_discharge_zip"
@@ -24,6 +26,15 @@ SERIES_MAPPINGS: dict[str, SeriesMapping] = {
         normalized_unit="m3/s",
         frequency="monthly",
         statistic="mean",
+        clipping_axis=ClippingAxis.CALENDAR_MONTH,
         evidence=(MONTHLY_ZIP_EVIDENCE,),
     ),
 }
+
+
+def source_series(station_id: str, product_id: str) -> SourceSeries:
+    """Return the declared Chile DGA ``SourceSeries`` definition for one station and product."""
+    mapping = SERIES_MAPPINGS.get(product_id)
+    if mapping is None:
+        raise FatalContractError(f"Unsupported cl_dga product {product_id!r}")
+    return mapping.source_series("cl_dga", station_id, product_id)

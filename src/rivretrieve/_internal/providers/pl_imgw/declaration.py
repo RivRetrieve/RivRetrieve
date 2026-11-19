@@ -26,12 +26,15 @@ def _download(request: BulkDownloadRequest) -> tuple[DownloadedBulkArtifact, ...
 
 def _compile(request: BulkCompileRequest) -> ValidatedStore:
     """Adapt the shared compile request to the publisher's request type."""
+    vintage = request.source_vintage
+    if vintage is None:
+        raise ValueError("IMGW compilation requires publisher-dated source_vintage values")
     return bulk.compile_imgw(
         bulk.ImgwCompileRequest(
             publisher_artifact=request.publisher_artifact,
             destination=request.destination,
             publisher_url=request.publisher_url,
-            source_vintage=request.source_vintage,
+            source_vintage=vintage,
             publisher_artifacts=request.publisher_artifacts,
             built_at=request.built_at,
             compiler_version=request.compiler_version,

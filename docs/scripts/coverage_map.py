@@ -34,6 +34,7 @@ PROVIDER_COUNTRY = {
     "br_ana": "BRA",
     "ca_eccc": "CAN",
     "ch_foen": "CHE",
+    "cl_dga": "CHL",
     "co_ideam": "COL",
     "cz_chmi": "CZE",
     "dk_vanda": "DNK",
@@ -51,7 +52,6 @@ PROVIDER_COUNTRY = {
 PLANNED_COUNTRY = {
     "AUS": "Australia",
     "BEL": "Belgium (Flanders, Wallonia)",
-    "CHL": "Chile",
     "DEU": "Germany (federal waterways, Bavaria, Baden-Württemberg, Berlin, NRW)",
     "ESP": "Spain",
     "EST": "Estonia",
