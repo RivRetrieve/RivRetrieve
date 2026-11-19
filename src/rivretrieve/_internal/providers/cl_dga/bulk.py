@@ -63,7 +63,7 @@ CL_DGA_DAILY_URL: Final[str] = f"https://mapas2.mop.gob.cl/{CL_DGA_DAILY_FILENAM
 CL_DGA_MONTHLY_URL: Final[str] = f"https://mapas2.mop.gob.cl/{CL_DGA_MONTHLY_FILENAME}"
 CL_DGA_DAILY_MEMBER: Final[str] = "caudal_diario_historico.txt"
 CL_DGA_MONTHLY_MEMBER: Final[str] = "caudal_medio_mensual_historico.txt"
-CL_DGA_ROWS_PER_BATCH: Final[int] = 65_536
+CL_DGA_ROWS_PER_BATCH: Final[int] = 16_384
 CL_DGA_SORT_ROWS_PER_FETCH: Final[int] = 4_096
 CL_DGA_MAX_OPEN_SPILLS: Final[int] = 64
 
