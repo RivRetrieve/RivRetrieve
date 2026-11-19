@@ -101,7 +101,7 @@ separate publisher recordings. The reconstructed database is not a complete
 publisher artifact. Run those checks with:
 
 ```sh
-uv run --isolated --locked python -B verify.py \
+uv run --isolated --frozen python -B verify.py \
   --reviewed-archive-sha "$REVIEWED_ARCHIVE_SHA" \
   --code-checkout /path/to/reviewed-rivretrieve \
   --reviewed-code-sha "$REVIEWED_CODE_SHA" \
