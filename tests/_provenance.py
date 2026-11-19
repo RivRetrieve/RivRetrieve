@@ -213,6 +213,7 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
     origins = import_module(f"rivretrieve._internal.providers.{provider}.origins")
     private_declarations = {
         "declarations/usgs_nwis/retention.json": "declarations/usgs_nwis/retention.json",
+        "maintenance/catalogue/ar_ina/official/selection.json": "declarations/ar_ina/catalogue.json",
         "maintenance/catalogue/usgs_nwis/selected-acquisitions.json": "declarations/usgs_nwis/selected-acquisitions.json",
         "maintenance/catalogue/usgs_nwis/retained-series.json": "declarations/usgs_nwis/retained-series.json",
         "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json": "declarations/ba_fhmzbih/baseline_workbook_access.json",
@@ -221,6 +222,7 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
         "maintenance/catalogue/station_metadata/review.json": "declarations/station_metadata/review.json",
         "maintenance/catalogue/cl_dga/official/selection.json": "declarations/cl_dga/catalogue.json",
         "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv": "declarations/th_thaiwater/governing_station_product_evidence.csv",
+        "maintenance/catalogue/fi_syke/official/catalogue.json": "maintenance/catalogue/fi_syke/official/catalogue.json",
     }
     if declaration_locations is None:
         declaration_locations = (

@@ -26,6 +26,7 @@ def test_init_public_surface_exports_catalogue_and_retrieval_functions() -> None
 
     assert "__version__" in vars(rivretrieve)
     assert module_defined_names == [
+        "annotations",
         "as_frame",
         "audit_cache",
         "cache_status",
@@ -68,10 +69,13 @@ def test_init_public_surface_exports_catalogue_and_retrieval_functions() -> None
 def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     providers_root = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
     expected_station_products = {
+        "ar_ina": (10_777, 0, 0),
+        "at_ehyd": (8_206, 0, 0),
         "ba_fhmzbih": (180, 0, 0),
         "br_ana": (107_484, 0, 0),
         "ca_eccc": (16_114, 0, 0),
         "ch_foen": (48_276, 0, 0),
+        "co_ideam": (27_440, 0, 0),
         "cz_chmi": (4_155, 0, 0),
         # Native inventories acquired 2026-09-21; these are snapshot checks.
         "fr_hubeau": (20_297, 0, 0),
@@ -96,10 +100,13 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "last_catalogue_check",
     )
     provider_ids = (
+        "ar_ina",
+        "at_ehyd",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "co_ideam",
         "cz_chmi",
         "fr_hubeau",
         "fr_hydroportail",
@@ -112,7 +119,13 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "za_dws",
     )
     expected_provider_terms: dict[str, tuple[str | None, str | None]] = dict.fromkeys(provider_ids, (None, None))
+    expected_provider_terms["ar_ina"] = ("Creative Commons Atribución 4.0 Internacional", None)
+    expected_provider_terms["at_ehyd"] = ("CC BY 4.0", "Datenquelle: ehyd.gv.at")
     expected_provider_terms["ch_foen"] = ("Freie Nutzung. Quellenangabe ist Pflicht.", None)
+    expected_provider_terms["co_ideam"] = (
+        "Creative Commons Attribution | Share Alike 4.0 International",
+        "Instituto de Hidrología, Meteorología y Estudios Ambientales - IDEAM, Bogotá D.C.",
+    )
     expected_provider_terms["no_nve"] = (
         "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) "
         "which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",

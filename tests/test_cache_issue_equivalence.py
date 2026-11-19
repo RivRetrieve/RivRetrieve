@@ -87,15 +87,17 @@ def test_cached_source_notes_equal_fresh_notes_after_unrequested_failure(authore
     selected, versions, transport = authored_cache
     selected = rr.pick(selected, variant=str(versions[0]))
     fresh = _fetch(selected, cache="refresh", on_issue="raise")
-    assert fresh.issues
-    assert any((issue.details or {}).get("source_quality_code") == 41 for issue in fresh.issues)
-    assert all("acquisition_ids" not in (issue.details or {}) for issue in fresh.issues)
+    assert fresh.issues == ()
+    assert rr.annotations(fresh, schema="no_nve.observations").select("quality", "correction").rows() == [(41, 1)]
     transport.forbid_network = True
     reused = _fetch(selected, cache="reuse", on_issue="raise")
     assert reused.issues == fresh.issues
     assert reused.provenance.retrieved_at == fresh.provenance.retrieved_at
     assert reused.provenance.endpoints == fresh.provenance.endpoints
     pt.assert_frame_equal(reused.data, fresh.data)
+    pt.assert_frame_equal(
+        rr.annotations(reused, schema="no_nve.observations"), rr.annotations(fresh, schema="no_nve.observations")
+    )
     transport.forbid_network = False
     transport.observations_failed = True
     failed = rr.fetch(selected, start="2025-07-15", end="2025-07-15", cache="refresh", on_issue="ignore")
@@ -103,6 +105,9 @@ def test_cached_source_notes_equal_fresh_notes_after_unrequested_failure(authore
     transport.forbid_network = True
     restored = _fetch(selected, cache="reuse", on_issue="raise")
     assert restored.issues == fresh.issues
+    pt.assert_frame_equal(
+        rr.annotations(restored, schema="no_nve.observations"), rr.annotations(fresh, schema="no_nve.observations")
+    )
     assert restored.provenance.calls_made == fresh.provenance.calls_made
     pt.assert_frame_equal(restored.data, fresh.data)
 

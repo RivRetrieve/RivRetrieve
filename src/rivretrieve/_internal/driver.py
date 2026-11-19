@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -15,7 +16,7 @@ from rivretrieve._internal.acquisition_dependencies import validate_acquisition_
 from rivretrieve._internal.assembly import _AssemblyResult, assemble
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
-from rivretrieve._internal.conversion import convert, validate_native_rows
+from rivretrieve._internal.conversion import convert, filter_annotations_for_window, validate_native_rows
 from rivretrieve._internal.coverage import (
     CoverageInterval,
     RequestedInterval,
@@ -58,6 +59,15 @@ from rivretrieve._internal.observations import (
 from rivretrieve._internal.physical_window import native_window, native_window_envelope
 from rivretrieve._internal.primitives import CacheMode, ProductId, ProviderId
 from rivretrieve._internal.source_acquisition import SourceResponseMeaning
+from rivretrieve._internal.source_annotations import (
+    AnnotationBundle,
+    anti_join_native_with_annotations,
+    concat_native_with_annotations,
+    filter_native_with_annotations,
+    filter_native_with_annotations_by_expr,
+    merge_series_tables,
+    validate_bundle_for_result,
+)
 from rivretrieve._internal.source_series import (
     ClippingAxis,
     InventoryCompleteness,
@@ -463,6 +473,9 @@ def _scope_for_pair(scope: SeriesScope, provider: str, station: str, product: st
     return scope.model_copy(update={"provider_ids": (provider,), "station_ids": (station,), "product_ids": (product,)})
 
 
+_IDENTITY_ORIGIN_RANK = {"mapping": 0, "catalogue": 1, "response": 2}
+
+
 def _merge_definitions(definitions: dict[str, SourceSeries], additions: tuple[SourceSeries, ...]) -> None:
     for item in additions:
         previous = definitions.get(item.series_id)
@@ -482,7 +495,13 @@ def _merge_definitions(definitions: dict[str, SourceSeries], additions: tuple[So
             if fact.facts_id in facts and facts[fact.facts_id] != fact:
                 raise FatalContractError("A physical-facts identifier changed its meaning")
             facts[fact.facts_id] = fact
-        definitions[item.series_id] = item.model_copy(update={"facts": tuple(facts.values())})
+        base = (
+            previous
+            if _IDENTITY_ORIGIN_RANK.get(previous.identity.origin, -1)
+            > _IDENTITY_ORIGIN_RANK.get(item.identity.origin, -1)
+            else item
+        )
+        definitions[item.series_id] = base.model_copy(update={"facts": tuple(facts.values())})
 
 
 def _validate_parsed_series(parsed: ParsedSeries) -> None:
@@ -520,43 +539,93 @@ def _validate_parsed_series(parsed: ParsedSeries) -> None:
                 unsuccessful = outcome
 
 
-def _clip_native(rows: Rows, series: tuple[SourceSeries, ...], window: RequestedWindow) -> Rows:
+def _narrow_series_tables(bundle: AnnotationBundle, allowed_series_ids: set[str]) -> AnnotationBundle:
+    if not bundle.series_tables:
+        return bundle
+    ser = {
+        schema_id: narrowed
+        for schema_id, table in bundle.series_tables.items()
+        if (narrowed := table.narrow(allowed_series_ids)).row_count > 0
+    }
+    return AnnotationBundle(observation_tables=bundle.observation_tables, series_tables=ser)
+
+
+def _clip_native_with_annotations(
+    rows: Rows, bundle: AnnotationBundle, series: tuple[SourceSeries, ...], window: RequestedWindow
+) -> tuple[Rows, AnnotationBundle]:
     facts = {fact.facts_id: fact for item in series for fact in item.facts}
     start = datetime.fromisoformat(window.start.isoformat())
     end = datetime.fromisoformat(window.end.isoformat())
-    keep = []
-    for row in rows.iter_rows(named=True):
+    kept_indices: list[int] = []
+    for idx, row in enumerate(rows.iter_rows(named=True)):
         fact = facts.get(row["facts_id"])
         if fact is None:
             raise FatalContractError("Native clipping references unknown physical facts")
         timestamp = row["time"]
         interval = native_window(start, end, fact)
-        keep.append(interval.start <= timestamp <= interval.end)
-    return rows.filter(pl.Series(keep, dtype=pl.Boolean))
+        if interval.start <= timestamp <= interval.end:
+            kept_indices.append(idx)
+
+    def _keep_unmeasured(record: dict[str, object]) -> bool:
+        fact = facts.get(cast("str", record["facts_id"]))
+        if fact is None:
+            raise FatalContractError("Native clipping references unknown physical facts")
+        timestamp = cast("datetime", record["time"])
+        interval = native_window(start, end, fact)
+        return interval.start <= timestamp <= interval.end
+
+    return filter_native_with_annotations(rows, bundle, kept_indices, unmeasured_predicate=_keep_unmeasured)
 
 
-def _exclude_native_intervals(
-    rows: Rows, series: tuple[SourceSeries, ...], intervals: tuple[tuple[str, tuple[str, ...], RequestedInterval], ...]
-) -> Rows:
-    """Exclude concrete source intervals on each physical fact's clipping axis."""
-    if rows.is_empty() or not intervals:
-        return rows
+def _clip_native(rows: Rows, series: tuple[SourceSeries, ...], window: RequestedWindow) -> Rows:
+    return _clip_native_with_annotations(rows, AnnotationBundle.empty(), series, window)[0]
+
+
+def _exclude_intervals_keep_expr(
+    series: tuple[SourceSeries, ...], intervals: tuple[tuple[str, tuple[str, ...], RequestedInterval], ...]
+) -> pl.Expr:
     daily_facts = tuple(
         facts.facts_id for item in series for facts in item.facts if facts.clipping_axis is ClippingAxis.CALENDAR_DATE
     )
+    monthly_facts = tuple(
+        facts.facts_id for item in series for facts in item.facts if facts.clipping_axis is ClippingAxis.CALENDAR_MONTH
+    )
     daily = pl.col("facts_id").is_in(daily_facts)
+    monthly = pl.col("facts_id").is_in(monthly_facts)
     keep = pl.lit(True)
     for series_id, facts_ids, interval in intervals:
+        month_start = interval.start.date().replace(day=1)
+        month_end = interval.end.date().replace(day=calendar.monthrange(interval.end.year, interval.end.month)[1])
         inside = (
             axis_time_expression(interval.axis).is_between(interval.start, interval.end, closed="both")
             if interval.axis is TimeAxis.UTC
             else (
                 daily & pl.col("time").dt.date().is_between(interval.start.date(), interval.end.date(), closed="both")
             )
-            | (~daily & pl.col("time").is_between(interval.start, interval.end, closed="both"))
+            | (monthly & pl.col("time").dt.date().is_between(month_start, month_end, closed="both"))
+            | (~daily & ~monthly & pl.col("time").is_between(interval.start, interval.end, closed="both"))
         )
         keep = keep & ~((pl.col("series_id") == series_id) & pl.col("facts_id").is_in(facts_ids) & inside)
-    return rows.filter(keep)
+    return keep
+
+
+def _exclude_native_intervals_with_annotations(
+    rows: Rows,
+    bundle: AnnotationBundle,
+    series: tuple[SourceSeries, ...],
+    intervals: tuple[tuple[str, tuple[str, ...], RequestedInterval], ...],
+) -> tuple[Rows, AnnotationBundle]:
+    """Exclude concrete source intervals on each physical fact's clipping axis."""
+    if not intervals or (rows.is_empty() and bundle.is_empty):
+        return rows, bundle
+    return filter_native_with_annotations_by_expr(rows, bundle, _exclude_intervals_keep_expr(series, intervals))
+
+
+def _exclude_native_intervals(
+    rows: Rows, series: tuple[SourceSeries, ...], intervals: tuple[tuple[str, tuple[str, ...], RequestedInterval], ...]
+) -> Rows:
+    """Exclude concrete source intervals on each physical fact's clipping axis."""
+    return _exclude_native_intervals_with_annotations(rows, AnnotationBundle.empty(), series, intervals)[0]
 
 
 def _complete_inventory(snapshot: InventorySnapshot, inventories: tuple[InventorySnapshot, ...]) -> bool:
@@ -1487,8 +1556,10 @@ def _observation_failure(outcome: RetrievalOutcome) -> bool:
     )
 
 
-def _exclude_failed_rows(rows: Rows, series: tuple[SourceSeries, ...], failures: tuple[RetrievalOutcome, ...]) -> Rows:
-    scopes = tuple(
+def _failed_interval_scopes(
+    series: tuple[SourceSeries, ...], failures: tuple[RetrievalOutcome, ...]
+) -> tuple[tuple[str, tuple[str, ...], RequestedInterval], ...]:
+    return tuple(
         (
             definition.series_id,
             (fact.facts_id,),
@@ -1499,7 +1570,16 @@ def _exclude_failed_rows(rows: Rows, series: tuple[SourceSeries, ...], failures:
         for fact in definition.facts
         if _failure_affects(item, definition.series_id, definition.station_id, definition.product_id, fact.facts_id)
     )
-    return _exclude_native_intervals(rows, series, scopes)
+
+
+def _exclude_failed_rows_with_annotations(
+    rows: Rows, bundle: AnnotationBundle, series: tuple[SourceSeries, ...], failures: tuple[RetrievalOutcome, ...]
+) -> tuple[Rows, AnnotationBundle]:
+    return _exclude_native_intervals_with_annotations(rows, bundle, series, _failed_interval_scopes(series, failures))
+
+
+def _exclude_failed_rows(rows: Rows, series: tuple[SourceSeries, ...], failures: tuple[RetrievalOutcome, ...]) -> Rows:
+    return _exclude_native_intervals(rows, series, _failed_interval_scopes(series, failures))
 
 
 def _failure_affects(
@@ -1606,9 +1686,16 @@ def _combine_replacements(
             facts_ids = tuple(facts)
             part = replacement
             if interval != replacement.coverage.interval or facts_ids != replacement.coverage.facts_ids:
-                native = replacement.rows.filter(
-                    pl.col("facts_id").is_in(facts_ids)
+                split_expr = (
+                    (pl.col("series_id") == replacement.coverage.series_id)
+                    & pl.col("facts_id").is_in(facts_ids)
                     & axis_time_expression(interval.axis).is_between(interval.start, interval.end)
+                )
+                native, split_ann = filter_native_with_annotations_by_expr(
+                    replacement.rows,
+                    replacement.annotations,
+                    split_expr,
+                    allowed_series_ids={replacement.coverage.series_id},
                 )
                 outcome = original.model_copy(
                     update={
@@ -1631,6 +1718,7 @@ def _combine_replacements(
                 part = replace(
                     replacement,
                     rows=native,
+                    annotations=split_ann,
                     coverage=replace(
                         replacement.coverage, interval=interval, outcome_id=outcome.outcome_id, facts_ids=facts_ids
                     ),
@@ -1659,7 +1747,13 @@ def _combine_replacements(
                 facts_ids = tuple(facts)
                 fragment = part
                 if facts_ids != part.coverage.facts_ids:
-                    native = part.rows.filter(pl.col("facts_id").is_in(facts_ids))
+                    cohort_expr = (pl.col("series_id") == part.coverage.series_id) & pl.col("facts_id").is_in(facts_ids)
+                    native, cohort_ann = filter_native_with_annotations_by_expr(
+                        part.rows,
+                        part.annotations,
+                        cohort_expr,
+                        allowed_series_ids={part.coverage.series_id},
+                    )
                     original = by_id[part.coverage.outcome_id]
                     outcome = original.model_copy(
                         update={
@@ -1679,6 +1773,7 @@ def _combine_replacements(
                     fragment = replace(
                         part,
                         rows=native,
+                        annotations=cohort_ann,
                         coverage=replace(part.coverage, facts_ids=facts_ids, outcome_id=outcome.outcome_id),
                         replaced_facts_ids=facts_ids,
                     )
@@ -1705,7 +1800,11 @@ def _combine_replacements(
         # row multiplicity and established composition; disjoint facts never share
         # this attribution merely because a store writes them in one batch.
         contributors = tuple(by_id[item.coverage.outcome_id] for item in parts)
-        native = pl.concat([item.rows for item in parts])
+        native, combined_part_ann = concat_native_with_annotations(
+            [(item.rows, item.annotations) for item in parts],
+            empty_schema=RowsSchema.polars_schema,
+            series_conflict="prefer_last",
+        )
         instants = tuple(item.retrieved_at for item in contributors if item.retrieved_at is not None)
         outcome = contributors[0].model_copy(
             update={
@@ -1721,6 +1820,7 @@ def _combine_replacements(
             SuccessfulReplacement(
                 CoverageInterval(series_id, interval, outcome.retrieved_at, outcome.outcome_id, outcome.facts_ids),
                 native,
+                annotations=combined_part_ann,
                 replaced_facts_ids=tuple(
                     dict.fromkeys(
                         fact for part in parts for fact in (part.replaced_facts_ids or part.coverage.facts_ids)
@@ -1893,7 +1993,9 @@ def drive(
     ]
     outcomes: list[RetrievalOutcome] = []
     all_issues: list[Issue] = []
-    rows: list[Rows] = [pl.DataFrame(schema=RowsSchema.polars_schema)]
+    result_parts: list[tuple[Rows, AnnotationBundle]] = [
+        (pl.DataFrame(schema=RowsSchema.polars_schema), AnnotationBundle.empty())
+    ]
     receipt_entries: list[ReceiptEntry] = []
     payloads: list[Payload] = []
     source_series_by_payload: list[tuple[str, ...]] = []
@@ -2056,7 +2158,7 @@ def drive(
                 )
             if ids:
                 assert store is not None
-                read = resolved_reader.query(
+                rows_read = resolved_reader.query(
                     StoreQuery(
                         store,
                         request.provider_id,
@@ -2068,9 +2170,9 @@ def drive(
                         facts_ids=matching_facts,
                     )
                 )
-                rows.append(read.rows)
+                result_parts.append((rows_read.rows, rows_read.annotations))
                 if receipts is ReceiptMode.INCLUDE:
-                    receipt_entries.append(encode_store_excerpt(read))
+                    receipt_entries.append(encode_store_excerpt(rows_read))
             continue
 
         def retain_held_successes(
@@ -2128,15 +2230,20 @@ def drive(
                     facts_ids=fact_ids,
                 )
             )
-            held_rows = _exclude_native_intervals(
-                held_read.rows.filter(
-                    axis_time_expression(held_interval.axis).is_between(held_interval.start, held_interval.end)
-                ),
+            held_rows, held_ann = filter_native_with_annotations_by_expr(
+                held_read.rows,
+                held_read.annotations,
+                axis_time_expression(held_interval.axis).is_between(held_interval.start, held_interval.end),
+                allowed_series_ids=set(ids),
+            )
+            held_rows, held_ann = _exclude_native_intervals_with_annotations(
+                held_rows,
+                held_ann,
                 held_series,
                 tuple((item.series_id, item.facts_ids, item.interval) for item in served),
             )
-            held_rows = _clip_native(held_rows, held_series, request.window)
-            rows.append(held_rows)
+            held_rows, held_ann = _clip_native_with_annotations(held_rows, held_ann, held_series, request.window)
+            result_parts.append((held_rows, held_ann))
             _merge_definitions(definitions, held_series)
             selected_snapshots = tuple(item for item in manifest.inventories if set(item.members).intersection(ids))
             referenced_ids = {key for item in selected_snapshots for key in item.members}
@@ -2563,6 +2670,17 @@ def drive(
             )
             parsed = replace(parsed, outcomes=bound_outcomes, inventories=bound_inventories, issues=bound_issues)
             validate_native_rows(parsed.rows, config.products, series=parsed.series)
+            validate_bundle_for_result(parsed.annotations, parsed.rows, parsed.series)
+            # A source response may include revised rows owned by another partition.
+            # Apply acquisition bounds before combining snapshots; retain duplicates
+            # inside the owned interval and leave receipt bytes unchanged.
+            owned_expr = axis_time_expression(payload.acquisition_axis).is_between(
+                datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+                datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+                closed="both",
+            )
+            owned_rows, owned_ann = filter_native_with_annotations_by_expr(parsed.rows, parsed.annotations, owned_expr)
+            parsed = replace(parsed, rows=owned_rows, annotations=owned_ann)
             transaction_parsed.append(parsed)
             parsed_payloads.append((payload_index, parsed))
         # Resolve held fallback for the entire acquisition before admitting fresh
@@ -2641,26 +2759,55 @@ def drive(
                     )
                 )
             admitted_outcome_ids: dict[str, str] = {}
-            native = _clip_native(parsed.rows, parsed.series, request.window)
+            native, native_ann = _clip_native_with_annotations(
+                parsed.rows, parsed.annotations, parsed.series, request.window
+            )
             selected_ids = {item.series_id for item in parsed.series if pair_scope.matches(item)}
             selected_facts = {
                 fact.facts_id for item in parsed.series for fact in item.facts if pair_scope.matches_facts(fact)
             }
-            native = native.filter(pl.col("series_id").is_in(selected_ids) & pl.col("facts_id").is_in(selected_facts))
+            scope_expr = pl.col("series_id").is_in(selected_ids) & pl.col("facts_id").is_in(selected_facts)
+            native, native_ann = filter_native_with_annotations_by_expr(
+                native, native_ann, scope_expr, allowed_series_ids=selected_ids
+            )
             # Coverage/outcome evidence describes the current source page even
             # when reuse serves held values instead of overlapping partial rows.
-            coverage_native = (
-                parsed.rows.filter(pl.col("series_id").is_in(selected_ids) & pl.col("facts_id").is_in(selected_facts))
-                if any(item.window.axis is TimeAxis.UTC for item in parsed.outcomes)
-                else native
-            )
+            if any(item.window.axis is TimeAxis.UTC for item in parsed.outcomes):
+                coverage_native, coverage_ann = filter_native_with_annotations_by_expr(
+                    parsed.rows, parsed.annotations, scope_expr, allowed_series_ids=selected_ids
+                )
+            else:
+                coverage_native, coverage_ann = native, native_ann
             failures = (
                 *(fetched.outcomes if isinstance(fetched, SourceAcquisition) else ()),
                 *(item for result in transaction_parsed for item in result.outcomes),
                 *fresh_outcomes[acquisition_outcome_start:],
             )
-            native = _exclude_failed_rows(native, parsed.series, failures)
-            rows.append(native)
+            native, native_ann = _exclude_failed_rows_with_annotations(native, native_ann, parsed.series, failures)
+            positive_parsed_ids = {
+                item.series_id
+                for item in parsed.outcomes
+                if item.series_id is not None and item.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+            } | set(native["series_id"].to_list())
+            # A prerequisite payload (e.g. a series lookup) can identify a series and publish
+            # a series-scope annotation for it while carrying no outcome of its own; the child
+            # payload that fetches observations owns that outcome. Keep such a payload's own
+            # published series annotations instead of discarding them for lacking an outcome
+            # this payload never claims to have -- but still drop them when this same payload
+            # does claim a negative outcome (failed, unsupported, unresolved or no_match) for
+            # that series, since a bad outcome is exactly what the per-payload gate exists to
+            # exclude.
+            unresolved_ids = {
+                item.series_id
+                for item in parsed.outcomes
+                if item.series_id is not None and item.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+            }
+            self_published_ids = (
+                {item.series_id for item in parsed.series}
+                & {sid for table in native_ann.series_tables.values() for sid in table.rows["series_id"].to_list()}
+            ) - unresolved_ids
+            native_ann = _narrow_series_tables(native_ann, selected_ids & (positive_parsed_ids | self_published_ids))
+            result_parts.append((native, native_ann))
             identity_scope = pair_scope.model_copy(update={"predicates": ()})
             requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
             for original in parsed.outcomes:
@@ -2717,17 +2864,23 @@ def drive(
                     )
                     if candidate.select(axis_time_expression(TimeAxis.UTC).is_null().any()).item():
                         raise FatalContractError("UTC acquisition rows require published fixed offsets")
-                concrete = (
-                    coverage_native.filter(
+                if original.series_id:
+                    concrete_expr = (
                         (pl.col("series_id") == original.series_id)
                         & pl.col("facts_id").is_in(original.facts_ids)
                         & axis_time_expression(original.window.axis).is_between(
                             overlap_start, overlap_end, closed="both"
                         )
                     )
-                    if original.series_id
-                    else pl.DataFrame(schema=RowsSchema.polars_schema)
-                )
+                    concrete, concrete_ann = filter_native_with_annotations_by_expr(
+                        coverage_native,
+                        coverage_ann,
+                        concrete_expr,
+                        allowed_series_ids={original.series_id},
+                    )
+                else:
+                    concrete = pl.DataFrame(schema=RowsSchema.polars_schema)
+                    concrete_ann = AnnotationBundle.empty()
                 updates: dict[str, object] = {
                     "window": observed_window,
                     "outcome_id": stable_id(
@@ -2757,6 +2910,7 @@ def drive(
                                 outcome.facts_ids,
                             ),
                             concrete,
+                            annotations=concrete_ann,
                             replaced_facts_ids=outcome.facts_ids,
                         )
                     )
@@ -2886,7 +3040,11 @@ def drive(
     pending = _authorize_fact_retirement(
         pending, tuple(retirement_definitions.values()), fresh_inventories, fresh_outcomes
     )
-    combined = pl.concat(rows)
+    combined, combined_ann = concat_native_with_annotations(
+        result_parts,
+        empty_schema=RowsSchema.polars_schema,
+        series_conflict="prefer_last",
+    )
     # A rolling publication establishes only its explicit observation keys.
     # Preserve older snapshot rows absent from the new publication, without
     # presenting their dates as reusable interval coverage.
@@ -2899,26 +3057,33 @@ def drive(
         held_series = tuple(item for item in manifest.series if item.series_id in snapshot_ids and scope.matches(item))
         if held_series:
             _merge_definitions(definitions, held_series)
+            held_facts = tuple(fact for item in held_series for fact in item.facts if scope.matches_facts(fact))
+            held_scan = native_window_envelope(
+                datetime.fromisoformat(request.window.start.isoformat()),
+                datetime.fromisoformat(request.window.end.isoformat()),
+                held_facts,
+            )
             held_read = resolved_reader.query(
                 StoreQuery(
                     store,
                     request.provider_id,
                     request.stations,
                     request.products,
-                    datetime.fromisoformat(request.window.start.isoformat()) - _FETCH_WINDOW_PADDING,
-                    datetime.fromisoformat(request.window.end.isoformat()) + _FETCH_WINDOW_PADDING,
+                    held_scan.start - _FETCH_WINDOW_PADDING,
+                    held_scan.end + _FETCH_WINDOW_PADDING,
                     series_ids=tuple(item.series_id for item in held_series),
-                    facts_ids=tuple(
-                        fact.facts_id for item in held_series for fact in item.facts if scope.matches_facts(fact)
-                    ),
+                    facts_ids=tuple(dict.fromkeys(fact.facts_id for fact in held_facts)),
                 )
             )
-            held_rows = _clip_native(held_read.rows, held_series, request.window).join(
-                combined.select("series_id", "facts_id", "time", "time_zone").unique(),
-                on=["series_id", "facts_id", "time", "time_zone"],
-                how="anti",
+            held_rows, held_ann = _clip_native_with_annotations(
+                held_read.rows, held_read.annotations, held_series, request.window
             )
-            combined = pl.concat([combined, held_rows])
+            held_rows, held_ann = anti_join_native_with_annotations(held_rows, held_ann, combined)
+            combined, combined_ann = concat_native_with_annotations(
+                [(combined, combined_ann), (held_rows, held_ann)],
+                empty_schema=RowsSchema.polars_schema,
+                series_conflict="prefer_last",
+            )
             held_keys = set(held_rows.select("series_id", "facts_id", "time", "time_zone").iter_rows())
             # Outcomes remain immutable acquisition evidence in the store. The
             # last acquired reference owns a currently held observation key.
@@ -2940,6 +3105,12 @@ def drive(
     selected, retained_inventories, retained_outcomes = _result_metadata(scope, definitions, inventories, outcomes)
     converted = convert(combined, config, request.window, series=tuple(definitions.values()))
     _require_canonical_rows_within_requested(converted.value, tuple(definitions.values()), request.window)
+    filtered_annotations = filter_annotations_for_window(
+        combined,
+        combined_ann,
+        request.window,
+        series=tuple(definitions.values()),
+    )
     enriched = _provenance_with_payload_origins(
         provenance, tuple(payloads), source_series_by_payload=tuple(source_series_by_payload)
     )
@@ -2972,6 +3143,12 @@ def drive(
                 ),
                 acquired_calls,
                 supporting_outcomes=tuple(supporting_outcomes),
+                series_annotations=tuple(
+                    merge_series_tables(
+                        [table for item in pending for table in item.annotations.series_tables.values()],
+                        conflict="prefer_last",
+                    ).values()
+                ),
             ),
         )
         resolved_reader.invalidate()
@@ -3073,6 +3250,7 @@ def drive(
     enriched = _provenance_with_calls(enriched, _unique_calls((*held_calls, *acquired_calls)))
     if served:
         enriched = enriched.model_copy(update={"served_intervals": tuple(served)})
+    result_annotations = _narrow_series_tables(filtered_annotations, {item.series_id for item in selected})
     return assemble(
         converted.value,
         enriched,
@@ -3088,6 +3266,7 @@ def drive(
         outcomes=evidence.outcomes,
         supporting_outcomes=evidence.supporting_outcomes,
         scope=scope,
+        annotations=result_annotations,
     )
 
 
@@ -3128,33 +3307,34 @@ def drive_store(
         for item in manifest.series
         if item.station_id in request.stations and item.product_id in request.products and scope.matches(item)
     )
-    matching_facts = tuple(
-        dict.fromkeys(
-            fact.facts_id for definition in selected for fact in definition.facts if scope.matches_facts(fact)
-        )
-    )
+    selected_facts = tuple(fact for definition in selected for fact in definition.facts if scope.matches_facts(fact))
+    matching_facts = tuple(dict.fromkeys(fact.facts_id for fact in selected_facts))
     start = datetime.fromisoformat(request.window.start.isoformat())
     end = datetime.fromisoformat(request.window.end.isoformat())
     if selected:
+        scan_window = native_window_envelope(start, end, selected_facts)
         read = resolved.query(
             StoreQuery(
                 store,
                 request.provider_id,
                 request.stations,
                 request.products,
-                start - _FETCH_WINDOW_PADDING,
-                end + _FETCH_WINDOW_PADDING,
+                scan_window.start - _FETCH_WINDOW_PADDING,
+                scan_window.end + _FETCH_WINDOW_PADDING,
                 series_ids=tuple(item.series_id for item in selected),
                 facts_ids=matching_facts,
             )
         )
         native = read.rows
+        native_ann = read.annotations
         receipt_entries = () if receipts is ReceiptMode.OMIT else (encode_store_excerpt(read),)
     else:
         native = pl.DataFrame(schema=RowsSchema.polars_schema)
+        native_ann = AnnotationBundle.empty()
         receipt_entries = ()
     converted = convert(native, config, request.window, series=selected)
     _require_canonical_rows_within_requested(converted.value, selected, request.window)
+    filtered_annotations = filter_annotations_for_window(native, native_ann, request.window, series=selected)
     # Compilation describes the artifact. These outcomes describe this local
     # query, not a new publisher call or a fresh publisher retrieval instant.
     outcomes: list[RetrievalOutcome] = []
@@ -3341,6 +3521,7 @@ def drive_store(
             "publisher_artifact_urls": tuple(item.url for item in manifest.publisher_artifacts),
         }
     )
+    result_annotations = _narrow_series_tables(filtered_annotations, {item.series_id for item in returned_series})
     return assemble(
         converted.value,
         provenance,
@@ -3351,4 +3532,5 @@ def drive_store(
         outcomes=evidence.outcomes,
         supporting_outcomes=evidence.supporting_outcomes,
         scope=scope,
+        annotations=result_annotations,
     )

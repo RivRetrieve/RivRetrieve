@@ -10,6 +10,31 @@ meaning or current access. Identify the intended scope and the next unresolved
 step before investigating. Use the [steps below](#provider-steps-and-their-code-targets) for concrete outcomes
 and code references; read the references needed for the current work.
 
+## Keep the provider ports tracker current
+
+Check the [provider ports tracker](https://github.com/RivRetrieve/RivRetrieve/issues/870)
+before selecting or starting a port. Confirm that the provider is not already
+implemented on `main`, marked in progress (`🚧`) by another contributor or agent,
+or listed in the externally blocked group awaiting an access or maintainer decision.
+
+Update the tracker entry in place as work progresses. Fetch the latest issue body
+immediately before editing (for example with `gh issue view 870 --json body`)
+and change only that provider's line so concurrent updates are preserved:
+
+1. **When starting work** (beginning Step 1 research or creating a `port/<provider>`
+   branch): change `- [ ]` to `- [ ] 🚧` and append a short status note naming the
+   active branch or Effort issue, such as `*(in progress on port/ee-est, #352)*`.
+2. **When pausing on a blocker** (such as awaiting an agency reply or a maintainer
+   scope decision): keep `🚧` or move the entry to the blocked group and state what
+   it is waiting on in the status note.
+3. **When merged into `main`** (after Step 8 final review is approved and the port
+   pull request is merged into `main`, not when work finishes on a `port/<provider>`
+   branch): remove `🚧`, tick `- [x]`, and record the merged pull request, such as
+   `*(merged in #900)*`.
+
+When opening a new provider-port issue that is not yet in the tracker, add a `- [ ]`
+entry in the matching complexity group linking to the new issue.
+
 ## Progress through evidence-backed steps
 
 1. Establish source, scope and access.
@@ -89,6 +114,12 @@ scope, available routes, access conditions, terms and attribution. Obtain small
 genuine examples of metadata and observations. Distinguish unavailable access from
 an empty response and from evidence that has not yet been collected.
 
+A terms or licence page that automated tools cannot read, such as one requiring
+JavaScript, is not the same as terms that do not exist. Ask a person to open it
+directly before drafting external correspondence; a publisher's own data catalogue
+often states a licence, in seconds, where a support request would take much
+longer.
+
 [`ProviderDeclaration`](../../src/rivretrieve/_internal/providers/registration.py)
 selects `LiveStages` for on-demand acquisition, `BulkStore` for explicit download
 and compilation, or `CatalogueOnly` for discovery without observation retrieval.
@@ -132,6 +163,19 @@ keep identity and physical interpretation separate.
 [`SeriesMapping`](../../src/rivretrieve/_internal/provider_series.py)
 can share supported mappings between catalogue publication and parsing; it is not
 a substitute for response-specific identities when the source requires them.
+
+Preserve observation qualifiers, approval statuses, method notes, unmeasured source
+slots, and non-identity series attributes through declared
+[`AnnotationSchema`](../../src/rivretrieve/_internal/source_annotations.py) definitions
+with plain Polars types, verified descriptions (never placeholders such as
+`"unknown"`), and official `http` or `https` `reference_url` links. Do not alter
+`ObservationResult.data`, create stream variants solely for annotation changes, or
+emit per-row informational quality-code issues when annotations carry those source
+fields.
+
+Distinguish stream selectors, which belong in `SourceSeries.variant`, from
+non-identity series attributes, exposed through `rr.series(result, annotations=...)`,
+and observation annotations, exposed through `result.to_polars(annotations=...)`.
 
 **Outcome:** each adopted fact has supporting evidence, and remaining unknowns are
 explicit. Admission requires established quantity, source unit and valid conversion.
@@ -196,6 +240,19 @@ useful default, not a rigid requirement. Plot both hydrographs with explicit uni
 conversion and preserved gaps. Inspect for obvious errors and investigate meaningful
 discrepancies without filtering, shifting or fitting values to force agreement.
 
+A comparison window bounded to a published dataset's coverage, such as a CAMELS
+dataset's end date, is not evidence of the source's actual historical reach. Check
+each sampled station's own earliest-available-result metadata where the source
+publishes one, and test a genuine retrieval against a window near that claimed
+depth for at least one long-running station, not only the modern comparison
+window. A single failed attempt against a far-back window can be a transient,
+cold-query response rather than an absence of data; retry before concluding the
+data is not retrievable. Separately, a source may track an older, lower-frequency
+product (for example, manually-taken spot measurements) alongside the continuous
+product a provider retrieves, reaching further back than the continuous record
+does; note this as an open scope question when found, rather than assuming the
+continuous product's own history is the source's only route to older data.
+
 Retain the dataset version, station and date selection, comparison method, figures,
 findings and limitations through the existing evidence process. If no suitable
 dataset is available, record why; that absence alone does not block the port.
@@ -218,13 +275,33 @@ limits. Missing mandatory genuine inputs block acceptance.
 verified practical example.
 
 Explain who publishes the data, what users can retrieve, access requirements, source
-series distinctions, time and units, availability limits, terms and unresolved facts
-that affect interpretation. State consequences clearly rather than publishing the
-whole investigation. Keep detailed research and correspondence in the private record.
+series distinctions, declared source-annotation schemas and fields where applicable,
+time and units, availability limits, terms and unresolved facts that affect interpretation.
+State consequences clearly rather than publishing the whole investigation. Keep detailed
+research and correspondence in the private record.
 
 Follow [documentation guidance](../AGENTS.md) and use existing
 [provider pages](../providers/) for scope. Link general usage rather
 than repeat it. Do not present a successful example as proof of continuous coverage.
+
+Reuse shared layout verbatim rather than inventing a new shape per provider.
+In particular, the "What you can retrieve" table uses this exact header, in
+every provider page that has one, whether or not the data needs every column:
+
+```
+| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+```
+
+Before writing a new provider page, grep the other pages in `../providers/`
+for the section headers and table shapes you are about to use, and try hard
+to follow them. Existing pages already show how to handle a column that does
+not obviously apply: `ba_fhmzbih` fills `Frequency`/`Statistic` with
+`Unknown` rather than dropping the column. Difficulty fitting one provider's
+data into the shared shape is not by itself evidence that the shape is
+wrong; look for how another page handled a similar gap before concluding the
+table itself needs to change. If you still think it does, raise that for
+review rather than quietly adding, removing, or renaming a column on just
+the new page.
 
 **Outcome:** users can understand the result and its limits without reconstructing
 the investigation. Documentation and implemented behavior agree.

@@ -118,7 +118,7 @@ def test_status_reports_absence_or_validated_manifest_facts(tmp_path: Path) -> N
     present = reader.status(store, ProviderId("fixture_bulk"))
     assert present.presence is StorePresence.PRESENT
     assert present.exists
-    assert present.format_version == 5
+    assert present.format_version == 10
     assert present.manifest is not None
     assert isinstance(present.manifest, StoreManifest)
     assert present.compiler_version == present.manifest.compiler_version

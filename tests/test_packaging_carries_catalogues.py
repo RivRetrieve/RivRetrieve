@@ -30,17 +30,22 @@ _CANONICAL_CATALOGUE_FILES = {
 }
 
 _PROVENANCE_PROVIDER_IDS = {
+    "ar_ina",
+    "at_ehyd",
     "ba_fhmzbih",
     "br_ana",
     "ca_eccc",
     "ch_foen",
     "cl_dga",
+    "co_ideam",
     "cz_chmi",
+    "dk_vanda",
     "fr_hubeau",
     "fr_hydroportail",
     "jp_mlit",
     "lt_lhmt",
     "no_nve",
+    "pe_senamhi",
     "pl_imgw",
     "th_thaiwater",
     "usgs_nwis",

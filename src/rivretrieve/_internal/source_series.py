@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 from functools import lru_cache
@@ -19,6 +19,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.source_annotations import AnnotationBundle
 from rivretrieve._internal.time_axis import TimeAxis
 
 
@@ -58,9 +59,10 @@ def known(value: str, evidence: str) -> EvidenceFact:
 
 
 class ClippingAxis(StrEnum):
-    """Whether a request clips daily calendar labels or source wall-clock timestamps."""
+    """Whether a request clips calendar dates, calendar months, or source wall-clock timestamps."""
 
     CALENDAR_DATE = "calendar_date"
+    CALENDAR_MONTH = "calendar_month"
     SOURCE_TIMESTAMP = "source_timestamp"
 
 
@@ -136,6 +138,8 @@ class PhysicalFacts(BaseModel):
             raise ValueError(defect)
         if self.clipping_axis is ClippingAxis.CALENDAR_DATE and self.frequency.value != "daily":
             raise ValueError("Calendar-date clipping requires established daily frequency")
+        if self.clipping_axis is ClippingAxis.CALENDAR_MONTH and self.frequency.value != "monthly":
+            raise ValueError("Calendar-month clipping requires established monthly frequency")
         return self
 
 
@@ -586,6 +590,7 @@ class ParsedSeries:
     inventories: tuple[InventorySnapshot, ...]
     outcomes: tuple[RetrievalOutcome, ...]
     issues: tuple[Issue, ...] = ()
+    annotations: AnnotationBundle = field(default_factory=AnnotationBundle.empty)
 
 
 def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -> None:
