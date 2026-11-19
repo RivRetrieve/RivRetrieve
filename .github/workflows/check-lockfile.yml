@@ -26,4 +26,7 @@ jobs:
         run: uv python install 3.13
 
       - name: Check lockfile consistency
-        run: uv lock --check
+        run: uv lock --check --default-index https://pypi.org/simple
+
+      - name: Verify public PyPI lockfile sources
+        run: uv run --no-project --python 3.13 python -B scripts/check_lockfile_sources.py

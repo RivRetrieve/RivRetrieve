@@ -10,8 +10,9 @@ Run these commands from the source checkout. `uv sync --extra map` installs the
 locked project, development tools and optional map dependency. It creates the
 local environment; it does not download provider observations. Pass `--frozen`
 to `uv sync` and `uv run` on workstations configured with a local package mirror
-so `uv.lock` stays on public PyPI URLs; CI checks lockfile consistency with
-`uv lock --check`.
+so `uv.lock` stays on public PyPI URLs. `.github/workflows/check-lockfile.yml`
+checks lockfile consistency against public PyPI and verifies public PyPI
+package sources on pull requests and pushes to `main` and `port/**`.
 
 ```sh
 uv sync --extra map
