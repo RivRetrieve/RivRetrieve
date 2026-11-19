@@ -42,6 +42,7 @@ from rivretrieve._internal.transport import (
     CredentialHeader,
     HttpClient,
     Transport,
+    TransportPolicy,
     _SystemClock,
 )
 
@@ -50,7 +51,7 @@ if TYPE_CHECKING:
 
     from rivretrieve._internal.engine import FetchWindow
     from rivretrieve._internal.primitives import OnIssue
-    from rivretrieve._internal.providers.registration import PublicArchiveAccess
+    from rivretrieve._internal.providers.registration import ProviderRateLimit, PublicArchiveAccess
 
 _DEFAULT_PROVIDER_REGISTRATION_ENABLED = True
 
@@ -1413,15 +1414,18 @@ def _resolve_credentials(
     return resolved
 
 
+def _provider_transport_policy(rate_limit: ProviderRateLimit | None) -> TransportPolicy:
+    """provider transport policy : ProviderRateLimit | None → TransportPolicy (pure)."""
+    if rate_limit is None:
+        return TRANSPORT_POLICY
+    return replace(TRANSPORT_POLICY, minimum_interval_seconds=rate_limit.minimum_interval_seconds)
+
+
 def _credentialed_transport(provider_id: str, values: dict[str, str]) -> Transport:
     """credential transport : ProviderCredentialValues × (HeaderBindings | CredentialExchangeBinding) → Transport."""
     handle = _registry.get(provider_id)
     rate_limit = handle.rate_limit
-    base = (
-        HttpClient()
-        if rate_limit is None
-        else HttpClient(policy=replace(TRANSPORT_POLICY, minimum_interval_seconds=rate_limit.minimum_interval_seconds))
-    )
+    base = HttpClient() if rate_limit is None else HttpClient(policy=_provider_transport_policy(rate_limit))
     exchange = handle.credential_exchange
     if exchange is not None:
         headers = tuple(
