@@ -562,22 +562,27 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
                 if "source.station.native_identity" in binding.facts and binding.transformation is None
             )
             if provenance.provider_id == "ch_foen"
+            else tuple(
+                binding.acquisition_id
+                for binding in provenance.fact_bindings
+                if "source.station.registry" in binding.facts and binding.transformation is None
+            )
+            if provenance.provider_id == "pe_senamhi"
             else origins.selected_native_acquisition_ids(provenance)
             if provenance.provider_id == "usgs_nwis"
             else origins.NATIVE_TABLE_ACQUISITION_IDS
         )
-        if provenance.provider_id in {"ch_foen", "cl_dga"}:
-            import importlib as _importlib
+        if provenance.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "cl_dga", "co_ideam", "pe_senamhi"}:
             import json
 
-            gen = _importlib.import_module(
+            generator = importlib.import_module(
                 f"rivretrieve._internal.providers.{provenance.provider_id}.generate_catalogue"
             )
             selection_path = f"maintenance/catalogue/{provenance.provider_id}/official/selection.json"
             if selection_path not in {item.consumer_path for item in receipt.declaration_inputs}:
                 raise ValueError(f"{provenance.provider_id} build support requires the selected authored declaration")
             selection = json.loads((retained_evidence_root / selection_path).read_bytes())
-            supporting_inputs.update(gen.selected_supporting_inputs(provenance, selection))
+            supporting_inputs.update(generator.selected_supporting_inputs(provenance, selection))
         result = select_catalogue_build_inputs(
             provenance,
             receipt,

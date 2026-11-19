@@ -9,8 +9,14 @@ import polars as pl
 from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
+from rivretrieve._internal.providers.ch_foen.annotations import CH_FOEN_ARCHIVE_SCHEMA, CH_FOEN_RECENT_SCHEMA
 from rivretrieve._internal.providers.ch_foen.official_config import OfficialRoute
 from rivretrieve._internal.providers.ch_foen.official_series import source_series
+from rivretrieve._internal.source_annotations import (
+    OBSERVATION_STRUCTURAL_SCHEMA,
+    AnnotationBundle,
+    ObservationAnnotationTable,
+)
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -22,6 +28,34 @@ from rivretrieve._internal.source_series import (
     admission,
     stable_id,
 )
+
+_INT64_MIN = -(2**63)
+_INT64_MAX = 2**63
+
+
+def _has_consistent_annotation_field(records: list[dict[str, object]], field_name: str) -> bool:
+    if not records:
+        return False
+    present_count = sum(field_name in record for record in records)
+    if present_count == 0:
+        return False
+    if present_count != len(records):
+        raise UnsupportedSourceStructureError(
+            f"Official Swiss observation payload mixes present and missing {field_name} fields"
+        )
+    return True
+
+
+def _validate_annotation_value(value: object, *, recent: bool) -> str | int | None:
+    if value is None:
+        return None
+    if recent:
+        if type(value) is not int or not (_INT64_MIN <= value < _INT64_MAX):
+            raise UnsupportedSourceStructureError("Official Swiss releaseStatus must be a 64-bit integer or null")
+        return value
+    if not isinstance(value, str):
+        raise UnsupportedSourceStructureError("Official Swiss releaseState must be a string or null")
+    return value
 
 
 def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
@@ -39,6 +73,8 @@ def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
     if not isinstance(records, list) or document.get("errors"):
         raise UnsupportedSourceStructureError("Official Swiss response does not contain successful rows")
     recent = coordinates.route == "data_live"
+    ann_schema = CH_FOEN_RECENT_SCHEMA if recent else CH_FOEN_ARCHIVE_SCHEMA
+    ann_field = ann_schema.fields[0].name
     evidence = f"source-call:{payload.acquisition_id}"
     groups = {}
     for record in records:
@@ -54,8 +90,13 @@ def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         if not recent and (not isinstance(name, str) or not name):
             raise UnsupportedSourceStructureError("Official Swiss archive observation lacks its source name")
         groups.setdefault(name, []).append(record)
+    include_annotations = _has_consistent_annotation_field(records, ann_field)
+    if include_annotations:
+        for record in records:
+            _validate_annotation_value(record[ann_field], recent=recent)
     definitions = []
     rows = []
+    ann_rows = []
     outcomes = []
     window = SeriesWindow(
         start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
@@ -106,6 +147,7 @@ def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 entries if recent else [entry for entry in entries if entry["unitSymbol"] == fact.source_unit.value]
             )
             native = []
+            native_ann = []
             if decision.status == "supported":
                 for entry in selected:
                     label = entry.get("timestamp")
@@ -119,23 +161,43 @@ def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                         raise UnsupportedSourceStructureError("Official Swiss timestamp must be explicit UTC")
                     timestamp = timestamp.replace(tzinfo=None)
                     value = entry.get("value")
-                    if "value" not in entry or (
-                        value is not None and (type(value) not in (int, float) or not isfinite(value))
-                    ):
+                    if "value" not in entry or (value is not None and type(value) not in (int, float)):
+                        raise UnsupportedSourceStructureError("Official Swiss observation must be numeric or null")
+                    try:
+                        numeric = None if value is None else float(value)
+                    except OverflowError as error:
+                        raise UnsupportedSourceStructureError(
+                            "Official Swiss observation must be numeric or null"
+                        ) from error
+                    if numeric is not None and not isfinite(numeric):
                         raise UnsupportedSourceStructureError("Official Swiss observation must be numeric or null")
                     native.append(
                         {
                             "station_id": station,
                             "product_id": product,
                             "time": timestamp,
-                            "value": value,
+                            "value": numeric,
                             "time_zone": "+00:00",
                             "series_id": definition.series_id,
                             "facts_id": fact.facts_id,
                             "source_unit": fact.source_unit.value,
                         }
                     )
+                    if include_annotations:
+                        native_ann.append(
+                            {
+                                "series_id": definition.series_id,
+                                "facts_id": fact.facts_id,
+                                "station_id": station,
+                                "product_id": product,
+                                "time": timestamp,
+                                "time_zone": "+00:00",
+                                "measured": True,
+                                ann_field: entry[ann_field],
+                            }
+                        )
                 rows.extend(native)
+                ann_rows.extend(native_ann)
             status = (
                 OutcomeStatus.UNSUPPORTED
                 if decision.status != "supported"
@@ -192,8 +254,25 @@ def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         evidence=(evidence,),
         reason="Returned series establish this response, not an exhaustive historical inventory",
     )
+    if ann_rows:
+        ann_frame = pl.DataFrame(
+            ann_rows,
+            schema={**OBSERVATION_STRUCTURAL_SCHEMA, **ann_schema.polars_schema()},
+        )
+        ann_table = ObservationAnnotationTable.from_rows(
+            schema=ann_schema,
+            rows=ann_frame,
+            measurement_indices=list(range(len(rows))),
+        )
+        annotations = AnnotationBundle(observation_tables={ann_schema.schema_id: ann_table})
+    else:
+        annotations = AnnotationBundle.empty()
     return ParsedSeries(
-        pl.DataFrame(rows, schema=RowsSchema.polars_schema), tuple(definitions), (inventory,), tuple(outcomes)
+        pl.DataFrame(rows, schema=RowsSchema.polars_schema),
+        tuple(definitions),
+        (inventory,),
+        tuple(outcomes),
+        annotations=annotations,
     )
 
 

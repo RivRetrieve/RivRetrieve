@@ -111,8 +111,9 @@ def test_public_hydat_same_or_newer_release_can_have_fewer_rows(public_hydat, or
     assert result.manifest.source_vintage == date(2026, 9, 22)
     assert sum(dict(result.manifest.partition_row_counts).values()) == 31
     assert sum(dict(original.manifest.partition_row_counts).values()) == 62
-    rows = pl.read_parquet(list(Path(root).rglob("*.parquet")), hive_partitioning=False)
+    rows = pl.read_parquet(list(Path(root).rglob("part-*.parquet")), hive_partitioning=False)
     assert rows.height == 31
+    assert len(list(Path(root).rglob("annotations=*/rows.parquet"))) == 1
     assert validate_store(root, ProviderId("ca_eccc")).manifest == result.manifest
     assert not tuple(Path(root).parent.glob("publisher-artifact.download*"))
 

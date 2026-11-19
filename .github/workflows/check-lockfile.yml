@@ -1,0 +1,32 @@
+name: Check Lockfile
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "port/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-lockfile:
+    name: Verify uv.lock matches pyproject.toml and public PyPI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Check lockfile consistency
+        run: uv lock --check --default-index https://pypi.org/simple
+
+      - name: Verify public PyPI lockfile sources
+        run: uv run --no-project --python 3.13 python -B scripts/check_lockfile_sources.py

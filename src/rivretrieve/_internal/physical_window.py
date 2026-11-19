@@ -1,5 +1,6 @@
 """Interpret public windows using established physical calendar facts."""
 
+import calendar
 import re
 from datetime import datetime, time, timedelta
 
@@ -23,20 +24,25 @@ def native_window(start: datetime, end: datetime, facts: PhysicalFacts) -> Reque
     """Return closed source-label bounds for a public physical window.
 
     Established start-labelled calendar periods use their fixed calendar zone.
-    Daily labels retain whole-date clipping; monthly and yearly labels preserve
-    explicit clock bounds. Other series use source timestamps. Returned
-    observation labels are never changed.
+    Daily labels retain whole-date clipping; explicit calendar-month labels
+    expand to whole calendar months; timestamp-labelled monthly and yearly
+    series preserve explicit clock bounds. Other series use source timestamps.
+    Returned observation labels are never changed.
     """
     offset = None
     if (
         facts.temporal_support.value in {"calendar_day", "calendar_month", "calendar_year"}
         and facts.timestamp_anchor.value == "start"
     ):
-        calendar = _fixed_offset(facts.day_definition.value)
+        calendar_offset = _fixed_offset(facts.day_definition.value)
         source = _fixed_offset(facts.time_zone.value)
-        if calendar is not None and source is not None:
-            offset = calendar - source
-    if (
+        if calendar_offset is not None and source is not None:
+            offset = calendar_offset - source
+    if facts.clipping_axis is ClippingAxis.CALENDAR_MONTH:
+        start = datetime.combine(start.date().replace(day=1), time.min)
+        last_day = calendar.monthrange(end.year, end.month)[1]
+        end = datetime.combine(end.date().replace(day=last_day), time.max)
+    elif (
         offset is not None and facts.temporal_support.value == "calendar_day"
     ) or facts.clipping_axis is ClippingAxis.CALENDAR_DATE:
         start = datetime.combine(start.date(), time.min)

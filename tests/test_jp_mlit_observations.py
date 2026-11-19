@@ -218,11 +218,15 @@ def test_exact_official_boundaries(
     assert rows["time"][[0, -1]].to_list() == [first, last]
     assert rows["value"][[0, -1]].to_list() == pytest.approx([first_value, last_value])
     assert rows["time_zone"].unique().to_list() == ["unknown"]
+    assert result.issues == ()
     if index == 5:
-        assert len(result.issues) == 1
-        issue = result.issues[0]
-        assert issue.details is not None
-        assert (issue.code, issue.details["count"]) == ("source_missing", 552)
+        ann = result.annotations.observation_tables["jp_mlit.observations"]
+        assert ann.unmeasured_count == 552
+        assert {
+            flag
+            for flag, measured in zip(ann.rows["flag"].to_list(), ann.rows["measured"].to_list(), strict=True)
+            if not measured
+        } == {"$"}
 
 
 @pytest.mark.recorded(
@@ -257,17 +261,18 @@ def test_flags_control_observation_status_without_numeric_threshold(retained_evi
     tentative = replace(payload, content=payload.content.replace(b"321.52, ", b"321.52,*", 1))
     parsed = parse(tentative, config())
     assert parsed.rows["value"][0] == 321.52
-    assert parsed.issues[0].code == "source_tentative"
+    assert parsed.issues == ()
+    ann = parsed.annotations.observation_tables["jp_mlit.observations"]
+    assert ann.rows["flag"][0] == "*"
     unknown = replace(payload, content=payload.content.replace(b"321.52, ", b"321.52,?", 1))
     unsupported = parse(unknown, config())
     assert unsupported.rows.is_empty()
+    assert unsupported.annotations.is_empty
     assert unsupported.outcomes[0].status == "unsupported"
     assert "unknown native flag" in unsupported.outcomes[0].reason
 
 
-@pytest.mark.parametrize(
-    ("flag", "code"), [("$", "source_missing"), ("#", "source_closed_station"), ("-", "source_unregistered")]
-)
+@pytest.mark.parametrize("flag", ["$", "#", "-"])
 @pytest.mark.recorded(
     "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
     "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
@@ -278,12 +283,19 @@ def test_flags_control_observation_status_without_numeric_threshold(retained_evi
     "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
     "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
 )
-def test_native_non_observation_flags_are_distinct_and_dropped(retained_evidence_root, flag: str, code: str) -> None:
+def test_native_non_observation_flags_are_distinct_and_dropped(retained_evidence_root, flag: str) -> None:
     payload = _fetched(retained_evidence_root)[1]
     changed = replace(payload, content=payload.content.replace(b"321.52, ", f"321.52,{flag}".encode(), 1))
     result = parse(changed, config())
     assert result.rows.height == 743
-    assert result.issues[0].code == code
+    assert result.issues == ()
+    ann = result.annotations.observation_tables["jp_mlit.observations"]
+    unmeasured_flags = [
+        slot_flag
+        for slot_flag, measured in zip(ann.rows["flag"].to_list(), ann.rows["measured"].to_list(), strict=True)
+        if not measured
+    ]
+    assert flag in unmeasured_flags
 
 
 @pytest.mark.recorded(

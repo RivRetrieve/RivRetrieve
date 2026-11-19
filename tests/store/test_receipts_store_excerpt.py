@@ -80,8 +80,10 @@ def test_ca_eccc_fetch_retains_a_faithful_store_excerpt(tmp_path: Path) -> None:
     assert receipt.origin.source_path == str(store)
     assert receipt.executed_query.stations == ("02GA010",)
     assert receipt.executed_query.products == ("discharge_daily_mean",)
-    assert receipt.format_version == 5
+    assert receipt.format_version == 10
     assert receipt.source_vintage == date(2024, 6, 1)
     excerpt = pl.read_parquet(BytesIO(receipt.content))
     assert excerpt["value"].to_list() == [12.4, None, None]
-    assert excerpt["DLY_FLOWS.FLOW_SYMBOL1"].to_list() == ["E", "E", "E"]
+    assert "DLY_FLOWS.FLOW_SYMBOL1" not in excerpt.columns
+    assert excerpt["DLY_FLOWS.NO_DAYS"].to_list() == [1, 1, 1]
+    assert result.to_polars(annotations="symbol")["symbol"].to_list() == ["E"]

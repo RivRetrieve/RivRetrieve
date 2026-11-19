@@ -50,9 +50,11 @@ def product_id(route: str, parameter: str) -> str:
     return f"{PARAMETERS[parameter][0]}_{suffix}"
 
 
-# Publisher vocabulary only: retain the original field and its code/null in rows.
-# Status 3 includes corrections and definitive stage-discharge relations. It is
-# not a RivRetrieve ranking; unresolved "ersetzt" wording establishes no lineage.
+# Publisher vocabulary only: official_parse retains archive releaseState in
+# ch_foen.archive and recent releaseStatus in ch_foen.recent without adding
+# annotation columns to canonical observation rows. Status 3 includes corrections
+# and definitive stage-discharge relations. It is not a RivRetrieve ranking;
+# unresolved "ersetzt" wording establishes no lineage.
 RELEASE_STATUS_FIELDS = {"archive": "releaseState", "recent": "releaseStatus"}
 RELEASE_STATUS_MEANINGS = {
     None: "raw",

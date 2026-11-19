@@ -224,17 +224,23 @@ type OriginDeclarations = Mapping[str, object]
 
 ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
     {
+        ProviderId("ar_ina"),
+        ProviderId("at_ehyd"),
         ProviderId("ba_fhmzbih"),
         ProviderId("br_ana"),
         ProviderId("ca_eccc"),
         ProviderId("ch_foen"),
         ProviderId("cl_dga"),
+        ProviderId("co_ideam"),
         ProviderId("cz_chmi"),
+        ProviderId("dk_vanda"),
+        ProviderId("fi_syke"),
         ProviderId("fr_hubeau"),
         ProviderId("fr_hydroportail"),
         ProviderId("jp_mlit"),
         ProviderId("lt_lhmt"),
         ProviderId("no_nve"),
+        ProviderId("pe_senamhi"),
         ProviderId("pl_imgw"),
         ProviderId("th_thaiwater"),
         ProviderId("usgs_nwis"),

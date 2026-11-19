@@ -39,12 +39,16 @@ def _areas(selection) -> pl.DataFrame:
 
 # Independent source-column expectations, including established units only.
 SOURCE_FIELDS = {
+    "ar_ina": ("id", {}),
+    "at_ehyd": ("hzbnr", {"orogr.Einzugsgebiet [km²]": "km²"}),
     "ba_fhmzbih": ("metadata_station_no", {"metadata_CATCHMENT_SIZE": None}),
     "br_ana": ("codigoestacao", {"Area_Drenagem": None}),
     "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": "km2", "DRAINAGE_AREA_EFFECT": "km2"}),
     "ch_foen": ("name", {}),
     "cl_dga": ("CODIGO ESTACION", {}),
+    "co_ideam": ("Codigo", {}),
     "cz_chmi": ("objID", {"PLO_STA": "km²"}),
+    "dk_vanda": ("stationId", {"catchmentAreaKm2": "km2"}),
     "fr_hubeau": ("code_station", {"superficie_topo": None, "superficie_reelle": None}),
     "fr_hydroportail": ("bookmarkCode", {}),
     "jp_mlit": ("観測所記号", {"流域面積": None}),
@@ -122,12 +126,12 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     keys = ["provider_id", "station_id"]
     assert_frame_equal(result.select(keys).unique().sort(keys), before.select(keys).unique().sort(keys))
     assert result.select(*keys, "source_field").is_duplicated().sum() == 0
-    assert result["provider_id"].n_unique() == 14
+    assert set(result["provider_id"]) == set(BUILTIN_PROVIDER_IDS)
     assert_frame_equal(rr.as_frame(selection), before)
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
     assert overlapping.height > 0
-    for provider in ("cl_dga", "lt_lhmt", "th_thaiwater"):
+    for provider in ("ar_ina", "cl_dga", "co_ideam", "lt_lhmt", "pe_senamhi", "th_thaiwater"):
         absent = result.filter(pl.col("provider_id") == provider)
         assert set(absent["state"]) == {"no_metadata"}
         assert (
@@ -144,10 +148,19 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
         pytest.param(
             provider,
             marks=pytest.mark.derived(
-                {
-                    "usgs_nwis": "maintenance/catalogue/usgs_nwis",
-                    "cl_dga": "maintenance/catalogue/cl_dga/official/native.parquet",
-                }.get(provider, f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet")
+                "maintenance/catalogue/ar_ina/official"
+                if provider == "ar_ina"
+                else "maintenance/catalogue/at_ehyd/official"
+                if provider == "at_ehyd"
+                else "maintenance/catalogue/usgs_nwis"
+                if provider == "usgs_nwis"
+                else "maintenance/catalogue/cl_dga/official/native.parquet"
+                if provider == "cl_dga"
+                else "maintenance/catalogue/co_ideam/official/native.parquet"
+                if provider == "co_ideam"
+                else "maintenance/catalogue/dk_vanda/official"
+                if provider == "dk_vanda"
+                else f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"
             ),
         )
         for provider in BUILTIN_PROVIDER_IDS
@@ -157,10 +170,18 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
     repository = Path(__file__).parents[1]
     catalogue = repository / "src/rivretrieve/_internal/providers" / provider / "catalogue"
     native_path = (
-        retained_evidence_root / "maintenance/catalogue/usgs_nwis/legacy-native.parquet"
+        retained_evidence_root / "maintenance/catalogue/at_ehyd/official/native.parquet"
+        if provider == "at_ehyd"
+        else retained_evidence_root / "maintenance/catalogue/usgs_nwis/legacy-native.parquet"
         if provider == "usgs_nwis"
+        else retained_evidence_root / "maintenance/catalogue/ar_ina/official/native.parquet"
+        if provider == "ar_ina"
         else retained_evidence_root / "maintenance/catalogue/cl_dga/official/native.parquet"
         if provider == "cl_dga"
+        else retained_evidence_root / "maintenance/catalogue/co_ideam/official/native.parquet"
+        if provider == "co_ideam"
+        else retained_evidence_root / "maintenance/catalogue/dk_vanda/official/native.parquet"
+        if provider == "dk_vanda"
         else retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     )
     native = pl.read_parquet(native_path)
@@ -188,7 +209,14 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         assert set(site["source_scope"]) == {"hydrometrie/referentiel/sites"}
         assert set(site["source_dtype"]) == {"Float64"}
         assert set(site["source_unit"]) == {"km²"}
-    if provider == "usgs_nwis":
+    elif provider == "at_ehyd":
+        telemetry_only = native.filter(~pl.col("in_owf"))["hzbnr"]
+        absent = actual.filter(pl.col("station_id").is_in(telemetry_only.implode()))
+        assert absent.height == 7
+        assert set(absent["state"]) == {"no_metadata"}
+        native = native.filter(pl.col("in_owf"))
+        assert set(projection.filter(pl.col("source_field").is_in(list(fields)))["source_scope"]) == {"owf_stammdaten"}
+    elif provider == "usgs_nwis":
         modern = pl.read_parquet(retained_evidence_root / "maintenance/catalogue/usgs_nwis/modern-native.parquet")
         # Independently compare exact native scalars under agency-qualified identities.
         legacy_by_identity = {}
