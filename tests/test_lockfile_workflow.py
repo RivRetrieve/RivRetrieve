@@ -24,7 +24,7 @@ def test_lockfile_workflow_covers_all_prs_and_port_branches() -> None:
     workflow = yaml.load((ROOT / ".github/workflows/check-lockfile.yml").read_text(), Loader=yaml.BaseLoader)
     on_config = workflow["on"]
     assert "pull_request" in on_config
-    assert "paths" not in (on_config["pull_request"] or {})
+    assert on_config["pull_request"] in (None, "", {})
     assert set(on_config["push"]["branches"]) >= {"main", "port/**"}
     assert "workflow_dispatch" in on_config
 
@@ -98,3 +98,17 @@ def test_check_lockfile_sources_rejects_symlinked_lockfile(tmp_path: Path) -> No
     (checkout / "uv.lock").symlink_to(real_lock)
     with pytest.raises(lockfile_error):
         namespace["validate_lockfile"](checkout)
+
+
+def test_check_lockfile_sources_rejects_project_uv_toml(tmp_path: Path) -> None:
+    namespace = runpy.run_path(str(SCRIPT))
+    lockfile_error = namespace["LockfileError"]
+    checkout = _copy_project_files(tmp_path / "project-uv-toml")
+    (checkout / "uv.toml").write_text('default-index = "https://mirror.example.invalid/simple"\n', encoding="utf-8")
+    with pytest.raises(lockfile_error):
+        namespace["validate_lockfile"](checkout)
+
+    symlink_checkout = _copy_project_files(tmp_path / "symlinked-uv-toml")
+    (symlink_checkout / "uv.toml").symlink_to(checkout / "uv.toml")
+    with pytest.raises(lockfile_error):
+        namespace["validate_lockfile"](symlink_checkout)

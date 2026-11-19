@@ -229,6 +229,9 @@ def _validate_root_metadata(pyproject: dict, project: dict, lock: dict, root: di
 
 def validate_lockfile(checkout: Path) -> None:
     """Verify declared dependencies and public PyPI sources in ``uv.lock``."""
+    project_uv_toml = checkout / "uv.toml"
+    if project_uv_toml.exists() or project_uv_toml.is_symlink():
+        raise LockfileError("Project-level uv.toml is not permitted under public PyPI lockfile policy")
     pyproject = _read_toml_file(checkout / "pyproject.toml")
     lock = _read_toml_file(checkout / "uv.lock")
     _validate_uv_tool_config(pyproject)
