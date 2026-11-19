@@ -34,7 +34,7 @@ The Step 3 record reports 6,838,571 daily rows, 235,185 monthly rows and 784 sta
 Build on the Step 1 transport observations, distinguishing retained evidence from probes that were not retained:
 
 - Use HTTPS GET through `request.transfer`, not HEAD-based `request.probe`; observed HEAD responses did not describe the ZIP correctly.
-- Keep TLS verification enabled with the supported certifi-backed transport. The handoff recommends read timeouts of at least 90 seconds and bounded backoff for transient 503 responses and interrupted streams. Verify these requirements through the shared transport rather than introducing a provider-specific bypass.
+- Keep TLS verification enabled with the supported certifi-backed transport. Treat the handoff's read timeout of at least 90 seconds as a starting recommendation to verify, and establish bounded backoff for transient 503 responses and interrupted streams through the shared transport rather than introducing a provider-specific bypass.
 - Stream acquisition and process the approximately 863 MB daily and 29 MB monthly uncompressed text with bounded memory. Reuse suitable retained inputs and minimize redundant national downloads.
 
 Establish accepted archive members, encoding, delimiters, column names and types, date parsing, and validation of complete versus truncated or malformed input. The known national monthly schema omits `FECHA`; the regional example includes an empty `FECHA` column. Account explicitly for this evidenced difference without treating it as permission to accept arbitrary schema drift or to add a regional runtime route.
