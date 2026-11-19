@@ -26,6 +26,7 @@ from rivretrieve._internal.boundary_probes import (
     WallClockExpectation,
     run_manifest_boundary_probes,
 )
+from rivretrieve._internal.discovery import EmptySelectionError
 from rivretrieve._internal.observations import ReceiptAuthorship, StoreExcerptReceipt
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.cl_dga.bulk import (
@@ -110,6 +111,7 @@ def _read_raw_daily_witnesses(zip_path: Path) -> tuple[RawDailyWitness, ...]:
             station_id = record["CODIGO ESTACION"]
             if station_id not in _WITNESS_STATIONS:
                 continue
+            assert record["Unidad"] == "m3/s"
             raw_fecha = record["FECHA"]
             day_s, month_s, year_s = raw_fecha.split("/")
             rows.append(
@@ -133,6 +135,7 @@ def _read_raw_monthly_witnesses(zip_path: Path) -> tuple[RawMonthlyWitness, ...]
             station_id = record["CODIGO ESTACION"]
             if station_id not in _WITNESS_STATIONS:
                 continue
+            assert record["Unidad"] == "m3/s"
             raw_year = record["Año"]
             raw_month = record["Mes"]
             rows.append(
@@ -354,7 +357,19 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     for unknown_field in ("temporal_support", "day_definition", "timestamp_anchor", "time_zone"):
         assert getattr(daily_facts, unknown_field).state is EvidenceState.NOT_ESTABLISHED
 
+    # Unknown daily statistic refuses statistic="mean" filtering via EmptySelectionError.
+    empty_stat_sel = rr.find(provider="cl_dga", station="01050002", frequency="daily", statistic="mean")
+    with pytest.raises(EmptySelectionError):
+        rr.fetch(empty_stat_sel, start="2024-01-01", end="2024-01-02")
+
     yb_res = rr.fetch(daily_sel, start="2023-12-31", end="2024-01-02", on_issue="raise")
+    assert yb_res.data.height == 3
+    assert set(yb_res.data["time_zone"].to_list()) == {"unknown"}
+    assert set(yb_res.data["product_id"].to_list()) == {"discharge_daily"}
+    assert set(yb_res.data["facts_id"].to_list()) == {daily_facts.facts_id}
+    assert set(yb_res.data["quantity"].to_list()) == {"discharge"}
+    assert set(yb_res.data["source_unit"].to_list()) == {"m3/s"}
+    assert set(yb_res.data["unit"].to_list()) == {"m3/s"}
     pl_testing.assert_frame_equal(
         yb_res.data.select("station_id", "series_id", "time", "value").sort("station_id", "series_id", "time", "value"),
         _expected_daily_frame(
@@ -367,6 +382,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     )
 
     leap_res = rr.fetch(daily_sel, start="2024-02-29", end="2024-02-29", on_issue="raise")
+    assert leap_res.data.height == 1
     pl_testing.assert_frame_equal(
         leap_res.data.select("station_id", "series_id", "time", "value").sort(
             "station_id", "series_id", "time", "value"
@@ -381,7 +397,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     )
 
     edge_1960_res = rr.fetch(daily_sel, start="1960-01-01", end="1960-01-10", on_issue="raise")
-    assert edge_1960_res.data["time"].to_list() != []
+    assert edge_1960_res.data.height > 0
     pl_testing.assert_frame_equal(
         edge_1960_res.data.select("station_id", "series_id", "time", "value").sort(
             "station_id", "series_id", "time", "value"
@@ -413,6 +429,8 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
         if w.station_id == "01201001" and datetime(2020, 2, 12) <= w.time <= datetime(2020, 2, 13)
     ]
     assert len(raw_dup) == 4
+    assert len({w.value for w in raw_dup if w.time == datetime(2020, 2, 12)}) > 1
+    assert dup_res.data.height == 4
     pl_testing.assert_frame_equal(
         dup_res.data.select("station_id", "series_id", "time", "value").sort(
             "station_id", "series_id", "time", "value"
@@ -447,6 +465,10 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     restored_daily = rr.from_bundle(rr.to_bundle(dup_res))
     pl_testing.assert_frame_equal(restored_daily.data, dup_res.data)
     assert restored_daily.provenance.source_vintage is None
+    (restored_receipt,) = restored_daily.receipts.entries
+    assert isinstance(restored_receipt, StoreExcerptReceipt)
+    assert restored_receipt.source_vintage is None
+    assert restored_receipt.content == daily_receipt.content
 
     # Genuine zero-flow daily + monthly values, and genuine scientific-notation daily value.
     zero_daily_sel = rr.find(provider="cl_dga", station="01020002", frequency="daily")
@@ -458,6 +480,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
         end=datetime(1966, 2, 23),
         series_id=zero_daily_sel.series[0].series_id,
     )
+    assert zero_daily_res.data.height == 2
     assert zero_daily_expected["value"].to_list() == [0.0, 0.0]
     pl_testing.assert_frame_equal(
         zero_daily_res.data.select("station_id", "series_id", "time", "value").sort(
@@ -467,7 +490,14 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     )
 
     sci_daily_sel = rr.find(provider="cl_dga", station="04515002", frequency="daily")
+    raw_sci = [
+        w
+        for w in genuine_cl_dga_store.daily_rows
+        if w.station_id == "04515002" and datetime(2026, 6, 13) <= w.time <= datetime(2026, 6, 23)
+    ]
+    assert raw_sci and any("e" in w.raw_value.lower() for w in raw_sci)
     sci_daily_res = rr.fetch(sci_daily_sel, start="2026-06-13", end="2026-06-23", on_issue="raise")
+    assert sci_daily_res.data.height == len(raw_sci)
     pl_testing.assert_frame_equal(
         sci_daily_res.data.select("station_id", "series_id", "time", "value").sort(
             "station_id", "series_id", "time", "value"
@@ -501,6 +531,13 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
         assert getattr(monthly_facts, unknown_field).state is EvidenceState.NOT_ESTABLISHED
 
     mid_month_res = rr.fetch(monthly_sel, start="2024-02-10", end="2024-02-20", receipts=True, on_issue="raise")
+    assert mid_month_res.data.height == 1
+    assert set(mid_month_res.data["time_zone"].to_list()) == {"unknown"}
+    assert set(mid_month_res.data["product_id"].to_list()) == {"discharge_monthly_mean"}
+    assert set(mid_month_res.data["facts_id"].to_list()) == {monthly_facts.facts_id}
+    assert set(mid_month_res.data["quantity"].to_list()) == {"discharge"}
+    assert set(mid_month_res.data["source_unit"].to_list()) == {"m3/s"}
+    assert set(mid_month_res.data["unit"].to_list()) == {"m3/s"}
     pl_testing.assert_frame_equal(
         mid_month_res.data.select("station_id", "series_id", "time", "value").sort(
             "station_id", "series_id", "time", "value"
@@ -525,6 +562,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     assert feb_excerpt["caudal_medio_mensual.Caudal_Medio_mensual"].to_list() == [raw_feb.raw_value]
 
     ym_month_res = rr.fetch(monthly_sel, start="2023-12-15", end="2024-01-10", on_issue="raise")
+    assert ym_month_res.data.height == 2
     pl_testing.assert_frame_equal(
         ym_month_res.data.select("station_id", "series_id", "time", "value").sort(
             "station_id", "series_id", "time", "value"
@@ -538,6 +576,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     )
 
     m_1960_res = rr.fetch(monthly_sel, start="1960-01-15", end="1960-02-10", on_issue="raise")
+    assert m_1960_res.data.height == 2
     pl_testing.assert_frame_equal(
         m_1960_res.data.select("station_id", "series_id", "time", "value").sort(
             "station_id", "series_id", "time", "value"
@@ -558,6 +597,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
         months=(datetime(1967, 1, 1), datetime(1967, 2, 1)),
         series_id=zero_monthly_sel.series[0].series_id,
     )
+    assert zero_monthly_res.data.height == 2
     assert zero_monthly_expected["value"].to_list() == [0.0, 0.0]
     pl_testing.assert_frame_equal(
         zero_monthly_res.data.select("station_id", "series_id", "time", "value").sort(
