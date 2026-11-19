@@ -173,6 +173,10 @@ with plain Polars types, verified descriptions (never placeholders such as
 emit per-row informational quality-code issues when annotations carry those source
 fields.
 
+Distinguish stream selectors, which belong in `SourceSeries.variant`, from
+non-identity series attributes, exposed through `rr.series(result, annotations=...)`,
+and observation annotations, exposed through `result.to_polars(annotations=...)`.
+
 **Outcome:** each adopted fact has supporting evidence, and remaining unknowns are
 explicit. Admission requires established quantity, source unit and valid conversion.
 Unknown time zone, temporal support or datum need not prohibit retrieval, but cannot
