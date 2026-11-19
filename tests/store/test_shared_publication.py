@@ -186,7 +186,7 @@ def test_public_download_owns_transfer_compile_and_workspace(
         content = source.read_bytes()
     elif provider == "cl_dga":
         from rivretrieve._internal.providers.cl_dga.bulk import CL_DGA_DAILY_URL, CL_DGA_MONTHLY_URL
-        from rivretrieve._internal.providers.cl_dga.generate_catalogue import DAILY_HEADER, MONTHLY_HEADER
+        from rivretrieve._internal.providers.cl_dga.config import DAILY_HEADER, MONTHLY_HEADER
 
         station = ("01001002", "RIO", "15", "REG", "COM", "0175952 ", "0691525 ", "1", "1", "4400")
         daily_buf, monthly_buf = BytesIO(), BytesIO()

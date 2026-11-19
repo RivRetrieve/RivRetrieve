@@ -7,10 +7,9 @@ import hashlib
 import math
 import sqlite3
 import tempfile
-import weakref
 import zipfile
 from collections import OrderedDict
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -19,7 +18,7 @@ from typing import IO, Final
 import polars as pl
 
 from rivretrieve._internal.primitives import ProviderId
-from rivretrieve._internal.providers.cl_dga.generate_catalogue import DAILY_HEADER, MONTHLY_HEADER
+from rivretrieve._internal.providers.cl_dga.config import DAILY_HEADER, MONTHLY_HEADER
 from rivretrieve._internal.providers.cl_dga.series import SERIES_MAPPINGS, source_series
 from rivretrieve._internal.providers.registration import (
     BulkProbe,
@@ -232,7 +231,12 @@ def _sha256(path: Path) -> ArtifactChecksum:
 
 
 def compile_cl_dga(request: ClDgaCompileRequest) -> ValidatedStore:
-    """Certify and publish the daily and monthly Chile DGA historical ZIPs into one store."""
+    """Certify and publish the daily and monthly Chile DGA historical ZIPs into one store.
+
+    When unsorted input triggers external SQLite sorting, disk estimates require
+    ``SQLITE_TMPDIR``/``TMPDIR`` to be set before Python starts and left unchanged
+    for the process lifetime.
+    """
     with compilation_transaction(request.destination, request.transaction) as transaction:
         artifacts = tuple(Path(item.path) for item in request.publisher_artifacts)
         provenance = tuple(PublisherArtifact(item.url, _sha256(item.path)) for item in request.publisher_artifacts)
@@ -275,8 +279,13 @@ def _validate_single_zip_member(path: Path, expected_member: str, label: str) ->
 
 
 def _parse_csv_row(line: str) -> list[str]:
+    if "\x00" in line:
+        raise ValueError("NUL byte is not permitted in Chile DGA CSV")
     if '"' in line:
-        return next(csv.reader([line]))
+        try:
+            return next(csv.reader([line], strict=True))
+        except csv.Error as error:
+            raise ValueError(f"Malformed CSV quoting in Chile DGA CSV: {error}") from error
     return line.split(",")
 
 
@@ -293,7 +302,7 @@ def _validate_unit(unit: str) -> None:
 def _parse_value(raw: str) -> tuple[float | None, str]:
     if not raw:
         return None, ValueState.PUBLISHED_BLANK.value
-    if raw[0].isspace() or raw[-1].isspace() or "_" in raw or raw[0] == "-":
+    if raw[0].isspace() or raw[-1].isspace() or "_" in raw or raw[0] in ("-", "+"):
         raise ValueError(f"Invalid Chile DGA discharge value {raw!r}")
     try:
         numeric = float(raw)
@@ -503,6 +512,39 @@ def _new_empty_batch_columns() -> dict[str, list[object]]:
     return columns
 
 
+class _SpillClosingIterator:
+    """Ensure the inner generator (and any open SQLite sort handle) closes before spill cleanup."""
+
+    def __init__(self, inner: Iterator[NativeObservationBatch], cleanup: Callable[[], None]) -> None:
+        self._inner = inner
+        self._cleanup = cleanup
+        self._closed = False
+
+    def __iter__(self) -> Iterator[NativeObservationBatch]:
+        return self
+
+    def __next__(self) -> NativeObservationBatch:
+        try:
+            return next(self._inner)
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            close_fn = getattr(self._inner, "close", None)
+            if close_fn is not None:
+                close_fn()
+        finally:
+            self._cleanup()
+
+    def __del__(self) -> None:
+        self.close()
+
+
 def decode_cl_dga_batches(
     paths: Path | tuple[Path, ...],
     *,
@@ -566,11 +608,14 @@ def decode_cl_dga_batches(
             output_bytes = max(24 * total_rows, uncompressed_bytes // 2)
             growth = compiled_store_growth(phase, len(sorted_units), output_bytes)
             if sort_workspace > 0:
+                sqlite_temp = (
+                    resources.sqlite_temp if resources.sqlite_temp is not None else resolve_sqlite_temp_directory()
+                )
                 sort_resources = CompilationResources(
                     resources.provider_id,
                     resources.workspace,
                     resources.free_space_probe,
-                    sqlite_temp=resolve_sqlite_temp_directory(),
+                    sqlite_temp=sqlite_temp,
                 )
                 sort_resources.check(
                     CompilationSpaceEstimate(phase, growth + sort_workspace, sqlite_temp_bytes=sort_workspace)
@@ -584,95 +629,90 @@ def decode_cl_dga_batches(
     def batches() -> Iterator[NativeObservationBatch]:
         daily_date_cache: dict[str, tuple[int, datetime]] = {}
         monthly_ym_cache: dict[tuple[str, str], tuple[int, datetime]] = {}
-        try:
-            for product_id, year_map in (
-                ("discharge_daily", daily_years),
-                ("discharge_monthly_mean", monthly_years),
-            ):
-                source_unit_value = SERIES_MAPPINGS[product_id].source_unit
-                series_cache: dict[str, SourceSeries] = {}
-                retained_pairs = (
-                    tuple(zip(_DAILY_RETAINED_COLUMNS, _DAILY_RETAINED_INDICES, strict=True))
-                    if product_id == "discharge_daily"
-                    else tuple(zip(_MONTHLY_RETAINED_COLUMNS, _MONTHLY_RETAINED_INDICES, strict=True))
-                )
-                null_columns = _MONTHLY_RETAINED_COLUMNS if product_id == "discharge_daily" else _DAILY_RETAINED_COLUMNS
+        for product_id, year_map in (
+            ("discharge_daily", daily_years),
+            ("discharge_monthly_mean", monthly_years),
+        ):
+            source_unit_value = SERIES_MAPPINGS[product_id].source_unit
+            series_cache: dict[str, SourceSeries] = {}
+            retained_pairs = (
+                tuple(zip(_DAILY_RETAINED_COLUMNS, _DAILY_RETAINED_INDICES, strict=True))
+                if product_id == "discharge_daily"
+                else tuple(zip(_MONTHLY_RETAINED_COLUMNS, _MONTHLY_RETAINED_INDICES, strict=True))
+            )
+            null_columns = _MONTHLY_RETAINED_COLUMNS if product_id == "discharge_daily" else _DAILY_RETAINED_COLUMNS
 
-                for year in sorted(year_map):
-                    state = year_map[year]
+            for year in sorted(year_map):
+                state = year_map[year]
+                columns = _new_empty_batch_columns()
+                new_series: list[SourceSeries] = []
+                batch_len = 0
+                unit_registered = False
+
+                def _flush(count: int, *, _unit: _YearSpillState = state) -> NativeObservationBatch:
+                    nonlocal columns, new_series, unit_registered
+                    units_tuple = (
+                        (SourceUnitCount(_unit.unit_name, _unit.row_count, _unit.row_count),)
+                        if not unit_registered
+                        else ()
+                    )
+                    unit_registered = True
+                    result = NativeObservationBatch(
+                        rows=_build_batch_frame(columns),
+                        source_units=units_tuple,
+                        source_contributions=(SourceUnitContribution(_unit.unit_name, count),),
+                        series=tuple(new_series),
+                    )
                     columns = _new_empty_batch_columns()
-                    new_series: list[SourceSeries] = []
-                    batch_len = 0
-                    unit_registered = False
+                    new_series = []
+                    return result
 
-                    def _flush(count: int, *, _unit: _YearSpillState = state) -> NativeObservationBatch:
-                        nonlocal columns, new_series, unit_registered
-                        units_tuple = (
-                            (SourceUnitCount(_unit.unit_name, _unit.row_count, _unit.row_count),)
-                            if not unit_registered
-                            else ()
-                        )
-                        unit_registered = True
-                        result = NativeObservationBatch(
-                            rows=_build_batch_frame(columns),
-                            source_units=units_tuple,
-                            source_contributions=(SourceUnitContribution(_unit.unit_name, count),),
-                            series=tuple(new_series),
-                        )
-                        columns = _new_empty_batch_columns()
-                        new_series = []
-                        return result
+                try:
+                    for line in _iter_partition_lines(state, spill_root):
+                        fields = _parse_csv_row(line)
+                        station_id = fields[0]
+                        entry = series_cache.get(station_id)
+                        if entry is None:
+                            entry = source_series(station_id, product_id)
+                            series_cache[station_id] = entry
+                            new_series.append(entry)
 
-                    try:
-                        for line in _iter_partition_lines(state, spill_root):
-                            fields = _parse_csv_row(line)
-                            station_id = fields[0]
-                            entry = series_cache.get(station_id)
-                            if entry is None:
-                                entry = source_series(station_id, product_id)
-                                series_cache[station_id] = entry
-                                new_series.append(entry)
+                        if product_id == "discharge_daily":
+                            _, timestamp = _parse_daily_fecha(fields[10], daily_date_cache)
+                            numeric_value, value_state = _parse_value(fields[11])
+                        else:
+                            _, timestamp = _parse_monthly_ym(fields[10], fields[11], monthly_ym_cache)
+                            numeric_value, value_state = _parse_value(fields[12])
 
-                            if product_id == "discharge_daily":
-                                _, timestamp = _parse_daily_fecha(fields[10], daily_date_cache)
-                                numeric_value, value_state = _parse_value(fields[11])
-                            else:
-                                _, timestamp = _parse_monthly_ym(fields[10], fields[11], monthly_ym_cache)
-                                numeric_value, value_state = _parse_value(fields[12])
+                        columns["product"].append(product_id)
+                        columns["station_id"].append(station_id)
+                        columns["time"].append(timestamp)
+                        columns["time_zone"].append("unknown")
+                        columns["value"].append(numeric_value)
+                        columns["value_state"].append(value_state)
+                        columns["series_id"].append(entry.series_id)
+                        columns["facts_id"].append(entry.facts[0].facts_id)
+                        columns["source_unit"].append(source_unit_value)
+                        for col_name, idx in retained_pairs:
+                            columns[col_name].append(fields[idx])
+                        for col_name in null_columns:
+                            columns[col_name].append(None)
 
-                            columns["product"].append(product_id)
-                            columns["station_id"].append(station_id)
-                            columns["time"].append(timestamp)
-                            columns["time_zone"].append("unknown")
-                            columns["value"].append(numeric_value)
-                            columns["value_state"].append(value_state)
-                            columns["series_id"].append(entry.series_id)
-                            columns["facts_id"].append(entry.facts[0].facts_id)
-                            columns["source_unit"].append(source_unit_value)
-                            for col_name, idx in retained_pairs:
-                                columns[col_name].append(fields[idx])
-                            for col_name in null_columns:
-                                columns[col_name].append(None)
-
-                            batch_len += 1
-                            if batch_len >= CL_DGA_ROWS_PER_BATCH:
-                                count = batch_len
-                                batch_len = 0
-                                yield _flush(count)
-                        if batch_len > 0:
+                        batch_len += 1
+                        if batch_len >= CL_DGA_ROWS_PER_BATCH:
                             count = batch_len
                             batch_len = 0
                             yield _flush(count)
-                    finally:
-                        state.path.unlink(missing_ok=True)
-        finally:
-            spill_dir.cleanup()
+                    if batch_len > 0:
+                        count = batch_len
+                        batch_len = 0
+                        yield _flush(count)
+                finally:
+                    state.path.unlink(missing_ok=True)
 
-    batch_iter = batches()
-    weakref.finalize(batch_iter, spill_dir.cleanup)
     return ObservationBatchStream(
         observed_source_columns=CL_DGA_SOURCE_COLUMNS,
-        batches=batch_iter,
+        batches=_SpillClosingIterator(batches(), spill_dir.cleanup),
         expected_publisher_records=total_rows,
         expected_emitted_rows=total_rows,
         expected_inventory_sha256=inventory_sha256,

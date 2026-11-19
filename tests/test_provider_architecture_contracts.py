@@ -59,6 +59,8 @@ def test_runtime_declarations_transitively_do_not_import_maintainer_roles() -> N
                     "rivretrieve._internal.catalogue_origins",
                 }, (provider, module, names)
                 pending.extend(name.removeprefix(prefix) for name in names if name.startswith(prefix))
+                if isinstance(node, ast.ImportFrom) and node.module == prefix[:-1]:
+                    pending.extend(alias.name for alias in node.names if alias.name != "*")
 
 
 def _tree(path: Path) -> ast.Module:

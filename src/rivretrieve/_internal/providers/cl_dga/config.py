@@ -27,6 +27,40 @@ class ClDgaSourceCoordinates:
     value_column: str
 
 
+DAILY_HEADER: Final[tuple[str, ...]] = (
+    "CODIGO ESTACION",
+    "NOMBRE ESTACION",
+    "COD_REGION",
+    "REGION",
+    "COMUNA",
+    "LAT",
+    "LONG",
+    "UTM_ESTE",
+    "UTM_NORTE",
+    "ALTITUD",
+    "FECHA",
+    "Caudal_diario",
+    "Unidad",
+)
+
+MONTHLY_HEADER: Final[tuple[str, ...]] = (
+    "CODIGO ESTACION",
+    "NOMBRE ESTACION",
+    "COD_REGION",
+    "REGION",
+    "COMUNA",
+    "LAT",
+    "LONG",
+    "UTM_ESTE",
+    "UTM_NORTE",
+    "ALTITUD",
+    "Año",
+    "Mes",
+    "Caudal_Medio_mensual",
+    "Unidad",
+)
+
+
 config: Final[ProviderConfig] = ProviderConfig(
     zone=ZoneValue("unknown"),
     products={

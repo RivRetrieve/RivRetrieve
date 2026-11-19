@@ -206,6 +206,18 @@ def test_dated_providers_refuse_undated_source_vintage(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="source_vintage"):
         ca_eccc_declaration.observations.compile(request)
 
+    from rivretrieve._internal.providers.ca_eccc.bulk import HydatCompileRequest
+
+    with pytest.raises(ValueError, match="source_vintage"):
+        HydatCompileRequest(
+            publisher_artifact=artifact,
+            destination=StoreRoot(tmp_path / "hydat_store"),
+            publisher_url="https://collaboration.cmc.ec.gc.ca/cmc/hydrometrics/www/Hydat_sqlite3_20260802.zip",
+            source_vintage=None,  # type: ignore[arg-type]
+            built_at=datetime(2026, 11, 19, 12, 0, tzinfo=UTC),
+            compiler_version="0.1.5",
+        )
+
     assert isinstance(pl_imgw_declaration.observations, BulkStore)
     with pytest.raises(ValueError, match="source_vintage"):
         pl_imgw_declaration.observations.compile(request)

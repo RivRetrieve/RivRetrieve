@@ -27,6 +27,12 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, st
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.providers.cl_dga.config import (
+    DAILY_HEADER as DAILY_HEADER,
+)
+from rivretrieve._internal.providers.cl_dga.config import (
+    MONTHLY_HEADER as MONTHLY_HEADER,
+)
 from rivretrieve._internal.providers.cl_dga.origins import DGA_CITATION, unsigned_dms_coordinate
 from rivretrieve._internal.providers.cl_dga.series import SERIES_MAPPINGS
 
@@ -46,39 +52,6 @@ _STATION_METADATA_COLUMNS: tuple[str, ...] = (
     "UTM_ESTE",
     "UTM_NORTE",
     "ALTITUD",
-)
-
-DAILY_HEADER: tuple[str, ...] = (
-    "CODIGO ESTACION",
-    "NOMBRE ESTACION",
-    "COD_REGION",
-    "REGION",
-    "COMUNA",
-    "LAT",
-    "LONG",
-    "UTM_ESTE",
-    "UTM_NORTE",
-    "ALTITUD",
-    "FECHA",
-    "Caudal_diario",
-    "Unidad",
-)
-
-MONTHLY_HEADER: tuple[str, ...] = (
-    "CODIGO ESTACION",
-    "NOMBRE ESTACION",
-    "COD_REGION",
-    "REGION",
-    "COMUNA",
-    "LAT",
-    "LONG",
-    "UTM_ESTE",
-    "UTM_NORTE",
-    "ALTITUD",
-    "Año",
-    "Mes",
-    "Caudal_Medio_mensual",
-    "Unidad",
 )
 
 INFORME_NACIONAL_HEADERS: tuple[str, ...] = (

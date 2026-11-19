@@ -343,6 +343,9 @@ def test_compile_cl_dga_preserves_duplicates_metadata_special_values_and_sorts_u
         "nan_value",
         "inf_value",
         "spaced_value",
+        "malformed_quote",
+        "nul_byte",
+        "plus_sign_value",
     ],
 )
 def test_compile_cl_dga_rejects_malformed_archives_and_rows(tmp_path: Path, case: str) -> None:
@@ -427,6 +430,24 @@ def test_compile_cl_dga_rejects_malformed_archives_and_rows(tmp_path: Path, case
         _daily_zip(daily, [("01001002", "01/01/2020", "inf")])
     elif case == "spaced_value":
         _daily_zip(daily, [("01001002", "01/01/2020", " 1.0")])
+    elif case == "malformed_quote":
+        fields = list(_station_fields())
+        fields[1] = '"RIO"X'
+        _write_text_zip(
+            daily,
+            "caudal_diario_historico.txt",
+            (_csv_line(DAILY_HEADER) + _csv_line((*fields, "01/01/2020", "1.0", "m3/s"))).encode(),
+        )
+    elif case == "nul_byte":
+        fields = list(_station_fields())
+        fields[1] = "RIO\x00CAQUENA"
+        _write_text_zip(
+            daily,
+            "caudal_diario_historico.txt",
+            (_csv_line(DAILY_HEADER) + _csv_line((*fields, "01/01/2020", "1.0", "m3/s"))).encode(),
+        )
+    elif case == "plus_sign_value":
+        _daily_zip(daily, [("01001002", "01/01/2020", "+1.0")])
 
     with pytest.raises((ValueError, zipfile.BadZipFile)):
         compile_cl_dga(
@@ -676,3 +697,61 @@ def test_cl_dga_end_to_end_public_api_windows_refresh_and_bundle(
 
     rr.clear_cache("cl_dga")
     assert rr.cache_status("cl_dga").presence is StorePresence.ABSENT
+
+
+def test_decode_cl_dga_abandoned_unsorted_sort_closes_sqlite_before_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import gc
+    import sqlite3
+    import tempfile
+
+    from rivretrieve._internal.providers.cl_dga import bulk as bulk_mod
+
+    monkeypatch.setattr(bulk_mod, "CL_DGA_ROWS_PER_BATCH", 1)
+    daily = _daily_zip(
+        tmp_path / "caudal_diario_historico.zip",
+        [("02112007", "01/01/2024", "1.0"), ("01001002", "01/01/2024", "2.0")],
+    )
+    monthly = _monthly_zip(
+        tmp_path / "caudal_medio_mensual_historico.zip",
+        [("01001002", "2024", "1", "3.0")],
+    )
+
+    events: list[str] = []
+    real_connect = sqlite3.connect
+    real_cleanup = tempfile.TemporaryDirectory.cleanup
+
+    class TrackedConnection:
+        def __init__(self, conn: sqlite3.Connection) -> None:
+            self._conn = conn
+
+        def __getattr__(self, name: str):
+            return getattr(self._conn, name)
+
+        def close(self) -> None:
+            events.append("sqlite_close")
+            self._conn.close()
+
+    def tracked_connect(*args, **kwargs):
+        return TrackedConnection(real_connect(*args, **kwargs))
+
+    def tracked_cleanup(self: tempfile.TemporaryDirectory[str]) -> None:
+        if Path(self.name).name.startswith(".cl-dga-spill-"):
+            events.append("spill_cleanup")
+        real_cleanup(self)
+
+    monkeypatch.setattr(bulk_mod.sqlite3, "connect", tracked_connect)
+    monkeypatch.setattr(tempfile.TemporaryDirectory, "cleanup", tracked_cleanup)
+
+    workspace = tmp_path / "work"
+    workspace.mkdir()
+    stream = bulk_mod.decode_cl_dga_batches((daily, monthly), workspace=workspace)
+    iterator = iter(stream.batches)
+    next(iterator)
+    assert events == []
+    del iterator, stream
+    gc.collect()
+
+    assert events == ["sqlite_close", "spill_cleanup"]
+    assert not list(workspace.glob(".cl-dga-spill-*"))
