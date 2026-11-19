@@ -252,6 +252,73 @@ def test_cl_dga_series_mappings_and_catalogue_descriptions() -> None:
     assert [item.native_coordinate for item in described.descriptions] == ["Caudal_diario", "Caudal_Medio_mensual"]
 
 
+def test_cl_dga_series_admission_and_physical_filters() -> None:
+    from pathlib import Path
+
+    import rivretrieve as rr
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.cl_dga.series import SERIES_MAPPINGS
+    from rivretrieve._internal.source_series import (
+        ClippingAxis,
+        EvidenceState,
+        PhysicalPredicate,
+        SeriesScope,
+        admission,
+    )
+
+    daily = SERIES_MAPPINGS["discharge_daily"].physical_facts()
+    monthly = SERIES_MAPPINGS["discharge_monthly_mean"].physical_facts()
+
+    for facts, expected_axis in (
+        (daily, ClippingAxis.CALENDAR_DATE),
+        (monthly, ClippingAxis.SOURCE_TIMESTAMP),
+    ):
+        decision = admission(facts)
+        assert decision.status == "supported"
+        assert decision.factor == 1.0
+        assert decision.target_unit == "m3/s"
+        assert facts.clipping_axis is expected_axis
+        assert facts.label_time is None
+        for field_name in (
+            "temporal_support",
+            "day_definition",
+            "timestamp_anchor",
+            "time_zone",
+            "vertical_reference",
+            "vertical_datum",
+        ):
+            assert getattr(facts, field_name).state is EvidenceState.NOT_ESTABLISHED
+
+    catalogue_dir = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/cl_dga/catalogue"
+    packaged = load_packaged_catalogue_artifact(catalogue_dir, on_issue="raise")
+    products = {row["product_id"]: row for row in packaged.products.iter_rows(named=True)}
+    assert products["discharge_daily"]["statistic"] == "unknown"
+    assert products["discharge_monthly_mean"]["statistic"] == "mean"
+    assert all(row["period_anchor"] == "unknown" and row["period_type"] == "unknown" for row in products.values())
+
+    broad = rr.find(provider="cl_dga", station="01001001", quantity="discharge")
+    assert {item.product_id for item in broad.series} == {"discharge_daily", "discharge_monthly_mean"}
+
+    means = rr.find(provider="cl_dga", station="01001001", quantity="discharge", statistic="mean")
+    assert {item.product_id for item in means.series} == {"discharge_monthly_mean"}
+
+    daily_found = rr.find(provider="cl_dga", station="01001001", frequency="daily")
+    assert {item.product_id for item in daily_found.series} == {"discharge_daily"}
+
+    monthly_found = rr.find(provider="cl_dga", station="01001001", frequency="monthly")
+    assert {item.product_id for item in monthly_found.series} == {"discharge_monthly_mean"}
+
+    for field_name, probe_value in (
+        ("temporal_support", "calendar_day"),
+        ("temporal_support", "calendar_month"),
+        ("day_definition", "UTC-04:00"),
+        ("timestamp_anchor", "start"),
+        ("time_zone", "America/Santiago"),
+    ):
+        scope = SeriesScope(predicates=(PhysicalPredicate(field=field_name, value=probe_value),))
+        assert not any(scope.matches(item) for item in broad.series)
+
+
 def test_cl_dga_station_metadata_projection_withholds_altitud_zero() -> None:
     from datetime import UTC, datetime
 
