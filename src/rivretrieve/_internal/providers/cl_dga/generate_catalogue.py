@@ -483,7 +483,11 @@ def build_catalogue(
         "live_stations": False,
         "live_products": False,
         "live_station_products": False,
-        "bulk_observations": "none",
+        "bulk_observations": (
+            "true: explicit download compiles the publisher's historical daily and monthly discharge ZIP archives "
+            "into a local native observation store; retrieval reads that store without network access or implicit "
+            "download; no authentication required"
+        ),
         "catalogue_version": checked_on.isoformat(),
         "license": statements.get("license"),
         "citation": DGA_CITATION,

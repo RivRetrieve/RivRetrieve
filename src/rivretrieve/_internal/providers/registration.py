@@ -55,7 +55,13 @@ class DownloadedBulkArtifact:
 
     path: Path
     url: str
-    source_vintage: date
+    source_vintage: date | None
+
+    def __post_init__(self) -> None:
+        if self.source_vintage is not None and (
+            not isinstance(self.source_vintage, date) or isinstance(self.source_vintage, datetime)
+        ):
+            raise TypeError("downloaded bulk artifact source_vintage must be a datetime.date or None")
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +78,9 @@ class BulkCompileRequest:
     def __post_init__(self) -> None:
         if not self.publisher_artifacts:
             raise ValueError("bulk compile requires at least one publisher artifact")
+        dated = [item for item in self.publisher_artifacts if item.source_vintage is not None]
+        if 0 < len(dated) < len(self.publisher_artifacts):
+            raise ValueError("bulk compile artifacts cannot mix dated and undated source_vintage values")
 
     @property
     def publisher_artifact(self) -> Path:
@@ -82,8 +91,11 @@ class BulkCompileRequest:
         return self.publisher_artifacts[0].url
 
     @property
-    def source_vintage(self) -> date:
-        return max(item.source_vintage for item in self.publisher_artifacts)
+    def source_vintage(self) -> date | None:
+        vintages = [item.source_vintage for item in self.publisher_artifacts if item.source_vintage is not None]
+        if not vintages:
+            return None
+        return max(vintages)
 
 
 BulkDownload = Callable[[BulkDownloadRequest], tuple[DownloadedBulkArtifact, ...]]

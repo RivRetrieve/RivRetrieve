@@ -233,6 +233,7 @@ def test_cl_dga_series_mappings_and_catalogue_descriptions() -> None:
     assert monthly_facts.statistic.value == "mean"
     assert monthly_facts.temporal_support.state is EvidenceState.NOT_ESTABLISHED
     assert monthly_facts.time_zone.state is EvidenceState.NOT_ESTABLISHED
+    assert monthly_facts.clipping_axis is ClippingAxis.CALENDAR_MONTH
     assert monthly.published_id == "Caudal_Medio_mensual"
 
     artifact = PackagedCatalogArtifact(
@@ -271,7 +272,7 @@ def test_cl_dga_series_admission_and_physical_filters() -> None:
 
     for facts, expected_axis in (
         (daily, ClippingAxis.CALENDAR_DATE),
-        (monthly, ClippingAxis.SOURCE_TIMESTAMP),
+        (monthly, ClippingAxis.CALENDAR_MONTH),
     ):
         decision = admission(facts)
         assert decision.status == "supported"
@@ -712,7 +713,7 @@ def test_generate_catalogue_excludes_non_zip_stations_and_enforces_conflicts() -
         ),
     )
     assert cat.provider_info["license"] is None
-    assert cat.provider_info["bulk_observations"] == "none"
+    assert str(cat.provider_info["bulk_observations"]).startswith("true:")
     assert "condiciones-de-uso" in str(cat.provider_info["citation"])
     assert cat.stations["station_id"].to_list() == ["01001002", "02112007"]
     assert cat.stations["crs"].to_list() == ["unknown", "unknown"]

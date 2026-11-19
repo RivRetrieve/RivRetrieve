@@ -336,6 +336,7 @@ class ImgwCompileRequest:
             raise ValueError("duplicate publisher artifact URL")
         covered: set[tuple[int, int]] = set()
         previous: tuple[int, int] | None = None
+        expected_vintages: list[date] = []
         for item in artifacts:
             basename = Path(item.url.rsplit("/", 1)[-1]).name
             if not basename or not item.path.name.endswith(basename):
@@ -348,8 +349,10 @@ class ImgwCompileRequest:
             )
             if item.url != expected_url:
                 raise ValueError("IMGW artifact URL is not the exact official period template")
-            if item.source_vintage != _imgw_period_source_vintage((year, months)):
+            expected_vintage = _imgw_period_source_vintage((year, months))
+            if item.source_vintage != expected_vintage:
                 raise ValueError("IMGW source vintage must equal the publisher-labelled coverage end")
+            expected_vintages.append(expected_vintage)
             interval = tuple((year, month) for month in months)
             if previous is not None and interval[0] <= previous:
                 raise ValueError("IMGW publisher artifacts are out of period order or overlap")
@@ -362,7 +365,7 @@ class ImgwCompileRequest:
                 raise ValueError("IMGW publisher artifact coverage overlaps")
             covered.update(interval)
             previous = interval[-1]
-        if self.source_vintage != max(item.source_vintage for item in artifacts):
+        if self.source_vintage != max(expected_vintages):
             raise ValueError("IMGW aggregate source vintage must equal the latest artifact coverage end")
 
 
@@ -379,7 +382,7 @@ def compile_imgw(request: ImgwCompileRequest) -> ValidatedStore:
             provider_id=PROVIDER_ID,
             compiler_version=request.compiler_version,
             built_at=request.built_at,
-            source_vintage=max(item.source_vintage for item in downloaded),
+            source_vintage=request.source_vintage,
             publisher_artifact=provenance[0],
             publisher_artifacts=provenance,
             source_columns=IMGW_SOURCE_COLUMNS,

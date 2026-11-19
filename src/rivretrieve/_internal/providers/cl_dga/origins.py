@@ -253,7 +253,7 @@ def build_acquisition_provenance(
         provenance,
         tuple(fact for fact in CATALOGUE_FACT_UNIVERSE if fact.startswith("provider.")),
         transformation=Transformation(
-            name="RivRetrieve Chile DGA identity and catalogue-only capabilities",
+            name="RivRetrieve Chile DGA identity and bulk observation capabilities",
             kind="authored_constant",
             external_inputs=(),
         ),

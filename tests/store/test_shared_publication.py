@@ -157,12 +157,14 @@ def test_staging_cleanup_preserves_initiating_failure(tmp_path, monkeypatch):
     assert audit_store(request.destination, request.provider_id).rows_checked == 1
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "pl_imgw"])
+@pytest.mark.parametrize("provider", ["ca_eccc", "cl_dga", "pl_imgw"])
 def test_public_download_owns_transfer_compile_and_workspace(
     tmp_path, monkeypatch, stub_packaged_catalogue_artifact, provider
 ):
+    import zipfile
     from datetime import date
     from importlib import import_module
+    from io import BytesIO
     from types import SimpleNamespace
 
     import rivretrieve as rr
@@ -182,6 +184,24 @@ def test_public_download_owns_transfer_compile_and_workspace(
         _hydat(source)
         responses = None
         content = source.read_bytes()
+    elif provider == "cl_dga":
+        from rivretrieve._internal.providers.cl_dga.bulk import CL_DGA_DAILY_URL, CL_DGA_MONTHLY_URL
+        from rivretrieve._internal.providers.cl_dga.generate_catalogue import DAILY_HEADER, MONTHLY_HEADER
+
+        station = ("01001002", "RIO", "15", "REG", "COM", "0175952 ", "0691525 ", "1", "1", "4400")
+        daily_buf, monthly_buf = BytesIO(), BytesIO()
+        with zipfile.ZipFile(daily_buf, "w") as zf:
+            zf.writestr(
+                "caudal_diario_historico.txt",
+                ",".join(DAILY_HEADER) + "\n" + ",".join((*station, "01/01/2020", "1.5", "m3/s")) + "\n",
+            )
+        with zipfile.ZipFile(monthly_buf, "w") as zf:
+            zf.writestr(
+                "caudal_medio_mensual_historico.txt",
+                ",".join(MONTHLY_HEADER) + "\n" + ",".join((*station, "2020", "1", "1.5", "m3/s")) + "\n",
+            )
+        responses = {CL_DGA_DAILY_URL: daily_buf.getvalue(), CL_DGA_MONTHLY_URL: monthly_buf.getvalue()}
+        content = b""
     else:
         source_bulk = import_module("rivretrieve._internal.providers.pl_imgw.bulk")
         monkeypatch.setattr(source_bulk, "FIRST_PUBLISHED_YEAR", 2022)
