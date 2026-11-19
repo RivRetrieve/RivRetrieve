@@ -171,6 +171,13 @@ requests; it does not create an exemption from MLIT's access guidance. MLIT also
 warns of slower responses during floods and directs real-time users to
 リアルタイム川の防災情報.
 
+Because of that guidance and the earlier HTTP 403, RivRetrieve paces jp_mlit
+requests at least 3 seconds apart, more conservatively than the 1-second shared
+default used for other providers. This is RivRetrieve's own precaution, not a
+numeric limit MLIT itself publishes, and it does not establish continued access.
+A retrieval covering many stations, quantities or years therefore takes longer
+than it would against a provider with the shared default pacing.
+
 Daily retrieval downloads annual files, and hourly retrieval downloads monthly
 files, even for a short requested period. Returned rows and observation
 annotations are clipped to the requested period before return.

@@ -1,4 +1,4 @@
-from dataclasses import fields
+from dataclasses import fields, replace
 from datetime import UTC, datetime
 from typing import Any, cast, get_type_hints
 
@@ -69,11 +69,13 @@ class RecordingSender:
 
 def make_client(
     actions: list[Action],
+    *,
+    policy: TransportPolicy = TRANSPORT_POLICY,
 ) -> tuple[HttpClient, RecordingSender, FakeClock, FakeSleeper]:
     clock = FakeClock()
     sleeper = FakeSleeper(clock)
     sender = RecordingSender(actions, clock)
-    return HttpClient(sender=sender, clock=clock, sleeper=sleeper), sender, clock, sleeper
+    return HttpClient(sender=sender, clock=clock, sleeper=sleeper, policy=policy), sender, clock, sleeper
 
 
 @pytest.mark.parametrize(
@@ -226,6 +228,22 @@ def test_rate_limit_waits_between_successive_calls_on_one_client() -> None:
     other_client.send(request)
     assert other_sender.started_at == [0.0]
     assert other_sleeper.calls == []
+
+
+def test_a_custom_policy_overrides_pacing_without_changing_the_shared_user_agent() -> None:
+    slower = replace(TRANSPORT_POLICY, minimum_interval_seconds=3.0)
+    client, sender, _, sleeper = make_client(
+        [(b"first", 200, "text/plain"), (b"second", 200, "text/plain")], policy=slower
+    )
+    request = TransportRequest(HttpMethod.GET, "https://source.example")
+
+    client.send(request)
+    client.send(request)
+
+    assert sender.started_at == [0.0, 3.0]
+    assert sleeper.calls == [3.0]
+    sent_request = cast("TransportRequest", sender.calls[0][0])
+    assert sent_request.headers["User-Agent"] == TRANSPORT_POLICY.user_agent
 
 
 @pytest.mark.parametrize(

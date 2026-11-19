@@ -130,7 +130,7 @@ def test_public_dat_failure_retains_html_and_cache_coverage(retained_evidence_ro
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     transport = _Chunks((2022,), "dat", _recording_paths(retained_evidence_root))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: transport)
     selection = rr.find(provider="jp_mlit", station=_STATION, quantity="stage", frequency="daily")
     selection = rr.pick(selection, series_id=tuple(series.series_id for series in selection.series))
     result = rr.fetch(
@@ -196,7 +196,7 @@ def test_hour_24_month_end_survives_failed_or_empty_neighbor_and_reuse(retained_
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     transport = Months()
-    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: transport)
     selected = rr.find(provider="jp_mlit", station=_STATION, quantity="stage", frequency="hourly")
     selected = rr.pick(selected, series_id=tuple(series.series_id for series in selected.series))
 

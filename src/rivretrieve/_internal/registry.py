@@ -52,6 +52,7 @@ if TYPE_CHECKING:
         BulkStore,
         CredentialExchangeBinding,
         CredentialHeaderBinding,
+        ProviderRateLimit,
         PublicArchiveAccess,
     )
     from rivretrieve._internal.transport import Transport
@@ -102,6 +103,7 @@ class _ProviderHandle:
     credential_headers: tuple[CredentialHeaderBinding, ...] = ()
     credential_exchange: CredentialExchangeBinding | None = None
     public_archive_access: PublicArchiveAccess | None = None
+    rate_limit: ProviderRateLimit | None = None
     _reader: StoreReader | None = None
 
     def info(self) -> ProviderInfo:
@@ -496,6 +498,7 @@ class ProviderRegistry:
         credential_headers: tuple[CredentialHeaderBinding, ...] = (),
         credential_exchange: CredentialExchangeBinding | None = None,
         public_archive_access: PublicArchiveAccess | None = None,
+        rate_limit: ProviderRateLimit | None = None,
     ) -> _ProviderHandle:
         if not _PROVIDER_ID_PATTERN.fullmatch(provider_id):
             raise FatalContractError(f"Provider ID has invalid format: {provider_id}")
@@ -546,6 +549,7 @@ class ProviderRegistry:
             credential_headers=credential_headers,
             credential_exchange=credential_exchange,
             public_archive_access=public_archive_access,
+            rate_limit=rate_limit,
         )
         self._providers[provider_id] = _ProviderRecord(
             provider_id=typed_provider_id,

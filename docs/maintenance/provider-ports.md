@@ -199,6 +199,17 @@ source-call origins, rows, identities, inventories, outcomes and issues.
 The [Lithuania fetcher](../../src/rivretrieve/_internal/providers/lt_lhmt/fetch.py)
 is a concrete example, not a universal source policy.
 
+The shared transport already paces every request at least one second apart and
+retries transient failures (see
+[`TRANSPORT_POLICY`](../../src/rivretrieve/_internal/transport.py)). When a
+source states its own stricter numeric request-rate limit, or its own access
+guidance calls for slower retrieval than that shared default (such as an
+explicit server-load warning), declare `ProviderDeclaration.rate_limit` with a
+[`ProviderRateLimit`](../../src/rivretrieve/_internal/providers/registration.py)
+instead of adding provider-specific sleeps or retry logic in `fetch`. The
+[Japan declaration](../../src/rivretrieve/_internal/providers/jp_mlit/declaration.py)
+is a concrete example. See issue #698.
+
 **Outcome:** a defensible acquisition contract, including failure and completeness
 limits. Identify necessary shared-engine changes rather than hiding them in source code.
 

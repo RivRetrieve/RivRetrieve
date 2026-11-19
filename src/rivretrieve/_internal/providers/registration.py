@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -141,6 +142,26 @@ class PublicArchiveAccess:
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderRateLimit:
+    """Declare a provider's own minimum pacing between successive live source requests.
+
+    This overrides only the shared transport's inter-request pacing
+    (``TransportPolicy.minimum_interval_seconds``) for this provider; every other
+    transport behavior, including timeouts, retries and the shared user agent,
+    stays the engine default. Declare this when a source states its own numeric
+    request-rate limit, or when a source's own access guidance calls for
+    retrieval slower than the shared default, such as an explicit server-load
+    warning. See issue #698.
+    """
+
+    minimum_interval_seconds: float
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.minimum_interval_seconds) or self.minimum_interval_seconds <= 0:
+            raise ValueError("provider rate limit interval must be finite and positive")
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderDeclaration:
     """State one provider's packaged catalogue, observation kind, and credentials."""
 
@@ -151,6 +172,7 @@ class ProviderDeclaration:
     credential_headers: tuple[CredentialHeaderBinding, ...] = ()
     credential_exchange: CredentialExchangeBinding | None = None
     public_archive_access: PublicArchiveAccess | None = None
+    rate_limit: ProviderRateLimit | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,6 +241,11 @@ def load_manifest(
         if set(value.required_credentials) & set(value.optional_credentials):
             raise FatalContractError(f"Provider {provider_id} required and optional credentials overlap")
         credentials = (*value.required_credentials, *value.optional_credentials)
+        rate_limit = value.rate_limit
+        if rate_limit is not None and (
+            not isinstance(rate_limit, ProviderRateLimit) or not isinstance(value.observations, LiveStages)
+        ):
+            raise FatalContractError(f"Provider {provider_id} rate limit requires LiveStages")
         archive = value.public_archive_access
         if archive is not None:
             if not isinstance(archive, PublicArchiveAccess) or not isinstance(value.observations, LiveStages):
@@ -368,6 +395,7 @@ def register_manifest(
                 credential_headers=declaration.credential_headers,
                 credential_exchange=declaration.credential_exchange,
                 public_archive_access=declaration.public_archive_access,
+                rate_limit=declaration.rate_limit,
             )
         elif isinstance(kind, BulkStore):
             registry.register(

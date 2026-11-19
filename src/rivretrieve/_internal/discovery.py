@@ -36,6 +36,7 @@ from rivretrieve._internal.source_series import RetrievalOutcome, SeriesScope, S
 from rivretrieve._internal.station_map import StationMap
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import (
+    TRANSPORT_POLICY,
     AuthenticatedTransport,
     AuthenticationCapability,
     CredentialHeader,
@@ -1414,8 +1415,13 @@ def _resolve_credentials(
 
 def _credentialed_transport(provider_id: str, values: dict[str, str]) -> Transport:
     """credential transport : ProviderCredentialValues × (HeaderBindings | CredentialExchangeBinding) → Transport."""
-    base = HttpClient()
     handle = _registry.get(provider_id)
+    rate_limit = handle.rate_limit
+    base = (
+        HttpClient()
+        if rate_limit is None
+        else HttpClient(policy=replace(TRANSPORT_POLICY, minimum_interval_seconds=rate_limit.minimum_interval_seconds))
+    )
     exchange = handle.credential_exchange
     if exchange is not None:
         headers = tuple(
