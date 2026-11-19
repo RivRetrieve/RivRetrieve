@@ -566,13 +566,16 @@ def test_cl_dga_end_to_end_public_api_windows_refresh_and_bundle(
     import rivretrieve as rr
     from rivretrieve._internal import bulk as bulk_shared
     from rivretrieve._internal import discovery
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
     from rivretrieve._internal.issues import FatalContractError
     from rivretrieve._internal.observations import ReceiptAuthorship, StoreExcerptReceipt
     from rivretrieve._internal.providers.cl_dga.bulk import CL_DGA_DAILY_URL, CL_DGA_MONTHLY_URL
-    from rivretrieve._internal.providers.cl_dga.series import source_series
-    from rivretrieve._internal.selection import _Selection
-    from rivretrieve._internal.source_series import ClippingAxis, OutcomeStatus, SeriesScope
+    from rivretrieve._internal.providers.cl_dga.declaration import declaration
+    from rivretrieve._internal.source_series import ClippingAxis, OutcomeStatus
     from rivretrieve._internal.store import StorePresence
+
+    packaged = load_packaged_catalogue_artifact(declaration.catalogue, on_issue="raise")
+    assert str(packaged.provider_info["bulk_observations"]).startswith("true:")
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
 
@@ -658,12 +661,9 @@ def test_cl_dga_end_to_end_public_api_windows_refresh_and_bundle(
     assert restored_receipt.source_vintage is None
 
     # Monthly CALENDAR_MONTH mid-month and year-boundary windows.
-    monthly_series = source_series("01001002", "discharge_monthly_mean")
-    assert monthly_series.facts[0].clipping_axis is ClippingAxis.CALENDAR_MONTH
-    monthly_sel = _Selection(
-        scope=SeriesScope(provider_ids=("cl_dga",), station_ids=("01001002",), product_ids=("discharge_monthly_mean",)),
-        known_series=(monthly_series,),
-    )
+    monthly_sel = rr.find(provider="cl_dga", station="01001002", frequency="monthly")
+    assert len(monthly_sel.series) == 1
+    assert monthly_sel.series[0].facts[0].clipping_axis is ClippingAxis.CALENDAR_MONTH
     mid_month = rr.fetch(monthly_sel, start="2024-02-10", end="2024-02-20", on_issue="raise")
     assert mid_month.data["time"].to_list() == [datetime(2024, 2, 1)]
     assert mid_month.data["value"].to_list() == [3.1]
