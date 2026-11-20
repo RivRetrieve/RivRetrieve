@@ -78,7 +78,6 @@ RESEARCHED_COUNTRY = {
     "CIV": "Ivory Coast",
     "CMR": "Cameroon",
     "GIN": "Guinea",
-    "HRV": "Croatia",
     "IDN": "Indonesia",
     "ISR": "Israel",
     "LKA": "Sri Lanka",
