@@ -169,7 +169,6 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `fi_syke` | live | none | 2543 | 2543 | 5086 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
-| `jp_mlit` | live | none | 1023 | 0 | 4092 | 0 |
 | `lt_lhmt` | live | none | 97 | 0 | 194 | 0 |
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
 | `pe_senamhi` | live | none | 771 | 1170 | 10395 | 0 |
@@ -291,10 +290,6 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `fr_hubeau` | `water_temperature_reported` | `degC` |
 | `fr_hydroportail` | `discharge_instantaneous` | `m3/s` |
 | `fr_hydroportail` | `stage_instantaneous` | `m` |
-| `jp_mlit` | `discharge_daily` | `m3/s` |
-| `jp_mlit` | `discharge_hourly` | `m3/s` |
-| `jp_mlit` | `stage_daily` | `m` |
-| `jp_mlit` | `stage_hourly` | `m` |
 | `lt_lhmt` | `discharge_daily_mean` | `m3/s` |
 | `lt_lhmt` | `stage_daily_mean` | `m` |
 | `no_nve` | `discharge_daily_mean` | `m3/s` |

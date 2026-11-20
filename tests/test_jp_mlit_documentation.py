@@ -12,7 +12,7 @@ from polars.testing import assert_frame_equal
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport
 
-pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues", "registered_jp_mlit")
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -68,5 +68,6 @@ def test_japan_page_catalogue_count_and_unknown_statistic():
     selection = rr.find(provider="jp_mlit", station="305071285512040", quantity="discharge", frequency="daily")
     assert rr.series(selection)["statistic"].to_list() == [None]
     index = (ROOT / "docs/README.md").read_text()
-    for provider in ("jp_mlit", "ch_foen", "fr_hubeau", "fr_hydroportail"):
+    assert "(providers/jp_mlit.md)" not in index
+    for provider in ("ch_foen", "fr_hubeau", "fr_hydroportail"):
         assert f"(providers/{provider}.md)" in index

@@ -9,7 +9,7 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
-pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues", "registered_jp_mlit")
 
 CASES = (
     (

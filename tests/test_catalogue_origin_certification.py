@@ -638,10 +638,12 @@ def test_provider_declarations_preserve_reviewed_identity_and_coordinate_fields(
 
     assert frozenset(DECLARATIONS) == ORIGIN_GATE_ENROLLED_PROVIDERS
     # za_dws is origin-gate-enrolled with a real packaged catalogue but
-    # deliberately absent from BUILTIN_PROVIDER_IDS. dk_vanda was in that same
-    # state during Effort #800, step 5, until its real catalogue was built and
-    # it was registered as a LiveStages provider (see declaration.py).
-    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
+    # deliberately absent from BUILTIN_PROVIDER_IDS. jp_mlit is temporarily
+    # disabled from BUILTIN_PROVIDER_IDS (see #926) while keeping its enrolled
+    # catalogue intact. dk_vanda was in that same state during Effort #800,
+    # step 5, until its real catalogue was built and it was registered as a
+    # LiveStages provider (see declaration.py).
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("jp_mlit"), ProviderId("za_dws")}
     assert {(provider, case.identity): case.declarations for provider, case in CASES} == _expected_declarations()
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 

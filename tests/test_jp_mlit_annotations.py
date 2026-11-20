@@ -29,7 +29,7 @@ from rivretrieve._internal.source_annotations import CATALOG_SCHEMA, AnnotationS
 from rivretrieve._internal.source_series import OutcomeStatus
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
 
-pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues", "registered_jp_mlit")
 
 _STATION = "301011281104010"
 _RETRIEVED_AT = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)

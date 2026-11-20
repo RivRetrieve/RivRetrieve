@@ -19,7 +19,6 @@ EXPECTED_PRODUCT_IDS = [
     "discharge_daily_mean",
     "discharge_daily_mean_bruto",
     "discharge_daily_mean_consistido",
-    "discharge_hourly",
     "discharge_hourly_mean",
     "discharge_instantaneous",
     "discharge_reported",
@@ -150,12 +149,6 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "water_temperature_reported",
     ],
     "fr_hydroportail": ["discharge_instantaneous", "stage_instantaneous"],
-    "jp_mlit": [
-        "discharge_daily",
-        "discharge_hourly",
-        "stage_daily",
-        "stage_hourly",
-    ],
     "lt_lhmt": [
         "discharge_daily_mean",
         "stage_daily_mean",
@@ -258,7 +251,6 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "fi_syke",
         "fr_hubeau",
         "fr_hydroportail",
-        "jp_mlit",
         "lt_lhmt",
         "no_nve",
         "pe_senamhi",
@@ -274,6 +266,11 @@ def test_providers_empty_registry_returns_default_providers() -> None:
 def test_south_african_station_discovery_is_not_offered() -> None:
     with pytest.raises(UnknownProviderError):
         rr.find(provider="za_dws", station="X3H001")
+
+
+def test_japan_mlit_station_discovery_is_temporarily_disabled() -> None:
+    with pytest.raises(UnknownProviderError):
+        rr.find(provider="jp_mlit", station="305071285512040")
 
 
 def test_providers_sorted_independent_of_registration_order(

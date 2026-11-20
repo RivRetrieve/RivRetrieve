@@ -389,7 +389,7 @@ def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts(reta
     assert omitted.receipts.entries == ()
 
 
-@pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.usefixtures("reuse_packaged_catalogues", "registered_jp_mlit")
 @pytest.mark.recorded(
     "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
     "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",

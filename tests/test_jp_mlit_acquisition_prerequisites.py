@@ -11,7 +11,7 @@ from rivretrieve._internal import discovery
 from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason, TransportResponse
 
-pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues", "registered_jp_mlit")
 
 _STATION = "301011281104010"
 _DAT_URL = "http://www1.river.go.jp/dat/dload/download/authored.dat"

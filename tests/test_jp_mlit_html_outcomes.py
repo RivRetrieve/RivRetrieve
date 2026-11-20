@@ -11,7 +11,7 @@ from rivretrieve._internal.issues import IssuePolicyError
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 from tests.test_jp_mlit_observations import _recording_paths
 
-pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues", "registered_jp_mlit")
 
 _STATION = "301011281104010"
 

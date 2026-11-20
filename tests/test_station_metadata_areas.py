@@ -345,7 +345,7 @@ def test_formatted_string_is_not_parsed() -> None:
     assert result["source_unit"].item() == "km²"
 
 
-def test_nonbreaking_space_and_blank_are_values() -> None:
+def test_nonbreaking_space_and_blank_are_values(registered_jp_mlit) -> None:
     nonbreaking = _areas(rr.find(provider="jp_mlit", station="301011281104310"))
     assert json.loads(nonbreaking["source_value"].item()) == "\u00a0"
     assert nonbreaking["state"].item() == "value"

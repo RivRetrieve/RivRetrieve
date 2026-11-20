@@ -1144,7 +1144,7 @@ def test_inline_unit_declarations_reject_conflicting_or_nonquantity_units(role, 
         ("ch_foen", "2004", "Station altitude", "elevation", "432 m a.s.l.", "432", "m", "LN02"),
     ],
 )
-@pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.usefixtures("reuse_packaged_catalogues", "registered_jp_mlit")
 def test_public_quantity_presentation_examples_are_offline(
     provider, station, field, role, raw, numeric, unit, datum, monkeypatch
 ):

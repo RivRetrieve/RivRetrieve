@@ -111,7 +111,7 @@ def test_independent_chunks_retain_bounds_failures_and_prerequisites(retained_ev
     assert len(result.value) == 6 - len(failed) * (2 if role == "html" else 1)
 
 
-@pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.usefixtures("reuse_packaged_catalogues", "registered_jp_mlit")
 @pytest.mark.recorded(
     "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
     "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
@@ -150,7 +150,7 @@ def test_public_dat_failure_retains_html_and_cache_coverage(retained_evidence_ro
     assert transport.calls[before:] == [(2022, "html"), (2022, "dat")]
 
 
-@pytest.mark.usefixtures("reuse_packaged_catalogues")
+@pytest.mark.usefixtures("reuse_packaged_catalogues", "registered_jp_mlit")
 @pytest.mark.recorded(
     "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
     "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",

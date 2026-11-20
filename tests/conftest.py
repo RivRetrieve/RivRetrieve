@@ -29,6 +29,14 @@ def registered_dws_catalogue():
     registration.register_manifest(_registry, ("za_dws",))
 
 
+@pytest.fixture
+def registered_jp_mlit():
+    """Opt in to the temporarily disabled jp_mlit provider without offering it by default."""
+    from rivretrieve._internal.providers import registration
+
+    registration.register_manifest(_registry, ("jp_mlit",))
+
+
 @pytest.fixture(autouse=True)
 def isolated_runtime_inputs(monkeypatch, tmp_path):
     """Keep ambient configuration out without replacing test-selected stores or dotenv."""
