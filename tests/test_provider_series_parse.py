@@ -80,7 +80,6 @@ def test_invalid_internal_tags_remain_fatal(retained_evidence_root: Path):
     "tests/test_data/ba_fhmzbih_2010_Q_1Y.recording.json",
     "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
     "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
-    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
     "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
     "tests/test_data/th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json",
 )
@@ -89,10 +88,8 @@ def test_other_recorded_provider_parsers_retain_series_context(retained_evidence
 
     from rivretrieve._internal.engine import SourceCoordinates
     from rivretrieve._internal.providers.cz_chmi.fetch import CzChmiRequestCoordinates
-    from rivretrieve._internal.providers.jp_mlit.fetch import JpMlitPayloadCoordinates
 
     cases = (
-        ("jp_mlit", "301011281104010", "discharge_daily", "jp_mlit_discharge_daily_2023_dat.recording.json"),
         ("ba_fhmzbih", "2010", "discharge_reported", "ba_fhmzbih_2010_Q_1Y.recording.json"),
         ("cz_chmi", "0-203-1-000400", "discharge_daily_mean", "cz_chmi_0-203-1-000400_DQ_2023.recording.json"),
         ("fr_hubeau", "1011000101", "discharge_daily_mean", "fr_hubeau_1011000101_QmnJ_padded.recording.json"),
@@ -106,8 +103,6 @@ def test_other_recorded_provider_parsers_retain_series_context(retained_evidence
         coordinates = config.products[ProductId(product)].coordinates
         if provider == "cz_chmi":
             coordinates = SourceCoordinates(CzChmiRequestCoordinates("DQ", ("QD",)))
-        if provider == "jp_mlit":
-            coordinates = SourceCoordinates(JpMlitPayloadCoordinates(7, "dat"))
         source = replace(
             template,
             station_products=((station, ProductId(product)),),

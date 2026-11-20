@@ -80,7 +80,6 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         # Native inventories acquired 2026-09-21; these are snapshot checks.
         "fr_hubeau": (20_297, 0, 0),
         "fr_hydroportail": (12_818, 0, 0),
-        "jp_mlit": (4_092, 0, 0),
         "lt_lhmt": (194, 0, 0),
         "no_nve": (44_118, 0, 0),
         "pl_imgw": (3_903, 0, 0),
@@ -110,7 +109,6 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "cz_chmi",
         "fr_hubeau",
         "fr_hydroportail",
-        "jp_mlit",
         "lt_lhmt",
         "no_nve",
         "pl_imgw",

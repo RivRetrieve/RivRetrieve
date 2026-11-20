@@ -16,7 +16,6 @@ exclude_docs: |
   provider_ports/**
   overrides/**
   _generated/**
-  providers/jp_mlit.md
 
 theme:
   name: material

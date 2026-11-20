@@ -9,21 +9,9 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
-pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues", "registered_jp_mlit")
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 CASES = (
-    (
-        "jp_mlit",
-        "301011281104010",
-        tuple(
-            f"jp_mlit_{quantity}_{frequency}_2023_{role}.recording.json"
-            for quantity in ("stage", "discharge")
-            for frequency in ("hourly", "daily")
-            for role in ("html", "dat")
-        ),
-        "2023-01-03",
-        "2023-01-29T23:00:00",
-    ),
     (
         "cz_chmi",
         "0-203-1-000400",
@@ -45,14 +33,6 @@ CASES = (
 @pytest.mark.recorded(
     "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
     "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
-    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
     "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
     "tests/test_data/th_thaiwater_1373273_2026-07-30_2026-08-04.recording.json",
 )
@@ -70,13 +50,6 @@ def test_public_discovery_retrieval_and_bundle_have_identical_facts(
     assert restored.source_series == result.source_series
     pl_testing.assert_frame_equal(restored.data, result.data)
     assert all(entry.content in {envelope.content for envelope in envelopes} for entry in result.receipts.entries)
-
-
-def test_japan_cadence_does_not_establish_interval_or_anchor():
-    selection = rr.find(provider="jp_mlit", station="301011281104010")
-    assert all(f.temporal_support.value is None for s in selection.series for f in s.facts)
-    assert all(f.timestamp_anchor.value is None for s in selection.series for f in s.facts)
-    assert all(f.statistic.value is None for s in selection.series for f in s.facts)
 
 
 def test_thaiwater_published_sea_level_reference_is_not_a_named_datum():
@@ -102,14 +75,6 @@ def test_daily_means_retain_support_without_inventing_interval_anchor():
 @pytest.mark.recorded(
     "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
     "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
-    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
     "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
     "tests/test_data/th_thaiwater_1373273_2026-07-30_2026-08-04.recording.json",
 )
@@ -155,7 +120,7 @@ def test_explicit_series_cache_refresh_preserves_siblings_facts_and_native_value
 def test_mapped_builtin_facts_retain_source_references():
     from importlib import import_module
 
-    for provider in ("jp_mlit", "cz_chmi", "lt_lhmt", "th_thaiwater", "fr_hubeau", "fr_hydroportail", "ba_fhmzbih"):
+    for provider in ("cz_chmi", "lt_lhmt", "th_thaiwater", "fr_hubeau", "fr_hydroportail", "ba_fhmzbih"):
         mappings = import_module(f"rivretrieve._internal.providers.{provider}.config").SERIES_MAPPINGS
         for mapping in mappings.values():
             assert mapping.evidence
@@ -221,7 +186,7 @@ def test_product_tables_project_source_facts_without_independent_scientific_clai
 
     from rivretrieve._internal.source_series import admission
 
-    for provider in ("jp_mlit", "cz_chmi", "lt_lhmt", "th_thaiwater"):
+    for provider in ("cz_chmi", "lt_lhmt", "th_thaiwater"):
         module = import_module(f"rivretrieve._internal.providers.{provider}.generate_catalogue")
         mappings = import_module(f"rivretrieve._internal.providers.{provider}.config").SERIES_MAPPINGS
         for product in module.build_products().iter_rows(named=True):
@@ -236,14 +201,6 @@ def test_product_tables_project_source_facts_without_independent_scientific_clai
 @pytest.mark.recorded(
     "tests/test_data/cz_chmi_0-203-1-000400_DQ_2023.recording.json",
     "tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json",
-    "tests/test_data/jp_mlit_discharge_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_discharge_hourly_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_daily_2023_html.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",
-    "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
     "tests/test_data/lt_lhmt_anyksciu-vms_2023-06.recording.json",
     "tests/test_data/th_thaiwater_1373273_2026-07-30_2026-08-04.recording.json",
 )

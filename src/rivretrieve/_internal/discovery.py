@@ -759,10 +759,11 @@ def metadata(selection: _Selection, *, view: str = "summary") -> pl.DataFrame:
         separate entries. Water-body names are
         decoded strings. Area and elevation values remain JSON scalar text:
         json.loads distinguishes numbers from numeric-looking source strings.
-        In the supported Japanese, Bosnian and Swiss quantity fields, complete
+        In the supported Bosnian and Swiss quantity fields, complete
         numeric strings with explicit units keep their numeric text separately
-        from the unit. For example, '"142.00km2"' becomes '"142.00"' with unit
-        'km2'. Numeric spelling is preserved and still needs parsing for arithmetic.
+        from the unit. For example, '"1600.00 km²"' becomes '"1600.00"' with
+        unit 'km²'. Numeric spelling is preserved and still needs parsing for
+        arithmetic.
         In USGS alt_va, leading spaces, tabs and nonbreaking spaces are removed
         only from complete numeric strings: '" 0.00"' becomes '"0.00"', still a
         JSON string with unchanged numeric spelling, unit and datum.
