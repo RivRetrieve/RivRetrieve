@@ -91,7 +91,7 @@ class _AuthoredTransport:
 @pytest.fixture
 def authored(monkeypatch, tmp_path):
     transport = _AuthoredTransport()
-    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: transport)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     return transport
 

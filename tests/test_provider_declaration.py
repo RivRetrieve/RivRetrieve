@@ -20,6 +20,7 @@ from rivretrieve._internal.providers.registration import (
     CredentialHeaderBinding,
     LiveStages,
     ProviderDeclaration,
+    ProviderRateLimit,
     load_manifest,
     register_manifest,
 )
@@ -304,3 +305,37 @@ def test_exchange_declaration_refuses_invalid_contract(tmp_path, defect):
     declaration = replace(declaration, credential_exchange=exchange)
     with pytest.raises(FatalContractError):
         load_manifest(("xx_test",), declaration_loader=lambda _: declaration)
+
+
+def test_rate_limit_declaration_propagates_to_registry(tmp_path, stub_packaged_catalogue_artifact):
+    rate_limit = ProviderRateLimit(minimum_interval_seconds=3.0)
+    declaration = ProviderDeclaration(
+        tmp_path / "catalogue",
+        no_nve_declaration.declaration.observations,
+        rate_limit=rate_limit,
+    )
+    registry = ProviderRegistry()
+    register_manifest(
+        registry,
+        ("xx_test",),
+        declaration_loader=lambda _: declaration,
+        artifact_loader=lambda _: stub_packaged_catalogue_artifact("xx_test"),
+    )
+    assert registry.get("xx_test").rate_limit == rate_limit
+
+
+def test_rate_limit_requires_live_stages(tmp_path: Path) -> None:
+    declaration = ProviderDeclaration(
+        tmp_path / "catalogue",
+        CatalogueOnly(),
+        rate_limit=ProviderRateLimit(minimum_interval_seconds=3.0),
+    )
+
+    with pytest.raises(FatalContractError, match="rate limit requires LiveStages"):
+        load_manifest(("xx_test",), declaration_loader=lambda _provider_id: declaration)
+
+
+@pytest.mark.parametrize("minimum_interval_seconds", [0.0, -1.0, float("inf"), float("nan")])
+def test_rate_limit_rejects_non_positive_or_non_finite_interval(minimum_interval_seconds: float) -> None:
+    with pytest.raises(ValueError, match="finite and positive"):
+        ProviderRateLimit(minimum_interval_seconds=minimum_interval_seconds)

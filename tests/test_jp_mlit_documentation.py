@@ -36,7 +36,7 @@ def test_japan_page_examples_and_displayed_outputs(monkeypatch, tmp_path, retain
         return send(request)
 
     monkeypatch.setattr(replay, "send", tracked_send)
-    monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
     namespace = {}

@@ -576,10 +576,12 @@ class HttpClient:
         sender: Sender = _send_with_requests,
         clock: Clock | None = None,
         sleeper: Sleeper = time.sleep,
+        policy: TransportPolicy = TRANSPORT_POLICY,
     ) -> None:
         self._sender = sender
         self._clock = clock if clock is not None else _SystemClock()
         self._sleeper = sleeper
+        self._policy = policy
         self._last_attempt_started_at: float | None = None
 
     def send(self, request: _ExecutableTransportRequest) -> TransportResponse:
@@ -599,15 +601,15 @@ class HttpClient:
         replay_safe = request.method in {HttpMethod.GET, HttpMethod.HEAD} or request.replay_safety is ReplaySafety.SAFE
         retry_delay = 0.0
         attempt_traces: list[TransportAttempt] = []
-        for attempt in range(1, TRANSPORT_POLICY.max_attempts + 1):
+        for attempt in range(1, self._policy.max_attempts + 1):
             if attempt > 1:
                 self._sleeper(retry_delay)
-            if attempt < TRANSPORT_POLICY.max_attempts:
-                retry_delay = TRANSPORT_POLICY.backoff_seconds[attempt - 1]
+            if attempt < self._policy.max_attempts:
+                retry_delay = self._policy.backoff_seconds[attempt - 1]
             self._wait_for_rate_limit()
 
             try:
-                sent = self._sender(prepared_request, TRANSPORT_POLICY.timeout_seconds)
+                sent = self._sender(prepared_request, self._policy.timeout_seconds)
                 response = sent if isinstance(sent, SenderResponse) else SenderResponse(*sent)
             except (requests.RequestException, TimeoutError, ConnectionError) as exception:
                 category = _sender_failure_category(exception)
@@ -624,7 +626,7 @@ class HttpClient:
                     reason = TransportFailureReason.TERMINAL_SENDER_FAILURE
                 elif not replay_safe:
                     reason = TransportFailureReason.REPLAY_UNSAFE
-                elif attempt == TRANSPORT_POLICY.max_attempts:
+                elif attempt == self._policy.max_attempts:
                     reason = TransportFailureReason.RETRY_EXHAUSTED
                 else:
                     continue
@@ -657,9 +659,9 @@ class HttpClient:
                 attempts=attempt,
                 attempt_traces=tuple(attempt_traces),
             )
-            if status_code not in TRANSPORT_POLICY.retryable_status_codes:
+            if status_code not in self._policy.retryable_status_codes:
                 return received
-            if not replay_safe or attempt == TRANSPORT_POLICY.max_attempts:
+            if not replay_safe or attempt == self._policy.max_attempts:
                 raise TransportFailure(
                     request,
                     TransportFailureReason.RETRY_EXHAUSTED if replay_safe else TransportFailureReason.REPLAY_UNSAFE,
@@ -670,7 +672,7 @@ class HttpClient:
                 )
             guidance = _retry_after_seconds(response.retry_after, received.retrieved_at)
             if guidance is not None:
-                if guidance > TRANSPORT_POLICY.max_retry_delay_seconds:
+                if guidance > self._policy.max_retry_delay_seconds:
                     raise TransportFailure(
                         request,
                         TransportFailureReason.RETRY_DELAY_EXCEEDED,
@@ -683,12 +685,11 @@ class HttpClient:
 
         raise AssertionError("retry loop exhausted without a terminal result")
 
-    @staticmethod
-    def _with_policy_headers(request: _ExecutableTransportRequest) -> _ExecutableTransportRequest:
+    def _with_policy_headers(self, request: _ExecutableTransportRequest) -> _ExecutableTransportRequest:
         headers = dict(request.headers)
         if any(name.lower() == "user-agent" for name in headers):
             raise ValueError("Source request must not provide a User-Agent header")
-        headers["User-Agent"] = TRANSPORT_POLICY.user_agent
+        headers["User-Agent"] = self._policy.user_agent
         if isinstance(request, _CredentialTransportRequest):
             public = TransportRequest(
                 request.method, request.url, request.params, {}, request.body, replay_safety=request.replay_safety
@@ -713,7 +714,7 @@ class HttpClient:
         now = self._clock.monotonic()
         if self._last_attempt_started_at is not None:
             elapsed = now - self._last_attempt_started_at
-            remaining = TRANSPORT_POLICY.minimum_interval_seconds - elapsed
+            remaining = self._policy.minimum_interval_seconds - elapsed
             if remaining > 0:
                 self._sleeper(remaining)
                 now = self._clock.monotonic()

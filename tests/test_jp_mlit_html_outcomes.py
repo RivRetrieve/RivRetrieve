@@ -89,7 +89,7 @@ class _DerivativeTransport:
 )
 def test_public_html_derivative_retains_identified_outcome_and_siblings(retained_evidence_root, monkeypatch, defect):
     transport = _DerivativeTransport(defect, _recording_paths(retained_evidence_root))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: transport)
     result = rr.fetch(
         rr.find(provider="jp_mlit", station=_STATION),
         start="2023-01-03",
@@ -155,7 +155,7 @@ def test_public_html_unsupported_obeys_issue_policy(retained_evidence_root, monk
     "tests/test_data/jp_mlit_stage_hourly_2023_html.recording.json",
 )
 def test_exact_html_and_dat_have_only_dat_outcomes(retained_evidence_root, monkeypatch):
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(_recording_paths(retained_evidence_root)))
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: ReplayTransport(_recording_paths(retained_evidence_root)))
     result = rr.fetch(
         rr.find(provider="jp_mlit", station=_STATION),
         start="2023-01-03",
@@ -214,7 +214,7 @@ def test_internal_payload_defects_remain_fatal(retained_evidence_root, defect):
 @pytest.mark.parametrize("defect", ["wrong-unit", "no-data-marker"])
 def test_html_boundary_provenance_survives_without_receipts(retained_evidence_root, monkeypatch, defect):
     transport = _DerivativeTransport(defect, _recording_paths(retained_evidence_root))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: transport)
     result = rr.fetch(
         rr.find(provider="jp_mlit", station=_STATION),
         start="2023-01-03",
@@ -244,7 +244,7 @@ def test_html_boundary_provenance_survives_without_receipts(retained_evidence_ro
 def test_html_outcome_controls_explicit_series_cache_coverage(retained_evidence_root, monkeypatch, tmp_path, defect):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     transport = _DerivativeTransport(defect, _recording_paths(retained_evidence_root))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: transport)
     broad = rr.find(provider="jp_mlit", station=_STATION)
     selection = rr.pick(broad, series_id=tuple(s.series_id for s in broad.series))
     first = rr.fetch(

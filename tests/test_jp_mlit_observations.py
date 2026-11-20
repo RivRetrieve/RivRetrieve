@@ -403,7 +403,7 @@ def test_shared_engine_pads_windows_clips_rows_and_preserves_eight_receipts(reta
 def test_public_selection_uses_corrected_ids_and_exact_eight_call_replay(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(_recording_paths(retained_evidence_root)))
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: ReplayTransport(_recording_paths(retained_evidence_root)))
     selection = rr.find(provider="jp_mlit", station=_STATION)
     assert set(rr.as_frame(selection)["product_id"]) == set(_PRODUCTS)
     assert not any(product.endswith("_mean") for product in rr.as_frame(selection)["product_id"])

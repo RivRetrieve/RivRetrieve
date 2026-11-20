@@ -250,7 +250,7 @@ def test_jp_mlit_public_projection_clipping_cache_reuse_and_bundle_roundtrip(
 
     transport = _Transport()
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: transport)
 
     selection = rr.find(provider="jp_mlit", station=_STATION, quantity="discharge", frequency="hourly")
     assert rr.annotations(selection).is_empty()
@@ -332,7 +332,7 @@ def test_jp_mlit_daily_public_fetch_cache_reuse_and_bundle_roundtrip(
 
     transport = _Transport()
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
+    monkeypatch.setattr(discovery, "HttpClient", lambda **_: transport)
 
     selection = rr.find(provider="jp_mlit", station=_STATION, quantity="stage", frequency="daily")
     result = rr.fetch(selection, start="2023-02-01", end="2023-02-05", cache="reuse", on_issue="ignore")
