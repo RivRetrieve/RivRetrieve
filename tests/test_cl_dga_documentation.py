@@ -61,7 +61,14 @@ def test_cl_dga_page_catalogue_links_and_offline_selection(monkeypatch: pytest.M
 
     page = PAGE.read_text(encoding="utf-8")
     assert "\u2014" not in page
-    assert 'product="' not in page
+    for internal_token in (
+        'product="',
+        "product_id",
+        "discharge_daily",
+        "discharge_monthly_mean",
+        "result.outcomes",
+    ):
+        assert internal_token not in page
 
     blocks = re.findall(r"```python\n(.*?)```", page, re.DOTALL)
     assert len(blocks) == 3
@@ -152,6 +159,9 @@ def test_cl_dga_page_catalogue_links_and_offline_selection(monkeypatch: pytest.M
     ).row(0, named=True)
     assert zero_elev["state"] == "source_null"
     assert zero_elev["source_datum"] is None
+    elev_rows = source_meta.filter(source_meta["attribute_role"] == "elevation")
+    assert elev_rows.filter(elev_rows["state"] == "value").height == 700
+    assert elev_rows.filter(elev_rows["state"] == "source_null").height == 84
 
     descriptor = rr.describe("cl_dga")
     assert descriptor["name"] == "rivretrieve-cl_dga-catalogue"

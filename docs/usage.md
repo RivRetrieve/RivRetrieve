@@ -270,12 +270,13 @@ are included. Use ISO date strings, naive ISO datetime strings or naive Python
 
 Daily calendar labels use whole-date clipping. For established start-labelled
 calendar periods with a fixed calendar zone, bounds use that calendar while
-returned timestamps remain unchanged. Monthly and yearly labels preserve explicit
-datetime clock bounds. Year-and-month source labels without a day of month (such
-as Chile's monthly discharge archive) select by calendar-month overlap instead. For a UTC+1 calendar with UTC start labels, a February 2025
-date request includes `2025-01-31T23:00` and excludes `2025-02-28T23:00`, which
-labels March 1. Series with unknown calendar support retain source-timestamp
-clipping.
+returned timestamps remain unchanged. Monthly and yearly timestamp-labelled
+series preserve explicit datetime clock bounds. For a UTC+1 calendar with UTC
+start labels, a February 2025 date request includes `2025-01-31T23:00` and
+excludes `2025-02-28T23:00`, which labels March 1. Year-and-month source labels
+without a day of month (such as Chile's monthly discharge archive) select by
+calendar-month overlap instead, while timestamped series with unknown calendar
+support retain source-timestamp clipping.
 
 Read `time` together with `time_zone`. An `unknown` zone supplies no basis for UTC
 conversion. The function `to_utc(result)` requires established zones for every row and

@@ -12,7 +12,7 @@
 | Station metadata | Station name and elevation. See [Fields by provider](../station-metadata.md#fields-by-provider) |
 | Credentials | None |
 | Access | Explicit national DGA archive download, then local retrieval |
-| Terms | MOP non-commercial reproduction with clear citation; commercial use and adaptation require written permission; dataset-specific licence unestablished. See [Terms and citation](#terms-and-citation) |
+| Terms | MOP non-commercial reproduction with clear citation; written permission required for promotional materials or other media; dataset-specific licence for commercial reuse or adaptation unestablished. See [Terms and citation](#terms-and-citation) |
 | Agency documentation | [Visor de Mapas y Estadística Hidrométrica (`mapas2`)](https://mapas2.mop.gob.cl/), [Manual de usuario `mapas2` (PDF)](https://mapas2.mop.gob.cl/manual_usuario_mapas2.pdf) |
 
 First prepare the national archive. This transfers and compiles both national
@@ -152,7 +152,8 @@ preserves any existing committed store.
 Both products publish discharge in cubic metres per second (`m3/s`) and need no
 unit conversion. `Caudal_diario` has no established statistic in DGA's files or
 manuals, so `statistic` remains unknown. As a consequence, filtering with
-`statistic="mean"` selects only `discharge_monthly_mean` (`Caudal_Medio_mensual`).
+`statistic="mean"` selects only the monthly mean series (`Caudal_Medio_mensual`),
+and combining `frequency="daily"` with `statistic="mean"` matches nothing.
 To retrieve daily discharge, request `frequency="daily"` without `statistic="mean"`,
 as shown in the example above. RivRetrieve reads DGA's published monthly means
 directly; it does not calculate them from the daily series.
