@@ -271,7 +271,8 @@ are included. Use ISO date strings, naive ISO datetime strings or naive Python
 Daily calendar labels use whole-date clipping. For established start-labelled
 calendar periods with a fixed calendar zone, bounds use that calendar while
 returned timestamps remain unchanged. Monthly and yearly labels preserve explicit
-datetime clock bounds. For a UTC+1 calendar with UTC start labels, a February 2025
+datetime clock bounds. Year-and-month source labels without a day of month (such
+as Chile's monthly discharge archive) select by calendar-month overlap instead. For a UTC+1 calendar with UTC start labels, a February 2025
 date request includes `2025-01-31T23:00` and excludes `2025-02-28T23:00`, which
 labels March 1. Series with unknown calendar support retain source-timestamp
 clipping.
@@ -408,12 +409,12 @@ may be a symlink; managed provider directories and store contents must not be.
 Clear removes terminal managed symlinks without following their targets and never
 removes unrelated siblings.
 
-Canada (`ca_eccc`) and Poland (`pl_imgw`) read compiled stores from bulk downloads.
+Canada (`ca_eccc`), Chile (`cl_dga`) and Poland (`pl_imgw`) read compiled stores from bulk downloads.
 Without a store, retrieval returns an empty result and an issue. Use
 `download(provider)` to authorize the national download, which can require substantial
 bandwidth and disk space. Both `bypass` and `reuse` read these stores; `refresh`
-raises. Use `download` to replace a store. Polish daily archive series have no
-archive-wide statistic, so they do not match an explicit mean-statistic filter.
+raises. Use `download` to replace a store. Chilean and Polish daily archive series have no
+established archive-wide statistic, so they do not match an explicit mean-statistic filter.
 
 ### S3-compatible object storage
 
