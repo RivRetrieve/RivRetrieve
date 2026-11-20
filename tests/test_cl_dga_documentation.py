@@ -40,6 +40,19 @@ _DAILY_WEB_STEM = "mapas2-caudal-diario-nacional-zip"
 _MONTHLY_WEB_STEM = "mapas2-caudal-medio-mensual-nacional-zip"
 
 
+def _output_examples(page: str) -> list[tuple[str, str]]:
+    blocks = list(re.finditer(r"```(python|text)\n(.*?)```", page, re.DOTALL))
+    matched: list[tuple[str, str]] = []
+    for index, block in enumerate(blocks[:-1]):
+        if block.group(1) != "python":
+            continue
+        following = blocks[index + 1]
+        between = page[block.end() : following.start()]
+        if following.group(1) == "text" and between in ("\n\nOutput:\n\n", "\n\nOutput for the verified copy:\n\n"):
+            matched.append((block.group(2), following.group(2)))
+    return matched
+
+
 def _verify_capture(web_root: Path, stem: str, expected_url: str) -> Path:
     body_path = web_root / f"{stem}.zip"
     receipt = json.loads((web_root / f"{stem}.receipt.json").read_text(encoding="utf-8"))
@@ -75,6 +88,10 @@ def test_cl_dga_page_catalogue_links_and_offline_selection(monkeypatch: pytest.M
     for block in blocks:
         compile(block, str(PAGE), "exec")
     assert 'rr.download("cl_dga")' in blocks[0]
+    examples = _output_examples(page)
+    assert len(examples) == 2
+    assert examples[0][0] == blocks[1]
+    assert examples[1][0] == blocks[2]
 
     expected_header = (
         "| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |"
@@ -192,11 +209,7 @@ def test_cl_dga_page_examples_replay_retained_archives(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     page = PAGE.read_text(encoding="utf-8")
-    matched = re.findall(
-        r"```python\n(.*?)```\n\nOutput(?: for the verified copy)?:\n\n```text\n(.*?)```",
-        page,
-        re.DOTALL,
-    )
+    matched = _output_examples(page)
     assert len(matched) == 2
 
     web_root = retained_evidence_root / _SCOPE / "web"
