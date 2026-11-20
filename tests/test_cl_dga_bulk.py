@@ -677,6 +677,11 @@ def test_cl_dga_end_to_end_public_api_windows_refresh_and_bundle(
     assert empty_res.data.is_empty()
     assert empty_res.outcomes[0].status == OutcomeStatus.EMPTY
 
+    # cache="refresh" on bulk provider refuses explicitly before modifying store or transport.
+    with pytest.raises(FatalContractError, match=r'rivretrieve\.download\("cl_dga"\)'):
+        rr.fetch(daily_sel, start="2024-01-01", end="2024-01-02", cache="refresh")
+    assert len(http_methods) == 2
+
     # Failed refresh preserves the prior certified store intact.
     fail_http = True
     with pytest.raises(FatalContractError, match="HTTP 503"):
