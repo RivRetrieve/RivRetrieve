@@ -136,3 +136,93 @@ def test_incomplete_hubeau_cursor_links_actual_http_retry_attempts():
     unresolved = next(item for item in result.outcomes if item.status is OutcomeStatus.UNRESOLVED)
     assert unresolved.calls == expected
     assert len(expected) == 4
+
+
+@pytest.mark.parametrize(
+    ("product", "station", "expected_url", "expected_params", "next_url", "page1_row", "page2_row"),
+    [
+        (
+            ProductId("discharge_daily_mean"),
+            STATION,
+            "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab",
+            {
+                "code_entite": STATION,
+                "date_debut_obs_elab": "2000-01-01",
+                "date_fin_obs_elab": "2000-01-02",
+                "grandeur_hydro_elab": "QmnJ",
+                "size": 2500,
+            },
+            "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab?cursor=page2&size=2500",
+            {
+                "code_station": STATION,
+                "grandeur_hydro_elab": "QmnJ",
+                "date_obs_elab": "2000-01-01",
+                "resultat_obs_elab": 12,
+            },
+            {
+                "code_station": STATION,
+                "grandeur_hydro_elab": "QmnJ",
+                "date_obs_elab": "2000-01-02",
+                "resultat_obs_elab": 14,
+            },
+        ),
+        (
+            ProductId("water_temperature_reported"),
+            "01001336",
+            "https://hubeau.eaufrance.fr/api/v1/temperature/chronique",
+            {
+                "code_station": "01001336",
+                "date_debut_mesure": "2008-07-09",
+                "date_fin_mesure": "2008-07-10",
+                "size": 2500,
+            },
+            "https://hubeau.eaufrance.fr/api/v1/temperature/chronique?page=2&size=2500",
+            {
+                "code_station": "01001336",
+                "code_parametre": "1301",
+                "code_unite": "27",
+                "symbole_unite": "°C",
+                "date_mesure_temp": "2008-07-09",
+                "heure_mesure_temp": "11:00:00",
+                "resultat": 14.2,
+            },
+            {
+                "code_station": "01001336",
+                "code_parametre": "1301",
+                "code_unite": "27",
+                "symbole_unite": "°C",
+                "date_mesure_temp": "2008-07-09",
+                "heure_mesure_temp": "12:00:00",
+                "resultat": 14.5,
+            },
+        ),
+    ],
+)
+def test_hubeau_fetch_requests_page_size_2500_and_follows_next_without_original_params(
+    product, station, expected_url, expected_params, next_url, page1_row, page2_row
+):
+    first_body = json.dumps({"data": [page1_row], "next": next_url}).encode()
+    second_body = json.dumps({"data": [page2_row], "next": None}).encode()
+    transport = Transport(first_body, second_body)
+    start = expected_params.get("date_debut_obs_elab") or expected_params["date_debut_mesure"]
+    stop = expected_params.get("date_fin_obs_elab") or expected_params["date_fin_mesure"]
+    bounds = engine._make_fetch_window(
+        engine.WindowEndpoint.from_datetime(datetime.fromisoformat(start)),
+        engine.WindowEndpoint.from_datetime(datetime.fromisoformat(stop)),
+    )
+    result = fetch(
+        (station,),
+        (product,),
+        {product: (engine.RenderedWindow(start, stop),)},
+        bounds,
+        config(),
+        transport,
+    )
+    assert not result.failed_requests
+    assert not result.issues
+    assert len(result.value) == 2
+    assert len(transport.requests) == 2
+    assert transport.requests[0].url == expected_url
+    assert dict(transport.requests[0].params or {}) == expected_params
+    assert transport.requests[1].url == next_url
+    assert transport.requests[1].params is None

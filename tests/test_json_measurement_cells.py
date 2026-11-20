@@ -21,7 +21,7 @@ CASES = (
         {"quantity": "discharge", "frequency": "daily", "statistic": "mean"},
         "2025-01-03",
         "2025-01-03",
-        ("fr_hubeau_1011000101_QmnJ_padded.recording.json",),
+        ("fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",),
         "resultat_obs_elab",
         1,
     ),
@@ -31,7 +31,7 @@ CASES = (
         {"quantity": "temperature"},
         "2008-07-09",
         "2008-07-10T23:59:59",
-        tuple(f"fr_hubeau_01001336_temp_padded_p{i}.recording.json" for i in range(1, 6)),
+        ("fr_hubeau_size2500/fr_hubeau_01001336_temp_padded.recording.json",),
         "resultat",
         37,
     ),
@@ -85,12 +85,8 @@ def _measurement_content(content, field, mutation):
 @pytest.mark.parametrize("case", CASES, ids=[case[0] for case in CASES])
 @pytest.mark.parametrize("mutation", ["original", "null", "missing", "true", "false"])
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",
     "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
 )
 def test_france_parser_measurement_cells_keep_absence_distinct_from_null(retained_evidence_root: Path, case, mutation):
@@ -129,12 +125,8 @@ def test_france_parser_measurement_cells_keep_absence_distinct_from_null(retaine
 @pytest.mark.parametrize("mutation", ["original", "null", "missing"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",
     "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
 )
 def test_public_france_measurement_cells_keep_absence_distinct_from_null(
@@ -180,17 +172,21 @@ def test_public_france_measurement_cells_keep_absence_distinct_from_null(
 @pytest.mark.parametrize("mutation", ["missing", "true", "false"])
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",
 )
 def test_bad_daily_measurement_does_not_discard_independent_recorded_statistic(
     retained_evidence_root: Path, monkeypatch, mutation
 ):
     mean = read_recording(
-        retained_evidence_root / "tests/test_data" / "fr_hubeau_1011000101_QmnJ_padded.recording.json"
+        retained_evidence_root
+        / "tests/test_data/fr_hubeau_size2500"
+        / "fr_hubeau_1011000101_QmnJ_padded.recording.json"
     )
     maximum = read_recording(
-        retained_evidence_root / "tests/test_data" / "fr_hubeau_1011000101_QIXnJ_padded.recording.json"
+        retained_evidence_root
+        / "tests/test_data/fr_hubeau_size2500"
+        / "fr_hubeau_1011000101_QIXnJ_padded.recording.json"
     )
     replay = MeasurementReplay((mean, maximum), "resultat_obs_elab", mutation, selected_content=mean.content)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)

@@ -499,21 +499,17 @@ def test_fr_hubeau_public_fetch_cache_reuse_pick_and_bundle_roundtrip(
 
 
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_HIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_padded.recording.json",
 )
 def test_fr_hubeau_recorded_routes_attach_exact_source_annotations(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
-    data_dir = retained_evidence_root / "tests/test_data"
+    data_dir = retained_evidence_root / "tests/test_data/fr_hubeau_size2500"
 
     hydrometry = ReplayTransport(
         [
@@ -537,9 +533,7 @@ def test_fr_hubeau_recorded_routes_attach_exact_source_annotations(
     assert projected["code_methode"].to_list() == [8, 8, 0]
     assert projected["libelle_methode"].to_list() == ["Calculée", "Calculée", "Mesurée"]
 
-    temp_recordings = [
-        read_recording(data_dir / f"fr_hubeau_01001336_temp_padded_p{index}.recording.json") for index in range(1, 6)
-    ]
+    temp_recordings = [read_recording(data_dir / "fr_hubeau_01001336_temp_padded.recording.json")]
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(temp_recordings))
     temp_sel = rr.find(provider="fr_hubeau", station="01001336", quantity="temperature")
     temp_res = rr.fetch(temp_sel, start="2008-07-09", end="2008-07-10T23:59:59", cache="reuse", on_issue="raise")
