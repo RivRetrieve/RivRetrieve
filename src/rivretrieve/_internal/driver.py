@@ -462,10 +462,11 @@ def _requested_interval(
     return RequestedInterval(start, end)
 
 
-def _padded_interval(interval: RequestedInterval) -> FetchWindow:
+def _padded_interval(interval: RequestedInterval, *, padding: timedelta | None = None) -> FetchWindow:
+    resolved = _FETCH_WINDOW_PADDING if padding is None else padding
     return _make_fetch_window(
-        WindowEndpoint.from_datetime(interval.start - _FETCH_WINDOW_PADDING),
-        WindowEndpoint.from_datetime(interval.end + _FETCH_WINDOW_PADDING),
+        WindowEndpoint.from_datetime(interval.start - resolved),
+        WindowEndpoint.from_datetime(interval.end + resolved),
     )
 
 
@@ -2081,9 +2082,10 @@ def drive(
             if reuse is None:
                 if product not in declarations.products:
                     raise FatalContractError(f"Missing window declaration for {product}")
-                fetch_window = _padded_interval(interval)
+                declaration = declarations.products[product]
+                fetch_window = _padded_interval(interval, padding=declaration.fetch_padding)
                 _require_fetch_window_contains_requested(fetch_window, request.window)
-                rendered = plan_windows(fetch_window, declarations.products[product])
+                rendered = plan_windows(fetch_window, declaration)
             plans.append(
                 _PairRetrieval(
                     station, product, pair_scope, pair_series, interval, window, reuse, fetch_window, rendered
