@@ -114,7 +114,7 @@ def probes(retained_evidence_root: Path):
             "discharge_daily_mean",
             "2025-01-01",
             "2025-01-03",
-            ("fr_hubeau_1011000101_QmnJ_2025-01-01_03.recording.json",),
+            ("fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_2025-01-01_03.recording.json",),
             (3, "2025-01-01T00:00:00", "2025-01-03T00:00:00", "unknown"),
         ),
         _probe(
@@ -124,7 +124,7 @@ def probes(retained_evidence_root: Path):
             "discharge_daily_max",
             "2025-01-01",
             "2025-01-03",
-            ("fr_hubeau_1011000101_QIXnJ_2025-01-01_03.recording.json",),
+            ("fr_hubeau_size2500/fr_hubeau_1011000101_QIXnJ_2025-01-01_03.recording.json",),
             (3, "2025-01-01T00:00:00", "2025-01-03T00:00:00", "unknown"),
         ),
         _probe(
@@ -134,7 +134,7 @@ def probes(retained_evidence_root: Path):
             "stage_daily_max",
             "2025-01-01",
             "2025-01-03",
-            ("fr_hubeau_1011000101_HIXnJ_2025-01-01_03.recording.json",),
+            ("fr_hubeau_size2500/fr_hubeau_1011000101_HIXnJ_2025-01-01_03.recording.json",),
             (3, "2025-01-01T00:00:00", "2025-01-03T00:00:00", "unknown"),
         ),
         _probe(
@@ -143,12 +143,12 @@ def probes(retained_evidence_root: Path):
             "01001336",
             "water_temperature_reported",
             "2008-07-09",
-            "2008-07-10",
+            "2008-10-22",
             (
-                "fr_hubeau_01001336_temp_2008-07-09_10_p1.recording.json",
-                "fr_hubeau_01001336_temp_2008-07-09_10_p2.recording.json",
+                "fr_hubeau_size2500/fr_hubeau_01001336_temp_2008-07-09_2008-10-22_p1.recording.json",
+                "fr_hubeau_size2500/fr_hubeau_01001336_temp_2008-07-09_2008-10-22_p2.recording.json",
             ),
-            (37, "2008-07-09T11:00:00", "2008-07-10T23:00:00", "unknown"),
+            (2533, "2008-07-09T11:00:00", "2008-10-22T23:00:00", "unknown"),
         ),
         _probe(
             retained_evidence_root,
@@ -176,11 +176,11 @@ def test_france_temperature_support_remains_unknown():
     "tests/test_data/ba_fhmzbih_4024_Q_1Y.recording.json",
     "tests/test_data/ba_fhmzbih_4110_Tvode_1Y.recording.json",
     "tests/test_data/ba_fhmzbih_metadata_index.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_2008-07-09_10_p1.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_2008-07-09_10_p2.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_HIXnJ_2025-01-01_03.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QIXnJ_2025-01-01_03.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_2008-07-09_2008-10-22_p1.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_2008-07-09_2008-10-22_p2.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_HIXnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QIXnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_2025-01-01_03.recording.json",
     "tests/test_data/fr_hydroportail_historical_H.recording.json",
     "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
 )
@@ -191,26 +191,33 @@ def test_every_bosnia_and_france_product_has_exact_live_probe(probes):
 
 
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_01001336_temp_2008-07-09_10_p1.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_2008-07-09_10_p2.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_HIXnJ_2025-01-01_03.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QIXnJ_2025-01-01_03.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_2008-07-09_2008-10-22_p1.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_2008-07-09_2008-10-22_p2.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_HIXnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QIXnJ_2025-01-01_03.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_2025-01-01_03.recording.json",
 )
 def test_france_uses_current_daily_parameter_names_and_next_url_without_original_parameters(
     retained_evidence_root: Path,
 ):
     first = read_recording(
-        retained_evidence_root / "tests/test_data" / "fr_hubeau_01001336_temp_2008-07-09_10_p1.recording.json"
+        retained_evidence_root
+        / "tests/test_data"
+        / "fr_hubeau_size2500/fr_hubeau_01001336_temp_2008-07-09_2008-10-22_p1.recording.json"
     )
     second = read_recording(
-        retained_evidence_root / "tests/test_data" / "fr_hubeau_01001336_temp_2008-07-09_10_p2.recording.json"
+        retained_evidence_root
+        / "tests/test_data"
+        / "fr_hubeau_size2500/fr_hubeau_01001336_temp_2008-07-09_2008-10-22_p2.recording.json"
     )
     assert set(first.request.parameters or {}) == {"code_station", "date_debut_mesure", "date_fin_mesure", "size"}
+    assert (first.request.parameters or {})["size"] == 2500
     assert second.request.parameters is None
     for name in ("QmnJ", "QIXnJ", "HIXnJ"):
         request = read_recording(
-            retained_evidence_root / "tests/test_data" / f"fr_hubeau_1011000101_{name}_2025-01-01_03.recording.json"
+            retained_evidence_root
+            / "tests/test_data"
+            / f"fr_hubeau_size2500/fr_hubeau_1011000101_{name}_2025-01-01_03.recording.json"
         ).request
         assert set(request.parameters or {}) == {
             "code_entite",
@@ -219,3 +226,4 @@ def test_france_uses_current_daily_parameter_names_and_next_url_without_original
             "grandeur_hydro_elab",
             "size",
         }
+        assert (request.parameters or {})["size"] == 2500

@@ -36,6 +36,7 @@ from rivretrieve._internal.transport import HttpMethod, Transport, TransportFail
 
 _DAILY_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab"
 _TEMPERATURE_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/chronique"
+_PAGE_SIZE = 2500
 
 
 def fetch(
@@ -71,7 +72,7 @@ def fetch(
                         "date_debut_obs_elab": window.start,
                         "date_fin_obs_elab": window.stop,
                         "grandeur_hydro_elab": coordinates.field,
-                        "size": 20,
+                        "size": _PAGE_SIZE,
                     },
                     {"Accept": "application/json"},
                 )
@@ -83,7 +84,7 @@ def fetch(
                         "code_station": station,
                         "date_debut_mesure": window.start,
                         "date_fin_mesure": window.stop,
-                        "size": 20,
+                        "size": _PAGE_SIZE,
                     },
                     {"Accept": "application/json"},
                 )

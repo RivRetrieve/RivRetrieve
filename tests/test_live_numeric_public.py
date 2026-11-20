@@ -46,8 +46,8 @@ class NumericReplay(ReplayTransport):
     + [(mutation, "raise") for mutation in ("zero", "finite", "null")],
 )
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",
 )
 def test_public_numeric_representation_preserves_sibling_receipts_and_coverage(
     retained_evidence_root: Path, tmp_path, monkeypatch, mutation, policy
@@ -55,7 +55,9 @@ def test_public_numeric_representation_preserves_sibling_receipts_and_coverage(
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     recordings = tuple(
         read_recording(
-            retained_evidence_root / "tests/test_data" / f"fr_hubeau_1011000101_{field}_padded.recording.json"
+            retained_evidence_root
+            / "tests/test_data/fr_hubeau_size2500"
+            / f"fr_hubeau_1011000101_{field}_padded.recording.json"
         )
         for field in ("QmnJ", "QIXnJ")
     )
