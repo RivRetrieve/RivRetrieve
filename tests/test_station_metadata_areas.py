@@ -50,7 +50,6 @@ SOURCE_FIELDS = {
     "dk_vanda": ("stationId", {"catchmentAreaKm2": "km2"}),
     "fr_hubeau": ("code_station", {"superficie_topo": None, "superficie_reelle": None}),
     "fr_hydroportail": ("bookmarkCode", {}),
-    "jp_mlit": ("観測所記号", {"流域面積": None}),
     "lt_lhmt": ("code", {}),
     "no_nve": (
         "stationId",
@@ -277,12 +276,11 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         )
         assert_frame_equal(restored, native.select(identity, field))
         assert set(rows["source_dtype"]) == {str(native.schema[field])}
-        if provider in ("jp_mlit", "ba_fhmzbih"):
+        if provider == "ba_fhmzbih":
             # These retained native area columns contain only complete quantities
             # or blanks/nulls. This check does not certify missing source originals.
-            inline_unit = "km2" if provider == "jp_mlit" else "km²"
             assert rows["source_unit"].to_list() == [
-                inline_unit if value is not None and value.strip() else None for value in native[field]
+                "km²" if value is not None and value.strip() else None for value in native[field]
             ]
         else:
             assert set(rows["source_unit"]) == {unit}
@@ -345,10 +343,7 @@ def test_formatted_string_is_not_parsed() -> None:
     assert result["source_unit"].item() == "km²"
 
 
-def test_nonbreaking_space_and_blank_are_values() -> None:
-    nonbreaking = _areas(rr.find(provider="jp_mlit", station="301011281104310"))
-    assert json.loads(nonbreaking["source_value"].item()) == "\u00a0"
-    assert nonbreaking["state"].item() == "value"
+def test_blank_area_strings_are_values() -> None:
     bosnia = _areas(rr.find(provider="ba_fhmzbih"))
     blanks = bosnia.filter(pl.col("source_value") == '""')
     assert blanks.height == 10

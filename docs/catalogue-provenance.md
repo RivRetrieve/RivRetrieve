@@ -72,7 +72,7 @@ pinned by `tests/test_provider_row_withholding.py`.
 
 `ORIGIN_GATE_ENROLLED_PROVIDERS` in `catalogue_origins.py` is the executable certification boundary.
 Every provider in `ORIGIN_GATE_ENROLLED_PROVIDERS` has complete audited catalogue origin declarations.
-All twenty providers are enrolled: seventeen live providers, Canada and Poland with bulk
+All nineteen providers are enrolled: sixteen live providers, Canada and Poland with bulk
 stores, and the deferred South African catalogue. Certification concerns catalogue
 origins; it does not activate observation retrieval.
 

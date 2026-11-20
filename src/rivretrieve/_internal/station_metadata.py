@@ -60,8 +60,6 @@ SOURCE_SCALAR_DTYPES = frozenset({"String", "Boolean", "Float32", "Float64", *_I
 
 # Only these source fields have reviewed inline-unit summary presentation.
 _INLINE_QUANTITY_FIELDS: dict[tuple[str, str, str | None, str | None], tuple[str, str]] = {
-    ("jp_mlit", "drainage_area", None, "流域面積"): ("km2", "km2"),
-    ("jp_mlit", "elevation", None, "零点高"): ("m", "m"),
     ("ba_fhmzbih", "drainage_area", None, "metadata_CATCHMENT_SIZE"): ("km²", "km²"),
     ("ch_foen", "drainage_area", "station_page", "Catchment size"): ("km2", "km2"),
     ("ch_foen", "elevation", "station_page", "Station altitude"): ("m", "m a.s.l."),

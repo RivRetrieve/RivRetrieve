@@ -53,7 +53,6 @@ def _source(retained_evidence_root: Path, provider):
         "th_thaiwater": ("th_thaiwater_1373273_2026-08-01_2026-08-02.recording.json", "1373273", "stage_reported"),
         "cz_chmi": ("cz_chmi_0-203-1-000400_DQ_2023.recording.json", "0-203-1-000400", "stage_daily_mean"),
         "ba_fhmzbih": ("ba_fhmzbih_4024_H_1Y.recording.json", "4024", "stage_reported"),
-        "jp_mlit": ("jp_mlit_stage_hourly_2023_dat.recording.json", "301011281104010", "stage_hourly"),
     }
     filename, station, product = cases[provider]
     recording = read_recording(retained_evidence_root / "tests/test_data" / filename)
@@ -86,10 +85,6 @@ def _source(retained_evidence_root: Path, provider):
         from rivretrieve._internal.providers.cz_chmi.fetch import CzChmiRequestCoordinates
 
         source = replace(source, source_coordinates=SourceCoordinates(CzChmiRequestCoordinates("DQ", ("HD", "QD"))))
-    if provider == "jp_mlit":
-        from rivretrieve._internal.providers.jp_mlit.fetch import JpMlitPayloadCoordinates
-
-        source = replace(source, source_coordinates=SourceCoordinates(JpMlitPayloadCoordinates(2, "dat")))
     if provider == "no_nve":
         document = json.loads(source.content)
         sibling = read_recording(
@@ -136,10 +131,6 @@ def _mutated(provider, source, mutation):
         workbook.save(output)
         workbook.close()
         return output.getvalue()
-    if provider == "jp_mlit":
-        replacement = TOKENS[mutation].encode()
-        assert b"321.52, " in source.content
-        return source.content.replace(b"321.52, ", replacement + b", ", 1)
     document = json.loads(source.content)
     marker = "__NUMERIC_TEST_CELL__"
     if provider == "fr_hubeau":
@@ -187,14 +178,8 @@ def _mutated(provider, source, mutation):
                 "ba_fhmzbih",
                 ("tests/test_data/ba_fhmzbih_4024_H_1Y.recording.json",),
             ),
-            (
-                "jp_mlit",
-                ("tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json",),
-            ),
         )
         for mutation in (*BAD, "zero", "finite", "null")
-        # DAT missing slots use source flags, tested separately, not a JSON null token.
-        if (provider, mutation) != ("jp_mlit", "null")
     ],
 )
 def test_actual_live_parser_isolates_unrepresentable_numeric_cells(retained_evidence_root: Path, provider, mutation):
@@ -253,23 +238,6 @@ def test_ana_decimal_string_guard_preserves_consistency_sibling(retained_evidenc
         changed.rows.filter(changed.rows["series_id"] != target),
         baseline.rows.filter(baseline.rows["series_id"] != target),
     )
-
-
-@pytest.mark.recorded("tests/test_data/jp_mlit_stage_hourly_2023_dat.recording.json")
-def test_japan_published_missing_flag_remains_absent_not_invalid_numeric(retained_evidence_root: Path):
-    config, parse, source, baseline, _ = _source(retained_evidence_root, "jp_mlit")
-    content = source.content.replace(b"321.52, ", b"321.52,$", 1)
-    result = parse(replace(source, content=content), config)
-    assert result.rows.height == baseline.rows.height - 1
-    assert result.outcomes[0].status == "success"
-    assert result.issues == ()
-    ann = result.annotations.observation_tables["jp_mlit.observations"]
-    unmeasured = [
-        flag
-        for flag, measured in zip(ann.rows["flag"].to_list(), ann.rows["measured"].to_list(), strict=True)
-        if not measured
-    ]
-    assert unmeasured == ["$"]
 
 
 @pytest.mark.parametrize("wire_format", ["owf_csv", "pegel_bgis_json", "pegel_longterm_json"])

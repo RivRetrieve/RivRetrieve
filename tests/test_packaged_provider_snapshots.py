@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import date
 
-import polars as pl
 import pytest
 
 import rivretrieve as rr
@@ -45,20 +44,6 @@ def test_nve_packaged_snapshot_retains_availability_states() -> None:
     station_products = catalogue_reader("no_nve").read_station_products().data
     assert station_products.height == 44_118
     assert set(station_products["availability"].cast(str)) == {"available", "unavailable"}
-
-
-def test_jp_mlit_packaged_source_coordinates_are_adopted() -> None:
-    stations = catalogue_reader("jp_mlit").read_stations().data
-    expected = {
-        "302011282228100": (37.415277777777774, 140.48333333333332),
-        "302011282218050": (37.81111111111111, 140.4958333333333),
-        "308011288805010": (33.78333333333333, 132.8738888888889),
-    }
-    assert "307051287711040" not in stations["station_id"].to_list()
-    assert stations["crs"].unique().to_list() == ["unknown"]
-    for station_id, coordinates in expected.items():
-        row = stations.filter(pl.col("station_id") == station_id)
-        assert row.select("latitude", "longitude").row(0) == coordinates
 
 
 def test_lithuanian_packaged_snapshot_preserves_declared_scope() -> None:

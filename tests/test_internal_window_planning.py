@@ -69,14 +69,14 @@ def _pairs(windows: tuple[engine.RenderedWindow, ...]) -> tuple[tuple[str, str |
             (("01/01/2021", "31/12/2021"), ("01/01/2022", "01/01/2022")),
         ),
         (
-            "jp_mlit_hourly",
+            "year_month_date",
             datetime(2019, 12, 20),
             datetime(2020, 1, 10),
             _declaration("year-month", engine.WindowRenderingVocabulary.DATE),
             (("2019-12-01", "2019-12-31"), ("2020-01-01", "2020-01-31")),
         ),
         (
-            "jp_mlit_daily",
+            "year_date",
             datetime(2019, 12, 20),
             datetime(2020, 1, 10),
             _declaration("year", engine.WindowRenderingVocabulary.DATE),

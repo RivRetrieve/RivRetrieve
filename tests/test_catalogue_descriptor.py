@@ -663,7 +663,7 @@ def test_record_keys_expand_to_croissant_vocabulary(provider: str):
 def test_build_identity_comparison_preserves_source_content(name: str) -> None:
     from tests._catalogue import catalogue_content_without_build_identity
 
-    document = json.loads((_path("jp_mlit") / name).read_bytes())
+    document = json.loads((_path("cz_chmi") / name).read_bytes())
     expected = catalogue_content_without_build_identity(name, json.dumps(document).encode())
     if name == "provenance.json":
         document["build_inputs"] = {"test": "different selected revision"}

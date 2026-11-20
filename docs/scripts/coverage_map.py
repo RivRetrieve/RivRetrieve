@@ -40,7 +40,6 @@ PROVIDER_COUNTRY = {
     "fi_syke": "FIN",
     "fr_hubeau": "FRA",
     "fr_hydroportail": "FRA",
-    "jp_mlit": "JPN",
     "lt_lhmt": "LTU",
     "no_nve": "NOR",
     "pe_senamhi": "PER",

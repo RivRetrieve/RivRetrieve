@@ -77,9 +77,9 @@ def test_brazil_unacquired_station_support_is_not_source_silence() -> None:
     evidence = brazil.acquisition_provenance
     assert evidence is not None
     assert {group.reason for group in evidence.header.withheld_facts} == {"no_acquisition_record_established"}
-    japan = load_packaged_catalogue_artifact(catalogue_path("jp_mlit"), on_issue="raise")
-    assert japan.provider_info["license"] is None
-    origins_text = (catalogue_path("jp_mlit").parent / "origins.py").read_text(encoding="utf-8")
+    czech = load_packaged_catalogue_artifact(catalogue_path("cz_chmi"), on_issue="raise")
+    assert czech.provider_info["license"] is None
+    origins_text = (catalogue_path("cz_chmi").parent / "origins.py").read_text(encoding="utf-8")
     assert "NotPublished" in origins_text
 
 
@@ -115,8 +115,8 @@ def test_brazil_selection_retains_unknown_candidate_reason_and_source_evidence(p
 
 
 def test_packaged_evidence_rejects_retired_schema(tmp_path: Path) -> None:
-    copied = tmp_path / "jp_mlit"
-    shutil.copytree(catalogue_path("jp_mlit"), copied)
+    copied = tmp_path / "cz_chmi"
+    shutil.copytree(catalogue_path("cz_chmi"), copied)
     payload = json.loads((copied / "provenance.json").read_text(encoding="utf-8"))
     assert payload["schema_version"] == 3
     payload["schema_version"] = 1
@@ -247,8 +247,8 @@ def test_deferred_terms_match_completed_survey_exactly(
 
 def test_packaged_reader_normalizes_genuine_v2_to_the_same_evidence(tmp_path: Path) -> None:
     """Exercise the deliberate v2 file compatibility boundary, not a runtime facade."""
-    copied = tmp_path / "jp_mlit"
-    shutil.copytree(catalogue_path("jp_mlit"), copied)
+    copied = tmp_path / "cz_chmi"
+    shutil.copytree(catalogue_path("cz_chmi"), copied)
     expected = load_packaged_catalogue_artifact(copied, on_issue="raise").acquisition_provenance
     assert expected is not None
     (copied / "provenance.json").write_text(legacy_provenance(expected).model_dump_json())
