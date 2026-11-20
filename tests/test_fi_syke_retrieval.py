@@ -9,6 +9,7 @@ from types import MappingProxyType
 import polars as pl
 import pytest
 
+from rivretrieve._internal.catalogues.source_series import catalogue_series
 from rivretrieve._internal.engine import (
     FetchWindow,
     RenderedWindow,
@@ -20,7 +21,7 @@ from rivretrieve._internal.providers.fi_syke.config import config
 from rivretrieve._internal.providers.fi_syke.fetch import fetch
 from rivretrieve._internal.providers.fi_syke.parse import parse
 from rivretrieve._internal.providers.fi_syke.series import describe_series
-from rivretrieve._internal.source_series import OutcomeStatus, admission
+from rivretrieve._internal.source_series import OutcomeStatus, SeriesScope, admission, stable_id
 from rivretrieve._internal.transport import (
     TransportFailure,
     TransportFailureCategory,
@@ -28,6 +29,7 @@ from rivretrieve._internal.transport import (
     TransportRequest,
     TransportResponse,
 )
+from tests._catalogue import catalogue_reader
 
 _RETRIEVED_AT = datetime(2026, 11, 8, 12, 0, 0, tzinfo=UTC)
 _DISCHARGE = ProductId("discharge_reported")
@@ -188,3 +190,29 @@ def test_stage_series_carries_above_sea_level_vertical_reference_others_do_not()
     assert stage.vertical_reference.value == "above_sea_level"
     assert discharge.vertical_reference.state == "not_established"
     assert temperature.vertical_reference.state == "not_established"
+
+
+@pytest.mark.parametrize(
+    ("station_id", "product"),
+    [
+        ("894", _DISCHARGE),
+        ("1721", _STAGE),
+        ("1685", _TEMPERATURE),
+    ],
+)
+def test_describe_series_matches_packaged_catalogue_series_id_and_facts(station_id: str, product: ProductId) -> None:
+    artifact = catalogue_reader("fi_syke").artifact
+    materialized, _ = catalogue_series(
+        artifact,
+        scope=SeriesScope(provider_ids=("fi_syke",), station_ids=(station_id,), product_ids=(str(product),)),
+    )
+    assert len(materialized) == 1
+    cat_series = materialized[0]
+
+    parsed_series = describe_series(station_id, str(product))
+
+    assert parsed_series.series_id == cat_series.series_id
+    assert parsed_series.series_id == stable_id("fi_syke", station_id, f"fi_syke/{product}", None)
+    assert parsed_series.facts == cat_series.facts
+    assert parsed_series.facts[0].facts_id == cat_series.facts[0].facts_id
+    assert parsed_series.facts[0].facts_id == stable_id(parsed_series.facts[0].model_dump_json(exclude={"facts_id"}))
