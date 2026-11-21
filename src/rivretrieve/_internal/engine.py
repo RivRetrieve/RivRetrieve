@@ -171,6 +171,11 @@ class WindowDeclaration:
     ``[timestart, timeend)`` by upper-bound containment (``timeend <= stop``).
     The rendered request stop extends past ``bounds.end`` by ``stop_extension``
     while ``RenderedWindow.bounds`` preserves the unextended partition.
+
+    ``fetch_padding`` optionally overrides the engine's default ``±2`` day fetch
+    window padding (for example, ``timedelta(0)`` when source query parameters
+    are established to filter directly on the native calendar or wall-clock axis
+    without timezone drift). ``None`` retains the shared engine default.
     """
 
     granularity: WindowGranularity
@@ -181,8 +186,14 @@ class WindowDeclaration:
     timestamp_precision: timedelta | None = field(default=None, kw_only=True)
     stop_extension: timedelta | None = field(default=None, kw_only=True)
     year_start_month: int = field(default=1, kw_only=True)
+    fetch_padding: timedelta | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
+        if self.fetch_padding is not None:
+            if not isinstance(self.fetch_padding, timedelta):
+                raise TypeError("window fetch padding must be a timedelta or None")
+            if self.fetch_padding < timedelta(0):
+                raise ValueError("window fetch padding must be non-negative")
         if type(self.year_start_month) is not int or not 1 <= self.year_start_month <= 12:
             raise ValueError("year start month must be an integer from 1 to 12")
         if self.year_start_month != 1 and (

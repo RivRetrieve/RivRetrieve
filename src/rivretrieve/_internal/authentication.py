@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -122,12 +124,13 @@ class CredentialExchangeError(Exception):
 @dataclass(frozen=True, slots=True, repr=False)
 class _Acquired:
     token: str = field(repr=False)
+    acquired_at: float
     refresh_at: float
     trace: SecretCallTrace | None
     auth_response: bytes | None = field(default=None, repr=False)
 
     def __repr__(self) -> str:
-        return "_Acquired(token=[REDACTED], refresh_at=[REDACTED], trace=[REDACTED], auth_response=[REDACTED])"
+        return "_Acquired(token=[REDACTED], acquired_at=[REDACTED], refresh_at=[REDACTED], trace=[REDACTED], auth_response=[REDACTED])"
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +147,105 @@ class _FatalContractViolation:
     """Carry fatal identity without retaining secret-bearing exception state."""
 
 
+def _cache_key(spec: ExchangeSpec, secret_headers: tuple[CredentialHeader, ...]) -> str:
+    """Derive a secret-free digest uniquely identifying one exchange spec and credential set."""
+    canonical = {
+        "exchange_url": spec.exchange_url,
+        "method": spec.method.value,
+        "token_json_path": list(spec.token_json_path),
+        "output_scheme": spec.output_scheme,
+        "lifetime_seconds": spec.lifetime_seconds,
+        "refresh_after_seconds": spec.refresh_after_seconds,
+        "allowed_data_origin": spec.allowed_data_origin,
+        "secret_headers": sorted(
+            [
+                {
+                    "name": header.name,
+                    "value": header._value,
+                    "origins": list(header.origins),
+                }
+                for header in secret_headers
+            ],
+            key=lambda item: (item["name"].casefold(), item["name"], item["value"], item["origins"]),
+        ),
+    }
+    return hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+class ExchangeTokenCache:
+    """Process-local, thread-safe bearer token cache keyed by secret-free credential digests."""
+
+    __slots__ = ("_entries", "_key_locks", "_lock")
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._key_locks: dict[str, threading.Lock] = {}
+        self._entries: dict[str, _Acquired] = {}
+
+    def __repr__(self) -> str:
+        return "ExchangeTokenCache([REDACTED])"
+
+    def lock_for(self, key: str) -> threading.Lock:
+        with self._lock:
+            key_lock = self._key_locks.get(key)
+            if key_lock is None:
+                key_lock = threading.Lock()
+                self._key_locks[key] = key_lock
+            return key_lock
+
+    def peek(self, key: str) -> _Acquired | None:
+        with self._lock:
+            return self._entries.get(key)
+
+    def checkout(self, key: str, now: float) -> _Acquired | None:
+        """Return a valid cached token, consuming any pending prerequisite trace once."""
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None or not (entry.acquired_at <= now < entry.refresh_at):
+                return None
+            if entry.trace is not None:
+                self._entries[key] = _Acquired(entry.token, entry.acquired_at, entry.refresh_at, None)
+            return entry
+
+    def store(self, key: str, acquired: _Acquired) -> None:
+        with self._lock:
+            self._entries[key] = _Acquired(acquired.token, acquired.acquired_at, acquired.refresh_at, None)
+
+    def restore_trace(self, key: str, acquired: _Acquired) -> None:
+        """Restore an unconsumed prerequisite trace if the same token is still cached."""
+        if acquired.trace is None:
+            return
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is not None and entry.token == acquired.token and entry.trace is None:
+                self._entries[key] = _Acquired(entry.token, entry.acquired_at, entry.refresh_at, acquired.trace)
+
+    def invalidate(self, key: str, stale: _Acquired) -> None:
+        """Evict the cached entry only if it still holds the same token as ``stale``."""
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is not None and entry.token == stale.token:
+                del self._entries[key]
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+            self._key_locks.clear()
+
+
+_PROCESS_TOKEN_CACHE = ExchangeTokenCache()
+
+
+def process_token_cache() -> ExchangeTokenCache:
+    """Return the shared process-local token cache used across public fetches."""
+    return _PROCESS_TOKEN_CACHE
+
+
+def clear_process_token_cache() -> None:
+    """Evict all tokens from the shared process-local token cache."""
+    _PROCESS_TOKEN_CACHE.clear()
+
+
 @dataclass(slots=True, repr=False)
 class CredentialExchangeTransport:
     """Acquire, cache, and apply one scoped bearer credential without exposing secret responses."""
@@ -152,7 +254,9 @@ class CredentialExchangeTransport:
     secret_headers: tuple[CredentialHeader, ...]
     spec: ExchangeSpec
     clock: Clock
-    _cached: _Acquired | None = field(default=None, init=False, repr=False)
+    token_cache: ExchangeTokenCache | None = field(default=None, repr=False)
+    _cache: ExchangeTokenCache = field(init=False, repr=False)
+    _cache_key: str = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.secret_headers, tuple) or not self.secret_headers:
@@ -162,6 +266,10 @@ class CredentialExchangeTransport:
         exchange_origin = _request_origin(self.spec.exchange_url)
         if any(exchange_origin not in header.origins for header in self.secret_headers):
             raise ValueError("every exchange credential must include the exact exchange origin")
+        if self.token_cache is not None and not isinstance(self.token_cache, ExchangeTokenCache):
+            raise TypeError("token cache must be an ExchangeTokenCache or None")
+        self._cache = self.token_cache if self.token_cache is not None else ExchangeTokenCache()
+        self._cache_key = _cache_key(self.spec, self.secret_headers)
 
     def __repr__(self) -> str:
         return f"CredentialExchangeTransport(transport=[REDACTED], secret_headers={tuple(h.name for h in self.secret_headers)!r}, spec={self.spec!r}, clock=[REDACTED], cache=[REDACTED])"
@@ -169,18 +277,39 @@ class CredentialExchangeTransport:
     def can_authenticate(self, url: str) -> bool:
         return _request_origin(url) == self.spec.allowed_data_origin
 
+    def _acquire_or_checkout(self) -> tuple[_Acquired, bool] | _Failure | _FatalContractViolation:
+        with self._cache.lock_for(self._cache_key):
+            now = self.clock.monotonic()
+            cached = self._cache.checkout(self._cache_key, now)
+            if cached is not None:
+                return cached, True
+            acquired = _acquire(self.transport, self.secret_headers, self.spec, self.clock)
+            if isinstance(acquired, (_Failure, _FatalContractViolation)):
+                return acquired
+            self._cache.store(self._cache_key, acquired)
+            return acquired, False
+
+    @staticmethod
+    def _is_unauthorized(result: TransportResponse | _Failure | _FatalContractViolation) -> bool:
+        if isinstance(result, TransportResponse):
+            return result.status_code == 401
+        if isinstance(result, _Failure):
+            return result.status_code == 401
+        return False
+
     def send(self, request: TransportRequest) -> TransportResponse:
-        sanitized_request = _sanitize_if_contains_exchange_secrets(request, self.secret_headers, self._cached)
+        cached = self._cache.peek(self._cache_key)
+        sanitized_request = _sanitize_if_contains_exchange_secrets(request, self.secret_headers, cached)
         if sanitized_request is not None:
             request = sanitized_request
             raise CredentialExchangeError(request, AuthenticationFailureReason.DATA_SEND_FAILED) from None
         if _transport_request_origin(request) != self.spec.allowed_data_origin:
             result = self.transport.send(request)
-            if _exchange_response_contains_secrets(result, self.secret_headers, self._cached):
+            if _exchange_response_contains_secrets(result, self.secret_headers, cached):
                 attempts = result.attempts
                 status_code = result.status_code
                 result = None
-                request = _sanitized_exchange_request(request, self.secret_headers, self._cached)
+                request = _sanitized_exchange_request(request, self.secret_headers, cached)
                 raise CredentialExchangeError(
                     request,
                     AuthenticationFailureReason.RETAINED_METADATA_UNSAFE,
@@ -188,28 +317,43 @@ class CredentialExchangeTransport:
                     attempts=attempts,
                 ) from None
             return result
-        now = self.clock.monotonic()
-        acquired = (
-            self._cached
-            if self._cached is not None and now < self._cached.refresh_at
-            else _acquire(self.transport, self.secret_headers, self.spec, self.clock)
-        )
-        if isinstance(acquired, _FatalContractViolation):
+        outcome = self._acquire_or_checkout()
+        if isinstance(outcome, _FatalContractViolation):
             raise FatalContractError("Credential exchange violated an internal contract") from None
-        if isinstance(acquired, _Failure):
+        if isinstance(outcome, _Failure):
             raise CredentialExchangeError(
                 request,
-                acquired.reason,
-                status_code=acquired.status_code,
-                category=acquired.category,
-                attempts=acquired.attempts,
-                transport_reason=acquired.transport_reason,
+                outcome.reason,
+                status_code=outcome.status_code,
+                category=outcome.category,
+                attempts=outcome.attempts,
+                transport_reason=outcome.transport_reason,
             ) from None
+        acquired, used_cached = outcome
         result = _send_acquired(self.transport, request, acquired, self.spec, self.secret_headers)
+        if self._is_unauthorized(result):
+            self._cache.invalidate(self._cache_key, acquired)
+            if used_cached:
+                retry_outcome = self._acquire_or_checkout()
+                if isinstance(retry_outcome, _FatalContractViolation):
+                    raise FatalContractError("Credential exchange violated an internal contract") from None
+                if isinstance(retry_outcome, _Failure):
+                    raise CredentialExchangeError(
+                        request,
+                        retry_outcome.reason,
+                        status_code=retry_outcome.status_code,
+                        category=retry_outcome.category,
+                        attempts=retry_outcome.attempts,
+                        transport_reason=retry_outcome.transport_reason,
+                    ) from None
+                acquired, _ = retry_outcome
+                result = _send_acquired(self.transport, request, acquired, self.spec, self.secret_headers)
+                if self._is_unauthorized(result):
+                    self._cache.invalidate(self._cache_key, acquired)
         if isinstance(result, _FatalContractViolation):
             raise FatalContractError("Credentialed data request violated an internal contract") from None
         if isinstance(result, _Failure):
-            self._cached = _Acquired(acquired.token, acquired.refresh_at, acquired.trace)
+            self._cache.restore_trace(self._cache_key, acquired)
             request = _sanitized_source_request(
                 request,
                 remove_names=("Authorization",),
@@ -223,7 +367,6 @@ class CredentialExchangeTransport:
                 attempts=result.attempts,
                 transport_reason=result.transport_reason,
             ) from None
-        self._cached = _Acquired(acquired.token, acquired.refresh_at, None)
         return result
 
 
@@ -359,7 +502,8 @@ def _acquire(
             retrieved_at=response.retrieved_at,
             content_type=response.content_type,
         )
-        return _Acquired(value, clock.monotonic() + spec.refresh_after_seconds, trace, response.content)
+        acquired_at = clock.monotonic()
+        return _Acquired(value, acquired_at, acquired_at + spec.refresh_after_seconds, trace, response.content)
     except TransportFailure as error:
         reason = (
             AuthenticationFailureReason.EXCHANGE_REDIRECT_REFUSED

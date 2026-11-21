@@ -10,6 +10,7 @@ from rivretrieve._internal.authentication import (
     CredentialExchangeError,
     CredentialExchangeTransport,
     ExchangeSpec,
+    ExchangeTokenCache,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.transport import (
@@ -624,3 +625,179 @@ def test_exchange_response_refuses_encoded_extracted_token_before_trace_recordin
         assert encoded in recording_path.read_text()
         assert provenance_event["content_type"] == encoded
         raise AssertionError("encoded token entered prerequisite trace, recording v2, and provenance")
+
+
+def _shared_transport(
+    actions,
+    cache: ExchangeTokenCache,
+    clock: FakeClock,
+    *,
+    identifier: str = _IDENTIFIER,
+    password: str = _PASSWORD,
+):
+    raw = Scripted(actions)
+    spec = ExchangeSpec.ana()
+    exchange_origin = "https://www.ana.gov.br"
+    transport = CredentialExchangeTransport(
+        raw,
+        (
+            CredentialHeader("Identificador", identifier, (exchange_origin,)),
+            CredentialHeader("Senha", password, (exchange_origin,)),
+        ),
+        spec,
+        clock,
+        cache,
+    )
+    return transport, raw
+
+
+def test_shared_token_cache_reuses_token_across_instances_and_isolates_credentials() -> None:
+    cache = ExchangeTokenCache()
+    clock = FakeClock()
+    first, raw_first = _shared_transport([(_AUTH_BODY, 200), (b'{"data":1}', 200)], cache, clock)
+    second, raw_second = _shared_transport([(b'{"data":2}', 200)], cache, clock)
+    rotated, raw_rotated = _shared_transport(
+        [(b'{"items":{"tokenautenticacao":"SECOND-BEARER-TOKEN"}}', 200), (b'{"data":3}', 200)],
+        cache,
+        clock,
+        password="DIFFERENT-PASSWORD",
+    )
+
+    r1 = first.send(data_request())
+    r2 = second.send(data_request())
+    r3 = rotated.send(data_request())
+
+    assert len(r1.prerequisite_calls) == 1
+    assert r2.prerequisite_calls == ()
+    assert len(r3.prerequisite_calls) == 1
+    assert [req.url for req in raw_first.requests] == [ExchangeSpec.ana().exchange_url, data_request().url]
+    assert [req.url for req in raw_second.requests] == [data_request().url]
+    assert raw_second.requests[0].headers["Authorization"] == f"Bearer {_TOKEN}"
+    assert [req.url for req in raw_rotated.requests] == [ExchangeSpec.ana().exchange_url, data_request().url]
+    assert raw_rotated.requests[1].headers["Authorization"] == "Bearer SECOND-BEARER-TOKEN"
+    for secret in (_IDENTIFIER, _PASSWORD, _TOKEN, "DIFFERENT-PASSWORD", "SECOND-BEARER-TOKEN"):
+        assert secret not in repr(cache)
+
+
+@pytest.mark.parametrize("unauthorized_mode", ["response", "transport_failure"])
+def test_cached_token_401_invalidates_refreshes_once_and_retries(unauthorized_mode: str) -> None:
+    cache = ExchangeTokenCache()
+    clock = FakeClock()
+    fresh_token = "FRESH-BEARER-TOKEN"
+    fresh_auth = f'{{"items":{{"tokenautenticacao":"{fresh_token}"}}}}'.encode()
+    first, _ = _shared_transport([(_AUTH_BODY, 200), (b'{"data":1}', 200)], cache, clock)
+    first.send(data_request())
+
+    unauthorized = (
+        (b"Unauthorized", 401, "text/plain")
+        if unauthorized_mode == "response"
+        else TransportFailure(data_request(), TransportFailureReason.HTTP_STATUS, 1, status_code=401)
+    )
+    second, raw_second = _shared_transport([unauthorized, (fresh_auth, 200), (b'{"data":2}', 200)], cache, clock)
+    retried = second.send(data_request())
+
+    assert retried.status_code == 200
+    assert retried.content == b'{"data":2}'
+    assert len(retried.prerequisite_calls) == 1
+    assert [req.url for req in raw_second.requests] == [
+        data_request().url,
+        ExchangeSpec.ana().exchange_url,
+        data_request().url,
+    ]
+    assert raw_second.requests[0].headers["Authorization"] == f"Bearer {_TOKEN}"
+    assert raw_second.requests[2].headers["Authorization"] == f"Bearer {fresh_token}"
+
+    # Subsequent transport uses the refreshed cached token without re-exchanging.
+    third, raw_third = _shared_transport([(b'{"data":3}', 200)], cache, clock)
+    third_response = third.send(data_request())
+    assert third_response.prerequisite_calls == ()
+    assert raw_third.requests[0].headers["Authorization"] == f"Bearer {fresh_token}"
+
+
+def test_fresh_token_401_evicts_cache_without_infinite_retry_or_secret_leak() -> None:
+    cache = ExchangeTokenCache()
+    clock = FakeClock()
+    first, raw_first = _shared_transport([(_AUTH_BODY, 200), (b"Unauthorized", 401, "text/plain")], cache, clock)
+    response = first.send(data_request())
+    assert response.status_code == 401
+    assert [req.url for req in raw_first.requests] == [ExchangeSpec.ana().exchange_url, data_request().url]
+
+    # Cache entry was evicted so the next transport performs a fresh exchange.
+    second, raw_second = _shared_transport([(_AUTH_BODY, 200), (b'{"data":2}', 200)], cache, clock)
+    ok = second.send(data_request())
+    assert ok.status_code == 200
+    assert [req.url for req in raw_second.requests] == [ExchangeSpec.ana().exchange_url, data_request().url]
+
+
+def test_shared_token_cache_single_flights_concurrent_cold_exchanges() -> None:
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    cache = ExchangeTokenCache()
+    clock = FakeClock()
+    spec = ExchangeSpec.ana()
+    exchange_origin = "https://www.ana.gov.br"
+    lock = threading.Lock()
+    exchange_count = 0
+    data_count = 0
+    exchange_started = threading.Event()
+    allow_exchange_finish = threading.Event()
+
+    class _ConcurrentTransport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            nonlocal exchange_count, data_count
+            if request.url == spec.exchange_url:
+                with lock:
+                    exchange_count += 1
+                exchange_started.set()
+                allow_exchange_finish.wait(timeout=5.0)
+                applied = getattr(request, "credential_header_names", ())
+                return TransportResponse(
+                    _AUTH_BODY,
+                    200,
+                    datetime(2026, 1, 2, 3, 4, tzinfo=UTC),
+                    "application/json",
+                    request.url,
+                    {},
+                    applied_credential_header_names=applied,
+                    executed_request=ExecutedRequestEvidence({"User-Agent": "RivRetrieve"}, applied),
+                )
+            with lock:
+                data_count += 1
+            assert request.headers["Authorization"] == f"Bearer {_TOKEN}"
+            applied = getattr(request, "credential_header_names", ())
+            return TransportResponse(
+                b'{"data":1}',
+                200,
+                datetime(2026, 1, 2, 3, 4, tzinfo=UTC),
+                "application/json",
+                request.url,
+                request.params or {},
+                applied_credential_header_names=applied,
+                executed_request=ExecutedRequestEvidence({"User-Agent": "RivRetrieve"}, applied),
+            )
+
+    def make_transport() -> CredentialExchangeTransport:
+        return CredentialExchangeTransport(
+            _ConcurrentTransport(),
+            (
+                CredentialHeader("Identificador", _IDENTIFIER, (exchange_origin,)),
+                CredentialHeader("Senha", _PASSWORD, (exchange_origin,)),
+            ),
+            spec,
+            clock,
+            cache,
+        )
+
+    def worker() -> TransportResponse:
+        return make_transport().send(data_request())
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = [pool.submit(worker) for _ in range(6)]
+        assert exchange_started.wait(timeout=5.0)
+        allow_exchange_finish.set()
+        responses = [future.result() for future in futures]
+
+    assert exchange_count == 1
+    assert data_count == 6
+    assert sum(len(response.prerequisite_calls) for response in responses) == 1

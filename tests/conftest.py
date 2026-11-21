@@ -471,8 +471,12 @@ def reuse_packaged_catalogues(monkeypatch, packaged_catalogue_inputs) -> None:
 
 @pytest.fixture(autouse=True)
 def clear_provider_registry() -> Generator[None]:
+    from rivretrieve._internal.authentication import clear_process_token_cache
+
     _registry.clear()
+    clear_process_token_cache()
     yield
+    clear_process_token_cache()
     _registry.clear()
 
 

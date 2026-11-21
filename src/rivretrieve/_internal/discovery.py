@@ -14,7 +14,7 @@ import polars as pl
 from dotenv import dotenv_values
 from platformdirs import user_cache_dir
 
-from rivretrieve._internal.authentication import CredentialExchangeTransport
+from rivretrieve._internal.authentication import CredentialExchangeTransport, process_token_cache
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.issues import FatalContractError, Issue, MissingCredentialError, apply_on_issue
 from rivretrieve._internal.observations import ObservationRequest, ObservationResult, ReceiptMode, Receipts
@@ -1431,6 +1431,7 @@ def _credentialed_transport(provider_id: str, values: dict[str, str]) -> Transpo
             headers,
             exchange.spec,
             _SystemClock(),
+            process_token_cache(),
         )
     bindings = tuple(binding for binding in handle.credential_headers if binding.variable in values)
     if not bindings:
