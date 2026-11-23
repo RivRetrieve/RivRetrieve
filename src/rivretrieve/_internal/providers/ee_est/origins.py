@@ -108,8 +108,8 @@ STATION_METADATA_FIELDS = (
 )
 
 _CATALOGUE_SOURCE_FACTS = {
-    "station": ("source.station.registry",),
-    "product": ("source.station_product.associations",),
+    "station": ("source.station.registry", "source.station.estmodel_registry"),
+    "product": ("source.station_product.associations", "source.series.fields", "source.series.hourly_fields"),
     "station_product": ("source.station_product.associations",),
 }
 
@@ -133,7 +133,6 @@ def build_acquisition_provenance(
             "source.station.drainage_area_unit",
             "source.provider.terms",
             "source.provider.attribution",
-            "source.series.fields",
         )
     )
     if missing := required - set(facts):

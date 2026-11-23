@@ -102,10 +102,12 @@ def _provenance():
                 acquisition_id="estmodel-stations-500",
                 facts=(
                     "source.station.registry",
+                    "source.station.estmodel_registry",
                     "source.station.drainage_area",
                     "source.station.drainage_area_unit",
                     "source.station_product.associations",
                     "source.series.fields",
+                    "source.series.hourly_fields",
                     "source.provider.terms",
                     "source.provider.attribution",
                 ),
@@ -215,3 +217,78 @@ def test_catalogue_projects_wgs84_and_covers_all_18_products() -> None:
     }
     prov = _provenance()
     assert prov.provider_id == "ee_est"
+
+
+@pytest.mark.governing(
+    "maintenance/catalogue/ee_est/official",
+    "maintenance/catalogue/ee_est/official/selection.json",
+)
+def test_selected_inputs_publish_deterministic_catalogue(
+    retained_evidence_root, catalogue_input_receipt, catalogue_build_inputs, tmp_path
+) -> None:
+    """Build the real ee_est packaged catalogue deterministically from verified originals."""
+    import json
+    import os
+    from pathlib import Path
+
+    import polars.testing as pl_testing
+
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.ee_est.generate_catalogue import main, read_catalogue_sources
+    from rivretrieve._internal.providers.ee_est.origins import STATION_METADATA_NOTICE
+
+    configured = os.environ.get("RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT")
+    if not configured:
+        pytest.fail("Reviewed catalogue generation requires restricted product output.", pytrace=False)
+    product_root = Path(configured).resolve()
+    selection = "maintenance/catalogue/ee_est/official/selection.json"
+    sources = read_catalogue_sources(
+        retained_evidence_root, selection_path=selection, input_receipt=catalogue_input_receipt
+    )
+    build_inputs = catalogue_build_inputs(sources.provenance)
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(catalogue_input_receipt.model_dump_json())
+    build_path = tmp_path / "build-inputs.json"
+    build_path.write_text(build_inputs.model_dump_json())
+    outputs = [product_root / "ee_est", product_root / "ee_est-repeat"]
+    for output in outputs:
+        assert (
+            main(
+                [
+                    "--evidence-root",
+                    str(retained_evidence_root),
+                    "--selection",
+                    selection,
+                    "--input-receipt",
+                    str(receipt_path),
+                    "--build-inputs",
+                    str(build_path),
+                    "--out",
+                    str(output),
+                ]
+            )
+            == 0
+        )
+        load_packaged_catalogue_artifact(output, on_issue="raise")
+        stations = pl.read_parquet(output / "stations.parquet")
+        assert stations.height == 60
+        assert stations["crs"].unique().to_list() == ["EPSG:4326"]
+        products = pl.read_parquet(output / "products.parquet")
+        assert products.height == 18
+        pairs = pl.read_parquet(output / "station_products.parquet")
+        assert pairs.height == 1080
+        assert pairs.filter(pl.col("availability") == "available").height == 1032
+        assert pairs.filter(pl.col("availability") == "unavailable").height == 48
+        assert pairs.filter(pl.col("availability") == "unknown").height == 0
+        provider = json.loads((output / "provider.json").read_bytes())
+        assert provider["license"] == "CC BY 4.0"
+        assert provider["citation"] == "Estonian Environment Agency (Keskkonnaagentuur)"
+        assert STATION_METADATA_NOTICE in json.dumps(
+            json.loads((output / "croissant.json").read_bytes()), ensure_ascii=False
+        )
+        assert not (output / "native.parquet").exists()
+    assert {p.name for p in outputs[0].iterdir()} == {p.name for p in outputs[1].iterdir()}
+    for path in outputs[0].iterdir():
+        repeated = outputs[1] / path.name
+        if path.suffix == ".parquet":
+            pl_testing.assert_frame_equal(pl.read_parquet(path), pl.read_parquet(repeated))

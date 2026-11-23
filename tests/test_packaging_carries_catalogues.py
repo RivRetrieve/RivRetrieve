@@ -41,6 +41,7 @@ _PROVENANCE_PROVIDER_IDS = {
     "co_ideam",
     "cz_chmi",
     "dk_vanda",
+    "ee_est",
     "fr_hubeau",
     "fr_hydroportail",
     "lt_lhmt",
