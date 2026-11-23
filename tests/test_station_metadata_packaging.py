@@ -81,6 +81,7 @@ for provider_id in provider_ids:
     if provider_id in {
         "ar_ina",
         "at_ehyd",
+        "be_wal",
         "br_ana",
         "ca_eccc",
         "co_ideam",

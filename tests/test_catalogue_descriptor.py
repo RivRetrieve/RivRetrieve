@@ -443,6 +443,7 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
             marks=pytest.mark.derived(
                 {
                     "usgs_nwis": "maintenance/catalogue/usgs_nwis",
+                    "be_wal": "maintenance/catalogue/be_wal/official/native.parquet",
                     "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
                     "co_ideam": "maintenance/catalogue/co_ideam/official/native.parquet",
                     "dk_vanda": "maintenance/catalogue/dk_vanda/official/native.parquet",
