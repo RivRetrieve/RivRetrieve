@@ -115,11 +115,15 @@ def test_public_recorded_conversion_rejects_internal_scale_change_under_every_po
     from tests.usgs_modern_recordings import ModernReplay
 
     stages = declaration.observations.stages
+    original_fetch = stages.fetch
     original = stages.parse
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     monkeypatch.setattr(
         discovery, "HttpClient", lambda: ModernReplay("daily-07374000-docs-2023", evidence_root=retained_evidence_root)
     )
+
+    def fetch_without_interpretations(*args, **kwargs):
+        return replace(original_fetch(*args, **kwargs), interpretations=())
 
     def corrupt_parse(payload, config):
         parsed = original(payload, config)
@@ -150,6 +154,7 @@ def test_public_recorded_conversion_rejects_internal_scale_change_under_every_po
             )
         return replace(parsed, series=definitions)
 
+    monkeypatch.setattr(stages, "fetch", staticmethod(fetch_without_interpretations))
     monkeypatch.setattr(stages, "parse", staticmethod(corrupt_parse))
     # Compose only the recorded provider; unrelated catalogue regeneration must
     # not intercept this real public parse-to-result contract regression.
