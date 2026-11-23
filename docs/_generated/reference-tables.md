@@ -173,6 +173,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `fi_syke` | live | none | 2543 | 2543 | 5086 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
+| `ie_opw` | catalogue-only | none | 386 | 1107 | 3477 | 48 |
 | `lt_lhmt` | live | none | 97 | 0 | 194 | 0 |
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
 | `pe_senamhi` | live | none | 771 | 1170 | 10395 | 0 |
@@ -314,6 +315,18 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `fr_hubeau` | `water_temperature_reported` | `degC` |
 | `fr_hydroportail` | `discharge_instantaneous` | `m3/s` |
 | `fr_hydroportail` | `stage_instantaneous` | `m` |
+| `ie_opw` | `discharge_daily_max` | `m3/s` |
+| `ie_opw` | `discharge_daily_mean` | `m3/s` |
+| `ie_opw` | `discharge_daily_min` | `m3/s` |
+| `ie_opw` | `discharge_instantaneous` | `m3/s` |
+| `ie_opw` | `stage_daily_max` | `m` |
+| `ie_opw` | `stage_daily_mean` | `m` |
+| `ie_opw` | `stage_daily_min` | `m` |
+| `ie_opw` | `stage_instantaneous` | `m` |
+| `ie_opw` | `water_temperature_daily_max` | `degC` |
+| `ie_opw` | `water_temperature_daily_mean` | `degC` |
+| `ie_opw` | `water_temperature_daily_min` | `degC` |
+| `ie_opw` | `water_temperature_instantaneous` | `degC` |
 | `lt_lhmt` | `discharge_daily_mean` | `m3/s` |
 | `lt_lhmt` | `stage_daily_mean` | `m` |
 | `no_nve` | `discharge_daily_mean` | `m3/s` |
