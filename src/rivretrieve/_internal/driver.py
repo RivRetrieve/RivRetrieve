@@ -2602,10 +2602,11 @@ def drive(
         if group_index not in acquired:
             fetch_window = group[0].fetch_window
             assert fetch_window is not None
+            group_series_ids = {key for item in group for key in item.scope.series_ids}
             group_scope = pair_scope.model_copy(
                 update={
                     "product_ids": tuple(item.product for item in group),
-                    "series_ids": tuple(dict.fromkeys(key for item in group for key in item.scope.series_ids)),
+                    "series_ids": tuple(key for key in scope.series_ids if key in group_series_ids),
                 }
             )
             try:
@@ -2999,7 +3000,6 @@ def drive(
             elif isinstance(provider, SharedParseProvider):
                 existing_contexts = [entry.context for entry in slot_interpretations]
                 unparsed_pairs: dict[tuple[str, ProductId], Payload] = {(station, product): payload}
-                unparsed_siblings: list[_PairRetrieval] = []
                 for sibling_plan in slot_pending:
                     sibling_payload = _effective_pair_payload(received, sibling_plan, len(group))
                     sibling_context = InterpretationContext.from_payload(sibling_payload)
@@ -3011,27 +3011,27 @@ def drive(
                             break
                     if not matched_existing:
                         unparsed_pairs[(sibling_plan.station, sibling_plan.product)] = sibling_payload
-                        unparsed_siblings.append(sibling_plan)
                 if len(unparsed_pairs) >= 2:
                     grouped_parsed = provider.parse_group(received, MappingProxyType(unparsed_pairs), config)
                     if not isinstance(grouped_parsed, Mapping):
                         raise FatalContractError("Provider parse_group must return a mapping")
                     if set(grouped_parsed.keys()) != set(unparsed_pairs.keys()):
                         raise FatalContractError("Provider parse_group keys must match its requested pair payloads")
-                    for pair_key, pair_parsed in grouped_parsed.items():
+                    for pair_parsed in grouped_parsed.values():
                         if not isinstance(pair_parsed, ParsedSeries):
                             raise FatalContractError("Provider parse_group values must be ParsedSeries")
+                    for pair_key, pair_parsed in grouped_parsed.items():
                         if pair_key != (station, product):
                             slot_interpretations.append(
                                 InterpretedPayload.from_payload(unparsed_pairs[pair_key], pair_parsed)
                             )
                     parsed = grouped_parsed[(station, product)]
-                    if receipts is ReceiptMode.OMIT and _all_plans_interpreted(
-                        received, slot_pending, slot_interpretations, len(group)
-                    ):
-                        group_state.payload_slots[received_index] = replace(received, content=b"")
                 else:
                     parsed = provider.parse(payload, config)
+                if receipts is ReceiptMode.OMIT and _all_plans_interpreted(
+                    received, slot_pending, slot_interpretations, len(group)
+                ):
+                    group_state.payload_slots[received_index] = replace(received, content=b"")
             else:
                 parsed = provider.parse(payload, config)
             group_state.remaining_consumers[received_index] -= 1

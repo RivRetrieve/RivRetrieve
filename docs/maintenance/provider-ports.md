@@ -199,18 +199,19 @@ source-call origins, rows, identities, inventories, outcomes and issues.
 Use the shared [cursor pagination helper](../../src/rivretrieve/_internal/page_acquisition.py)
 (`acquire_pages`) for cursor-paginated endpoints. When acquisition inspects a response
 to follow pagination links, check completeness, validate a response envelope, or
-resolve a prerequisite lookup, it can narrow each consumer context with
-`narrow_payload_for_pair`, attach context-bound `InterpretedPayload` entries on
-`SourceAcquisition.interpretations`, and release decoded source structures before
+resolve a prerequisite lookup, it narrows each consumer context with
+`narrow_payload_for_pair`, attaches context-bound `InterpretedPayload` entries on
+`SourceAcquisition.interpretations`, and releases decoded source structures before
 returning. The driver reuses the `ParsedSeries` when effective inputs match and falls
 back to shared or per-pair parsing whenever context inputs change. The
-[Lithuania fetcher](../../src/rivretrieve/_internal/providers/lt_lhmt/fetch.py),
 [Peru SENAMHI fetcher](../../src/rivretrieve/_internal/providers/pe_senamhi/fetch.py),
 [Austria eHYD fetcher](../../src/rivretrieve/_internal/providers/at_ehyd/fetch.py),
 [Hub'Eau fetcher](../../src/rivretrieve/_internal/providers/fr_hubeau/fetch.py),
 [USGS fetcher](../../src/rivretrieve/_internal/providers/usgs_nwis/fetch.py), and
 [Argentina INA fetcher](../../src/rivretrieve/_internal/providers/ar_ina/fetch.py)
-show these patterns as concrete examples.
+show these inspection and handoff patterns, while the
+[Lithuania fetcher](../../src/rivretrieve/_internal/providers/lt_lhmt/fetch.py)
+fetches shared bytes without decoding during acquisition.
 
 **Outcome:** a defensible acquisition contract, including failure and completeness
 limits. Identify necessary shared-engine changes rather than hiding them in source code.
@@ -236,12 +237,13 @@ registration. The [Lithuania parser](../../src/rivretrieve/_internal/providers/l
 show native parsing connected to source-series mappings, single-pass shared response
 decoding, and per-page memoization of repeated series and physical fact definitions
 without retaining mutable state across pages. When multiple co-acquired products share
-an undecoded response, implement `SharedParseProvider` (`parse_group`) in
-[provider stages](../../src/rivretrieve/_internal/driver.py), or `parse_mapped_group`
-in the [mapped series helper](../../src/rivretrieve/_internal/provider_series.py) for
-mapped providers, so source bytes decode once into independent per-product
-`ParsedSeries` results and drop intermediate decoded dictionaries immediately after
-parsing so memory retains only per-product tables.
+an undecoded response, implement `SharedParseProvider` (`parse_group`) from
+[provider stages](../../src/rivretrieve/_internal/driver.py). Mapped providers can
+delegate to `parse_mapped_group` in the
+[mapped series helper](../../src/rivretrieve/_internal/provider_series.py) inside
+`parse_group`. Both paths decode source bytes once into independent per-product
+`ParsedSeries` results and drop intermediate decoded structures immediately after
+parsing, keeping only per-product tables in memory.
 [Canada's declaration](../../src/rivretrieve/_internal/providers/ca_eccc/declaration.py)
 shows the bulk alternative. Reuse shared conversion, clipping, assembly and storage.
 

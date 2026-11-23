@@ -225,8 +225,17 @@ def _run_native_group(
         native_results = native_parse_group(payload, matched_payloads, config)
     except UnsupportedSourceStructureError as error:
         return {}, error
+    if not isinstance(native_results, Mapping):
+        raise FatalContractError("Mapped native_parse_group must return a mapping")
     if set(native_results.keys()) != set(matched_payloads.keys()):
         raise FatalContractError("Mapped native_parse_group keys must match its matched pair payloads")
+    for item in native_results.values():
+        if not isinstance(item, UnsupportedSourceStructureError) and not (
+            isinstance(item, WithIssues) and isinstance(item.value, pl.DataFrame)
+        ):
+            raise FatalContractError(
+                "Mapped native_parse_group values must be WithIssues[DataFrame] or UnsupportedSourceStructureError"
+            )
     return native_results, None
 
 
@@ -343,7 +352,40 @@ def parse_mapped_group(
     ],
     response_hash: str | None = None,
 ) -> dict[tuple[str, ProductId], ParsedSeries]:
-    """Build per-pair ``ParsedSeries`` results from one shared mapped response decode."""
+    """Build per-pair ``ParsedSeries`` results from one shared mapped response decode.
+
+    Parameters
+    ----------
+    payload:
+        Shared response payload covering one station and one or more products.
+    pair_payloads:
+        Per-pair narrowed payloads keyed by ``(station_id, product_id)``.
+    config:
+        Provider product configuration.
+    provider:
+        Declared provider identifier.
+    mappings:
+        Explicit source-series mapping per product identifier.
+    native_parse_group:
+        Callable decoding ``payload`` once into per-pair native frames or
+        ``UnsupportedSourceStructureError`` values. Raising
+        ``UnsupportedSourceStructureError`` broadcasts that failure to all
+        matched pairs; any other exception propagates untouched.
+    response_hash:
+        Optional precomputed SHA-256 hex digest of ``payload.content``.
+
+    Returns
+    -------
+    dict[tuple[str, ProductId], ParsedSeries]
+        Independent ``ParsedSeries`` objects keyed identically to
+        ``pair_payloads``.
+
+    Raises
+    ------
+    FatalContractError
+        If group inputs violate single-station/pair contracts, mappings are
+        incomplete, or ``native_parse_group`` returns an invalid mapping.
+    """
     if not pair_payloads:
         raise FatalContractError("Mapped group parse requires at least one pair payload")
     stations = {station for station, _ in pair_payloads}
@@ -381,16 +423,7 @@ def parse_mapped_group(
         if pair_scope.matches(series):
             matched_payloads[key] = pair_payload
 
-    native_results: Mapping[tuple[str, ProductId], WithIssues[pl.DataFrame] | UnsupportedSourceStructureError] = {}
-    shared_error: UnsupportedSourceStructureError | None = None
-    if matched_payloads:
-        try:
-            native_results = native_parse_group(payload, matched_payloads, config)
-        except UnsupportedSourceStructureError as error:
-            shared_error = error
-        else:
-            if set(native_results.keys()) != set(matched_payloads.keys()):
-                raise FatalContractError("Mapped native_parse_group keys must match its matched pair payloads")
+    native_results, shared_error = _run_native_group(payload, matched_payloads, config, native_parse_group)
 
     results: dict[tuple[str, ProductId], ParsedSeries] = {}
     for key, (pair_payload, mapping, series, fact_id, window, acquired, pair_scope) in prepared.items():

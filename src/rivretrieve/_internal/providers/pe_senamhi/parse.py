@@ -114,7 +114,8 @@ def interpret_decoded_group(
     stations = {station for station, _ in pair_payloads}
     if len(stations) != 1:
         raise FatalContractError("SENAMHI payload requires one station and selected products")
-    if not isinstance(payload.source_coordinates.value, SenamhiSourceCoordinates):
+    payload_coords = payload.source_coordinates.value
+    if not isinstance(payload_coords, SenamhiSourceCoordinates):
         raise FatalContractError("SENAMHI payload requires source coordinates")
 
     coords_by_pair: dict[tuple[str, ProductId], SenamhiSourceCoordinates] = {}
@@ -126,6 +127,12 @@ def interpret_decoded_group(
         coordinate = product_cfg.coordinates.value if product_cfg is not None else None
         if not isinstance(coordinate, SenamhiSourceCoordinates):
             raise FatalContractError("SENAMHI product requires source coordinates")
+        if coordinate.subsystem != payload_coords.subsystem or (
+            coordinate.subsystem == "phisis"
+            and (coordinate.resolution, coordinate.variable, coordinate.unit)
+            != (payload_coords.resolution, payload_coords.variable, payload_coords.unit)
+        ):
+            raise FatalContractError("SENAMHI pair coordinates contradict payload source coordinates")
         coords_by_pair[key] = coordinate
 
     if data is None:
@@ -388,8 +395,8 @@ def _extract_monthly_fields(
                     active_set.clear()
                     break
                 cell_col = cell_map["column"]
-                if cell_col in active_set:
-                    field = cast("str", cell_col)
+                if isinstance(cell_col, str) and cell_col in active_set:
+                    field = cell_col
                     if field not in declared_fields:
                         errors[field] = UnsupportedSourceStructureError(
                             "SENAMHI monthly value lacks its unit declaration"

@@ -1446,7 +1446,7 @@ def test_at_ehyd_shared_responses_decode_once(monkeypatch: pytest.MonkeyPatch, t
         res_lt = drive(req_lt, stages, provenance=_provenance(req_lt), transport=t_lt)
         assert len(t_lt.requests) == 1
         assert decode_count == 1
-        assert {o.status for o in res_lt.outcomes} <= expected_statuses
+        assert {o.status for o in res_lt.outcomes} == expected_statuses
 
     # 4. Context-change fallback on Messstellen/info (strip interpretations=()) -> 1 fallback parse_group decode.
     @dataclass(frozen=True)
@@ -1522,3 +1522,121 @@ def test_at_ehyd_shared_responses_decode_once(monkeypatch: pytest.MonkeyPatch, t
     assert direct_bgis_res.annotations.series_tables["at_ehyd.series"].rows["data_quality"].to_list() == [
         "ungeprüfte Rohdaten!"
     ]
+
+
+def test_review_regressions_unhashable_pe_column_and_explicit_mixed_series_ids_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+    from types import SimpleNamespace
+
+    import rivretrieve._internal.providers.pe_senamhi.parse as pe_parse
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.engine import (
+        ObservationRequest,
+        RequestedWindow,
+        WindowEndpoint,
+    )
+    from rivretrieve._internal.providers.pe_senamhi.declaration import declaration
+    from rivretrieve._internal.providers.pe_senamhi.series import series_mappings
+    from rivretrieve._internal.transport import TransportResponse
+    from tests.test_internal_driver import _provenance
+
+    stages = declaration.observations.stages
+    decode_count = 0
+    fallback_calls = 0
+    real_loads = json.loads
+
+    def counting_loads(*args, **kwargs):
+        nonlocal decode_count
+        decode_count += 1
+        return real_loads(*args, **kwargs)
+
+    monkeypatch.setattr(pe_parse, "json", SimpleNamespace(loads=counting_loads, JSONDecodeError=json.JSONDecodeError))
+    real_parse = stages.parse
+    real_parse_group = stages.parse_group
+
+    def tracked_parse(*args, **kwargs):
+        nonlocal fallback_calls
+        fallback_calls += 1
+        return real_parse(*args, **kwargs)
+
+    def tracked_parse_group(*args, **kwargs):
+        nonlocal fallback_calls
+        fallback_calls += 1
+        return real_parse_group(*args, **kwargs)
+
+    monkeypatch.setattr(stages, "parse", tracked_parse)
+    monkeypatch.setattr(stages, "parse_group", tracked_parse_group)
+
+    station = "214901"
+    p1 = ProductId("monthly_archive_nivel_del_rio_06h")
+    p2 = ProductId("monthly_archive_nivel_del_rio_10h")
+    s1 = series_mappings("monthly_archive", None, "NIVEL_DEL_RIO_06H", "m")["NIVEL_DEL_RIO_06H"].source_series(
+        "pe_senamhi", station, str(p1)
+    )
+    s2 = series_mappings("monthly_archive", None, "NIVEL_DEL_RIO_10H", "m")["NIVEL_DEL_RIO_10H"].source_series(
+        "pe_senamhi", station, str(p2)
+    )
+
+    body = json.dumps(
+        {
+            "status": True,
+            "data": {
+                "columns": [
+                    {"column": "NIVEL_DEL_RIO_06H", "unit": "m"},
+                    {"column": "NIVEL_DEL_RIO_10H", "unit": "m"},
+                ],
+                "readings": [
+                    {
+                        "date": "2024-01-10",
+                        "time": "",
+                        "values": [
+                            {"column": ["unhashable"], "value": 999.0},
+                            {"column": "NIVEL_DEL_RIO_06H", "value": 1.25},
+                            {"column": "NIVEL_DEL_RIO_10H", "value": 2.5},
+                        ],
+                    }
+                ],
+            },
+        }
+    ).encode()
+
+    class _Trans:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def send(self, request):
+            self.calls += 1
+            return TransportResponse(
+                content=body,
+                status_code=200,
+                retrieved_at=datetime(2026, 9, 27, tzinfo=UTC),
+                content_type="application/json",
+                url=request.url,
+                request_parameters=request.params,
+            )
+
+    transport = _Trans()
+    req = ObservationRequest(
+        provider_id=ProviderId("pe_senamhi"),
+        stations=(station,),
+        products=(p1, p2),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2024, 1, 10)),
+            WindowEndpoint.from_datetime(datetime(2024, 2, 10, 23, 59, 59)),
+        ),
+        known_series=(s1, s2),
+        scope=SeriesScope(
+            provider_ids=("pe_senamhi",),
+            station_ids=(station,),
+            product_ids=(str(p1), str(p2)),
+            restriction=RestrictionKind.EXPLICIT,
+            series_ids=(s1.series_id, s2.series_id, "unknown-series-id"),
+        ),
+    )
+    res = drive(req, stages, provenance=_provenance(req), receipts=ReceiptMode.OMIT, transport=transport)
+    assert transport.calls >= 2
+    assert decode_count == transport.calls  # 1 decode per response (never 2x on mixed EXPLICIT series_ids)
+    assert fallback_calls == 0
+    assert sorted(res.canonical_rows["value"].to_list()) == [1.25, 2.5]
