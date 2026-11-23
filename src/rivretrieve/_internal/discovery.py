@@ -1695,18 +1695,24 @@ def _merge_provider_results(
                 raise FatalContractError("Provider results disagree about an acquisition outcome")
         active_outcomes.update((item.outcome_id, item) for item in result.outcomes)
         supporting_outcomes.update((item.outcome_id, item) for item in result.supporting_outcomes)
+    has_obs_annotations = any(item._annotations.observation_tables for item in results)
+    has_any_annotations = has_obs_annotations or any(not item._annotations.is_empty for item in results)
     row_offsets: list[int] = []
     running = 0
     for item in results:
         row_offsets.append(running)
         running += item.data.height
     if running > 0:
-        combined = pl.concat([item.data for item in results]).with_columns(
-            pl.arange(0, running, eager=True, dtype=pl.Int64).alias("_rr_row_idx")
-        )
-        ordered = _canonical_observation_order(combined)
-        old_to_new = {old: new for new, old in enumerate(ordered["_rr_row_idx"].to_list())}
-        merged_data = ordered.drop("_rr_row_idx")
+        if has_obs_annotations:
+            combined = pl.concat([item.data for item in results]).with_columns(
+                pl.arange(0, running, eager=True, dtype=pl.Int64).alias("_rr_row_idx")
+            )
+            ordered = _canonical_observation_order(combined)
+            old_to_new = {old: new for new, old in enumerate(ordered["_rr_row_idx"].to_list())}
+            merged_data = ordered.drop("_rr_row_idx")
+        else:
+            old_to_new = {}
+            merged_data = _canonical_observation_order(pl.concat([item.data for item in results]))
     else:
         old_to_new = {}
         merged_data = pl.concat([item.data for item in results])
@@ -1737,6 +1743,8 @@ def _merge_provider_results(
         issues=issues,
         receipts=Receipts(provider_id=first.provenance.provider_id, entries=receipt_entries),
     )
+    if not has_any_annotations:
+        return merged
     merged_annotations = AnnotationBundle.merge_sorted(
         [item._annotations for item in results],
         row_offsets=row_offsets,
