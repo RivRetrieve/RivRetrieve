@@ -62,23 +62,23 @@
       "@type": "cr:FileObject",
       "contentUrl": "stations.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "313e1686ae3273027d57ddae75792da7e6e30e591fc874cfd07bcf32a5293ea5",
-      "contentSize": "8236 B"
+      "sha256": "13df462550a10ef2881c6e0a662f203e715f4b0a16594cd79a990d42a2a37486",
+      "contentSize": "8217 B"
     },
     {
       "@id": "station_products.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "station_products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "91d44fa51926c444cff2aaa904d465fb9b65b77754c39b34d3a35dafdc5bc5f7",
-      "contentSize": "7498 B"
+      "sha256": "e5c36cc8667ad51a74d516b64a050f01bebbfd03599ecaeeb26920a3744e44df",
+      "contentSize": "7497 B"
     },
     {
       "@id": "provenance.json",
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "d430f8199eb80b75edecad338dc5ee27f0d8d9d1301db2069d21c43bd4a05a54",
+      "sha256": "fff16850e09737d3d2e796bc6bf8dfafce57722c9af1790550a1d28b7156b26b",
       "contentSize": "78464 B"
     },
     {
@@ -150,8 +150,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "station_metadata.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "7cd0ac1de3275f7a30922e0eafa14f7a828ba828ea0e52d6b5cc632693d62d65",
-      "contentSize": "16702 B"
+      "sha256": "e25505427cc84bded0c53761024a83c3706e9700f2bc521e2b4b8cea716092da",
+      "contentSize": "16689 B"
     }
   ],
   "recordSet": [
@@ -1573,8 +1573,8 @@
     "@type": "sc:MediaObject",
     "identifier": "ie-opw-catalogue-native-parquet",
     "name": "Adopted retained input",
-    "sha256": "76174c8f808c8008cf12fe0edc8e27e85ea81d4048006728bed237909bfee25c",
-    "contentSize": "18738 B",
+    "sha256": "18ae2872e34eb568a648681fc995ffeb87922b9700f1b301a028832766552f47",
+    "contentSize": "18699 B",
     "additionalProperty": [
       {
         "@type": "sc:PropertyValue",
@@ -1584,12 +1584,12 @@
       {
         "@type": "sc:PropertyValue",
         "name": "collection_id",
-        "value": "ie_opw-catalogue-native-2026-11-23-v1"
+        "value": "ie_opw-catalogue-native-2026-11-23-v2"
       },
       {
         "@type": "sc:PropertyValue",
         "name": "manifest_sha256",
-        "value": "d6bfcd7e0aaa4004cb9d2f679183d8360b9ac21f18bc5a91aff2c9d8400cf6c1"
+        "value": "816116a466f8a15b7a716ec4be69b03d787e6bb0f2ff494957bf1cda406a91d3"
       },
       {
         "@type": "sc:PropertyValue",
