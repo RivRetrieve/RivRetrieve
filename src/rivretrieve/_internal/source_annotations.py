@@ -316,17 +316,6 @@ class AnnotationSchema(BaseModel):
         return tuple(item.name for item in self.fields)
 
 
-def _compute_native_links(rows: pl.DataFrame) -> tuple[tuple[datetime, str, int], ...]:
-    counts: dict[tuple[str, str, datetime, str], int] = {}
-    links: list[tuple[datetime, str, int]] = []
-    for row in rows.select("series_id", "facts_id", "time", "time_zone").iter_rows():
-        key = cast("tuple[str, str, datetime, str]", row)
-        ordinal = counts.get(key, 0)
-        counts[key] = ordinal + 1
-        links.append((key[2], key[3], ordinal))
-    return tuple(links)
-
-
 @dataclass(frozen=True, slots=True)
 class ObservationAnnotationTable:
     """Annotation rows at observation grain, including optional unmeasured slots."""
@@ -334,7 +323,6 @@ class ObservationAnnotationTable:
     schema: AnnotationSchema
     rows: pl.DataFrame
     measurement_indices: tuple[int | None, ...]
-    native_links: tuple[tuple[datetime, str, int], ...]
 
     @classmethod
     def from_rows(
@@ -343,7 +331,6 @@ class ObservationAnnotationTable:
         schema: AnnotationSchema,
         rows: pl.DataFrame,
         measurement_indices: Sequence[int | None],
-        native_links: Sequence[tuple[datetime, str, int]] | None = None,
     ) -> ObservationAnnotationTable:
         if schema.scope is not AnnotationScope.OBSERVATION:
             raise FatalContractError(f"Schema {schema.schema_id!r} is not an observation annotation schema")
@@ -382,14 +369,10 @@ class ObservationAnnotationTable:
                         f"Duplicate annotation row for measurement index {meas_idx} in {schema.schema_id!r}"
                     )
                 seen_indices.add(meas_idx)
-        resolved_links = _compute_native_links(rows) if native_links is None else tuple(native_links)
-        if len(resolved_links) != rows.height:
-            raise FatalContractError("Annotation native_links length must match row count")
         return cls(
             schema=schema,
             rows=rows,
             measurement_indices=indices,
-            native_links=resolved_links,
         )
 
     @classmethod
@@ -399,7 +382,6 @@ class ObservationAnnotationTable:
             schema=schema,
             rows=pl.DataFrame(schema=expected_schema),
             measurement_indices=(),
-            native_links=(),
         )
 
     @property
@@ -423,8 +405,28 @@ class ObservationAnnotationTable:
             schema=self.schema,
             rows=updated_rows,
             measurement_indices=self.measurement_indices,
-            native_links=self.native_links,
         )
+
+    def is_canonically_ordered(self) -> bool:
+        """Return whether rows already follow ``AnnotationBundle.merge_sorted`` order."""
+        if self.rows.height <= 1:
+            return True
+        return self.rows.select(
+            pl.struct(
+                "station_id",
+                "product_id",
+                "series_id",
+                "facts_id",
+                "time",
+                "time_zone",
+                (~pl.col("measured")).alias("_unmeasured"),
+                pl.Series(
+                    "_measurement_index",
+                    [-1 if idx is None else idx for idx in self.measurement_indices],
+                    dtype=pl.Int64,
+                ),
+            ).alias("_sort_key")
+        )["_sort_key"].is_sorted()
 
     def narrow(
         self,
@@ -434,27 +436,28 @@ class ObservationAnnotationTable:
     ) -> ObservationAnnotationTable:
         keep_positions: list[int] = []
         new_indices: list[int | None] = []
-        new_links: list[tuple[datetime, str, int]] = []
-        series_col = self.rows["series_id"].to_list()
-        facts_col = self.rows["facts_id"].to_list()
+        series_col: list[str] | None = None
+        facts_col: list[str] | None = None
         for pos, meas_idx in enumerate(self.measurement_indices):
             if meas_idx is not None:
-                if meas_idx in old_to_new:
+                new_idx = old_to_new.get(meas_idx)
+                if new_idx is not None:
                     keep_positions.append(pos)
-                    new_indices.append(old_to_new[meas_idx])
-                    new_links.append(self.native_links[pos])
-            elif (series_col[pos], facts_col[pos]) in allowed_series_facts:
-                keep_positions.append(pos)
-                new_indices.append(None)
-                new_links.append(self.native_links[pos])
+                    new_indices.append(new_idx)
+            else:
+                if series_col is None or facts_col is None:
+                    series_col = self.rows["series_id"].to_list()
+                    facts_col = self.rows["facts_id"].to_list()
+                if (series_col[pos], facts_col[pos]) in allowed_series_facts:
+                    keep_positions.append(pos)
+                    new_indices.append(None)
         if not keep_positions:
             return ObservationAnnotationTable.empty(self.schema)
-        mask = [pos in set(keep_positions) for pos in range(self.rows.height)]
+        narrowed_rows = self.rows if len(keep_positions) == self.rows.height else self.rows[keep_positions]
         return ObservationAnnotationTable.from_rows(
             schema=self.schema,
-            rows=self.rows.filter(pl.Series(mask, dtype=pl.Boolean)),
+            rows=narrowed_rows,
             measurement_indices=new_indices,
-            native_links=new_links,
         )
 
 
@@ -517,6 +520,42 @@ def _normalize_selection(selection: AnnotationSelection) -> tuple[bool, tuple[st
                 names.append(item)
         return bool(names), tuple(names)
     raise TypeError("annotations must be a bool, str, or sequence of str field names")
+
+
+def _sort_observation_annotation_rows(
+    schema: AnnotationSchema,
+    combined_rows: pl.DataFrame,
+    combined_indices: Sequence[int | None],
+) -> ObservationAnnotationTable:
+    sort_keys = list(
+        combined_rows.select(
+            "station_id", "product_id", "series_id", "facts_id", "time", "time_zone", "measured"
+        ).iter_rows()
+    )
+    order = sorted(
+        range(combined_rows.height),
+        key=lambda i: (
+            sort_keys[i][0],
+            sort_keys[i][1],
+            sort_keys[i][2],
+            sort_keys[i][3],
+            sort_keys[i][4],
+            sort_keys[i][5],
+            not sort_keys[i][6],
+            combined_indices[i] if combined_indices[i] is not None else -1,
+        ),
+    )
+    if order == list(range(combined_rows.height)):
+        return ObservationAnnotationTable.from_rows(
+            schema=schema,
+            rows=combined_rows,
+            measurement_indices=combined_indices,
+        )
+    return ObservationAnnotationTable.from_rows(
+        schema=schema,
+        rows=combined_rows[order],
+        measurement_indices=[combined_indices[i] for i in order],
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -728,6 +767,38 @@ class AnnotationBundle:
                 ser[schema_id] = narrowed
         return AnnotationBundle(observation_tables=obs, series_tables=ser)
 
+    def canonicalize_for_sorted_rows(self) -> AnnotationBundle:
+        """Canonicalize annotation tables when observation rows already match canonical order."""
+        if self.is_empty:
+            return self
+        obs: dict[str, ObservationAnnotationTable] = {}
+        changed = False
+        for schema_id, table in self.observation_tables.items():
+            if table.row_count == 0:
+                changed = True
+                continue
+            if table.is_canonically_ordered():
+                obs[schema_id] = table
+            else:
+                obs[schema_id] = _sort_observation_annotation_rows(table.schema, table.rows, table.measurement_indices)
+                changed = True
+        ser: dict[str, SeriesAnnotationTable] = {}
+        for schema_id, table in self.series_tables.items():
+            if table.row_count == 0:
+                changed = True
+                continue
+            if table.row_count <= 1 or table.rows["series_id"].is_sorted():
+                ser[schema_id] = table
+            else:
+                ser[schema_id] = SeriesAnnotationTable.from_rows(
+                    schema=table.schema,
+                    rows=table.rows.sort("series_id"),
+                )
+                changed = True
+        if not changed:
+            return self
+        return AnnotationBundle(observation_tables=obs, series_tables=ser)
+
     @classmethod
     def merge_sorted(
         cls,
@@ -737,7 +808,7 @@ class AnnotationBundle:
         old_to_new: Mapping[int, int],
     ) -> AnnotationBundle:
         """Merge annotations across result partitions after canonical row reordering."""
-        obs_by_schema: dict[str, list[ObservationAnnotationTable]] = {}
+        obs_by_schema: dict[str, list[tuple[ObservationAnnotationTable, list[int | None]]]] = {}
         ser_by_schema: dict[str, list[SeriesAnnotationTable]] = {}
         for bundle, offset in zip(bundles, row_offsets, strict=True):
             for schema_id, table in bundle.observation_tables.items():
@@ -746,53 +817,20 @@ class AnnotationBundle:
                 remapped_indices = [
                     None if idx is None else old_to_new[offset + idx] for idx in table.measurement_indices
                 ]
-                remapped_table = ObservationAnnotationTable.from_rows(
-                    schema=table.schema,
-                    rows=table.rows,
-                    measurement_indices=remapped_indices,
-                    native_links=table.native_links,
-                )
-                obs_by_schema.setdefault(schema_id, []).append(remapped_table)
+                obs_by_schema.setdefault(schema_id, []).append((table, remapped_indices))
             for schema_id, table in bundle.series_tables.items():
                 if table.row_count > 0:
                     ser_by_schema.setdefault(schema_id, []).append(table)
 
         merged_obs: dict[str, ObservationAnnotationTable] = {}
-        for schema_id, tables in obs_by_schema.items():
-            schema = tables[0].schema
-            for other in tables[1:]:
+        for schema_id, items in obs_by_schema.items():
+            schema = items[0][0].schema
+            for other, _ in items[1:]:
                 if other.schema != schema:
                     raise FatalContractError(f"Conflicting annotation schema definitions for {schema_id!r}")
-            combined_rows = pl.concat([t.rows for t in tables])
-            combined_indices = [idx for t in tables for idx in t.measurement_indices]
-            combined_links = [link for t in tables for link in t.native_links]
-            sort_keys = list(
-                combined_rows.select(
-                    "station_id", "product_id", "series_id", "facts_id", "time", "time_zone", "measured"
-                ).iter_rows()
-            )
-            order = sorted(
-                range(combined_rows.height),
-                key=lambda i: (
-                    sort_keys[i][0],
-                    sort_keys[i][1],
-                    sort_keys[i][2],
-                    sort_keys[i][3],
-                    sort_keys[i][4],
-                    sort_keys[i][5],
-                    not sort_keys[i][6],
-                    combined_indices[i] if combined_indices[i] is not None else -1,
-                ),
-            )
-            sorted_rows = combined_rows[order]
-            sorted_indices = [combined_indices[i] for i in order]
-            sorted_links = [combined_links[i] for i in order]
-            merged_obs[schema_id] = ObservationAnnotationTable.from_rows(
-                schema=schema,
-                rows=sorted_rows,
-                measurement_indices=sorted_indices,
-                native_links=sorted_links,
-            )
+            combined_rows = items[0][0].rows if len(items) == 1 else pl.concat([t.rows for t, _ in items])
+            combined_indices = items[0][1] if len(items) == 1 else [idx for _, indices in items for idx in indices]
+            merged_obs[schema_id] = _sort_observation_annotation_rows(schema, combined_rows, combined_indices)
 
         merged_ser: dict[str, SeriesAnnotationTable] = {}
         for schema_id, tables in ser_by_schema.items():
@@ -882,40 +920,57 @@ def filter_native_with_annotations(
     if bundle.is_empty:
         return filtered_rows, bundle
     old_to_new = {old: new for new, old in enumerate(kept_list)}
+    needs_unmeasured_filter = (
+        unmeasured_predicate is not None or unmeasured_expr is not None or allowed_series_ids is not None
+    )
     obs_tables: dict[str, ObservationAnnotationTable] = {}
     for schema_id, table in bundle.observation_tables.items():
         if table.row_count == 0:
             continue
-        expr_mask: list[bool] | None = (
-            table.rows.select(unmeasured_expr.alias("_k"))["_k"].to_list() if unmeasured_expr is not None else None
-        )
+        kept_unmeasured: set[int] = set()
+        if needs_unmeasured_filter and table.unmeasured_count > 0:
+            candidate_positions = [pos for pos, meas_idx in enumerate(table.measurement_indices) if meas_idx is None]
+            candidate_rows = table.rows[candidate_positions]
+            if allowed_series_ids is not None:
+                if not allowed_series_ids:
+                    candidate_positions = []
+                else:
+                    series_mask = [sid in allowed_series_ids for sid in candidate_rows["series_id"].to_list()]
+                    candidate_positions = [
+                        pos for pos, flag in zip(candidate_positions, series_mask, strict=True) if flag
+                    ]
+                    if candidate_positions and len(candidate_positions) < candidate_rows.height:
+                        candidate_rows = candidate_rows.filter(pl.Series(series_mask, dtype=pl.Boolean))
+            if unmeasured_expr is not None and candidate_positions:
+                expr_mask = candidate_rows.select(unmeasured_expr.alias("_k"))["_k"].to_list()
+                candidate_positions = [pos for pos, flag in zip(candidate_positions, expr_mask, strict=True) if flag]
+                if candidate_positions and len(candidate_positions) < candidate_rows.height:
+                    candidate_rows = candidate_rows.filter(pl.Series(expr_mask, dtype=pl.Boolean))
+            if unmeasured_predicate is not None and candidate_positions:
+                dict_rows = candidate_rows.to_dicts()
+                candidate_positions = [
+                    pos
+                    for pos, row_dict in zip(candidate_positions, dict_rows, strict=True)
+                    if unmeasured_predicate(row_dict)
+                ]
+            kept_unmeasured = set(candidate_positions)
         keep_positions: list[int] = []
         new_indices: list[int | None] = []
-        new_links: list[tuple[datetime, str, int]] = []
-        series_col = table.rows["series_id"].to_list() if allowed_series_ids is not None else None
-        dict_rows = table.rows.to_dicts() if unmeasured_predicate is not None else None
         for pos, meas_idx in enumerate(table.measurement_indices):
             if meas_idx is not None:
-                if meas_idx in old_to_new:
+                new_idx = old_to_new.get(meas_idx)
+                if new_idx is not None:
                     keep_positions.append(pos)
-                    new_indices.append(old_to_new[meas_idx])
-                    new_links.append(table.native_links[pos])
-                continue
-            if series_col is not None and allowed_series_ids is not None and series_col[pos] not in allowed_series_ids:
-                continue
-            if expr_mask is not None and not expr_mask[pos]:
-                continue
-            if dict_rows is not None and unmeasured_predicate is not None and not unmeasured_predicate(dict_rows[pos]):
-                continue
-            keep_positions.append(pos)
-            new_indices.append(None)
-            new_links.append(table.native_links[pos])
+                    new_indices.append(new_idx)
+            elif not needs_unmeasured_filter or pos in kept_unmeasured:
+                keep_positions.append(pos)
+                new_indices.append(None)
         if keep_positions:
+            kept_ann_rows = table.rows if len(keep_positions) == table.row_count else table.rows[keep_positions]
             obs_tables[schema_id] = ObservationAnnotationTable.from_rows(
                 schema=table.schema,
-                rows=table.rows[keep_positions],
+                rows=kept_ann_rows,
                 measurement_indices=new_indices,
-                native_links=new_links,
             )
     ser_tables: dict[str, SeriesAnnotationTable] = {}
     for schema_id, table in bundle.series_tables.items():
@@ -1045,12 +1100,10 @@ def concat_native_with_annotations(
         combined_indices = [
             None if idx is None else offset + idx for t, offset in items for idx in t.measurement_indices
         ]
-        combined_links = [link for t, _ in items for link in t.native_links]
         merged_obs[schema_id] = ObservationAnnotationTable.from_rows(
             schema=schema,
             rows=combined_ann_rows,
             measurement_indices=combined_indices,
-            native_links=combined_links,
         )
     merged_ser = merge_series_tables(ser_tables, conflict=series_conflict)
     return combined_rows, AnnotationBundle(observation_tables=merged_obs, series_tables=merged_ser)
@@ -1082,12 +1135,10 @@ def sort_native_by_station_with_annotations(
             None if table.measurement_indices[pos] is None else old_to_new[cast("int", table.measurement_indices[pos])]
             for pos in ann_order
         ]
-        new_links = [table.native_links[pos] for pos in ann_order]
         obs_tables[schema_id] = ObservationAnnotationTable.from_rows(
             schema=table.schema,
             rows=sorted_ann_rows,
             measurement_indices=new_indices,
-            native_links=new_links,
         )
     return sorted_rows, AnnotationBundle(observation_tables=obs_tables, series_tables=bundle.series_tables)
 

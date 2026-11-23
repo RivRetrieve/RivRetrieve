@@ -1534,6 +1534,116 @@ def _fetch_provider_series(
     return result
 
 
+_CANONICAL_OBSERVATION_SORT_COLUMNS: tuple[str, ...] = (
+    "station_id",
+    "product_id",
+    "series_id",
+    "facts_id",
+    "time",
+    "time_zone",
+    "value",
+)
+
+
+def _is_canonical_observation_order(data: pl.DataFrame) -> bool:
+    """Return whether ``data`` already satisfies ``_canonical_observation_order``."""
+    if data.height <= 1:
+        return True
+    return data.select(pl.struct(_CANONICAL_OBSERVATION_SORT_COLUMNS).alias("_sort_key"))["_sort_key"].is_sorted()
+
+
+def _merge_single_provider_result(
+    first: ObservationResult,
+    series: tuple[SourceSeries, ...],
+) -> ObservationResult:
+    from rivretrieve._internal.driver import _unique_calls
+
+    request = first.provenance.request
+    if request is None or "start" not in request or "end" not in request:
+        raise FatalContractError("Observation provenance must retain the normalized requested window")
+    merged_request = {
+        "scope": first.scope.model_dump(mode="json"),
+        "series": [
+            {
+                "station_id": selected_series.station_id,
+                "product_id": selected_series.product_id,
+                "series_id": selected_series.series_id,
+            }
+            for selected_series in series
+        ],
+        "start": request["start"],
+        "end": request["end"],
+    }
+    issues = _merge_provider_issues((first,))
+    calls_made = _unique_calls(first.provenance.calls_made)
+    endpoints = tuple(dict.fromkeys(first.provenance.endpoints))
+    decomposition = tuple(dict.fromkeys(first.provenance.decomposition))
+    active_outcomes = {item.outcome_id: item for item in first.outcomes}
+    supporting_outcomes = {item.outcome_id: item for item in first.supporting_outcomes}
+    merged_outcomes = tuple(active_outcomes.values())
+    merged_supporting = tuple(item for key, item in supporting_outcomes.items() if key not in active_outcomes)
+    merged_series = _merge_series_definitions((first,))
+    merged_inventories = tuple({item.snapshot_id: item for item in first.inventories}.values())
+    if _is_canonical_observation_order(first.data):
+        merged_data = first.data
+        merged_annotations = first._annotations.canonicalize_for_sorted_rows()
+    else:
+        indexed = first.data.with_columns(
+            pl.arange(0, first.data.height, eager=True, dtype=pl.Int64).alias("_rr_row_idx")
+        )
+        ordered = _canonical_observation_order(indexed)
+        merged_data = ordered.drop("_rr_row_idx")
+        if first._annotations.observation_tables:
+            old_to_new = {old: new for new, old in enumerate(ordered["_rr_row_idx"].to_list())}
+            merged_annotations = AnnotationBundle.merge_sorted(
+                (first._annotations,),
+                row_offsets=(0,),
+                old_to_new=old_to_new,
+            )
+        else:
+            merged_annotations = first._annotations.canonicalize_for_sorted_rows()
+    provenance = first.provenance.model_copy(
+        update={
+            "request": merged_request,
+            "calls_made": calls_made,
+            "endpoints": endpoints,
+            "decomposition": decomposition,
+        }
+    )
+    if (
+        first.view_scope is None
+        and first.data.height > 0
+        and merged_series == first.source_series
+        and merged_outcomes == first.outcomes
+        and merged_supporting == first.supporting_outcomes
+        and first.receipts.provider_id == first.provenance.provider_id
+    ):
+        merged = first.model_copy(
+            update={
+                "data": merged_data,
+                "inventories": merged_inventories,
+                "provenance": provenance,
+                "issues": issues,
+            }
+        )
+        object.__setattr__(merged, "_annotations", merged_annotations)
+        return merged
+    merged = ObservationResult(
+        data=merged_data,
+        source_series=merged_series,
+        inventories=merged_inventories,
+        outcomes=merged_outcomes,
+        supporting_outcomes=merged_supporting,
+        scope=first.scope,
+        provenance=provenance,
+        issues=issues,
+        receipts=Receipts(provider_id=first.provenance.provider_id, entries=first.receipts.entries),
+    )
+    if merged_annotations.is_empty:
+        return merged
+    return with_annotations(merged, merged_annotations)
+
+
 def _merge_provider_results(
     results: tuple[ObservationResult, ...],
     series: tuple[SourceSeries, ...],
@@ -1541,6 +1651,8 @@ def _merge_provider_results(
     """provider result merge : NonEmptyTuple[ObservationResult] × SelectedSeries → ObservationResult"""
     if not results:
         raise FatalContractError("Provider result merge requires at least one result")
+    if len(results) == 1:
+        return _merge_single_provider_result(results[0], series)
 
     first = results[0]
     request = first.provenance.request
@@ -1656,9 +1768,7 @@ def _merge_series_definitions(results: tuple[ObservationResult, ...]) -> tuple[S
 
 def _canonical_observation_order(data: pl.DataFrame) -> pl.DataFrame:
     """canonical observation order : ObservationData → ObservationData (pure)."""
-    return data.sort(
-        ["station_id", "product_id", "series_id", "facts_id", "time", "time_zone", "value"], maintain_order=True
-    )
+    return data.sort(list(_CANONICAL_OBSERVATION_SORT_COLUMNS), maintain_order=True)
 
 
 def _merge_provider_issues(results: tuple[ObservationResult, ...]) -> tuple[Issue, ...]:

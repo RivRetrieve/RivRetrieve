@@ -1057,3 +1057,39 @@ def test_streamed_compilation_clears_finished_partition_ordinal_state(
         "dup-1",
         "y1999-0",
     ]
+
+
+def test_parquet_roundtrip_recovers_duplicate_timestamps_and_null_without_native_links() -> None:
+    from rivretrieve._internal.source_annotations import (
+        decode_observation_table_from_parquet,
+        encode_observation_table_for_parquet,
+    )
+
+    series = _series_def()
+    ts = datetime(2024, 6, 1, 0, 0)
+    partition_rows = pl.DataFrame(
+        {
+            "station_id": [series.station_id] * 3,
+            "product_id": [series.product_id] * 3,
+            "time": [ts, ts, ts],
+            "value": [20.0, None, 10.0],
+            "time_zone": ["+00:00"] * 3,
+            "series_id": [series.series_id] * 3,
+            "facts_id": [series.facts[0].facts_id] * 3,
+            "source_unit": ["m"] * 3,
+        },
+        schema=RowsSchema.polars_schema,
+    )
+    table = _make_obs_table(
+        series,
+        [ts, ts, ts, ts],
+        [True, True, True, False],
+        ["dup-first", "dup-null", "dup-third", "dup-unmeasured"],
+        [["A"], None, ["B"], ["U"]],
+        [0, 1, 2, None],
+    )
+    encoded = encode_observation_table_for_parquet(table, partition_rows)
+    assert encoded["_occurrence_ordinal"].to_list() == [0, 1, 2, -1]
+    decoded = decode_observation_table_from_parquet(encoded, _OBS_SCHEMA, partition_rows)
+    assert decoded.measurement_indices == (0, 1, 2, None)
+    pl_testing.assert_frame_equal(decoded.rows, table.rows)

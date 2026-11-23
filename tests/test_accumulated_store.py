@@ -787,3 +787,148 @@ def test_reuse_preserves_response_identity_when_failed_update_supplies_mapping_i
     assert retained.identity.origin == "response"
     assert retained.identity.description == "Bruto"
     inspect_integrity(store, _PROVIDER)
+
+
+def test_accumulate_scans_accepted_keys_only_for_observation_coverage_outcomes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key_scans: list[tuple[int, ...]] = []
+    orig_select = pl.DataFrame.select
+
+    def spy_select(self: pl.DataFrame, *exprs: object, **named_exprs: object) -> pl.DataFrame:
+        result = orig_select(self, *exprs, **named_exprs)
+        if (
+            not named_exprs
+            and len(exprs) == 3
+            and all(isinstance(item, str) for item in exprs)
+            and exprs == ("facts_id", "time", "time_zone")
+        ):
+            key_scans.append((self.height,))
+        return result
+
+    monkeypatch.setattr(pl.DataFrame, "select", spy_select)
+
+    # 1. Interval-coverage update must bypass accepted_keys scan completely
+    interval_store = StoreRoot(tmp_path / "interval_store")
+    rows_interval = _rows([datetime(2020, 1, 1), datetime(2020, 1, 2)], [1.0, 2.0])
+    interval_manifest = _accumulate_rows(
+        interval_store, _PROVIDER, rows_interval, _coverage("2020-01-01", "2020-01-02")
+    )
+    assert key_scans == []
+    assert interval_manifest.outcomes[0].coverage == "interval"
+    assert interval_manifest.outcomes[0].observation_keys == ()
+    assert_frame_equal(_read(interval_store), rows_interval)
+
+    # 2. Mixed update: one interval replacement + one observation-coverage replacement + one unretained snapshot
+    mixed_store = StoreRoot(tmp_path / "mixed_store")
+    rows_a = _rows([datetime(2020, 1, 1), datetime(2020, 1, 2)], [1.0, 2.0])
+    cov_a = _coverage("2020-01-01", "2020-01-02", station="a")
+    upd_a = _rows_update(_PROVIDER, rows_a, cov_a)
+
+    series_b_id = stable_id("controlled fixture", str(_PROVIDER), "b", str(_PRODUCT))
+    facts = upd_a.series[0].facts[0]
+    series_b = SourceSeries(
+        series_id=series_b_id,
+        provider_id=str(_PROVIDER),
+        station_id="b",
+        product_id="level",
+        identity=SourceIdentity(namespace="controlled fixture", origin="mapping", evidence=("controlled fixture",)),
+        facts=(facts,),
+    )
+    rows_b = rows_a.with_columns(pl.lit("b").alias("station_id"), pl.lit(series_b_id).alias("series_id")).head(1)
+    cov_b = _coverage("2020-01-01", "2020-01-02", station="b")
+    out_b = RetrievalOutcome(
+        outcome_id="obs-outcome-b",
+        series_id=series_b_id,
+        station_id="b",
+        product_id="level",
+        window=SeriesWindow(start=cov_b.interval.start, end=cov_b.interval.end),
+        status=OutcomeStatus.SUCCESS,
+        facts_ids=(facts.facts_id,),
+        retrieved_at=_T1,
+        coverage="observations",
+        observation_keys=tuple(rows_b.select("facts_id", "time", "time_zone").iter_rows()),
+    )
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.source_series import InventoryCompleteness, InventorySnapshot, SeriesScope
+    from rivretrieve._internal.store.integrity import inspect_integrity
+
+    rewritten_id = stable_id("obs-outcome-unretained", "unretained-observations")
+    out_unretained = RetrievalOutcome(
+        outcome_id="obs-outcome-unretained",
+        series_id=series_b_id,
+        station_id="b",
+        product_id="level",
+        window=SeriesWindow(start=cov_b.interval.start, end=cov_b.interval.end),
+        status=OutcomeStatus.SUCCESS,
+        facts_ids=(facts.facts_id,),
+        retrieved_at=_T2,
+        coverage="observations",
+        observation_keys=((facts.facts_id, datetime(2020, 1, 2), "unknown"),),
+    )
+    inv_unretained = InventorySnapshot(
+        snapshot_id="inv-unretained",
+        scope=SeriesScope(provider_ids=(str(_PROVIDER),), station_ids=("b",), product_ids=("level",)),
+        members=(series_b_id,),
+        completeness=InventoryCompleteness.COMPLETE,
+        access="controlled fixture",
+        origin="response",
+        acquired_at=_T2,
+        window=SeriesWindow(start=cov_b.interval.start, end=cov_b.interval.end),
+        evidence=(f"retrieval-outcome:{rewritten_id}",),
+    )
+    key_scans.clear()
+
+    manifest_mixed = accumulate(
+        mixed_store,
+        _PROVIDER,
+        StoreUpdate(
+            (upd_a.series[0], series_b),
+            (inv_unretained,),
+            (upd_a.outcomes[0], out_b, out_unretained),
+            (
+                upd_a.replacements[0],
+                SuccessfulReplacement(CoverageInterval(series_b_id, cov_b.interval, _T1, out_b.outcome_id), rows_b),
+            ),
+        ),
+    )
+    # Only the 1-row observation-coverage replacement is scanned (twice: accepted_keys + snapshot check);
+    # the 2-row interval-coverage replacement is never scanned.
+    assert key_scans == [(1,), (1,)]
+    by_id = {item.outcome_id: item for item in manifest_mixed.outcomes}
+    assert out_b.outcome_id in by_id
+    assert by_id[out_b.outcome_id].observation_keys == out_b.observation_keys
+    supporting = {item.outcome_id: item for item in inspect_integrity(mixed_store, _PROVIDER).supporting_outcomes}
+    assert rewritten_id in supporting
+    assert supporting[rewritten_id].observation_keys == ()
+
+    # Mismatched replacement against observations-coverage outcome triggers unretained-observations rewrite -> FatalContractError
+    mismatch_store = StoreRoot(tmp_path / "mismatch_store")
+    rows_mismatch = rows_b.slice(0, 0)
+    out_mismatch = RetrievalOutcome(
+        outcome_id="obs-outcome-mismatch",
+        series_id=series_b_id,
+        station_id="b",
+        product_id="level",
+        window=SeriesWindow(start=cov_b.interval.start, end=cov_b.interval.end),
+        status=OutcomeStatus.SUCCESS,
+        facts_ids=(facts.facts_id,),
+        retrieved_at=_T1,
+        coverage="observations",
+        observation_keys=out_b.observation_keys,
+    )
+    with pytest.raises(FatalContractError, match="explicit successful concrete-series outcome"):
+        accumulate(
+            mismatch_store,
+            _PROVIDER,
+            StoreUpdate(
+                (series_b,),
+                (),
+                (out_mismatch,),
+                (
+                    SuccessfulReplacement(
+                        CoverageInterval(series_b_id, cov_b.interval, _T1, out_mismatch.outcome_id), rows_mismatch
+                    ),
+                ),
+            ),
+        )
