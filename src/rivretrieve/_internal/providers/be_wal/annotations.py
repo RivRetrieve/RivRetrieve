@@ -34,7 +34,7 @@ QUALITY_CODE_FIELD = AnnotationField(
         "161/162 (S Manuel), 163 (S Manuel pris en compte pour les stat), 165 (L Limnimétrie), "
         "200 (Unknown, carried by operational/unreviewed peak and recent readings and retained verbatim), "
         "205 (Douteux (publié)), 210 (Douteux (non publié)), 253 (VF Valeurs fantomes), "
-        "or -1 when emitted alongside Value=null on unmeasured gap slots (measured=False). "
+        "or -1 when emitted alongside Value=null on published Value=null missing-value rows. "
         "RivRetrieve preserves the publisher code without filtering or ranking."
     ),
     reference_url=BE_WAL_QUALITY_CODES_URL,
@@ -46,7 +46,7 @@ QUALITY_CODE_NAME_FIELD = AnnotationField(
     description=(
         "Verbatim SPW KiWIS Quality Code Name paired with quality_code "
         "(Excellent, Good, Fair, Suspect, Poor, S, L, Unknown, Douteux (publié), "
-        "Douteux (non publié), VF), or null when Quality Code is -1 on unmeasured gap slots."
+        "Douteux (non publié), VF), or null when Quality Code is -1 on published Value=null missing-value rows."
     ),
     reference_url=BE_WAL_QUALITY_CODES_URL,
 )
