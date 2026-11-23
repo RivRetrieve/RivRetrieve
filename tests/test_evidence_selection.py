@@ -228,7 +228,7 @@ def test_real_selected_nodes_keep_provider_and_helper_input_closure(pytester, mo
             *(f"tests/test_data/za_dws_terms_licence-{n}.html" for n in (1, 4, 5)),
         ],
     )
-    for provider in ("cz_chmi", "jp_mlit", "lt_lhmt", "no_nve", "th_thaiwater"):
+    for provider in ("cz_chmi", "lt_lhmt", "no_nve", "th_thaiwater"):
         check(f"test_all_ordered_source_assertions_match_pinned_original_revision[{provider}]", [], [])
     check(
         "test_actual_live_parser_isolates_unrepresentable_numeric_cells[lt_lhmt-zero]",

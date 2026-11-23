@@ -444,6 +444,7 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
                 {
                     "usgs_nwis": "maintenance/catalogue/usgs_nwis",
                     "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
+                    "co_ideam": "maintenance/catalogue/co_ideam/official/native.parquet",
                     "dk_vanda": "maintenance/catalogue/dk_vanda/official/native.parquet",
                 }.get(provider, f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet")
             ),
@@ -490,10 +491,14 @@ def test_retained_catalogue_tests_select_bound_consumer_scopes():
     scopes = {
         "usgs_nwis": "maintenance/catalogue/usgs_nwis",
         "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
+        "co_ideam": "maintenance/catalogue/co_ideam/official/native.parquet",
     }
     for test, providers in (
         (test_native_material_identity_matches_committed_provenance_and_bytes, scopes),
-        (test_projection_preserves_every_native_scalar, {"usgs_nwis": scopes["usgs_nwis"]}),
+        (
+            test_projection_preserves_every_native_scalar,
+            {"usgs_nwis": scopes["usgs_nwis"], "co_ideam": scopes["co_ideam"]},
+        ),
     ):
         cases = next(mark.args[1] for mark in test.pytestmark if mark.name == "parametrize")
         for case in cases:
@@ -658,7 +663,7 @@ def test_record_keys_expand_to_croissant_vocabulary(provider: str):
 def test_build_identity_comparison_preserves_source_content(name: str) -> None:
     from tests._catalogue import catalogue_content_without_build_identity
 
-    document = json.loads((_path("jp_mlit") / name).read_bytes())
+    document = json.loads((_path("cz_chmi") / name).read_bytes())
     expected = catalogue_content_without_build_identity(name, json.dumps(document).encode())
     if name == "provenance.json":
         document["build_inputs"] = {"test": "different selected revision"}

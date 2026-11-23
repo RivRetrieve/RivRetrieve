@@ -11,8 +11,8 @@ Counts are unique provider/station identities for observation-capable providers;
 they do not assert continuous observations or complete national network coverage.
 No station coordinates or station CRS assumptions enter this figure.
 Planned countries are fetchers in the legacy kratzert/RivRetrieve-Python repository,
-merged or in open pull requests, that have no provider here yet, plus countries with an open
-provider:port issue and South Africa.
+merged or in open pull requests, that have no provider here yet, plus unblocked candidate
+countries tracked in #870 and South Africa.
 """
 
 from __future__ import annotations
@@ -28,18 +28,19 @@ from rivretrieve._internal.providers.registration import CatalogueOnly, load_man
 
 BOUNDARIES = "https://naturalearth.s3.amazonaws.com/50m_cultural/ne_50m_admin_0_countries.zip"
 PROVIDER_COUNTRY = {
+    "ar_ina": "ARG",
     "at_ehyd": "AUT",
     "au_bom": "AUS",
     "ba_fhmzbih": "BIH",
     "br_ana": "BRA",
     "ca_eccc": "CAN",
     "ch_foen": "CHE",
+    "co_ideam": "COL",
     "cz_chmi": "CZE",
     "dk_vanda": "DNK",
     "fi_syke": "FIN",
     "fr_hubeau": "FRA",
     "fr_hydroportail": "FRA",
-    "jp_mlit": "JPN",
     "lt_lhmt": "LTU",
     "no_nve": "NOR",
     "pe_senamhi": "PER",
@@ -48,16 +49,15 @@ PROVIDER_COUNTRY = {
     "usgs_nwis": "USA",
 }
 PLANNED_COUNTRY = {
-    "ARG": "Argentina",
     "BEL": "Belgium (Flanders, Wallonia)",
     "CHL": "Chile",
-    "DEU": "Germany (Berlin)",
+    "DEU": "Germany (federal waterways, Bavaria, Baden-Württemberg, Berlin, NRW)",
     "ESP": "Spain",
     "EST": "Estonia",
     "GBR": "United Kingdom (EA, NRFA, SEPA)",
     "GRC": "Greece",
-    "IRL": "Ireland (OPW)",
-    "ITA": "Italy (Tuscany)",
+    "IRL": "Ireland (OPW, EPA)",
+    "ITA": "Italy (Emilia-Romagna, Tuscany)",
     "KOR": "South Korea",
     "NLD": "Netherlands",
     "PRT": "Portugal",
@@ -67,13 +67,26 @@ PLANNED_COUNTRY = {
     "TWN": "Taiwan",
     "ZAF": "South Africa",
 }
-# Countries with an open provider:port issue that are not legacy fetchers.
+# Countries with unblocked open provider:port issues (#870) that are not legacy fetchers.
 RESEARCHED_COUNTRY = {
     "AFG": "Afghanistan",
-    "COL": "Colombia",
+    "ARM": "Armenia",
+    "BEN": "Benin",
+    "BFA": "Burkina Faso",
+    "BGR": "Bulgaria",
+    "CIV": "Ivory Coast",
+    "CMR": "Cameroon",
+    "GIN": "Guinea",
+    "IDN": "Indonesia",
     "ISR": "Israel",
+    "LKA": "Sri Lanka",
     "MEX": "Mexico",
+    "MLI": "Mali",
+    "MYS": "Malaysia",
+    "NER": "Niger",
+    "NGA": "Nigeria",
     "NZL": "New Zealand",
+    "TCD": "Chad",
 }
 PLANNED_COUNTRY |= RESEARCHED_COUNTRY
 ROBINSON = "ESRI:54030"
@@ -118,8 +131,8 @@ def draw(world, stations: pl.DataFrame, out: Path) -> None:
     ax.margins(0.01)
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0.08)
     handles = [
-        Patch(facecolor=IMPLEMENTED, edgecolor="none", label="Observation retrieval"),
-        Patch(facecolor="none", edgecolor=PLANNED, hatch="////", label="Observation retrieval planned"),
+        Patch(facecolor=IMPLEMENTED, edgecolor="none", label="Implemented"),
+        Patch(facecolor="none", edgecolor=PLANNED, hatch="////", label="Coming soon"),
     ]
     fig.legend(
         handles=handles,

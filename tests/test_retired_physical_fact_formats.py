@@ -17,7 +17,7 @@ from rivretrieve._internal.store.validation import ObservationStoreRefusedError
 DATA = Path("tests/test_data")
 OLD_STORE = DATA / "boundary_stores/fr_hubeau_retired_facts"
 OLD_BUNDLE = DATA / "bundles/fr_hubeau_retired_facts_v1.bundle"
-RECORDING = DATA / "fr_hubeau_1011000101_QmnJ_padded.recording.json"
+RECORDING = DATA / "fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json"
 
 
 def _selection():
@@ -92,7 +92,7 @@ def test_old_bundle_refusal_preserves_original_bytes_and_precedes_scientific_dec
 
 
 @pytest.mark.derived("tests/test_data/boundary_stores/fr_hubeau_retired_facts")
-@pytest.mark.recorded("tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json")
+@pytest.mark.recorded("tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json")
 def test_explicit_bypass_and_cleanup_refetch_produce_only_current_facts(retained_evidence_root, monkeypatch, tmp_path):
     path = _copy_cache(retained_evidence_root, monkeypatch, tmp_path)
     before = _snapshot(path)

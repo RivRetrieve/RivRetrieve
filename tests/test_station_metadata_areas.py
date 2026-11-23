@@ -39,17 +39,18 @@ def _areas(selection) -> pl.DataFrame:
 
 # Independent source-column expectations, including established units only.
 SOURCE_FIELDS = {
+    "ar_ina": ("id", {}),
     "at_ehyd": ("hzbnr", {"orogr.Einzugsgebiet [km²]": "km²"}),
     "au_bom": ("station_no", {}),
     "ba_fhmzbih": ("metadata_station_no", {"metadata_CATCHMENT_SIZE": None}),
     "br_ana": ("codigoestacao", {"Area_Drenagem": None}),
     "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": "km2", "DRAINAGE_AREA_EFFECT": "km2"}),
     "ch_foen": ("name", {}),
+    "co_ideam": ("Codigo", {}),
     "cz_chmi": ("objID", {"PLO_STA": "km²"}),
     "dk_vanda": ("stationId", {"catchmentAreaKm2": "km2"}),
     "fr_hubeau": ("code_station", {"superficie_topo": None, "superficie_reelle": None}),
     "fr_hydroportail": ("bookmarkCode", {}),
-    "jp_mlit": ("観測所記号", {"流域面積": None}),
     "lt_lhmt": ("code", {}),
     "no_nve": (
         "stationId",
@@ -129,7 +130,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
     assert overlapping.height > 0
-    for provider in ("lt_lhmt", "th_thaiwater"):
+    for provider in ("ar_ina", "co_ideam", "lt_lhmt", "pe_senamhi", "th_thaiwater"):
         absent = result.filter(pl.col("provider_id") == provider)
         assert set(absent["state"]) == {"no_metadata"}
         assert (
@@ -146,10 +147,14 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
         pytest.param(
             provider,
             marks=pytest.mark.derived(
-                "maintenance/catalogue/at_ehyd/official"
+                "maintenance/catalogue/ar_ina/official"
+                if provider == "ar_ina"
+                else "maintenance/catalogue/at_ehyd/official"
                 if provider == "at_ehyd"
                 else "maintenance/catalogue/usgs_nwis"
                 if provider == "usgs_nwis"
+                else "maintenance/catalogue/co_ideam/official/native.parquet"
+                if provider == "co_ideam"
                 else "maintenance/catalogue/dk_vanda/official"
                 if provider == "dk_vanda"
                 else f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"
@@ -166,6 +171,10 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         if provider == "at_ehyd"
         else retained_evidence_root / "maintenance/catalogue/usgs_nwis/legacy-native.parquet"
         if provider == "usgs_nwis"
+        else retained_evidence_root / "maintenance/catalogue/ar_ina/official/native.parquet"
+        if provider == "ar_ina"
+        else retained_evidence_root / "maintenance/catalogue/co_ideam/official/native.parquet"
+        if provider == "co_ideam"
         else retained_evidence_root / "maintenance/catalogue/dk_vanda/official/native.parquet"
         if provider == "dk_vanda"
         else retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
@@ -268,12 +277,11 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         )
         assert_frame_equal(restored, native.select(identity, field))
         assert set(rows["source_dtype"]) == {str(native.schema[field])}
-        if provider in ("jp_mlit", "ba_fhmzbih"):
+        if provider == "ba_fhmzbih":
             # These retained native area columns contain only complete quantities
             # or blanks/nulls. This check does not certify missing source originals.
-            inline_unit = "km2" if provider == "jp_mlit" else "km²"
             assert rows["source_unit"].to_list() == [
-                inline_unit if value is not None and value.strip() else None for value in native[field]
+                "km²" if value is not None and value.strip() else None for value in native[field]
             ]
         else:
             assert set(rows["source_unit"]) == {unit}
@@ -336,10 +344,7 @@ def test_formatted_string_is_not_parsed() -> None:
     assert result["source_unit"].item() == "km²"
 
 
-def test_nonbreaking_space_and_blank_are_values() -> None:
-    nonbreaking = _areas(rr.find(provider="jp_mlit", station="301011281104310"))
-    assert json.loads(nonbreaking["source_value"].item()) == "\u00a0"
-    assert nonbreaking["state"].item() == "value"
+def test_blank_area_strings_are_values() -> None:
     bosnia = _areas(rr.find(provider="ba_fhmzbih"))
     blanks = bosnia.filter(pl.col("source_value") == '""')
     assert blanks.height == 10

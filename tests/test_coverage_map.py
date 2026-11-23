@@ -393,6 +393,7 @@ def test_catalogue_counts_match_readme_and_observation_capabilities():
     actual = dict(stations.group_by("provider_id").len().iter_rows())
     assert supported == set(module["PROVIDER_COUNTRY"])
     assert "za_dws" not in supported
+    assert "jp_mlit" not in supported
     table = _assert_readme_coverage_claims(
         (ROOT / "README.md").read_text(),
         module["PROVIDER_COUNTRY"],

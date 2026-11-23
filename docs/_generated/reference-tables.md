@@ -157,18 +157,19 @@ Counts describe packaged inventory accounting only. They do not establish countr
 
 | Provider | Observation kind | Required credential variables | Stations | Available pairs | Unknown pairs | Unavailable pairs |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
+| `ar_ina` | live | none | 829 | 2611 | 8166 | 0 |
 | `at_ehyd` | live | none | 746 | 4837 | 3369 | 0 |
 | `au_bom` | live | none | 8120 | 94412 | 51748 | 0 |
 | `ba_fhmzbih` | live | none | 60 | 132 | 48 | 0 |
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
 | `ch_foen` | live | none | 1341 | 7008 | 41268 | 0 |
+| `co_ideam` | live | none | 1372 | 19690 | 0 | 7750 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
 | `dk_vanda` | live | none | 1565 | 1733 | 2962 | 0 |
 | `fi_syke` | live | none | 2543 | 2543 | 5086 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
-| `jp_mlit` | live | none | 1023 | 0 | 4092 | 0 |
 | `lt_lhmt` | live | none | 97 | 0 | 194 | 0 |
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
 | `pe_senamhi` | live | none | 771 | 1170 | 10395 | 0 |
@@ -182,6 +183,19 @@ Access coordinates and declared units come from products.parquet. These are inte
 
 | Provider | Product | Canonical unit |
 | --- | --- | --- |
+| `ar_ina` | `discharge_daily_mean` | `m3/s` |
+| `ar_ina` | `discharge_instantaneous` | `m3/s` |
+| `ar_ina` | `discharge_monthly_max` | `m3/s` |
+| `ar_ina` | `discharge_monthly_mean` | `m3/s` |
+| `ar_ina` | `discharge_monthly_min` | `m3/s` |
+| `ar_ina` | `stage_4hourly` | `m` |
+| `ar_ina` | `stage_daily_mean` | `m` |
+| `ar_ina` | `stage_hourly` | `m` |
+| `ar_ina` | `stage_instantaneous` | `m` |
+| `ar_ina` | `stage_monthly_max` | `m` |
+| `ar_ina` | `stage_monthly_mean` | `m` |
+| `ar_ina` | `stage_monthly_min` | `m` |
+| `ar_ina` | `stage_weekly_mean` | `m` |
 | `at_ehyd` | `owf_abfl_monatsmaxima` | `m3/s` |
 | `at_ehyd` | `owf_abfl_monatsminima` | `m3/s` |
 | `at_ehyd` | `owf_abfl_tagesmittel` | `m3/s` |
@@ -258,6 +272,26 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `ch_foen` | `water_temperature_1year_mean` | `degC` |
 | `ch_foen` | `water_temperature_1year_min` | `degC` |
 | `ch_foen` | `water_temperature_recent` | `degC` |
+| `co_ideam` | `caudal_h` | `m3/s` |
+| `co_ideam` | `nivel_h` | `m` |
+| `co_ideam` | `nv_media_a` | `m` |
+| `co_ideam` | `nv_media_d` | `m` |
+| `co_ideam` | `nv_media_m` | `m` |
+| `co_ideam` | `nv_mn_a` | `m` |
+| `co_ideam` | `nv_mn_d` | `m` |
+| `co_ideam` | `nv_mn_m` | `m` |
+| `co_ideam` | `nv_mx_a` | `m` |
+| `co_ideam` | `nv_mx_d` | `m` |
+| `co_ideam` | `nv_mx_m` | `m` |
+| `co_ideam` | `q_media_a` | `m3/s` |
+| `co_ideam` | `q_media_d` | `m3/s` |
+| `co_ideam` | `q_media_m` | `m3/s` |
+| `co_ideam` | `q_mn_a` | `m3/s` |
+| `co_ideam` | `q_mn_d` | `m3/s` |
+| `co_ideam` | `q_mn_m` | `m3/s` |
+| `co_ideam` | `q_mx_a` | `m3/s` |
+| `co_ideam` | `q_mx_d` | `m3/s` |
+| `co_ideam` | `q_mx_m` | `m3/s` |
 | `cz_chmi` | `discharge_daily_mean` | `m3/s` |
 | `cz_chmi` | `discharge_hourly_mean` | `m3/s` |
 | `cz_chmi` | `stage_daily_mean` | `m` |
@@ -275,10 +309,6 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `fr_hubeau` | `water_temperature_reported` | `degC` |
 | `fr_hydroportail` | `discharge_instantaneous` | `m3/s` |
 | `fr_hydroportail` | `stage_instantaneous` | `m` |
-| `jp_mlit` | `discharge_daily` | `m3/s` |
-| `jp_mlit` | `discharge_hourly` | `m3/s` |
-| `jp_mlit` | `stage_daily` | `m` |
-| `jp_mlit` | `stage_hourly` | `m` |
 | `lt_lhmt` | `discharge_daily_mean` | `m3/s` |
 | `lt_lhmt` | `stage_daily_mean` | `m` |
 | `no_nve` | `discharge_daily_mean` | `m3/s` |

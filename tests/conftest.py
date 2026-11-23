@@ -471,8 +471,12 @@ def reuse_packaged_catalogues(monkeypatch, packaged_catalogue_inputs) -> None:
 
 @pytest.fixture(autouse=True)
 def clear_provider_registry() -> Generator[None]:
+    from rivretrieve._internal.authentication import clear_process_token_cache
+
     _registry.clear()
+    clear_process_token_cache()
     yield
+    clear_process_token_cache()
     _registry.clear()
 
 
@@ -572,18 +576,17 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
             if provenance.provider_id == "usgs_nwis"
             else origins.NATIVE_TABLE_ACQUISITION_IDS
         )
-        if provenance.provider_id in {"at_ehyd", "ch_foen", "pe_senamhi"}:
+        if provenance.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "pe_senamhi"}:
             import json
 
-            selected_supporting_inputs = importlib.import_module(
+            generator = importlib.import_module(
                 f"rivretrieve._internal.providers.{provenance.provider_id}.generate_catalogue"
-            ).selected_supporting_inputs
-
+            )
             selection_path = f"maintenance/catalogue/{provenance.provider_id}/official/selection.json"
             if selection_path not in {item.consumer_path for item in receipt.declaration_inputs}:
                 raise ValueError("Build support requires the selected authored declaration")
             selection = json.loads((retained_evidence_root / selection_path).read_bytes())
-            supporting_inputs.update(selected_supporting_inputs(provenance, selection))
+            supporting_inputs.update(generator.selected_supporting_inputs(provenance, selection))
         result = select_catalogue_build_inputs(
             provenance,
             receipt,

@@ -50,7 +50,6 @@ from rivretrieve._internal.providers.dk_vanda.origins import Utm32EtrsToWgs84Con
 from rivretrieve._internal.providers.fi_syke.origins import ConstantCrsConversion
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
-from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
 from rivretrieve._internal.providers.pe_senamhi.origins import CoordinateConversion
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
@@ -131,19 +130,20 @@ def _adapter(
             return generated
     else:
         build = generator.build_catalogue
-    if provider in {"at_ehyd", "ch_foen", "dk_vanda", "pe_senamhi"}:
+    if provider in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
         sources = generator.read_catalogue_sources(
             retained_evidence_root,
             selection_path=f"maintenance/catalogue/{provider}/official/selection.json",
             input_receipt=input_receipt,
         )
         native_path = retained_evidence_root / f"maintenance/catalogue/{provider}/official/native.parquet"
+        extra = {"station_metadata": sources.station_metadata} if provider in {"at_ehyd", "ch_foen"} else {}
         build = partial(
             build,
             associations=sources.associations,
             checked_on=sources.checked_on,
             provenance=sources.provenance,
-            station_metadata=sources.station_metadata,
+            **extra,
         )
     if provider == "au_bom":
         sources = generator.read_catalogue_sources(retained_evidence_root, input_receipt=input_receipt)
@@ -255,7 +255,7 @@ def _adapter(
     )
 
 
-@pytest.mark.parametrize("provider", ["at_ehyd", "ch_foen", "pe_senamhi"])
+@pytest.mark.parametrize("provider", ["ar_ina", "at_ehyd", "ch_foen", "co_ideam", "pe_senamhi"])
 def test_selected_source_adapter_passes_explicit_source_selection(monkeypatch, tmp_path, provider):
     from types import SimpleNamespace
 
@@ -365,17 +365,18 @@ _france_origins = _module("fr_hubeau", "origins")
 DECLARATIONS = {
     ProviderId(provider): _stations_case(provider)
     for provider in (
+        "ar_ina",
         "at_ehyd",
         "au_bom",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "co_ideam",
         "cz_chmi",
         "dk_vanda",
         "fi_syke",
         "fr_hydroportail",
-        "jp_mlit",
         "lt_lhmt",
         "no_nve",
         "pe_senamhi",
@@ -405,7 +406,7 @@ CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case i
 def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDecorator:
     paths = (
         [f"maintenance/catalogue/{provider}/official"]
-        if provider in {"at_ehyd", "au_bom", "ch_foen", "dk_vanda", "pe_senamhi"}
+        if provider in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
     if provider == "usgs_nwis":
@@ -436,7 +437,8 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
 def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> ProviderAdapter:
     receipt = (
         request.getfixturevalue("catalogue_input_receipt")
-        if request.param in {"at_ehyd", "au_bom", "ch_foen", "dk_vanda", "pe_senamhi", "usgs_nwis"}
+        if request.param
+        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi", "usgs_nwis"}
         else None
     )
     return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param], input_receipt=receipt)
@@ -480,6 +482,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
     from rivretrieve._internal.providers.au_bom.origins import GeorefsystemToEpsgConversion
 
     return {
+        (ProviderId("ar_ina"), "stations"): {
+            "provider_id": authored("ar_ina"),
+            "station_id": field("id"),
+            "latitude": field("latitude"),
+            "longitude": field("longitude"),
+            "crs": documented("https://alerta.ina.gob.ar/a5/secciones/mapa/puntual"),
+        },
         (ProviderId("at_ehyd"), "stations"): {
             "provider_id": authored("at_ehyd"),
             "station_id": field("hzbnr"),
@@ -531,6 +540,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "longitude": field("longitude"),
             "crs": documented("https://data.bafu.admin.ch/dataproduct-water-observations"),
         },
+        (ProviderId("co_ideam"), "stations"): {
+            "provider_id": authored("co_ideam"),
+            "station_id": field("Codigo"),
+            "latitude": field("Latitud", FloatConversion()),
+            "longitude": field("Longitud", FloatConversion()),
+            "crs": withheld(),
+        },
         (ProviderId("cz_chmi"), "stations"): {
             "provider_id": authored("cz_chmi"),
             "station_id": field("objID"),
@@ -567,13 +583,6 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "latitude": field("latitude", FloatConversion()),
             "longitude": field("longitude", FloatConversion()),
             "crs": documented("https://hubeau.eaufrance.fr/api/v1/temperature/station?size=2000&format=json"),
-        },
-        (ProviderId("jp_mlit"), "stations"): {
-            "provider_id": authored("jp_mlit"),
-            "station_id": field("観測所記号"),
-            "latitude": field("世界測地系", WorldGeodeticDmsConversion()),
-            "longitude": field("世界測地系", WorldGeodeticDmsConversion()),
-            "crs": unpublished("http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010"),
         },
         (ProviderId("lt_lhmt"), "stations"): {
             "provider_id": authored("lt_lhmt"),
@@ -832,6 +841,7 @@ def test_receipt_provider_specific_url_bindings_and_attested_exceptions(retained
 
 
 EXPECTED_CRS_COUNTS = {
+    (ProviderId("ar_ina"), "stations"): (829, "EPSG:4326"),
     (ProviderId("at_ehyd"), "stations"): (746, "EPSG:4326"),
     (ProviderId("ba_fhmzbih"), "stations"): (60, "unknown"),
     (ProviderId("ca_eccc"), "stations"): (8_057, "EPSG:4326"),
@@ -841,7 +851,6 @@ EXPECTED_CRS_COUNTS = {
     (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): (6_475, "EPSG:4326"),
     (ProviderId("fr_hubeau"), "temperature/station"): (872, "EPSG:4326"),
     (ProviderId("fr_hydroportail"), "stations"): (6_409, "EPSG:4326"),
-    (ProviderId("jp_mlit"), "stations"): (1_023, "unknown"),
     (ProviderId("lt_lhmt"), "stations"): (97, "EPSG:4326"),
     (ProviderId("no_nve"), "stations"): (4_902, "unknown"),
     (ProviderId("pl_imgw"), "stations"): (1_301, "unknown"),
@@ -893,9 +902,16 @@ def _assert_reviewed_crs(
         assert stations["crs"].unique().to_list() == [origin.value]
         assert "unknown" not in stations["crs"].unique().to_list()
     elif isinstance(origin, Withheld):
-        assert adapter.provider_id in {ProviderId("pl_imgw"), ProviderId("br_ana"), ProviderId("pe_senamhi")}
+        assert adapter.provider_id in {
+            ProviderId("pl_imgw"),
+            ProviderId("br_ana"),
+            ProviderId("co_ideam"),
+            ProviderId("pe_senamhi"),
+        }
         assert origin.reason == "acquisition_not_established"
         assert stations["crs"].unique().to_list() == ["unknown"]
+        if adapter.provider_id == ProviderId("co_ideam"):
+            assert stations.height == 1_372
     elif adapter.provider_id == ProviderId("au_bom"):
         assert isinstance(origin, Field)
         assert str(origin.native_column) == "station_georefsystem"
@@ -905,19 +921,6 @@ def _assert_reviewed_crs(
         assert str(origin.native_column) == "crs"
         expected = case_native.data.select("station_id", "crs").sort("station_id")
         pl_testing.assert_frame_equal(stations.select("station_id", "crs").sort("station_id"), expected)
-
-
-@pytest.mark.governing(
-    "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
-    "tests/test_data/jp_mlit_site_info_detail_301011281104010.html",
-)
-def test_japan_coordinate_representation_does_not_establish_crs(retained_evidence_root: Path) -> None:
-    capture = (retained_evidence_root / "tests/test_data/jp_mlit_site_info_detail_301011281104010.html").read_bytes()
-    assert len(capture) == 3_208
-    assert hashlib.sha256(capture).hexdigest() == "81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9"
-    assert "世界測地系".encode("euc_jp") in capture
-    japan = _adapter(retained_evidence_root, "jp_mlit", DECLARATIONS[ProviderId("jp_mlit")])
-    assert _build(japan).stations["crs"].unique().to_list() == ["unknown"]
 
 
 def _normalized_built_at(payload: bytes) -> bytes:
@@ -1060,6 +1063,13 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             ),
         ),
         pytest.param(
+            "co_ideam",
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/co_ideam/official",
+                "maintenance/catalogue/co_ideam/official/selection.json",
+            ),
+        ),
+        pytest.param(
             "cz_chmi",
             marks=pytest.mark.governing(
                 *_catalogue_recording_paths("cz_chmi"),
@@ -1078,15 +1088,6 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
                 "src/rivretrieve/_internal/providers/fr_hydroportail/catalogue/native.parquet",
                 "maintenance/catalogue/fr_hydroportail/evidence",
                 full_verification=("fr_hubeau",),
-            ),
-        ),
-        pytest.param(
-            "jp_mlit",
-            marks=pytest.mark.governing(
-                *_catalogue_recording_paths("jp_mlit"),
-                "src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet",
-                "tests/test_data/jp_mlit_terms_citation.pdf",
-                "tests/test_data/jp_mlit_terms_licence_euc_jp.html",
             ),
         ),
         pytest.param(
@@ -1162,6 +1163,14 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
                 full_verification=("fr_hubeau",),
             ),
         ),
+        pytest.param(
+            "ar_ina",
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/ar_ina/official",
+                "maintenance/catalogue/ar_ina/official/selection.json",
+                "maintenance/catalogue/station_metadata/review.json",
+            ),
+        ),
     ],
     indirect=True,
 )
@@ -1204,13 +1213,13 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     if product_root.is_relative_to(ROOT.resolve()) or product_root.is_relative_to(retained_evidence_root.resolve()):
         pytest.fail("Catalogue products must stay outside the checkout and retained inputs.", pytrace=False)
     output = product_root / str(adapter.provider_id)
-    if adapter.provider_id not in {"at_ehyd", "au_bom", "ch_foen", "dk_vanda", "pe_senamhi"}:
+    if adapter.provider_id not in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
         output.mkdir(mode=0o700)
     if adapter.provider_id == "br_ana":
         from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
 
         *_, provenance, generated = read_catalogue_inputs(retained_evidence_root)
-    elif adapter.provider_id in {"at_ehyd", "ch_foen", "dk_vanda", "pe_senamhi"}:
+    elif adapter.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
         generated = _build(adapter)
         provenance = generated.acquisition_provenance
         source_inputs_before = {
@@ -1261,9 +1270,10 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     with input_selection.open("x", encoding="utf-8") as stream:
         stream.write(adopted.model_dump_json())
     arguments = ["--out", str(output), "--build-inputs", str(input_selection)]
-    if adapter.provider_id not in {"at_ehyd", "au_bom", "ch_foen", "dk_vanda", "pe_senamhi"}:
+    if adapter.provider_id not in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
         arguments.extend(("--native", str(adapter.native_path)))
     if adapter.provider_id in {
+        "ar_ina",
         "au_bom",
         "ba_fhmzbih",
         "ca_eccc",
@@ -1275,26 +1285,26 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "za_dws",
     }:
         arguments.extend(("--evidence-root", str(retained_evidence_root)))
-    if adapter.provider_id in {"at_ehyd", "au_bom", "ch_foen", "dk_vanda", "fr_hubeau", "pe_senamhi"}:
+    if adapter.provider_id in {
+        "ar_ina",
+        "at_ehyd",
+        "au_bom",
+        "ch_foen",
+        "co_ideam",
+        "dk_vanda",
+        "fr_hubeau",
+        "pe_senamhi",
+    }:
         selected_receipt = product_root / f"{adapter.provider_id}.input-receipt.json"
         selected_receipt.write_text(catalogue_input_receipt.model_dump_json())
         arguments.extend(("--input-receipt", str(selected_receipt)))
-    if adapter.provider_id == "pe_senamhi":
+    if adapter.provider_id in {"at_ehyd", "co_ideam", "pe_senamhi"}:
         arguments.extend(
             (
                 "--evidence-root",
                 str(retained_evidence_root),
                 "--selection",
-                "maintenance/catalogue/pe_senamhi/official/selection.json",
-            )
-        )
-    if adapter.provider_id == "at_ehyd":
-        arguments.extend(
-            (
-                "--evidence-root",
-                str(retained_evidence_root),
-                "--selection",
-                "maintenance/catalogue/at_ehyd/official/selection.json",
+                f"maintenance/catalogue/{adapter.provider_id}/official/selection.json",
             )
         )
     if adapter.provider_id == "dk_vanda":
@@ -1347,15 +1357,6 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
                 str(retained_evidence_root),
                 "--acquisition-provenance",
                 str(selected_provenance),
-            )
-        )
-    elif adapter.provider_id == "jp_mlit":
-        arguments.extend(
-            (
-                "--license-recording",
-                str(retained_evidence_root / "tests/test_data/jp_mlit_terms_licence_euc_jp.html"),
-                "--citation-recording",
-                str(retained_evidence_root / "tests/test_data/jp_mlit_terms_citation.pdf"),
             )
         )
     elif adapter.provider_id == "fr_hubeau":

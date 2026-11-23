@@ -170,21 +170,27 @@ def test_complete_ordered_provenance_roundtrip(provider):
     assert reconstruct_provenance(parsed).model_dump(mode="json") == old.model_dump(mode="json")
 
 
-def test_senamhi_selected_metadata_publication_has_declared_source_lineage():
+@pytest.mark.parametrize("provider", ["at_ehyd", "co_ideam", "pe_senamhi"])
+def test_selected_metadata_publication_has_declared_source_lineage(provider: str):
+    from importlib import import_module
+
     from rivretrieve._internal.acquisition_provenance import CodeReference, ExternalFactReference
     from rivretrieve._internal.catalogues.station_metadata import validate_metadata_fields
-    from rivretrieve._internal.providers.pe_senamhi.origins import STATION_METADATA_FIELDS
     from rivretrieve._internal.station_metadata import metadata_support_fact, source_metadata_frame
+
+    station_metadata_fields = import_module(
+        f"rivretrieve._internal.providers.{provider}.origins"
+    ).STATION_METADATA_FIELDS
 
     # Selected-original providers have no historical metadata migration to undo.
     # Check their current publication instead of applying the legacy projection.
-    provenance = _legacy("pe_senamhi")
-    metadata = pl.read_parquet(ROOT / "pe_senamhi/catalogue/station_metadata.parquet")
+    provenance = _legacy(provider)
+    metadata = pl.read_parquet(ROOT / f"{provider}/catalogue/station_metadata.parquet")
     source_metadata_frame(metadata.select("provider_id", "station_id").unique(), metadata)
-    validate_metadata_fields(metadata, STATION_METADATA_FIELDS)
+    validate_metadata_fields(metadata, station_metadata_fields)
     build = provenance.build_inputs
     assert build is not None
-    prefix = "src/rivretrieve/_internal/providers/pe_senamhi/"
+    prefix = f"src/rivretrieve/_internal/providers/{provider}/"
     declaration = CodeReference(
         repository=build.build.repository,
         revision=build.build.revision,
@@ -194,13 +200,13 @@ def test_senamhi_selected_metadata_publication_has_declared_source_lineage():
     assert declaration in build.declarations
     selected = build.declarations[0]
     assert selected.repository == "https://github.com/RivRetrieve/verification-evidence"
-    assert selected.repository_path == "declarations/pe_senamhi/catalogue.json"
+    assert selected.repository_path == f"declarations/{provider}/catalogue.json"
     assert selected.symbol is None
     assert {item.reference.archive_revision for item in build.inputs} == {selected.revision}
     bindings = {binding.fact_group: binding for binding in provenance.fact_bindings}
     expected_facts = {
         metadata_support_fact(field.attribute_role, field.source_field, field.source_scope)
-        for field in STATION_METADATA_FIELDS
+        for field in station_metadata_fields
     }
     assert {fact for fact in provenance.fact_universe if fact.startswith("metadata.")} == expected_facts
     assert set(metadata["support_fact"].drop_nulls()) == expected_facts
@@ -211,7 +217,7 @@ def test_senamhi_selected_metadata_publication_has_declared_source_lineage():
         if binding.transformation is None
         for fact in binding.facts
     }
-    for field in STATION_METADATA_FIELDS:
+    for field in station_metadata_fields:
         fact = metadata_support_fact(field.attribute_role, field.source_field, field.source_scope)
         binding = bindings[fact]
         assert binding.facts == (fact,)
@@ -229,76 +235,10 @@ def test_senamhi_selected_metadata_publication_has_declared_source_lineage():
         support = (*field.source_facts, *field.support_facts)
         assert set(support) <= adopted
         assert transform.external_inputs == tuple(
-            ExternalFactReference(source_id="pe_senamhi", fact=item) for item in support
+            ExternalFactReference(source_id=provider, fact=item) for item in support
         )
         for item in support:
-            assert direct[item].source_id == "pe_senamhi"
-            assert direct[item].acquisition_id is not None
-
-
-def test_at_ehyd_selected_metadata_publication_has_declared_source_lineage():
-    from rivretrieve._internal.acquisition_provenance import CodeReference, ExternalFactReference
-    from rivretrieve._internal.catalogues.station_metadata import validate_metadata_fields
-    from rivretrieve._internal.providers.at_ehyd.origins import STATION_METADATA_FIELDS
-    from rivretrieve._internal.station_metadata import metadata_support_fact, source_metadata_frame
-
-    # Selected-original providers have no historical metadata migration to undo.
-    # Check their current publication instead of applying the legacy projection.
-    provenance = _legacy("at_ehyd")
-    metadata = pl.read_parquet(ROOT / "at_ehyd/catalogue/station_metadata.parquet")
-    source_metadata_frame(metadata.select("provider_id", "station_id").unique(), metadata)
-    validate_metadata_fields(metadata, STATION_METADATA_FIELDS)
-    build = provenance.build_inputs
-    assert build is not None
-    prefix = "src/rivretrieve/_internal/providers/at_ehyd/"
-    declaration = CodeReference(
-        repository=build.build.repository,
-        revision=build.build.revision,
-        repository_path=prefix + "origins.py",
-        symbol="STATION_METADATA_FIELDS",
-    )
-    assert declaration in build.declarations
-    selected = build.declarations[0]
-    assert selected.repository == "https://github.com/RivRetrieve/verification-evidence"
-    assert selected.repository_path == "declarations/at_ehyd/catalogue.json"
-    assert selected.symbol is None
-    assert {item.reference.archive_revision for item in build.inputs} == {selected.revision}
-    bindings = {binding.fact_group: binding for binding in provenance.fact_bindings}
-    expected_facts = {
-        metadata_support_fact(field.attribute_role, field.source_field, field.source_scope)
-        for field in STATION_METADATA_FIELDS
-    }
-    assert {fact for fact in provenance.fact_universe if fact.startswith("metadata.")} == expected_facts
-    assert set(metadata["support_fact"].drop_nulls()) == expected_facts
-    adopted = {fact for item in build.inputs for fact in item.facts}
-    direct = {
-        fact: binding
-        for binding in provenance.fact_bindings
-        if binding.transformation is None
-        for fact in binding.facts
-    }
-    for field in STATION_METADATA_FIELDS:
-        fact = metadata_support_fact(field.attribute_role, field.source_field, field.source_scope)
-        binding = bindings[fact]
-        assert binding.facts == (fact,)
-        transform = binding.transformation
-        assert transform is not None
-        assert transform.name == "project_station_metadata"
-        assert transform.kind == "derived_value" and transform.marker_value is None
-        assert transform.declaration == declaration
-        assert transform.executable == CodeReference(
-            repository=build.build.repository,
-            revision=build.build.revision,
-            repository_path=prefix + "station_metadata.py",
-            symbol="project_station_metadata",
-        )
-        support = (*field.source_facts, *field.support_facts)
-        assert set(support) <= adopted
-        assert transform.external_inputs == tuple(
-            ExternalFactReference(source_id="at_ehyd", fact=item) for item in support
-        )
-        for item in support:
-            assert direct[item].source_id == "at_ehyd"
+            assert direct[item].source_id == provider
             assert direct[item].acquisition_id is not None
 
 
@@ -743,42 +683,7 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
         del model["fact_universe"][48:51]
         del model["fact_bindings"][3:5]
         return AcquisitionProvenance.model_validate(model)
-    if provenance.provider_id == "jp_mlit":
-        expected_binding = {
-            "acquisition_id": "station_zero_point_definition_capture_2026_08_02",
-            "fact_group": "mlit_station_zero_point_elevation_definition",
-            "facts": ["source.station.mlit_zero_point_elevation_definition"],
-            "source_id": "jp_mlit",
-        }
-        expected_acquisition = {
-            "acquisition_id": "station_zero_point_definition_capture_2026_08_02",
-            "description": "Original MLIT station-detail recording exposing the zero-point elevation field",
-            "instant_type": "retrieval",
-            "material": None,
-            "method": "http_request",
-            "recording_ids": ["jp_mlit_site_info_detail_301011281104010"],
-            "requested_from": ["http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010"],
-            "retrieved_at_end": None,
-            "retrieved_at_start": "2026-08-02T19:35:42Z",
-        }
-        expected_evidence = {
-            "description": "Original station-detail field context for 零点高; no separate global unit or datum",
-            "evidence_id": "jp_mlit_station_zero_point_definition",
-            "recording": {
-                "media_type": "text/html; charset=EUC-JP",
-                "recording_id": "jp_mlit_site_info_detail_301011281104010",
-                "repository_path": "tests/test_data/jp_mlit_site_info_detail_301011281104010.html",
-                "retrieved_at": "2026-08-02T19:35:42Z",
-                "sha256": "81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9",
-                "source_url": "http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010",
-            },
-        }
-        (source,) = model["source_records"]
-        assert source["source_id"] == "jp_mlit"
-        assert source["acquisitions"].pop(0) == expected_acquisition
-        assert source["evidence"].pop(0) == expected_evidence
-        offset = 8
-    elif provenance.provider_id == "no_nve":
+    if provenance.provider_id == "no_nve":
         expected_binding = {
             "acquisition_id": "station_schema_capture_2026_09_04",
             "fact_group": "station_metadata_definitions",
@@ -801,7 +706,8 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
 
 
 @pytest.mark.parametrize(
-    "provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "dk_vanda", "pe_senamhi"})
+    "provider",
+    tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}),
 )
 def test_historical_projection_preserves_sources_and_validates_metadata(provider):
     if provider == "usgs_nwis":
@@ -815,7 +721,8 @@ def test_historical_projection_preserves_sources_and_validates_metadata(provider
 
 
 @pytest.mark.parametrize(
-    "provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "dk_vanda", "pe_senamhi"})
+    "provider",
+    tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}),
 )
 def test_historical_projection_rejects_changed_current_producer(provider):
     if provider == "usgs_nwis":
@@ -864,18 +771,17 @@ def test_historical_projection_rejects_changed_metadata_lineage(mutation):
         historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
 
 
-@pytest.mark.parametrize("mutation", ["binding", "acquisition", "recording"])
+@pytest.mark.parametrize("mutation", ["binding", "fact"])
 def test_historical_restoration_rejects_changed_metadata_source_extension(mutation):
-    original = _legacy("jp_mlit")
-    metadata = pl.read_parquet(ROOT / "jp_mlit/catalogue/station_metadata.parquet")
+    original = _legacy("no_nve")
+    metadata = pl.read_parquet(ROOT / "no_nve/catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     payload = projected.model_dump(mode="json")
     if mutation == "binding":
         payload["fact_bindings"][0]["fact_group"] = "other_definition"
-    elif mutation == "acquisition":
-        payload["source_records"][0]["acquisitions"][0]["description"] = "changed witness"
     else:
-        payload["source_records"][0]["evidence"][0]["recording"]["sha256"] = "a" * 64
+        payload["fact_universe"][6] = "source.station_catalogue.other_definition"
+        payload["fact_bindings"][0]["facts"][0] = "source.station_catalogue.other_definition"
     with pytest.raises(AssertionError):
         _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
 
@@ -918,7 +824,7 @@ def test_polish_historical_restoration_preserves_unexpected_source_facts():
     assert fact in restored.fact_universe
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["ca_eccc", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_removes_only_declared_metadata_source_closure(provider):
     original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
@@ -929,7 +835,6 @@ def test_historical_restoration_removes_only_declared_metadata_source_closure(pr
     fact_start, fact_count, binding_start, binding_count = {
         "ca_eccc": (5, 3, 0, 3),
         "ch_foen": (47, 5, 11, 4),
-        "jp_mlit": (8, 1, 0, 1),
         "no_nve": (6, 4, 0, 1),
         "pl_imgw": (48, 3, 3, 2),
         "usgs_nwis": (0, 3, 0, 1),
@@ -952,7 +857,7 @@ def test_historical_restoration_removes_only_declared_metadata_source_closure(pr
     assert projected.model_dump(mode="json") == before
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["ca_eccc", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_preserves_changes_outside_the_extension(provider):
     original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
@@ -963,8 +868,8 @@ def test_historical_restoration_preserves_changes_outside_the_extension(provider
     restored = _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
     expected["source_records"][0]["issuer"] = "changed historical issuer"
     assert restored.model_dump(mode="json") == expected
-    if provider == "jp_mlit":
-        # JP needs no retained intermediate restoration, so exercise the actual
+    if provider == "no_nve":
+        # NVE needs no retained intermediate restoration, so exercise the actual
         # immutable old oracle here, not a digest derived from today's product.
         oracle = json.loads((Path(__file__).parent / "test_data/catalogue_provenance_ordered_v2.json").read_text())
         ordered = json.dumps(restored.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
@@ -1583,7 +1488,6 @@ def _assert_bulk_source_history_preserved(retained_evidence_root: Path, provider
                 "tests/test_data/french_combined_catalogue",
             ),
         ),
-        "jp_mlit",
         "lt_lhmt",
         "no_nve",
         pytest.param(

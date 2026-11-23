@@ -22,7 +22,6 @@ EXPECTED_PRODUCT_IDS = [
     "discharge_daily_mean_bruto",
     "discharge_daily_mean_consistido",
     "discharge_daily_min",
-    "discharge_hourly",
     "discharge_hourly_mean",
     "discharge_instantaneous",
     "discharge_monthly_mean",
@@ -52,6 +51,21 @@ EXPECTED_PRODUCT_IDS = [
 ]
 
 EXPECTED_PRODUCTS_BY_PROVIDER = {
+    "ar_ina": [
+        "discharge_daily_mean",
+        "discharge_instantaneous",
+        "discharge_monthly_max",
+        "discharge_monthly_mean",
+        "discharge_monthly_min",
+        "stage_4hourly",
+        "stage_daily_mean",
+        "stage_hourly",
+        "stage_instantaneous",
+        "stage_monthly_max",
+        "stage_monthly_mean",
+        "stage_monthly_min",
+        "stage_weekly_mean",
+    ],
     "at_ehyd": [
         "owf_abfl_monatsmaxima",
         "owf_abfl_monatsminima",
@@ -120,6 +134,28 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
             "recent",
         )
     ],
+    "co_ideam": [
+        "caudal_h",
+        "nivel_h",
+        "nv_media_a",
+        "nv_media_d",
+        "nv_media_m",
+        "nv_mn_a",
+        "nv_mn_d",
+        "nv_mn_m",
+        "nv_mx_a",
+        "nv_mx_d",
+        "nv_mx_m",
+        "q_media_a",
+        "q_media_d",
+        "q_media_m",
+        "q_mn_a",
+        "q_mn_d",
+        "q_mn_m",
+        "q_mx_a",
+        "q_mx_d",
+        "q_mx_m",
+    ],
     "cz_chmi": [
         "discharge_daily_mean",
         "discharge_hourly_mean",
@@ -144,12 +180,6 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "water_temperature_reported",
     ],
     "fr_hydroportail": ["discharge_instantaneous", "stage_instantaneous"],
-    "jp_mlit": [
-        "discharge_daily",
-        "discharge_hourly",
-        "stage_daily",
-        "stage_hourly",
-    ],
     "lt_lhmt": [
         "discharge_daily_mean",
         "stage_daily_mean",
@@ -204,8 +234,10 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
 
 EXPECTED_PRODUCT_IDS = sorted(
     set(EXPECTED_PRODUCT_IDS)
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["ar_ina"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["at_ehyd"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["co_ideam"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["pe_senamhi"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["dk_vanda"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["fi_syke"])
@@ -238,18 +270,19 @@ def _disable_default_provider_registration(monkeypatch: pytest.MonkeyPatch) -> N
 def test_providers_empty_registry_returns_default_providers() -> None:
     result = rr.providers()
     assert result.get_column("provider_id").to_list() == [
+        "ar_ina",
         "at_ehyd",
         "au_bom",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "co_ideam",
         "cz_chmi",
         "dk_vanda",
         "fi_syke",
         "fr_hubeau",
         "fr_hydroportail",
-        "jp_mlit",
         "lt_lhmt",
         "no_nve",
         "pe_senamhi",
@@ -265,6 +298,11 @@ def test_providers_empty_registry_returns_default_providers() -> None:
 def test_south_african_station_discovery_is_not_offered() -> None:
     with pytest.raises(UnknownProviderError):
         rr.find(provider="za_dws", station="X3H001")
+
+
+def test_japan_mlit_station_discovery_is_temporarily_disabled() -> None:
+    with pytest.raises(UnknownProviderError):
+        rr.find(provider="jp_mlit", station="305071285512040")
 
 
 def test_providers_sorted_independent_of_registration_order(

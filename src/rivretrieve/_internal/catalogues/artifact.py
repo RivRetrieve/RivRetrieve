@@ -45,17 +45,18 @@ REQUIRED_ARTIFACT_FILES = (
 
 ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
     {
+        "ar_ina",
         "at_ehyd",
         "au_bom",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "co_ideam",
         "cz_chmi",
         "fi_syke",
         "fr_hubeau",
         "fr_hydroportail",
-        "jp_mlit",
         "lt_lhmt",
         "no_nve",
         "pl_imgw",

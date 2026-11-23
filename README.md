@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from eighteen different providers in seventeen countries.
+from nineteen different providers in eighteen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -37,17 +37,18 @@ for how to supply them.
 
 | Country | Agency | Provider | Stations | Access |
 |---|---|---|---:|---|
+| Argentina | Instituto Nacional del Agua (INA), Alerta5 | `ar_ina` | 829 | Open |
 | Australia | Bureau of Meteorology (BoM) | `au_bom` | 8,120 | Open |
 | Austria | Federal Ministry of Agriculture and Forestry, Climate and Environmental Protection, Regions and Water Management / Bundesministerium für Land- und Forstwirtschaft, Klima- und Umweltschutz, Regionen und Wasserwirtschaft (BMLUK), eHYD | `at_ehyd` | 744 | Open |
 | Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | Open |
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
 | Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Bulk download |
+| Colombia | Instituto de Hidrología, Meteorología y Estudios Ambientales (IDEAM) | `co_ideam` | 1,372 | Open |
 | Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | Open |
 | Denmark | Miljøstyrelsen (Danish Environmental Protection Agency) / Danmarks Miljøportal (VandA) | `dk_vanda` | 1,388 | Open |
 | Finland | Finnish Environment Institute (Syke), Hydrologiarajapinta | `fi_syke` | 2,543 | Open |
 | France | Hub'Eau | `fr_hubeau` | 7,347 | Open |
 | France | HydroPortail | `fr_hydroportail` | 6,409 | Open |
-| Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | Open |
 | Lithuania | Lithuanian Hydrometeorological Service (LHMT) | `lt_lhmt` | 97 | Open |
 | Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | Credentials required |
 | Peru | Servicio Nacional de Meteorología e Hidrología del Perú (SENAMHI) | `pe_senamhi` | 270 | Open |
@@ -57,13 +58,9 @@ for how to supply them.
 | United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 29,387 | Open |
 
 Station counts show gauges with supported series in the packaged catalogues, not guaranteed current data availability.
+See the [Argentine provider guide](https://rivretrieve.github.io/providers/ar_ina/) for `ar_ina` network scope, stage references and limitations.
 Austria's `at_ehyd` catalogue retains 746 river station identities; 744 have selectable series in this snapshot.
 See the [Austrian provider guide](https://rivretrieve.github.io/providers/at_ehyd/) for catalogue coverage and limitations.
-Denmark's `dk_vanda` catalogue retains 1,565 stations; 1,388 have selectable series in this snapshot.
-See the [Danish provider guide](https://rivretrieve.github.io/providers/dk_vanda/) for catalogue coverage and limitations.
-Switzerland's `ch_foen` catalogue retains 1,341 stations; 558 have selectable official series in this snapshot.
-See the [Swiss provider guide](https://rivretrieve.github.io/providers/ch_foen/) for catalogue coverage and limitations.
-The USGS catalogue retains 29,642 station identities; 29,387 have selectable series in this snapshot.
 SENAMHI retains 771 station identities; 270 have selectable series in this snapshot.
 A station can appear under both French services; their series remain separate.
 
@@ -72,9 +69,10 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Argentina, Belgium, Chile, Colombia, Estonia, Germany,
-Greece, Ireland, Israel, Italy, Mexico, Netherlands, New Zealand, Portugal, Rwanda,
-Slovenia, South Africa, South Korea, Spain, Sweden, Taiwan and the United Kingdom.
+Afghanistan, Armenia, Belgium, Benin, Bulgaria, Burkina Faso, Cameroon, Chad, Chile,
+Estonia, Germany, Greece, Guinea, Indonesia, Ireland, Israel, Italy, Ivory Coast, Malaysia,
+Mali, Mexico, Netherlands, New Zealand, Niger, Nigeria, Portugal, Rwanda, Slovenia, South Africa,
+South Korea, Spain, Sri Lanka, Sweden, Taiwan and the United Kingdom.
 
 Some of these have a fetcher in the legacy
 [RivRetrieve-Python](https://github.com/kratzert/RivRetrieve-Python) that awaits porting; others
@@ -228,8 +226,8 @@ streamflow for several gauges at once.
   appears in a daily-mean search only when its values are known to be daily means. Two matching
   records can still differ in ways that matter for your study.
 - **No quality control or gap filling.** RivRetrieve does not assess scientific quality.
-  It converts units and formats, and reports retrieval and parsing issues. Provider-specific
-  observation quality flags are not added to harmonised output.
+  It converts units and formats, and reports retrieval and parsing issues. Published quality flags are preserved as optional source annotations.
+  RivRetrieve does not interpret or rank them.
 - **No aggregation.** RivRetrieve does not aggregate data (e.g., from hourly to daily). Data are
   returned at the time step the provider publishes: daily data are available only where the
   provider already publishes daily values.

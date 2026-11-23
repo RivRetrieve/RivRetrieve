@@ -205,7 +205,7 @@ def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
         rr.series(explicit).select("series_id", "variant"),
         rr.series(narrowed).select("series_id", "variant"),
     )
-    assert scope["_transport"].ana.exchange_calls == 2
+    assert scope["_transport"].ana.exchange_calls == 1
     assert scope["_transport"].ana.observation_calls >= 2
     assert_frame_equal(scope["restored_result"].data, result.data)
     assert_frame_equal(scope["restored_result"].to_polars(annotations=True), result.to_polars(annotations=True))

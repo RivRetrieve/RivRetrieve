@@ -214,6 +214,7 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
     private_declarations = {
         "maintenance/catalogue/au_bom/official/catalogue.json": "maintenance/catalogue/au_bom/official/catalogue.json",
         "declarations/usgs_nwis/retention.json": "declarations/usgs_nwis/retention.json",
+        "maintenance/catalogue/ar_ina/official/selection.json": "declarations/ar_ina/catalogue.json",
         "maintenance/catalogue/usgs_nwis/selected-acquisitions.json": "declarations/usgs_nwis/selected-acquisitions.json",
         "maintenance/catalogue/usgs_nwis/retained-series.json": "declarations/usgs_nwis/retained-series.json",
         "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json": "declarations/ba_fhmzbih/baseline_workbook_access.json",

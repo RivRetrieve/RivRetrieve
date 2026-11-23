@@ -10,6 +10,31 @@ meaning or current access. Identify the intended scope and the next unresolved
 step before investigating. Use the [steps below](#provider-steps-and-their-code-targets) for concrete outcomes
 and code references; read the references needed for the current work.
 
+## Keep the provider ports tracker current
+
+Check the [provider ports tracker](https://github.com/RivRetrieve/RivRetrieve/issues/870)
+before selecting or starting a port. Confirm that the provider is not already
+implemented on `main`, marked in progress (`🚧`) by another contributor or agent,
+or listed in the externally blocked group awaiting an access or maintainer decision.
+
+Update the tracker entry in place as work progresses. Fetch the latest issue body
+immediately before editing (for example with `gh issue view 870 --json body`)
+and change only that provider's line so concurrent updates are preserved:
+
+1. **When starting work** (beginning Step 1 research or creating a `port/<provider>`
+   branch): change `- [ ]` to `- [ ] 🚧` and append a short status note naming the
+   active branch or Effort issue, such as `*(in progress on port/ee-est, #352)*`.
+2. **When pausing on a blocker** (such as awaiting an agency reply or a maintainer
+   scope decision): keep `🚧` or move the entry to the blocked group and state what
+   it is waiting on in the status note.
+3. **When merged into `main`** (after Step 8 final review is approved and the port
+   pull request is merged into `main`, not when work finishes on a `port/<provider>`
+   branch): remove `🚧`, tick `- [x]`, and record the merged pull request, such as
+   `*(merged in #900)*`.
+
+When opening a new provider-port issue that is not yet in the tracker, add a `- [ ]`
+entry in the matching complexity group linking to the new issue.
+
 ## Progress through evidence-backed steps
 
 1. Establish source, scope and access.
@@ -147,6 +172,10 @@ with plain Polars types, verified descriptions (never placeholders such as
 `ObservationResult.data`, create stream variants solely for annotation changes, or
 emit per-row informational quality-code issues when annotations carry those source
 fields.
+
+Distinguish stream selectors, which belong in `SourceSeries.variant`, from
+non-identity series attributes, exposed through `rr.series(result, annotations=...)`,
+and observation annotations, exposed through `result.to_polars(annotations=...)`.
 
 **Outcome:** each adopted fact has supporting evidence, and remaining unknowns are
 explicit. Admission requires established quantity, source unit and valid conversion.

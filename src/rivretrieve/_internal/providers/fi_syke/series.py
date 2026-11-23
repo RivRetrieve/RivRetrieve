@@ -7,6 +7,7 @@ MAINTAINER_ROLES module (tests/test_provider_architecture_contracts.py).
 """
 
 from dataclasses import dataclass
+from functools import cache
 from typing import Literal
 
 from rivretrieve._internal.source_series import (
@@ -114,20 +115,9 @@ _VEDENKTASOTIETO_EVIDENCE = "maintenance/catalogue/fi_syke/official/web/vedenkta
 _VEDENKORKEUS_EXTREMES_EVIDENCE = "maintenance/catalogue/fi_syke/official/web/vedenkorkeus-extremes-desc.body"
 
 
-def describe_series(
-    station_id: str, product_id: str, *, origin: Literal["catalogue", "response", "mapping"] = "response"
-) -> SourceSeries:
-    """Build the one concrete source identity for a station's series under one product.
-
-    Each (station_id, product_id) pair has exactly one native table and no
-    live lookup resolves it further (step 2, #754: one Suure_Id per Paikka_Id
-    row) -- unlike au_bom's ts_id, there is no second identity to preserve
-    separately here.
-    """
-    if product_id not in _BY_PRODUCT_ID:
-        raise ValueError(f"fi_syke series description requires an admitted product_id: {product_id!r}")
+@cache
+def _physical_facts(product_id: str) -> PhysicalFacts:
     definition = _BY_PRODUCT_ID[product_id]
-    series_id = stable_id("fi_syke", station_id, product_id)
     if product_id == "stage_reported":
         vertical_reference = EvidenceFact(
             value="above_sea_level",
@@ -137,7 +127,7 @@ def describe_series(
     else:
         vertical_reference = EvidenceFact(state=EvidenceState.NOT_ESTABLISHED)
     facts = PhysicalFacts(
-        facts_id=series_id,
+        facts_id=product_id,
         quantity=known(definition.quantity, _TAULUKUVAUS_EVIDENCE),
         source_unit=known(_NATIVE_UNIT[product_id], _TAULUKUVAUS_EVIDENCE),
         normalized_unit=_NORMALIZED_NATIVE_UNIT[product_id],
@@ -151,16 +141,33 @@ def describe_series(
         clipping_axis=ClippingAxis.CALENDAR_DATE,
         label_time="00:00:00",
     )
+    return facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})
+
+
+def describe_series(
+    station_id: str, product_id: str, *, origin: Literal["catalogue", "response", "mapping"] = "response"
+) -> SourceSeries:
+    """Build the one concrete source identity for a station's series under one product.
+
+    Each (station_id, product_id) pair has exactly one native table and no
+    live lookup resolves it further (step 2, #754: one Suure_Id per Paikka_Id
+    row) -- unlike au_bom's ts_id, there is no second identity to preserve
+    separately here.
+    """
+    if product_id not in _BY_PRODUCT_ID:
+        raise ValueError(f"fi_syke series description requires an admitted product_id: {product_id!r}")
+    identity = SourceIdentity(
+        namespace=f"fi_syke/{product_id}",
+        origin=origin,
+        description="SYKE Hydrologiarajapinta entity set; station_id (Paikka_Id) witnesses exactly one product",
+        evidence=(_TAULUKUVAUS_EVIDENCE, _PAIKKA_EVIDENCE),
+    )
+    series_id = stable_id("fi_syke", station_id, identity.namespace, identity.published_id)
     return SourceSeries(
         series_id=series_id,
         provider_id="fi_syke",
         station_id=station_id,
         product_id=product_id,
-        identity=SourceIdentity(
-            namespace=f"fi_syke/{product_id}",
-            origin=origin,
-            description="SYKE Hydrologiarajapinta entity set; station_id (Paikka_Id) witnesses exactly one product",
-            evidence=(_TAULUKUVAUS_EVIDENCE, _PAIKKA_EVIDENCE),
-        ),
-        facts=(facts,),
+        identity=identity,
+        facts=(_physical_facts(product_id),),
     )

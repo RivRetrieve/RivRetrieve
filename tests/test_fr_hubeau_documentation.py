@@ -18,9 +18,13 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = Path("tests/test_data/french_provider_documentation")
+HUBEAU_DOC_RECORDING = Path("tests/test_data/fr_hubeau_size2500/fr_hubeau-0.recording.json")
 
 
-@pytest.mark.recorded("tests/test_data/french_provider_documentation")
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau-0.recording.json",
+    "tests/test_data/french_provider_documentation",
+)
 @pytest.mark.parametrize("provider,block_count", [("fr_hubeau", 1), ("fr_hydroportail", 4)])
 def test_french_page_examples_and_displayed_outputs(
     retained_evidence_root, monkeypatch, tmp_path, provider, block_count
@@ -28,7 +32,12 @@ def test_french_page_examples_and_displayed_outputs(
     page = (ROOT / f"docs/providers/{provider}.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.DOTALL)
     assert len(blocks) == page.count("```python") == block_count
-    replay = ReplayTransport(sorted((retained_evidence_root / EVIDENCE).glob(f"{provider}-*.recording.json")))
+    recordings = (
+        (retained_evidence_root / HUBEAU_DOC_RECORDING,)
+        if provider == "fr_hubeau"
+        else sorted((retained_evidence_root / EVIDENCE).glob(f"{provider}-*.recording.json"))
+    )
+    replay = ReplayTransport(recordings)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.chdir(tmp_path)
     namespace = {}

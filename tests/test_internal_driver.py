@@ -1961,3 +1961,74 @@ def test_issue_context_marker_cannot_overwrite_publisher_context():
     with pytest.raises(FatalContractError, match="conflicts with storage-only context"):
         driver_module._issue_with_acquisition_references(original, ("authored-acquisition",))
     assert driver_module._public_issues((original,)) == (original,)
+
+
+@pytest.mark.parametrize(
+    ("fetch_padding", "expected_start", "expected_end", "expected_pairs"),
+    [
+        (
+            None,
+            datetime(2026, 10, 20),
+            datetime(2026, 11, 22),
+            (("2026-09-24", "2026-10-23"), ("2026-10-24", "2026-11-22")),
+        ),
+        (timedelta(0), datetime(2026, 10, 22), datetime(2026, 11, 20), (("2026-10-22", "2026-11-20"),)),
+    ],
+)
+def test_driver_honors_declaration_fetch_padding_override(
+    fetch_padding: timedelta | None,
+    expected_start: datetime,
+    expected_end: datetime,
+    expected_pairs: tuple[tuple[str, str], ...],
+) -> None:
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2026, 10, 22)),
+        WindowEndpoint.from_datetime(datetime(2026, 11, 20)),
+    )
+    request = _request(requested, ("station-1",))
+    seen_windows: list[tuple[FetchWindow, tuple[tuple[str, str | None], ...]]] = []
+    product = ProductId("level")
+    provider_config = ProviderConfig(
+        zone=ZoneValue("+00:00"),
+        products={
+            product: ProductConfig(
+                coordinates=SourceCoordinates({"parameter": "height"}),
+                unit=Unit.CM,
+                semantics=Instant(),
+            )
+        },
+    )
+    declarations = ProductWindowDeclarations(
+        {
+            product: WindowDeclaration(
+                WindowGranularity("fixed-backward-span"),
+                WindowRenderingVocabulary.DATE,
+                StopConvention.INCLUSIVE,
+                size=30,
+                fetch_padding=fetch_padding,
+            )
+        }
+    )
+
+    class _Provider:
+        config = provider_config
+        window_declarations = declarations
+
+        def fetch(self, stations, products, windows, window, config, transport, **_kwargs):
+            seen_windows.append((window, tuple((item.start, item.stop) for item in windows[product])))
+            return WithIssues(())
+
+        def parse(self, payload, config):
+            raise AssertionError("parse should not run without payloads")
+
+    driver_module.drive(
+        request,
+        _Provider(),
+        provenance=_provenance(request),
+        receipts=ReceiptMode.OMIT,
+    )
+    assert len(seen_windows) == 1
+    actual_window, actual_pairs = seen_windows[0]
+    assert actual_window.start == WindowEndpoint.from_datetime(expected_start)
+    assert actual_window.end == WindowEndpoint.from_datetime(expected_end)
+    assert actual_pairs == expected_pairs

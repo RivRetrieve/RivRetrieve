@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -461,10 +462,11 @@ def _requested_interval(
     return RequestedInterval(start, end)
 
 
-def _padded_interval(interval: RequestedInterval) -> FetchWindow:
+def _padded_interval(interval: RequestedInterval, *, padding: timedelta | None = None) -> FetchWindow:
+    resolved = _FETCH_WINDOW_PADDING if padding is None else padding
     return _make_fetch_window(
-        WindowEndpoint.from_datetime(interval.start - _FETCH_WINDOW_PADDING),
-        WindowEndpoint.from_datetime(interval.end + _FETCH_WINDOW_PADDING),
+        WindowEndpoint.from_datetime(interval.start - resolved),
+        WindowEndpoint.from_datetime(interval.end + resolved),
     )
 
 
@@ -586,16 +588,23 @@ def _exclude_intervals_keep_expr(
     daily_facts = tuple(
         facts.facts_id for item in series for facts in item.facts if facts.clipping_axis is ClippingAxis.CALENDAR_DATE
     )
+    monthly_facts = tuple(
+        facts.facts_id for item in series for facts in item.facts if facts.clipping_axis is ClippingAxis.CALENDAR_MONTH
+    )
     daily = pl.col("facts_id").is_in(daily_facts)
+    monthly = pl.col("facts_id").is_in(monthly_facts)
     keep = pl.lit(True)
     for series_id, facts_ids, interval in intervals:
+        month_start = interval.start.date().replace(day=1)
+        month_end = interval.end.date().replace(day=calendar.monthrange(interval.end.year, interval.end.month)[1])
         inside = (
             axis_time_expression(interval.axis).is_between(interval.start, interval.end, closed="both")
             if interval.axis is TimeAxis.UTC
             else (
                 daily & pl.col("time").dt.date().is_between(interval.start.date(), interval.end.date(), closed="both")
             )
-            | (~daily & pl.col("time").is_between(interval.start, interval.end, closed="both"))
+            | (monthly & pl.col("time").dt.date().is_between(month_start, month_end, closed="both"))
+            | (~daily & ~monthly & pl.col("time").is_between(interval.start, interval.end, closed="both"))
         )
         keep = keep & ~((pl.col("series_id") == series_id) & pl.col("facts_id").is_in(facts_ids) & inside)
     return keep
@@ -2073,9 +2082,10 @@ def drive(
             if reuse is None:
                 if product not in declarations.products:
                     raise FatalContractError(f"Missing window declaration for {product}")
-                fetch_window = _padded_interval(interval)
+                declaration = declarations.products[product]
+                fetch_window = _padded_interval(interval, padding=declaration.fetch_padding)
                 _require_fetch_window_contains_requested(fetch_window, request.window)
-                rendered = plan_windows(fetch_window, declarations.products[product])
+                rendered = plan_windows(fetch_window, declaration)
             plans.append(
                 _PairRetrieval(
                     station, product, pair_scope, pair_series, interval, window, reuse, fetch_window, rendered
@@ -2781,7 +2791,24 @@ def drive(
                 for item in parsed.outcomes
                 if item.series_id is not None and item.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
             } | set(native["series_id"].to_list())
-            native_ann = _narrow_series_tables(native_ann, selected_ids & positive_parsed_ids)
+            # A prerequisite payload (e.g. a series lookup) can identify a series and publish
+            # a series-scope annotation for it while carrying no outcome of its own; the child
+            # payload that fetches observations owns that outcome. Keep such a payload's own
+            # published series annotations instead of discarding them for lacking an outcome
+            # this payload never claims to have -- but still drop them when this same payload
+            # does claim a negative outcome (failed, unsupported, unresolved or no_match) for
+            # that series, since a bad outcome is exactly what the per-payload gate exists to
+            # exclude.
+            unresolved_ids = {
+                item.series_id
+                for item in parsed.outcomes
+                if item.series_id is not None and item.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
+            }
+            self_published_ids = (
+                {item.series_id for item in parsed.series}
+                & {sid for table in native_ann.series_tables.values() for sid in table.rows["series_id"].to_list()}
+            ) - unresolved_ids
+            native_ann = _narrow_series_tables(native_ann, selected_ids & (positive_parsed_ids | self_published_ids))
             result_parts.append((native, native_ann))
             identity_scope = pair_scope.model_copy(update={"predicates": ()})
             requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
@@ -3032,18 +3059,22 @@ def drive(
         held_series = tuple(item for item in manifest.series if item.series_id in snapshot_ids and scope.matches(item))
         if held_series:
             _merge_definitions(definitions, held_series)
+            held_facts = tuple(fact for item in held_series for fact in item.facts if scope.matches_facts(fact))
+            held_scan = native_window_envelope(
+                datetime.fromisoformat(request.window.start.isoformat()),
+                datetime.fromisoformat(request.window.end.isoformat()),
+                held_facts,
+            )
             held_read = resolved_reader.query(
                 StoreQuery(
                     store,
                     request.provider_id,
                     request.stations,
                     request.products,
-                    datetime.fromisoformat(request.window.start.isoformat()) - _FETCH_WINDOW_PADDING,
-                    datetime.fromisoformat(request.window.end.isoformat()) + _FETCH_WINDOW_PADDING,
+                    held_scan.start - _FETCH_WINDOW_PADDING,
+                    held_scan.end + _FETCH_WINDOW_PADDING,
                     series_ids=tuple(item.series_id for item in held_series),
-                    facts_ids=tuple(
-                        fact.facts_id for item in held_series for fact in item.facts if scope.matches_facts(fact)
-                    ),
+                    facts_ids=tuple(dict.fromkeys(fact.facts_id for fact in held_facts)),
                 )
             )
             held_rows, held_ann = _clip_native_with_annotations(
@@ -3278,22 +3309,20 @@ def drive_store(
         for item in manifest.series
         if item.station_id in request.stations and item.product_id in request.products and scope.matches(item)
     )
-    matching_facts = tuple(
-        dict.fromkeys(
-            fact.facts_id for definition in selected for fact in definition.facts if scope.matches_facts(fact)
-        )
-    )
+    selected_facts = tuple(fact for definition in selected for fact in definition.facts if scope.matches_facts(fact))
+    matching_facts = tuple(dict.fromkeys(fact.facts_id for fact in selected_facts))
     start = datetime.fromisoformat(request.window.start.isoformat())
     end = datetime.fromisoformat(request.window.end.isoformat())
     if selected:
+        scan_window = native_window_envelope(start, end, selected_facts)
         read = resolved.query(
             StoreQuery(
                 store,
                 request.provider_id,
                 request.stations,
                 request.products,
-                start - _FETCH_WINDOW_PADDING,
-                end + _FETCH_WINDOW_PADDING,
+                scan_window.start - _FETCH_WINDOW_PADDING,
+                scan_window.end + _FETCH_WINDOW_PADDING,
                 series_ids=tuple(item.series_id for item in selected),
                 facts_ids=matching_facts,
             )

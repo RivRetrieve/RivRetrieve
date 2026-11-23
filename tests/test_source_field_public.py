@@ -93,14 +93,16 @@ def test_published_instantaneous_support_has_one_cross_provider_predicate():
 
 @pytest.mark.parametrize("code,quantity,expected", [("QIXnJ", "discharge", 0.823), ("HIXnJ", "stage", 0.449)])
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_1011000101_HIXnJ_padded.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_HIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
 )
 def test_french_daily_maxima_keep_distinct_published_physics(
     retained_evidence_root: Path, monkeypatch, code, quantity, expected
 ):
     recording = read_recording(
-        retained_evidence_root / "tests/test_data" / f"fr_hubeau_1011000101_{code}_padded.recording.json"
+        retained_evidence_root
+        / "tests/test_data/fr_hubeau_size2500"
+        / f"fr_hubeau_1011000101_{code}_padded.recording.json"
     )
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selected = rr.find(
