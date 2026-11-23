@@ -31,6 +31,11 @@ class BaFhmzbihSourceCoordinates:
     source_unit: str
 
 
+@dataclass(frozen=True, slots=True)
+class BaFhmzbihMetadataCoordinates:
+    pass
+
+
 _CONFIG = ProviderConfig(
     zone=ZoneValue("unknown"),
     products={

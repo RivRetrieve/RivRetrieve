@@ -234,7 +234,7 @@ def test_internal_parser_error_is_never_isolated_as_source_failure(monkeypatch):
     def fatal(*args):
         raise FatalContractError("invalid internal stage")
 
-    monkeypatch.setattr(module, "parse", fatal)
+    monkeypatch.setattr(module, "interpret_page", fatal)
     with pytest.raises(FatalContractError, match="internal stage"):
         acquire(Transport(page(feature())))
 
@@ -971,3 +971,281 @@ def test_colliding_public_ids_route_to_distinct_source_locations(tmp_path):
         )
     assert [request.params["monitoring_location_id"] for request in transport.requests] == ["CA574-001", "USGS-001"]
     assert [request.params["parameter_code"] for request in transport.requests] == ["00060", "00065"]
+
+
+def test_usgs_paginated_retrieval_single_decode_and_memoized_series_facts(monkeypatch):
+    from dataclasses import replace
+    from functools import partial
+
+    import polars.testing as pt
+
+    import rivretrieve._internal.providers.usgs_nwis.metadata as usgs_metadata
+    import rivretrieve._internal.providers.usgs_nwis.parse as usgs_parse
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.providers.usgs_nwis.parse import parse as parse_page
+
+    product = ProductId("discharge_instantaneous")
+    page1_features = [
+        {
+            **feature("alpha"),
+            "properties": {
+                **feature("alpha")["properties"],
+                "statistic_id": "00011",
+                "time": f"2024-01-01T0{hour}:00:00Z",
+                "value": str(10 + hour),
+            },
+        }
+        for hour in range(5)
+    ]
+    page2_features = [
+        {
+            **feature("alpha"),
+            "properties": {
+                **feature("alpha")["properties"],
+                "statistic_id": "00011",
+                "time": f"2024-01-02T0{hour}:00:00Z",
+                "value": str(20 + hour),
+            },
+        }
+        for hour in range(4)
+    ] + [
+        {
+            **feature("alpha"),
+            "properties": {
+                **feature("alpha")["properties"],
+                "statistic_id": None,
+                "unit_of_measure": "m^3/s",
+                "time": "2024-01-02T05:00:00Z",
+                "value": "3.5",
+            },
+        }
+    ]
+    cont_url = BASE.replace("/daily/", "/continuous/")
+    cont_params = {
+        "f": "json",
+        "monitoring_location_id": LOCATION,
+        "parameter_code": "00060",
+        "datetime": "2023-12-30T00:00:00Z/2024-01-05T23:59:59.999999Z",
+        "limit": "10000",
+        "cursor": "p2",
+    }
+    p1 = page(*page1_features, next_url=cont_url + "?" + urlencode(cont_params))
+    p2 = page(*page2_features)
+
+    json_loads_calls = 0
+    real_loads = usgs_parse.json.loads
+
+    def counted_loads(*args, **kwargs):
+        nonlocal json_loads_calls
+        json_loads_calls += 1
+        return real_loads(*args, **kwargs)
+
+    source_series_calls = 0
+    real_source_series = usgs_parse.source_series
+
+    def counted_source_series(*args, **kwargs):
+        nonlocal source_series_calls
+        source_series_calls += 1
+        return real_source_series(*args, **kwargs)
+
+    physical_facts_calls = 0
+    real_physical_facts = usgs_metadata.PhysicalFacts
+
+    def counted_physical_facts(*args, **kwargs):
+        nonlocal physical_facts_calls
+        physical_facts_calls += 1
+        return real_physical_facts(*args, **kwargs)
+
+    monkeypatch.setattr(usgs_parse.json, "loads", counted_loads)
+    monkeypatch.setattr(usgs_parse, "source_series", counted_source_series)
+    monkeypatch.setattr(usgs_metadata, "PhysicalFacts", counted_physical_facts)
+
+    driver_parse_calls = 0
+
+    class ReusedStages:
+        config = config()
+        window_declarations = window_declarations()
+        fetch = staticmethod(partial(fetch, monitoring_locations={STATION: LOCATION}))
+
+        @staticmethod
+        def parse(payload, provider_config):
+            nonlocal driver_parse_calls
+            driver_parse_calls += 1
+            return parse_page(payload, provider_config)
+
+    class BaselineStages:
+        config = config()
+        window_declarations = window_declarations()
+
+        @staticmethod
+        def fetch(*args, **kwargs):
+            return replace(fetch(*args, **kwargs, monitoring_locations={STATION: LOCATION}), interpretations=())
+
+        parse = staticmethod(parse_page)
+
+    request = engine.ObservationRequest(
+        ProviderId("usgs_nwis"),
+        (STATION,),
+        (product,),
+        engine.RequestedWindow(
+            engine.WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+            engine.WindowEndpoint.from_datetime(datetime(2024, 1, 3, 23, 59, 59, 999999)),
+        ),
+    )
+    provenance = ObservationProvenance(source="USGS", provider_id=ProviderId("usgs_nwis"))
+
+    reused = drive(
+        request, ReusedStages(), provenance=provenance, transport=Transport(p1, p2), receipts=ReceiptMode.INCLUDE
+    )
+    assert driver_parse_calls == 0
+    assert json_loads_calls == 2
+    # Page 1 has 1 distinct (series, facts); Page 2 has 2 distinct (series, facts).
+    assert source_series_calls == 3
+    assert physical_facts_calls == 3
+
+    monkeypatch.undo()
+    baseline = drive(
+        request, BaselineStages(), provenance=provenance, transport=Transport(p1, p2), receipts=ReceiptMode.INCLUDE
+    )
+    pt.assert_frame_equal(reused.canonical_rows, baseline.canonical_rows)
+    assert reused.canonical_rows["facts_id"].n_unique() == 2
+    assert reused.source_series == baseline.source_series
+    assert [
+        (
+            o.series_id,
+            o.station_id,
+            o.product_id,
+            o.window,
+            o.status,
+            o.facts_ids,
+            o.reason,
+            o.retrieved_at,
+            len(o.calls),
+        )
+        for o in reused.outcomes
+    ] == [
+        (
+            o.series_id,
+            o.station_id,
+            o.product_id,
+            o.window,
+            o.status,
+            o.facts_ids,
+            o.reason,
+            o.retrieved_at,
+            len(o.calls),
+        )
+        for o in baseline.outcomes
+    ]
+    assert [
+        (i.scope, i.members, i.member_facts, i.completeness, i.access, i.origin, i.window, i.reason)
+        for i in reused.inventories
+    ] == [
+        (i.scope, i.members, i.member_facts, i.completeness, i.access, i.origin, i.window, i.reason)
+        for i in baseline.inventories
+    ]
+    assert reused.issues == baseline.issues
+    assert [e.content for e in reused.receipts.entries] == [e.content for e in baseline.receipts.entries]
+
+
+def test_cross_page_duplicate_detected_even_when_repeated_measurement_is_malformed():
+    bad_repeat = feature()
+    bad_repeat["properties"]["value"] = "not-a-number"
+    first = page(feature(), next_url=next_url())
+    second = page(bad_repeat, feature("beta", "2000-01-02"))
+    result = acquire(Transport(first, second))
+    assert result.inventories[0].completeness is InventoryCompleteness.INCOMPLETE
+    assert "repeats" in (result.inventories[0].reason or "")
+    alpha_id = definition("alpha").series_id
+    assert any(o.series_id == alpha_id and o.status is OutcomeStatus.UNSUPPORTED for o in result.outcomes)
+
+
+def test_usgs_changed_known_series_context_falls_back_to_parse():
+    from dataclasses import replace
+
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.observations import ObservationProvenance
+    from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.providers.usgs_nwis.parse import parse as parse_page
+
+    catalogue_props = {
+        **feature("alpha")["properties"],
+        "id": "alpha",
+        "computation_period_identifier": "Daily",
+        "computation_identifier": "Mean",
+        "web_description": "Discharge from catalogue",
+        "sublocation_identifier": None,
+    }
+    catalogue_series = source_series(
+        catalogue_props,
+        STATION,
+        str(PRODUCT),
+        UsgsNwisSourceCoordinates("daily", "00060", "00003"),
+        metadata=True,
+        monitoring_location_id=LOCATION,
+    )
+    parse_calls = 0
+
+    class ContextChangingStages:
+        config = config()
+        window_declarations = window_declarations()
+
+        @staticmethod
+        def fetch(stations, products, rendered_windows, fetch_window, cfg, transport, *, scope=None, known_series=()):
+            # Simulate an acquisition performed with known_series=() before driver injects pair_series,
+            # leaving catalogue identity enrichment to the driver's fallback parse pass.
+            acquired = fetch(
+                stations,
+                products,
+                rendered_windows,
+                fetch_window,
+                cfg,
+                transport,
+                monitoring_locations={STATION: LOCATION},
+                scope=scope,
+                known_series=(),
+            )
+            return replace(acquired, series=())
+
+        @staticmethod
+        def parse(payload, cfg):
+            nonlocal parse_calls
+            parse_calls += 1
+            return parse_page(payload, cfg)
+
+    request = engine.ObservationRequest(
+        ProviderId("usgs_nwis"),
+        (STATION,),
+        (PRODUCT,),
+        engine.RequestedWindow(
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 7)),
+        ),
+        known_series=(catalogue_series,),
+    )
+    result = drive(
+        request,
+        ContextChangingStages(),
+        provenance=ObservationProvenance(source="USGS", provider_id=ProviderId("usgs_nwis")),
+        transport=Transport(page(feature())),
+    )
+    assert parse_calls == 1
+    assert result.source_series[0].identity.origin == "catalogue"
+    assert result.source_series[0].identity.description == "Discharge from catalogue"
+
+
+def test_cross_page_duplicate_precedence_over_malformed_links():
+    p1 = page(feature("alpha", "2000-01-01"), next_url=next_url())
+    p2_raw = {
+        "type": "FeatureCollection",
+        "features": [feature("alpha", "2000-01-01")],
+        "links": "malformed",
+    }
+    p2 = json.dumps(p2_raw).encode()
+    acquired = acquire(Transport(p1, p2))
+    assert any(
+        o.status is OutcomeStatus.UNSUPPORTED and "repeats a logical series/time observation" in (o.reason or "")
+        for o in acquired.outcomes
+    )

@@ -703,3 +703,156 @@ def test_inspection_does_not_attach_current_inventory_or_outcome_to_historical_f
     current_row = inspected.filter(pl.col("facts_id") == current.facts_id)
     assert current_row["outcomes"].to_list() == [["empty"]]
     assert current_row["inventory_ids"].to_list() == [["current-inventory"]]
+
+
+def test_validate_series_context_dedupes_per_row_checks_and_preserves_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import rivretrieve._internal.observations as obs_mod
+    from rivretrieve._internal.source_series import SeriesScope
+
+    definition = _series_definition()
+    n_rows = 200
+    data = _observation_df(
+        time=[datetime(2026, 1, 1) + timedelta(days=i) for i in range(n_rows)],
+        time_zone=["-05:00"] * n_rows,
+        station_id=["station-1"] * n_rows,
+        product_id=["flow"] * n_rows,
+        series_id=[definition.series_id] * n_rows,
+        facts_id=[definition.facts[0].facts_id] * n_rows,
+        quantity=["discharge"] * n_rows,
+        source_unit=["m3/s"] * n_rows,
+        unit=["m3/s"] * n_rows,
+        value=[float(i) for i in range(n_rows)],
+    )
+
+    counts = {"zone": 0, "admission": 0}
+    orig_zv = obs_mod.ZoneValue
+    orig_adm = obs_mod.admission
+
+    def spy_zv(value: object):
+        counts["zone"] += 1
+        return orig_zv(value)  # type: ignore[arg-type]
+
+    def spy_adm(facts):
+        counts["admission"] += 1
+        return orig_adm(facts)
+
+    monkeypatch.setattr(obs_mod, "ZoneValue", spy_zv)
+    monkeypatch.setattr(obs_mod, "admission", spy_adm)
+
+    result = ObservationResult(
+        data=data,
+        provenance=_provenance(),
+        receipts=Receipts(provider_id=ProviderId("provider-a")),
+        source_series=(definition,),
+    )
+    assert result.data.height == n_rows
+    assert counts["zone"] == 1
+    assert counts["admission"] == 1
+
+    # Scope rejection, invalid zone, unknown series/facts, and unit contradiction must still fail loudly
+    with pytest.raises(ObservationDataSchemaError, match="lies outside its retained physical and identity scope"):
+        ObservationResult(
+            data=data.head(2),
+            provenance=_provenance(),
+            receipts=Receipts(provider_id=ProviderId("provider-a")),
+            source_series=(definition,),
+            view_scope=SeriesScope(product_ids=("stage",)),
+        )
+    with pytest.raises(ValueError, match="zone"):
+        ObservationResult(
+            data=_observation_df(time_zone=["BAD_TZ", "+00:00"]),
+            provenance=_provenance(),
+            receipts=Receipts(provider_id=ProviderId("provider-a")),
+            source_series=(definition,),
+        )
+    with pytest.raises(ObservationDataSchemaError, match="unknown source-series identity"):
+        ObservationResult(
+            data=_observation_df(series_id=["missing", "test-series"]),
+            provenance=_provenance(),
+            receipts=Receipts(provider_id=ProviderId("provider-a")),
+            source_series=(definition,),
+        )
+    with pytest.raises(ObservationDataSchemaError, match="unknown physical facts"):
+        ObservationResult(
+            data=_observation_df(facts_id=["test-facts", "missing-facts"]),
+            provenance=_provenance(),
+            receipts=Receipts(provider_id=ProviderId("provider-a")),
+            source_series=(definition,),
+        )
+    with pytest.raises(ObservationDataSchemaError, match="contradicts its admitted source-series facts"):
+        ObservationResult(
+            data=_observation_df(unit=["m3/s", "ft3/s"]),
+            provenance=_provenance(),
+            receipts=Receipts(provider_id=ProviderId("provider-a")),
+            source_series=(definition,),
+        )
+
+    # Cross-series facts_id collision must not share admissions across distinct SourceSeries
+    from rivretrieve._internal.source_series import (
+        OutcomeStatus,
+        PhysicalFacts,
+        RetrievalOutcome,
+        SeriesWindow,
+        SourceIdentity,
+        SourceSeries,
+        known,
+    )
+
+    series_1 = _series_definition()
+    series_2 = SourceSeries(
+        series_id="test-series-2",
+        provider_id="provider-a",
+        station_id="station-2",
+        product_id="flow",
+        identity=SourceIdentity(namespace="test", published_id="2", origin="catalogue", evidence=("unit-test",)),
+        facts=(
+            PhysicalFacts(
+                facts_id="test-facts",  # same facts_id as series_1, but different/unsupported physical facts
+                quantity=known("discharge", "unit-test"),
+                source_unit=known("bogus-unit", "unit-test"),
+                normalized_unit="bogus-unit",
+            ),
+        ),
+    )
+    mixed_data = _observation_df(
+        station_id=["station-1", "station-2"],
+        series_id=["test-series", "test-series-2"],
+        facts_id=["test-facts", "test-facts"],
+        source_unit=["m3/s", "bogus-unit"],
+    )
+    with pytest.raises(ObservationDataSchemaError, match="contradicts its admitted source-series facts"):
+        ObservationResult(
+            data=mixed_data,
+            provenance=_provenance(),
+            receipts=Receipts(provider_id=ProviderId("provider-a")),
+            source_series=(series_1, series_2),
+        )
+    with pytest.raises(ObservationDataSchemaError, match="admitted physical facts"):
+        ObservationResult(
+            data=_observation_df(),
+            provenance=_provenance(),
+            receipts=Receipts(provider_id=ProviderId("provider-a")),
+            source_series=(series_1, series_2),
+            outcomes=(
+                RetrievalOutcome(
+                    outcome_id="o1",
+                    series_id="test-series",
+                    station_id="station-1",
+                    product_id="flow",
+                    window=SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2)),
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("test-facts",),
+                ),
+                RetrievalOutcome(
+                    outcome_id="o2",
+                    series_id="test-series-2",
+                    station_id="station-2",
+                    product_id="flow",
+                    window=SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2)),
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("test-facts",),
+                ),
+            ),
+        )

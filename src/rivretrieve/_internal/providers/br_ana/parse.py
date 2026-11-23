@@ -54,19 +54,12 @@ class _DecodedObservations:
     annotations: tuple[dict[str, str | None], ...]
 
 
-def _parse_one(payload: Payload, config: ProviderConfig) -> _DecodedObservations:
-    if len(payload.station_products) != 1:
-        raise FatalContractError("ANA payload requires exactly one station-product pair")
-    station, product = payload.station_products[0]
-    coordinates = config.products[product].coordinates.value
-    if (
-        not isinstance(coordinates, (BrAnaSourceCoordinates, BrAnaDailySourceCoordinates))
-        or payload.source_coordinates.value != coordinates
-    ):
-        raise FatalContractError("ANA payload coordinates differ from the requested source product")
-    observations = _observations(payload.content)
-    if isinstance(coordinates, BrAnaDailySourceCoordinates):
-        return _daily_rows(observations, station, product, coordinates)
+def _telemetry_rows(
+    observations: list[dict[str, object]],
+    station: str,
+    product: ProductId,
+    coordinates: BrAnaSourceCoordinates,
+) -> _DecodedObservations:
     entries: list[tuple[dict[str, object], dict[str, str | None]]] = []
     status_field = f"{coordinates.field}_Status"
     for index, observation in enumerate(observations):
@@ -261,6 +254,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
     )
     retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
     calls = tuple(item.attempt_id for item in payload.attempt_traces) or (payload.acquisition_id,)
+    content_hash = hashlib.sha256(payload.content).hexdigest()
     try:
         observations = _observations(payload.content)
     except SourceStructureError as error:
@@ -268,7 +262,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         window_outcome = RetrievalOutcome(
             outcome_id=stable_id(
                 payload.acquisition_id,
-                hashlib.sha256(payload.content).hexdigest(),
+                content_hash,
                 str(retrieved),
                 station,
                 product,
@@ -308,9 +302,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             reason = "ANA response contains rows with unestablished mean/consistency identity"
             outcomes.append(
                 RetrievalOutcome(
-                    outcome_id=stable_id(
-                        payload.acquisition_id, hashlib.sha256(payload.content).hexdigest(), str(retrieved), reason
-                    ),
+                    outcome_id=stable_id(payload.acquisition_id, content_hash, str(retrieved), reason),
                     series_id=None,
                     station_id=station,
                     product_id=product,
@@ -360,14 +352,14 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                     native,
                 )
             else:
-                decoded = _parse_one(payload, config)
+                decoded = _telemetry_rows(observations, station, emitted_product, native)
         except SourceStructureError as error:
             reason = str(error)
             outcomes.append(
                 RetrievalOutcome(
                     outcome_id=stable_id(
                         payload.acquisition_id,
-                        hashlib.sha256(payload.content).hexdigest(),
+                        content_hash,
                         str(retrieved),
                         definition.series_id,
                         reason,
@@ -430,7 +422,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             RetrievalOutcome(
                 outcome_id=stable_id(
                     payload.acquisition_id,
-                    hashlib.sha256(payload.content).hexdigest(),
+                    content_hash,
                     str(payload.origin.retrieved_at),
                     definition.series_id,
                     str(window),
@@ -446,6 +438,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 calls=calls,
             )
         )
+    del observations
     observed_ids = tuple(item.series_id for item in definitions)
     if isinstance(coordinates, BrAnaDailySourceCoordinates) and coordinates.consistency not in present:
         default_candidate = describe_series(station, product, coordinates, origin="mapping")
@@ -459,7 +452,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             RetrievalOutcome(
                 outcome_id=stable_id(
                     payload.acquisition_id,
-                    hashlib.sha256(payload.content).hexdigest(),
+                    content_hash,
                     str(retrieved),
                     candidate.series_id,
                     reason,
@@ -490,7 +483,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             RetrievalOutcome(
                 outcome_id=stable_id(
                     payload.acquisition_id,
-                    hashlib.sha256(payload.content).hexdigest(),
+                    content_hash,
                     str(payload.origin.retrieved_at),
                     station,
                     product,
@@ -524,7 +517,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
     inventory = InventorySnapshot(
         snapshot_id=stable_id(
             payload.acquisition_id,
-            hashlib.sha256(payload.content).hexdigest(),
+            content_hash,
             str(payload.origin.retrieved_at),
             "br_ana",
             station,
