@@ -843,7 +843,7 @@ EXPECTED_CRS_COUNTS = {
     (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): (6_475, "EPSG:4326"),
     (ProviderId("fr_hubeau"), "temperature/station"): (872, "EPSG:4326"),
     (ProviderId("fr_hydroportail"), "stations"): (6_409, "EPSG:4326"),
-    (ProviderId("ie_opw"), "stations"): (386, "EPSG:4326"),
+    (ProviderId("ie_opw"), "stations"): (385, "EPSG:4326"),
     (ProviderId("lt_lhmt"), "stations"): (97, "EPSG:4326"),
     (ProviderId("no_nve"), "stations"): (4_902, "unknown"),
     (ProviderId("pl_imgw"), "stations"): (1_301, "unknown"),
