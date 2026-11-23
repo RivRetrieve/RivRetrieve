@@ -66,6 +66,7 @@ of the source view.
 | [`co_ideam`](providers/co_ideam.md) | `Nombre` | `Corriente` | — | `Altitud` |
 | [`cz_chmi`](providers/cz_chmi.md) | `STATION_NAME` | `STREAM_NAME` | `PLO_STA` (km²) | — |
 | [`dk_vanda`](providers/dk_vanda.md) | `name` | — | `catchmentAreaKm2` (km2) | — |
+| [`ee_est`](providers/ee_est.md) | `nimi` | `veekogu_nimi` | `area` (km2) | — |
 | [`fi_syke`](providers/fi_syke.md) | `Nimi` | `PaaVesalNimi`, `VesalNimi` | — | — |
 | [`fr_hubeau`](providers/fr_hubeau.md) | `libelle_station` | `libelle_cours_eau`, `libelle_masse_eau` | `superficie_reelle`, `superficie_topo`; `surface_bv` (km²) | `altitude`, `altitude_site`; `altitude_ref_alti_station` (m) |
 | [`fr_hydroportail`](providers/fr_hydroportail.md) | — | — | — | — |
@@ -382,6 +383,9 @@ packaged catalogue descriptor offline; metadata notices appear in its
 
 - [IDEAM's terms](providers/co_ideam.md#terms-and-citation) require source attribution
   to IDEAM and apply CC BY-SA 4.0. Adaptations must follow the licence's share-alike conditions.
+- [Keskkonnaagentuur's terms](providers/ee_est.md#terms-and-citation) apply CC BY 4.0 and
+  require source attribution under Section 13(4) of Estonia's Environmental Monitoring Act
+  (*Keskkonnaseire seadus* § 13(4)).
 - [LHMT's terms](providers/lt_lhmt.md#terms-and-citation) require source attribution
   and apply CC BY-SA 4.0 unless stated otherwise. Adaptations must follow the licence's share-alike conditions.
 
