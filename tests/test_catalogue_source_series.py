@@ -84,7 +84,8 @@ def test_scoped_materialization_constructs_only_selected_coordinates(monkeypatch
 
 
 @pytest.mark.parametrize(
-    "provider", ["ar_ina", "at_ehyd", "no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis", "co_ideam"]
+    "provider",
+    ["ar_ina", "at_ehyd", "be_wal", "no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis", "co_ideam"],
 )
 def test_catalogue_fact_identity_includes_exact_facts_and_evidence(provider):
     from rivretrieve._internal.source_series import stable_id
@@ -256,3 +257,61 @@ def test_materialization_preserves_generated_and_explicit_series_identity(series
         ).encode()
     ).hexdigest()
     assert inventories[0].snapshot_id == expected_snapshot
+
+
+def test_be_wal_packaged_series_meaning_preserves_cet_interval_start_vertical_ref_and_complete_silence():
+    from rivretrieve._internal.source_series import ClippingAxis
+
+    artifact = load_packaged_catalogue_artifact(BASE / "be_wal/catalogue")
+
+    # Station 3643 HYON publishes standard discharge and gauge-zero stage;
+    # 7102 LIEGE publishes absolute stage and water temperature.
+    series_3643, _ = catalogue_series(artifact, scope=SeriesScope(station_ids=("3643",)))
+    by_3643 = {item.product_id: item.facts[0] for item in series_3643}
+    series_7102, _ = catalogue_series(artifact, scope=SeriesScope(station_ids=("7102",)))
+    by_7102 = {item.product_id: item.facts[0] for item in series_7102}
+
+    assert by_3643["discharge_daily_mean"].frequency.value == "daily"
+    assert by_3643["discharge_daily_mean"].statistic.value == "mean"
+    assert by_3643["discharge_daily_mean"].temporal_support.value == "interval"
+    assert by_3643["discharge_daily_mean"].timestamp_anchor.value == "start"
+    assert by_3643["discharge_daily_mean"].time_zone.value == "+01:00"
+    assert by_3643["discharge_daily_mean"].day_definition.value == "+01:00"
+    assert by_3643["discharge_daily_mean"].clipping_axis is ClippingAxis.CALENDAR_DATE
+    assert by_3643["discharge_daily_mean"].label_time == "00:00"
+
+    assert by_3643["stage_hourly_mean"].vertical_reference.value == "gauge_zero"
+    assert by_3643["stage_hourly_mean"].vertical_datum.value is None
+    assert by_3643["stage_hourly_mean"].clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
+    assert by_3643["stage_hourly_mean"].label_time is None
+
+    assert by_7102["stage_absolute_monthly_mean"].vertical_reference.value == "above_sea_level"
+    assert by_7102["stage_absolute_monthly_mean"].vertical_datum.value is None
+    assert by_7102["stage_absolute_monthly_mean"].frequency.value == "monthly"
+    assert by_7102["stage_absolute_monthly_mean"].clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
+    assert by_7102["stage_absolute_monthly_mean"].label_time == "00:00"
+
+    assert by_7102["stage_absolute_complete"].frequency.value is None
+    assert by_7102["stage_absolute_complete"].statistic.value is None
+    assert by_7102["stage_absolute_complete"].temporal_support.value is None
+    assert by_7102["stage_absolute_complete"].timestamp_anchor.value is None
+    assert by_7102["stage_absolute_complete"].time_zone.value == "+01:00"
+    assert by_7102["stage_absolute_complete"].vertical_reference.value == "above_sea_level"
+    assert by_7102["stage_absolute_complete"].label_time is None
+
+    assert by_7102["water_temperature_daily_mean"].source_unit.value == "°C"
+    assert by_7102["water_temperature_daily_mean"].normalized_unit == "degC"
+    assert by_7102["water_temperature_daily_mean"].vertical_reference.value is None
+
+    # Ultrasonic discharge shares identical temporal/unit contracts (station 2708).
+    series_2708, _ = catalogue_series(
+        artifact, scope=SeriesScope(station_ids=("2708",), product_ids=("discharge_ultrasonic_yearly_min",))
+    )
+    qu51 = series_2708[0].facts[0]
+    assert qu51.frequency.value == "yearly"
+    assert qu51.statistic.value == "min"
+    assert qu51.temporal_support.value == "interval"
+    assert qu51.timestamp_anchor.value == "start"
+    assert qu51.time_zone.value == "+01:00"
+    assert qu51.label_time == "00:00"
+    assert qu51.clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
