@@ -85,6 +85,7 @@ for provider_id in provider_ids:
         "ca_eccc",
         "co_ideam",
         "cz_chmi",
+        "ee_est",
         "fr_hubeau",
         "lt_lhmt",
         "no_nve",
@@ -202,6 +203,23 @@ assert dict(ar_ina_source.select("attribute_role", "state").iter_rows()) == {
     "station_name": "value",
     "water_body_name": "value",
     "drainage_area": "no_metadata",
+    "elevation": "no_metadata",
+}
+
+ee_est_gauge = rr.find(provider="ee_est", station="SJA8821000")
+ee_est_summary = rr.metadata(ee_est_gauge).row(0, named=True)
+assert ee_est_summary["station_name"] == "Ahja HJ"
+assert ee_est_summary["water_body_name_field"] == ["veekogu_nimi"]
+assert ee_est_summary["water_body_name_value"] == ["Ahja jõgi"]
+assert ee_est_summary["drainage_area_field"] == ["area"]
+assert ee_est_summary["drainage_area_value"] == ["896.51"]
+assert ee_est_summary["drainage_area_unit"] == ["km2"]
+assert ee_est_summary["elevation_value"] is None
+ee_est_source = rr.metadata(ee_est_gauge, view="source")
+assert dict(ee_est_source.select("attribute_role", "state").iter_rows()) == {
+    "station_name": "value",
+    "water_body_name": "value",
+    "drainage_area": "value",
     "elevation": "no_metadata",
 }
 
