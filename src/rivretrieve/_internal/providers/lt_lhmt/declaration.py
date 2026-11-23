@@ -4,7 +4,7 @@ from pathlib import Path
 
 from rivretrieve._internal.providers.lt_lhmt.config import config, window_declarations
 from rivretrieve._internal.providers.lt_lhmt.fetch import fetch
-from rivretrieve._internal.providers.lt_lhmt.parse import parse
+from rivretrieve._internal.providers.lt_lhmt.parse import parse, parse_group
 from rivretrieve._internal.providers.registration import LiveStages, ProviderDeclaration
 
 
@@ -17,6 +17,7 @@ class _Stages:
     shared_acquisition_products = (frozenset(config.products),)
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
+    parse_group = staticmethod(parse_group)
 
 
 declaration = ProviderDeclaration(

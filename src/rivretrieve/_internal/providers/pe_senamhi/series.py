@@ -1,5 +1,8 @@
 """Published SENAMHI fields and independently established physical facts."""
 
+from dataclasses import dataclass
+from typing import Literal
+
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import SeriesMapping
 
@@ -16,6 +19,17 @@ MONTHLY_LEVEL_FIELDS = frozenset(
         "N_NIV_INST_10",
     }
 )
+
+
+@dataclass(frozen=True, slots=True)
+class SenamhiSourceCoordinates:
+    subsystem: Literal["phisis", "monthly_archive"]
+    resolution: Literal["DAILY", "HOURLY"] | None
+    variable: str
+    unit: str
+
+    def __post_init__(self) -> None:
+        series_mappings(self.subsystem, self.resolution, self.variable, self.unit)
 
 
 def series_mappings(subsystem: str, resolution: str | None, variable: str, unit: str) -> dict[str, SeriesMapping]:

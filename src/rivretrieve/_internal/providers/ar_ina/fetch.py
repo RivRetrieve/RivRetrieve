@@ -2,51 +2,48 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from datetime import datetime
-from typing import cast
 from uuid import uuid4
-
-import polars as pl
 
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
+    InterpretedPayload,
     Payload,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
     SourceCallOrigin,
     SourceCoordinates,
-    UnknownOriginFact,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
-from rivretrieve._internal.providers.ar_ina.annotations import AR_INA_SERIES_SCHEMA
 from rivretrieve._internal.providers.ar_ina.config import (
     ArInaSeriesLookupCoordinates,
     ArInaSourceCoordinates,
 )
+from rivretrieve._internal.providers.ar_ina.parse import (
+    parse,
+    reused_series,
+)
+from rivretrieve._internal.providers.ar_ina.parse import (
+    resolve_series_lookup as resolve_series_lookup,
+)
 from rivretrieve._internal.providers.ar_ina.series import (
     CATALOGUE_IDENTITY_EVIDENCE,
     NAMESPACE,
-    SPECS_BY_PRODUCT_ID,
     source_series,
-    validate_series_record_metadata,
 )
 from rivretrieve._internal.source_acquisition import (
     FailedSourceRequest,
     SourceRequestTarget,
     attempt_request,
 )
-from rivretrieve._internal.source_annotations import SERIES_STRUCTURAL_SCHEMA, SeriesAnnotationTable
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
     OutcomeStatus,
-    PhysicalFacts,
     RestrictionKind,
     RetrievalOutcome,
     SeriesScope,
@@ -59,164 +56,10 @@ from rivretrieve._internal.transport import (
     Transport,
     TransportFailure,
     TransportRequest,
-    TransportResponse,
 )
 
 _PROVIDER_ID = ProviderId("ar_ina")
 _SERIES_URL = "https://alerta.ina.gob.ar/a5/obs/puntual/series"
-
-
-def reused_series(definition: SourceSeries, known_series: tuple[SourceSeries, ...]) -> SourceSeries:
-    """Preserve prior established identity and matching fact IDs when available."""
-    candidate = next((item for item in known_series if item.series_id == definition.series_id), None)
-    if candidate is None:
-        return definition
-    retained = {_fact_signature(fact): fact for fact in candidate.facts}
-    return definition.model_copy(
-        update={
-            "identity": candidate.identity,
-            "facts": tuple(retained.get(_fact_signature(fact), fact) for fact in definition.facts),
-        }
-    )
-
-
-def _fact_signature(fact: PhysicalFacts) -> tuple[object, ...]:
-    return (
-        fact.quantity.value,
-        fact.source_unit.value,
-        fact.normalized_unit,
-        fact.frequency.value,
-        fact.statistic.value,
-        fact.temporal_support.value,
-        fact.day_definition.value,
-        fact.timestamp_anchor.value,
-        fact.time_zone.value,
-        fact.vertical_reference.value,
-        fact.vertical_datum.value,
-        fact.clipping_axis,
-        fact.label_time,
-    )
-
-
-def resolve_series_lookup(
-    content: bytes,
-    station: str,
-    product: ProductId,
-    *,
-    evidence: str,
-    known_series: tuple[SourceSeries, ...] = (),
-) -> tuple[tuple[SourceSeries, ...], SeriesAnnotationTable]:
-    """Validate an INA ``/obs/puntual/series`` JSON response for one station and product."""
-    spec = SPECS_BY_PRODUCT_ID.get(str(product))
-    if spec is None:
-        raise FatalContractError(f"Unsupported INA Alerta5 product_id: {product!r}")
-
-    try:
-        document = json.loads(content)
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
-        raise UnsupportedSourceStructureError("INA /obs/puntual/series response is not valid JSON") from error
-
-    if not isinstance(document, dict) or not isinstance(document.get("rows"), list):
-        raise UnsupportedSourceStructureError("INA /obs/puntual/series response must contain a JSON rows array")
-
-    if "is_last_page" in document and document["is_last_page"] is not True:
-        raise UnsupportedSourceStructureError(
-            "INA /obs/puntual/series response is paginated (is_last_page != true); complete inventory is not established"
-        )
-
-    raw_rows = cast("list[object]", document["rows"])
-    if "total" in document:
-        raw_total = document["total"]
-        if isinstance(raw_total, bool) or not isinstance(raw_total, int | str):
-            raise UnsupportedSourceStructureError(f"INA /obs/puntual/series total field is malformed: {raw_total!r}")
-        if isinstance(raw_total, str):
-            stripped = raw_total.strip()
-            if not stripped.isascii() or not stripped.isdigit():
-                raise UnsupportedSourceStructureError(
-                    f"INA /obs/puntual/series total field is not an integer: {raw_total!r}"
-                )
-            total_count = int(stripped)
-        else:
-            total_count = raw_total
-        if total_count != len(raw_rows):
-            raise UnsupportedSourceStructureError(
-                f"INA /obs/puntual/series total {total_count} contradicts {len(raw_rows)} returned rows"
-            )
-
-    resolved: list[SourceSeries] = []
-    availability_rows: list[dict[str, object]] = []
-    seen_ids: set[int] = set()
-    for index, entry in enumerate(raw_rows):
-        if not isinstance(entry, dict):
-            raise UnsupportedSourceStructureError(f"INA /obs/puntual/series row {index} must be a JSON object")
-        row_map = cast("dict[str, object]", entry)
-        if "tipo" in row_map and row_map["tipo"] != "puntual":
-            raise UnsupportedSourceStructureError(
-                f"INA /obs/puntual/series row {index} has non-puntual tipo {row_map['tipo']!r}"
-            )
-        raw_id = row_map.get("id")
-        if type(raw_id) is not int or raw_id <= 0:
-            raise UnsupportedSourceStructureError(
-                f"INA /obs/puntual/series row {index} lacks a positive integer series id: {raw_id!r}"
-            )
-        if raw_id in seen_ids:
-            raise UnsupportedSourceStructureError(f"INA /obs/puntual/series repeats published series_id {raw_id}")
-        seen_ids.add(raw_id)
-
-        estacion = row_map.get("estacion")
-        if not isinstance(estacion, dict):
-            raise UnsupportedSourceStructureError(
-                f"INA /obs/puntual/series series {raw_id} lacks embedded estacion metadata"
-            )
-        est_id = cast("dict[str, object]", estacion).get("id")
-        if type(est_id) is not int or str(est_id) != station:
-            raise UnsupportedSourceStructureError(
-                f"INA /obs/puntual/series series {raw_id} estacion.id {est_id!r} contradicts requested station {station!r}"
-            )
-
-        proc_obj = row_map.get("procedimiento")
-        if not isinstance(proc_obj, dict):
-            raise UnsupportedSourceStructureError(
-                f"INA /obs/puntual/series series {raw_id} lacks embedded procedimiento metadata"
-            )
-        proc_id = cast("dict[str, object]", proc_obj).get("id")
-        if type(proc_id) is not int:
-            raise UnsupportedSourceStructureError(
-                f"INA /obs/puntual/series series {raw_id} procedimiento.id {proc_id!r} must be an integer"
-            )
-
-        try:
-            unit_abrev, data_availability = validate_series_record_metadata(
-                row_map,
-                spec,
-                series_id=raw_id,
-                proc_id=proc_id,
-            )
-            definition = source_series(
-                station,
-                str(product),
-                published_series_id=raw_id,
-                source_unit=unit_abrev,
-                origin="response",
-                identity_evidence=evidence,
-            )
-        except FatalContractError as error:
-            raise UnsupportedSourceStructureError(str(error)) from error
-
-        resolved.append(reused_series(definition, known_series))
-        if data_availability is not None:
-            availability_rows.append({"series_id": definition.series_id, "data_availability": data_availability})
-
-    ordered = tuple(sorted(resolved, key=lambda item: int(item.identity.published_id or "0")))
-    if availability_rows:
-        availability_frame = pl.DataFrame(
-            availability_rows,
-            schema={**SERIES_STRUCTURAL_SCHEMA, **AR_INA_SERIES_SCHEMA.polars_schema()},
-        )
-        annotations = SeriesAnnotationTable.from_rows(schema=AR_INA_SERIES_SCHEMA, rows=availability_frame)
-    else:
-        annotations = SeriesAnnotationTable.empty(AR_INA_SERIES_SCHEMA)
-    return ordered, annotations
 
 
 def fetch(
@@ -265,6 +108,7 @@ def fetch(
     )
 
     payloads: list[Payload] = []
+    interpretations: list[InterpretedPayload] = []
     failures: list[FailedSourceRequest] = []
     definitions: dict[str, SourceSeries] = {}
     inventories: list[InventorySnapshot] = []
@@ -347,27 +191,25 @@ def fetch(
                     station_products=((station, product),),
                     fetch_window=fetch_window,
                     content=lookup_response.content,
-                    origin=_origin(lookup_response),
+                    origin=SourceCallOrigin.from_response(lookup_response),
                     prerequisite_calls=lookup_response.prerequisite_calls,
                     scope=pair_scope,
                     known_series=pair_known,
                     attempt_traces=lookup_response.attempt_traces,
                 )
                 payloads.append(lookup_payload)
-                try:
-                    discovered, _ = resolve_series_lookup(
-                        lookup_response.content,
-                        station,
-                        product,
-                        evidence=f"source-call:{lookup_payload.acquisition_id}",
-                        known_series=pair_known,
-                    )
-                except UnsupportedSourceStructureError:
-                    # parse(lookup_payload) records the bounded structural failure.
+                lookup_parsed = parse(lookup_payload, config)
+                interpretations.append(InterpretedPayload.from_payload(lookup_payload, lookup_parsed))
+                if any(
+                    outcome.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
+                    for outcome in lookup_parsed.outcomes
+                ):
+                    # Reused lookup_parsed (or fallback parse) records the bounded structural failure.
                     continue
 
+                discovered = lookup_parsed.series
                 if not discovered and not pair_known:
-                    # parse(lookup_payload) records the complete empty inventory and NO_MATCH outcome.
+                    # Reused lookup_parsed records the complete empty inventory and NO_MATCH outcome.
                     continue
 
                 discovered_by_id = {item.series_id: item for item in discovered}
@@ -533,7 +375,7 @@ def fetch(
                             station_products=((station, product),),
                             fetch_window=fetch_window,
                             content=annotation_response.content,
-                            origin=_origin(annotation_response),
+                            origin=SourceCallOrigin.from_response(annotation_response),
                             prerequisite_calls=annotation_response.prerequisite_calls,
                             scope=pair_scope,
                             known_series=established_series,
@@ -581,7 +423,7 @@ def fetch(
                             station_products=((station, product),),
                             fetch_window=window.bounds,
                             content=obs_response.content,
-                            origin=_origin(obs_response),
+                            origin=SourceCallOrigin.from_response(obs_response),
                             prerequisite_calls=obs_response.prerequisite_calls,
                             scope=pair_scope,
                             known_series=(target,),
@@ -597,6 +439,7 @@ def fetch(
         series=tuple(definitions.values()),
         inventories=tuple(inventories),
         outcomes=tuple(outcomes),
+        interpretations=tuple(interpretations),
     )
 
 
@@ -618,16 +461,3 @@ def _request_target(
     if len(known_series) == 1:
         return known_series[0]
     return SourceRequestTarget(station, str(product))
-
-
-def _origin(response: TransportResponse) -> SourceCallOrigin:
-    return SourceCallOrigin(
-        url=response.url,
-        request_parameters=response.request_parameters,
-        status_code=response.status_code,
-        retrieved_at=response.retrieved_at,
-        content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
-        source_path=UnknownOriginFact(),
-        query=UnknownOriginFact(),
-        attempts=response.attempts,
-    )

@@ -30,7 +30,10 @@ def test_precise_refresh_preserves_same_series_sibling_fact_rows(monkeypatch, tm
     class TwoSegments:
         config = stages.config
         window_declarations = stages.window_declarations
-        fetch = staticmethod(stages.fetch)
+
+        @staticmethod
+        def fetch(*args, **kwargs):
+            return replace(stages.fetch(*args, **kwargs), interpretations=())
 
         @staticmethod
         def parse(payload, config):

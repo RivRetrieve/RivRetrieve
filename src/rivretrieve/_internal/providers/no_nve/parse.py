@@ -65,6 +65,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
     )
     retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+    content_hash = hashlib.sha256(payload.content).hexdigest()
     definitions = []
     rows = []
     ann_rows = []
@@ -77,7 +78,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         outcomes.append(
             RetrievalOutcome(
                 outcome_id=stable_id(
-                    hashlib.sha256(payload.content).hexdigest(),
+                    content_hash,
                     str(payload.origin.retrieved_at),
                     station,
                     product,
@@ -237,7 +238,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             outcomes.append(
                 RetrievalOutcome(
                     outcome_id=stable_id(
-                        hashlib.sha256(payload.content).hexdigest(),
+                        content_hash,
                         str(payload.origin.retrieved_at),
                         definition.series_id,
                         str(window),
@@ -259,7 +260,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         outcomes.append(
             RetrievalOutcome(
                 outcome_id=stable_id(
-                    hashlib.sha256(payload.content).hexdigest(),
+                    content_hash,
                     str(payload.origin.retrieved_at),
                     station,
                     product,
@@ -278,7 +279,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     scope = payload.scope or SeriesScope(provider_ids=("no_nve",), station_ids=(station,), product_ids=(product,))
     inventory = InventorySnapshot(
         snapshot_id=stable_id(
-            hashlib.sha256(payload.content).hexdigest(),
+            content_hash,
             str(payload.origin.retrieved_at),
             "no_nve",
             station,

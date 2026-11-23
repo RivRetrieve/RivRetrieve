@@ -977,3 +977,1084 @@ def test_selection_supports_series_annotations_in_series_as_frame_and_annotation
     narrowed = rr.pick(selection, station="s1", on_issue="ignore")
     assert rr.annotations(narrowed)["row_count"].to_list() == [1]
     assert rr.series(narrowed, annotations="site_note")["site_note"].to_list() == ["note-1"]
+
+
+def test_narrow_and_pick_preserve_order_null_measured_unmeasured_and_omit_native_links() -> None:
+    import inspect
+    from dataclasses import fields
+
+    from rivretrieve._internal.source_series import PhysicalFacts
+
+    assert "native_links" not in {item.name for item in fields(ObservationAnnotationTable)}
+    assert "native_links" not in inspect.signature(ObservationAnnotationTable.from_rows).parameters
+
+    s_keep = SourceSeries(
+        series_id="provider_a/s1/discharge_instantaneous",
+        provider_id="provider_a",
+        station_id="s1",
+        product_id="discharge_instantaneous",
+        identity=SourceIdentity(
+            namespace="provider_a.series",
+            published_id="s1-q",
+            origin="mapping",
+            evidence=("test-fixture",),
+        ),
+        facts=(
+            PhysicalFacts(
+                facts_id="provider_a/facts/q-m3s",
+                quantity=known("discharge", "test-fixture"),
+                source_unit=known("m3/s", "test-fixture"),
+                normalized_unit="m3/s",
+                frequency=known("hourly", "test-fixture"),
+            ),
+            PhysicalFacts(
+                facts_id="provider_a/facts/q-ft3s",
+                quantity=known("discharge", "test-fixture"),
+                source_unit=known("ft^3/s", "test-fixture"),
+                normalized_unit="ft3/s",
+                frequency=known("daily", "test-fixture"),
+            ),
+        ),
+    )
+    s_drop = _series_def("provider_a", "s1", "stage_daily_mean")
+
+    obs_schema = AnnotationSchema(
+        schema_id="provider_a.obs",
+        provider_id="provider_a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="tag", dtype="String", description="Observation tag."),),
+    )
+    drop_schema = AnnotationSchema(
+        schema_id="provider_a.stage_obs",
+        provider_id="provider_a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="stage_tag", dtype="String", description="Stage tag."),),
+    )
+
+    f_15m = s_keep.facts[0]
+    f_daily = s_keep.facts[1]
+    f_stage = s_drop.facts[0]
+    obs_df = pl.DataFrame(
+        {
+            "series_id": [s_keep.series_id, s_keep.series_id, s_drop.series_id, s_keep.series_id, s_keep.series_id],
+            "facts_id": [f_15m.facts_id, f_15m.facts_id, f_stage.facts_id, f_15m.facts_id, f_daily.facts_id],
+            "station_id": ["s1"] * 5,
+            "product_id": [
+                "discharge_instantaneous",
+                "discharge_instantaneous",
+                "stage_daily_mean",
+                "discharge_instantaneous",
+                "discharge_instantaneous",
+            ],
+            "time": [
+                datetime(2026, 1, 1, 0, 0),
+                datetime(2026, 1, 1, 0, 0),
+                datetime(2026, 1, 1, 0, 0),
+                datetime(2026, 1, 1, 0, 15),
+                datetime(2026, 1, 2, 0, 0),
+            ],
+            "time_zone": ["+00:00"] * 5,
+            "value": [2.0, 1.0, 5.0, None, 3.0],
+            "quantity": ["discharge", "discharge", "stage", "discharge", "discharge"],
+            "source_unit": ["m3/s", "m3/s", "m", "m3/s", "ft^3/s"],
+            "unit": ["m3/s", "m3/s", "m", "m3/s", "m3/s"],
+        },
+        schema=ObservationDataSchema.polars_schema,
+    )
+    # Intentionally place annotations in reverse/mixed order across measured & unmeasured rows
+    ann_df = pl.DataFrame(
+        {
+            "series_id": [
+                s_keep.series_id,  # unmeasured dropped daily fact
+                s_keep.series_id,  # measured idx=3 (null value!)
+                s_keep.series_id,  # unmeasured kept 15min fact
+                s_keep.series_id,  # measured idx=0 (dup 1)
+                s_keep.series_id,  # measured idx=1 (dup 2)
+                s_keep.series_id,  # measured idx=4 (dropped daily fact)
+            ],
+            "facts_id": [
+                f_daily.facts_id,
+                f_15m.facts_id,
+                f_15m.facts_id,
+                f_15m.facts_id,
+                f_15m.facts_id,
+                f_daily.facts_id,
+            ],
+            "station_id": ["s1"] * 6,
+            "product_id": ["discharge_instantaneous"] * 6,
+            "time": [
+                datetime(2026, 1, 3, 0, 0),
+                datetime(2026, 1, 1, 0, 15),
+                datetime(2026, 1, 1, 0, 30),
+                datetime(2026, 1, 1, 0, 0),
+                datetime(2026, 1, 1, 0, 0),
+                datetime(2026, 1, 2, 0, 0),
+            ],
+            "time_zone": ["+00:00"] * 6,
+            "measured": [False, True, False, True, True, False],
+            "tag": ["drop-unm-daily", "kept-null", "kept-unm-15m", "dup-1", "dup-2", "drop-meas-daily"],
+        },
+        schema={
+            "series_id": pl.String,
+            "facts_id": pl.String,
+            "station_id": pl.String,
+            "product_id": pl.String,
+            "time": pl.Datetime("us"),
+            "time_zone": pl.String,
+            "measured": pl.Boolean,
+            **obs_schema.polars_schema(),
+        },
+    )
+    # Fix measured flag for idx=4
+    ann_df = ann_df.with_columns(pl.Series("measured", [False, True, False, True, True, True], dtype=pl.Boolean))
+    obs_table = ObservationAnnotationTable.from_rows(
+        schema=obs_schema,
+        rows=ann_df,
+        measurement_indices=(None, 3, None, 0, 1, 4),
+    )
+    drop_table = ObservationAnnotationTable.from_rows(
+        schema=drop_schema,
+        rows=pl.DataFrame(
+            {
+                "series_id": [s_drop.series_id, s_drop.series_id],
+                "facts_id": [f_stage.facts_id, f_stage.facts_id],
+                "station_id": ["s1", "s1"],
+                "product_id": ["stage_daily_mean", "stage_daily_mean"],
+                "time": [datetime(2026, 1, 1, 0, 0), datetime(2026, 1, 2, 0, 0)],
+                "time_zone": ["+00:00", "+00:00"],
+                "measured": [True, False],
+                "stage_tag": ["drop-stage-m", "drop-stage-u"],
+            },
+            schema={
+                "series_id": pl.String,
+                "facts_id": pl.String,
+                "station_id": pl.String,
+                "product_id": pl.String,
+                "time": pl.Datetime("us"),
+                "time_zone": pl.String,
+                "measured": pl.Boolean,
+                **drop_schema.polars_schema(),
+            },
+        ),
+        measurement_indices=(2, None),
+    )
+    base = _empty_result(provider_id="provider_a").model_copy(
+        update={"data": obs_df, "source_series": (s_keep, s_drop)}
+    )
+    result = with_annotations(
+        base,
+        AnnotationBundle(observation_tables={"provider_a.obs": obs_table, "provider_a.stage_obs": drop_table}),
+    )
+
+    picked = rr.pick(result, quantity="discharge", frequency="hourly", on_issue="ignore")
+    assert picked.to_polars(annotations="tag").select("time", "value", "tag").rows() == [
+        (datetime(2026, 1, 1, 0, 0), 2.0, "dup-1"),
+        (datetime(2026, 1, 1, 0, 0), 1.0, "dup-2"),
+        (datetime(2026, 1, 1, 0, 15), None, "kept-null"),
+    ]
+    direct = rr.annotations(picked, schema="provider_a.obs")
+    assert direct["tag"].to_list() == ["kept-null", "kept-unm-15m", "dup-1", "dup-2"]
+    assert picked._annotations.observation_tables["provider_a.obs"].measurement_indices == (2, None, 0, 1)
+    assert rr.annotations(picked)["schema"].to_list() == ["provider_a.obs"]
+    with pytest.raises(ValueError, match="Unknown annotation schema"):
+        rr.annotations(picked, schema="provider_a.stage_obs")
+
+
+def test_pick_narrows_growing_annotated_result_preserving_exact_mapping() -> None:
+    from datetime import timedelta
+
+    s1 = _series_def("provider_a", "s1", "discharge_daily_mean")
+    s2 = _series_def("provider_a", "s2", "stage_daily_mean")
+    schema = AnnotationSchema(
+        schema_id="provider_a.obs",
+        provider_id="provider_a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="tag", dtype="String", description="Observation tag."),),
+    )
+    n_pairs = 1_000
+    base_time = datetime(2020, 1, 1)
+    times = [base_time + timedelta(days=i // 2) for i in range(n_pairs * 2)]
+    is_s1 = [i % 2 == 0 for i in range(n_pairs * 2)]
+    obs_df = pl.DataFrame(
+        {
+            "series_id": [s1.series_id if k else s2.series_id for k in is_s1],
+            "facts_id": [s1.facts[0].facts_id if k else s2.facts[0].facts_id for k in is_s1],
+            "station_id": ["s1" if k else "s2" for k in is_s1],
+            "product_id": ["discharge_daily_mean" if k else "stage_daily_mean" for k in is_s1],
+            "time": times,
+            "time_zone": ["+00:00"] * (n_pairs * 2),
+            "value": [float(i) for i in range(n_pairs * 2)],
+            "quantity": ["discharge" if k else "stage" for k in is_s1],
+            "source_unit": ["m3/s" if k else "m" for k in is_s1],
+            "unit": ["m3/s" if k else "m" for k in is_s1],
+        },
+        schema=ObservationDataSchema.polars_schema,
+    )
+    ann_df = pl.DataFrame(
+        {
+            "series_id": obs_df["series_id"],
+            "facts_id": obs_df["facts_id"],
+            "station_id": obs_df["station_id"],
+            "product_id": obs_df["product_id"],
+            "time": times,
+            "time_zone": ["+00:00"] * (n_pairs * 2),
+            "measured": [True] * (n_pairs * 2),
+            "tag": [f"tag-{i}" for i in range(n_pairs * 2)],
+        },
+        schema={
+            "series_id": pl.String,
+            "facts_id": pl.String,
+            "station_id": pl.String,
+            "product_id": pl.String,
+            "time": pl.Datetime("us"),
+            "time_zone": pl.String,
+            "measured": pl.Boolean,
+            **schema.polars_schema(),
+        },
+    )
+    table = ObservationAnnotationTable.from_rows(
+        schema=schema, rows=ann_df, measurement_indices=tuple(range(n_pairs * 2))
+    )
+    result = with_annotations(
+        _empty_result(provider_id="provider_a").model_copy(update={"data": obs_df, "source_series": (s1, s2)}),
+        AnnotationBundle(observation_tables={"provider_a.obs": table}),
+    )
+    picked = rr.pick(result, quantity="discharge", on_issue="ignore")
+    projected = picked.to_polars(annotations="tag")
+    assert projected.height == n_pairs
+    assert projected["value"].to_list() == [float(2 * i) for i in range(n_pairs)]
+    assert projected["tag"].to_list() == [f"tag-{2 * i}" for i in range(n_pairs)]
+
+
+def test_filter_native_with_annotations_builds_dicts_only_for_needed_unmeasured_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rivretrieve._internal.engine import RowsSchema
+    from rivretrieve._internal.source_annotations import filter_native_with_annotations
+
+    s1 = _series_def("provider_a", "s1", "discharge_daily_mean")
+    s2 = _series_def("provider_a", "s2", "stage_daily_mean")
+    schema = AnnotationSchema(
+        schema_id="provider_a.obs",
+        provider_id="provider_a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="tag", dtype="String", description="Observation tag."),),
+    )
+    rows = pl.DataFrame(
+        {
+            "station_id": ["s1", "s1", "s1"],
+            "product_id": ["discharge_daily_mean"] * 3,
+            "time": [datetime(2026, 1, 1), datetime(2026, 1, 2), datetime(2026, 1, 3)],
+            "value": [1.0, None, 3.0],
+            "time_zone": ["+00:00"] * 3,
+            "series_id": [s1.series_id] * 3,
+            "facts_id": [s1.facts[0].facts_id] * 3,
+            "source_unit": ["m3/s"] * 3,
+        },
+        schema=RowsSchema.polars_schema,
+    )
+    ann_schema = {
+        "series_id": pl.String,
+        "facts_id": pl.String,
+        "station_id": pl.String,
+        "product_id": pl.String,
+        "time": pl.Datetime("us"),
+        "time_zone": pl.String,
+        "measured": pl.Boolean,
+        **schema.polars_schema(),
+    }
+
+    to_dicts_counts: list[int] = []
+    orig_to_dicts = pl.DataFrame.to_dicts
+
+    def spy_to_dicts(self: pl.DataFrame, *args: object, **kwargs: object) -> list[dict[str, object]]:
+        out = orig_to_dicts(self, *args, **kwargs)
+        to_dicts_counts.append(len(out))
+        return out
+
+    monkeypatch.setattr(pl.DataFrame, "to_dicts", spy_to_dicts)
+
+    # 1. Fully measured table including a null-valued measured row -> zero predicate dicts
+    measured_only = ObservationAnnotationTable.from_rows(
+        schema=schema,
+        rows=pl.DataFrame(
+            {
+                "series_id": [s1.series_id] * 3,
+                "facts_id": [s1.facts[0].facts_id] * 3,
+                "station_id": ["s1"] * 3,
+                "product_id": ["discharge_daily_mean"] * 3,
+                "time": [datetime(2026, 1, 1), datetime(2026, 1, 2), datetime(2026, 1, 3)],
+                "time_zone": ["+00:00"] * 3,
+                "measured": [True, True, True],
+                "tag": ["m0", "m-null", "m2"],
+            },
+            schema=ann_schema,
+        ),
+        measurement_indices=(0, 1, 2),
+    )
+    pred_calls: list[dict[str, object]] = []
+    filtered_rows, filtered_bundle = filter_native_with_annotations(
+        rows,
+        AnnotationBundle(observation_tables={"provider_a.obs": measured_only}),
+        kept_indices=[0, 1],
+        unmeasured_predicate=lambda rec: (pred_calls.append(rec), True)[1],
+    )
+    assert to_dicts_counts == []
+    assert pred_calls == []
+    assert filtered_rows["value"].to_list() == [1.0, None]
+    kept_table = filtered_bundle.observation_tables["provider_a.obs"]
+    assert kept_table.rows["tag"].to_list() == ["m0", "m-null"]
+    assert kept_table.measurement_indices == (0, 1)
+
+    # 2. Mixed table: series/expr filter before to_dicts, so dicts created ONLY for surviving candidates
+    mixed_table = ObservationAnnotationTable.from_rows(
+        schema=schema,
+        rows=pl.DataFrame(
+            {
+                "series_id": [
+                    s1.series_id,
+                    s2.series_id,
+                    s1.series_id,
+                    s1.series_id,
+                    s1.series_id,
+                    s1.series_id,
+                    s1.series_id,
+                ],
+                "facts_id": [
+                    s1.facts[0].facts_id,
+                    s2.facts[0].facts_id,
+                    s1.facts[0].facts_id,
+                    s1.facts[0].facts_id,
+                    s1.facts[0].facts_id,
+                    s1.facts[0].facts_id,
+                    s1.facts[0].facts_id,
+                ],
+                "station_id": ["s1", "s2", "s1", "s1", "s1", "s1", "s1"],
+                "product_id": [
+                    "discharge_daily_mean",
+                    "stage_daily_mean",
+                    "discharge_daily_mean",
+                    "discharge_daily_mean",
+                    "discharge_daily_mean",
+                    "discharge_daily_mean",
+                    "discharge_daily_mean",
+                ],
+                "time": [
+                    datetime(2026, 1, 1),
+                    datetime(2026, 1, 5),
+                    datetime(2026, 1, 2),
+                    datetime(2026, 1, 1),
+                    datetime(2026, 1, 3),
+                    datetime(2026, 1, 4),
+                    datetime(2026, 1, 3),
+                ],
+                "time_zone": ["+00:00"] * 7,
+                "measured": [True, False, True, False, False, False, True],
+                "tag": ["m0", "u-drop-series", "m-null", "u-drop-expr", "u-keep-pred", "u-drop-pred", "m2"],
+            },
+            schema=ann_schema,
+        ),
+        measurement_indices=(0, None, 1, None, None, None, 2),
+    )
+    mixed_bundle = AnnotationBundle(observation_tables={"provider_a.obs": mixed_table})
+    to_dicts_counts.clear()
+    pred_calls.clear()
+    _, mixed_out = filter_native_with_annotations(
+        rows,
+        mixed_bundle,
+        kept_indices=[0, 1],
+        unmeasured_expr=pl.col("time") >= datetime(2026, 1, 2),
+        unmeasured_predicate=lambda rec: (pred_calls.append(rec), rec["tag"] == "u-keep-pred")[1],
+        allowed_series_ids={s1.series_id},
+    )
+    assert sum(to_dicts_counts) == 2
+    assert [rec["tag"] for rec in pred_calls] == ["u-keep-pred", "u-drop-pred"]
+    out_table = mixed_out.observation_tables["provider_a.obs"]
+    assert out_table.rows["tag"].to_list() == ["m0", "m-null", "u-keep-pred"]
+    assert out_table.measurement_indices == (0, 1, None)
+
+    # 3. Excluded unmeasured rows never reach unmeasured_predicate; kept candidate exceptions still raise
+    def fail_on_excluded(rec: dict[str, object]) -> bool:
+        if rec["tag"] in {"u-drop-series", "u-drop-expr"}:
+            raise FatalContractError("excluded row should not reach predicate")
+        return True
+
+    filter_native_with_annotations(
+        rows,
+        mixed_bundle,
+        kept_indices=[0, 1],
+        unmeasured_expr=pl.col("time") >= datetime(2026, 1, 2),
+        unmeasured_predicate=fail_on_excluded,
+        allowed_series_ids={s1.series_id},
+    )
+
+    def fail_on_candidate(rec: dict[str, object]) -> bool:
+        if rec["tag"] == "u-keep-pred":
+            raise FatalContractError("candidate failure must surface")
+        return True
+
+    with pytest.raises(FatalContractError, match="candidate failure must surface"):
+        filter_native_with_annotations(
+            rows,
+            mixed_bundle,
+            kept_indices=[0, 1],
+            unmeasured_expr=pl.col("time") >= datetime(2026, 1, 2),
+            unmeasured_predicate=fail_on_candidate,
+            allowed_series_ids={s1.series_id},
+        )
+
+
+def test_merge_single_station_multi_series_ordered_reuses_without_revalidation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rivretrieve._internal import discovery, observations, source_annotations
+    from rivretrieve._internal.issues import Issue
+    from rivretrieve._internal.source_series import OutcomeStatus, RetrievalOutcome, SeriesWindow
+
+    s_q = _series_def("provider_a", "s1", "discharge_daily_mean")
+    s_h = _series_def("provider_a", "s1", "stage_daily_mean")
+    # Ensure s_q < s_h in canonical order ("discharge_daily_mean" < "stage_daily_mean")
+    obs_schema = AnnotationSchema(
+        schema_id="provider_a.obs",
+        provider_id="provider_a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="tag", dtype="String", description="Observation tag."),),
+    )
+    ser_schema = AnnotationSchema(
+        schema_id="provider_a.meta",
+        provider_id="provider_a",
+        scope=AnnotationScope.SERIES,
+        fields=(AnnotationField(name="gauge_note", dtype="String", description="Series note."),),
+    )
+    rows = [
+        {
+            "station_id": "s1",
+            "product_id": "discharge_daily_mean",
+            "time": datetime(2026, 1, 1),
+            "time_zone": "+00:00",
+            "value": None,
+        },
+        {
+            "station_id": "s1",
+            "product_id": "discharge_daily_mean",
+            "time": datetime(2026, 1, 1),
+            "time_zone": "+00:00",
+            "value": 1.0,
+        },
+        {
+            "station_id": "s1",
+            "product_id": "stage_daily_mean",
+            "time": datetime(2026, 1, 1),
+            "time_zone": "+00:00",
+            "value": 5.0,
+        },
+    ]
+    obs_table = ObservationAnnotationTable.from_rows(
+        schema=obs_schema,
+        rows=pl.DataFrame(
+            {
+                "series_id": [s_q.series_id, s_q.series_id, s_q.series_id, s_h.series_id],
+                "facts_id": [
+                    s_q.facts[0].facts_id,
+                    s_q.facts[0].facts_id,
+                    s_q.facts[0].facts_id,
+                    s_h.facts[0].facts_id,
+                ],
+                "station_id": ["s1"] * 4,
+                "product_id": [
+                    "discharge_daily_mean",
+                    "discharge_daily_mean",
+                    "discharge_daily_mean",
+                    "stage_daily_mean",
+                ],
+                "time": [
+                    datetime(2026, 1, 1),
+                    datetime(2026, 1, 1),
+                    datetime(2026, 1, 1),
+                    datetime(2026, 1, 1),
+                ],
+                "time_zone": ["+00:00"] * 4,
+                "measured": [True, True, False, True],
+                "tag": ["q-null", "q-one", "q-unm", "h-five"],
+            },
+            schema={
+                "series_id": pl.String,
+                "facts_id": pl.String,
+                "station_id": pl.String,
+                "product_id": pl.String,
+                "time": pl.Datetime("us"),
+                "time_zone": pl.String,
+                "measured": pl.Boolean,
+                **obs_schema.polars_schema(),
+            },
+        ),
+        measurement_indices=(0, 1, None, 2),
+    )
+    ordered_series_ids = sorted([s_q.series_id, s_h.series_id])
+    ser_table = SeriesAnnotationTable.from_rows(
+        schema=ser_schema,
+        rows=pl.DataFrame(
+            {"series_id": ordered_series_ids, "gauge_note": ["note-0", "note-1"]},
+            schema={"series_id": pl.String, **ser_schema.polars_schema()},
+        ),
+    )
+    prov_issue = Issue(
+        severity="info",
+        code="provenance.note",
+        message="Duplicate provenance note",
+        provider_id=ProviderId("provider_a"),
+    )
+    src_issue = Issue(
+        severity="warning",
+        code="source.partial",
+        message="Stage product unavailable",
+        provider_id=ProviderId("provider_a"),
+        details={"station_id": "s1", "product_id": "stage_daily_mean"},
+    )
+    out_q = RetrievalOutcome(
+        outcome_id="out-q",
+        series_id=s_q.series_id,
+        station_id="s1",
+        product_id="discharge_daily_mean",
+        window=SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2)),
+        status=OutcomeStatus.SUCCESS,
+        facts_ids=(s_q.facts[0].facts_id,),
+    )
+    out_h = RetrievalOutcome(
+        outcome_id="out-h",
+        series_id=s_h.series_id,
+        station_id="s1",
+        product_id="stage_daily_mean",
+        window=SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2)),
+        status=OutcomeStatus.FAILED,
+        reason="partial stage failure",
+    )
+    single = _make_result(
+        rows,
+        (s_q, s_h),
+        bundle=AnnotationBundle(
+            observation_tables={"provider_a.obs": obs_table},
+            series_tables={"provider_a.meta": ser_table},
+        ),
+    )
+    single = with_annotations(
+        single.model_copy(
+            update={
+                "outcomes": (out_q, out_h),
+                "issues": (prov_issue, src_issue, prov_issue),
+                "provenance": single.provenance.model_copy(
+                    update={
+                        "endpoints": ("https://example.invalid/a", "https://example.invalid/a"),
+                        "decomposition": ("d1", "d1"),
+                    }
+                ),
+            }
+        ),
+        single._annotations,
+    )
+
+    validate_calls: list[str] = []
+    orig_validate_data = observations.validate_observation_data
+    orig_zone_value = observations.ZoneValue
+    orig_validate_bundle = source_annotations.validate_bundle_for_result
+    orig_merge_sorted = AnnotationBundle.merge_sorted
+
+    def spy_validate_data(data: object) -> None:
+        validate_calls.append("validate_observation_data")
+        return orig_validate_data(data)
+
+    def spy_zone_value(value: str) -> object:
+        validate_calls.append("ZoneValue")
+        return orig_zone_value(value)
+
+    def spy_bundle(bundle: AnnotationBundle, data: pl.DataFrame, source_series: tuple[SourceSeries, ...]) -> None:
+        validate_calls.append("validate_bundle")
+        return orig_validate_bundle(bundle, data, source_series)
+
+    @classmethod
+    def spy_merge_sorted(cls, *args: object, **kwargs: object) -> AnnotationBundle:
+        validate_calls.append("merge_sorted")
+        return orig_merge_sorted.__func__(cls, *args, **kwargs)
+
+    orig_with_annotations = discovery.with_annotations
+
+    monkeypatch.setattr(observations, "validate_observation_data", spy_validate_data)
+    monkeypatch.setattr(observations, "ZoneValue", spy_zone_value)
+    monkeypatch.setattr(source_annotations, "validate_bundle_for_result", spy_bundle)
+    monkeypatch.setattr(
+        discovery,
+        "with_annotations",
+        lambda res, bundle: (validate_calls.append("with_annotations"), orig_with_annotations(res, bundle))[1],
+    )
+    monkeypatch.setattr(AnnotationBundle, "merge_sorted", spy_merge_sorted)
+
+    merged = _merge_provider_results((single,), (s_q, s_h))
+    assert validate_calls == []
+    assert merged.data is single.data
+    assert merged._annotations is single._annotations
+    assert merged.issues == (prov_issue, src_issue)
+    assert merged.provenance.endpoints == ("https://example.invalid/a",)
+    assert merged.provenance.decomposition == ("d1",)
+    assert merged.provenance.request == {
+        "scope": single.scope.model_dump(mode="json"),
+        "series": [
+            {"station_id": "s1", "product_id": "discharge_daily_mean", "series_id": s_q.series_id},
+            {"station_id": "s1", "product_id": "stage_daily_mean", "series_id": s_h.series_id},
+        ],
+        "start": "2026-01-01T00:00:00",
+        "end": "2026-01-02T23:59:59",
+    }
+    assert merged.outcomes == (out_q, out_h)
+    assert merged.to_polars(annotations="tag").select("value", "tag").rows() == [
+        (None, "q-null"),
+        (1.0, "q-one"),
+        (5.0, "h-five"),
+    ]
+    assert rr.annotations(merged, schema="provider_a.obs")["tag"].to_list() == ["q-null", "q-one", "q-unm", "h-five"]
+
+
+def test_merge_single_station_multi_series_unsorted_rows_and_annotations_preserves_exact_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rivretrieve._internal import discovery, observations, source_annotations
+
+    s_q = _series_def("provider_a", "s1", "discharge_daily_mean")
+    s_h = _series_def("provider_a", "s1", "stage_daily_mean")
+    obs_schema = AnnotationSchema(
+        schema_id="provider_a.obs",
+        provider_id="provider_a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="tag", dtype="String", description="Observation tag."),),
+    )
+    empty_schema = AnnotationSchema(
+        schema_id="provider_a.empty_obs",
+        provider_id="provider_a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="unused", dtype="String", description="Unused empty schema."),),
+    )
+    ser_schema = AnnotationSchema(
+        schema_id="provider_a.meta",
+        provider_id="provider_a",
+        scope=AnnotationScope.SERIES,
+        fields=(AnnotationField(name="gauge_note", dtype="String", description="Series note."),),
+    )
+    # Intentionally unsorted: stage first, then discharge duplicate timestamps (2.0, 1.0, None)
+    rows = [
+        {
+            "station_id": "s1",
+            "product_id": "stage_daily_mean",
+            "time": datetime(2026, 1, 1),
+            "time_zone": "+00:00",
+            "value": 9.0,
+        },
+        {
+            "station_id": "s1",
+            "product_id": "discharge_daily_mean",
+            "time": datetime(2026, 1, 1),
+            "time_zone": "+00:00",
+            "value": 2.0,
+        },
+        {
+            "station_id": "s1",
+            "product_id": "discharge_daily_mean",
+            "time": datetime(2026, 1, 1),
+            "time_zone": "+00:00",
+            "value": 1.0,
+        },
+        {
+            "station_id": "s1",
+            "product_id": "discharge_daily_mean",
+            "time": datetime(2026, 1, 1),
+            "time_zone": "+00:00",
+            "value": None,
+        },
+    ]
+    obs_table = ObservationAnnotationTable.from_rows(
+        schema=obs_schema,
+        rows=pl.DataFrame(
+            {
+                "series_id": [
+                    s_h.series_id,
+                    s_q.series_id,
+                    s_q.series_id,
+                    s_q.series_id,
+                    s_q.series_id,
+                ],
+                "facts_id": [
+                    s_h.facts[0].facts_id,
+                    s_q.facts[0].facts_id,
+                    s_q.facts[0].facts_id,
+                    s_q.facts[0].facts_id,
+                    s_q.facts[0].facts_id,
+                ],
+                "station_id": ["s1"] * 5,
+                "product_id": [
+                    "stage_daily_mean",
+                    "discharge_daily_mean",
+                    "discharge_daily_mean",
+                    "discharge_daily_mean",
+                    "discharge_daily_mean",
+                ],
+                "time": [datetime(2026, 1, 1)] * 5,
+                "time_zone": ["+00:00"] * 5,
+                "measured": [True, False, True, True, True],
+                "tag": ["h-nine", "q-unm", "q-two", "q-one", "q-null"],
+            },
+            schema={
+                "series_id": pl.String,
+                "facts_id": pl.String,
+                "station_id": pl.String,
+                "product_id": pl.String,
+                "time": pl.Datetime("us"),
+                "time_zone": pl.String,
+                "measured": pl.Boolean,
+                **obs_schema.polars_schema(),
+            },
+        ),
+        measurement_indices=(0, None, 1, 2, 3),
+    )
+    # Reverse series_id order for SeriesAnnotationTable
+    reverse_series_ids = sorted([s_q.series_id, s_h.series_id], reverse=True)
+    ser_table = SeriesAnnotationTable.from_rows(
+        schema=ser_schema,
+        rows=pl.DataFrame(
+            {"series_id": reverse_series_ids, "gauge_note": ["note-rev-0", "note-rev-1"]},
+            schema={"series_id": pl.String, **ser_schema.polars_schema()},
+        ),
+    )
+    single = _make_result(
+        rows,
+        (s_q, s_h),
+        bundle=AnnotationBundle(
+            observation_tables={
+                "provider_a.obs": obs_table,
+                "provider_a.empty_obs": ObservationAnnotationTable.empty(empty_schema),
+            },
+            series_tables={"provider_a.meta": ser_table},
+        ),
+    )
+
+    revalidation_calls: list[str] = []
+    orig_validate_data = observations.validate_observation_data
+    orig_zone_value = observations.ZoneValue
+    orig_validate_bundle = source_annotations.validate_bundle_for_result
+    monkeypatch.setattr(
+        observations,
+        "validate_observation_data",
+        lambda data: (revalidation_calls.append("validate_observation_data"), orig_validate_data(data))[1],
+    )
+    monkeypatch.setattr(
+        observations,
+        "ZoneValue",
+        lambda value: (revalidation_calls.append("ZoneValue"), orig_zone_value(value))[1],
+    )
+    monkeypatch.setattr(
+        source_annotations,
+        "validate_bundle_for_result",
+        lambda *a, **k: (revalidation_calls.append("validate_bundle"), orig_validate_bundle(*a, **k))[1],
+    )
+    orig_with_annotations = discovery.with_annotations
+    monkeypatch.setattr(
+        discovery,
+        "with_annotations",
+        lambda res, bundle: (revalidation_calls.append("with_annotations"), orig_with_annotations(res, bundle))[1],
+    )
+
+    merged = _merge_provider_results((single,), (s_q, s_h))
+    assert revalidation_calls == []
+    assert merged.to_polars(annotations="tag").select("product_id", "value", "tag").rows() == [
+        ("discharge_daily_mean", None, "q-null"),
+        ("discharge_daily_mean", 1.0, "q-one"),
+        ("discharge_daily_mean", 2.0, "q-two"),
+        ("stage_daily_mean", 9.0, "h-nine"),
+    ]
+    assert rr.annotations(merged, schema="provider_a.obs")["tag"].to_list() == [
+        "q-null",
+        "q-one",
+        "q-two",
+        "q-unm",
+        "h-nine",
+    ]
+    with pytest.raises(ValueError, match="Unknown annotation schema"):
+        rr.annotations(merged, schema="provider_a.empty_obs")
+    assert rr.series(merged, annotations="gauge_note")["series_id"].to_list() == [s_q.series_id, s_h.series_id]
+    assert rr.series(merged, annotations="gauge_note")["gauge_note"].to_list() == ["note-rev-1", "note-rev-0"]
+
+
+def test_merge_single_station_ordered_data_unsorted_annotations_and_contract_guards(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rivretrieve._internal.issues import ObservationDataSchemaError
+    from rivretrieve._internal.source_series import OutcomeStatus, RetrievalOutcome, SeriesWindow
+
+    s_q = _series_def("provider_a", "s1", "discharge_daily_mean")
+    obs_schema = AnnotationSchema(
+        schema_id="provider_a.obs",
+        provider_id="provider_a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="tag", dtype="String", description="Observation tag."),),
+    )
+    # Ordered data (2.0, 2.0 at same timestamp) with unsorted annotations (unmeasured before measured + reversed indices)
+    single_ordered = _make_result(
+        [
+            {
+                "station_id": "s1",
+                "product_id": "discharge_daily_mean",
+                "time": datetime(2026, 1, 1),
+                "time_zone": "+00:00",
+                "value": 2.0,
+            },
+            {
+                "station_id": "s1",
+                "product_id": "discharge_daily_mean",
+                "time": datetime(2026, 1, 1),
+                "time_zone": "+00:00",
+                "value": 2.0,
+            },
+        ],
+        (s_q,),
+        bundle=AnnotationBundle(
+            observation_tables={
+                "provider_a.obs": ObservationAnnotationTable.from_rows(
+                    schema=obs_schema,
+                    rows=pl.DataFrame(
+                        {
+                            "series_id": [s_q.series_id] * 3,
+                            "facts_id": [s_q.facts[0].facts_id] * 3,
+                            "station_id": ["s1"] * 3,
+                            "product_id": ["discharge_daily_mean"] * 3,
+                            "time": [datetime(2026, 1, 1)] * 3,
+                            "time_zone": ["+00:00"] * 3,
+                            "measured": [False, True, True],
+                            "tag": ["unm", "second", "first"],
+                        },
+                        schema={
+                            "series_id": pl.String,
+                            "facts_id": pl.String,
+                            "station_id": pl.String,
+                            "product_id": pl.String,
+                            "time": pl.Datetime("us"),
+                            "time_zone": pl.String,
+                            "measured": pl.Boolean,
+                            **obs_schema.polars_schema(),
+                        },
+                    ),
+                    measurement_indices=(None, 1, 0),
+                )
+            }
+        ),
+    )
+    from rivretrieve._internal import observations, source_annotations
+
+    validate_calls: list[str] = []
+    orig_validate_data = observations.validate_observation_data
+    orig_zone_value = observations.ZoneValue
+    orig_merge_sorted = AnnotationBundle.merge_sorted
+    orig_validate_bundle = source_annotations.validate_bundle_for_result
+    monkeypatch.setattr(
+        observations,
+        "validate_observation_data",
+        lambda data: (validate_calls.append("validate_observation_data"), orig_validate_data(data))[1],
+    )
+    monkeypatch.setattr(
+        observations,
+        "ZoneValue",
+        lambda value: (validate_calls.append("ZoneValue"), orig_zone_value(value))[1],
+    )
+    monkeypatch.setattr(
+        source_annotations,
+        "validate_bundle_for_result",
+        lambda *a, **k: (validate_calls.append("validate_bundle"), orig_validate_bundle(*a, **k))[1],
+    )
+
+    @classmethod
+    def spy_merge_sorted(cls, *args: object, **kwargs: object) -> AnnotationBundle:
+        validate_calls.append("merge_sorted")
+        return orig_merge_sorted.__func__(cls, *args, **kwargs)
+
+    monkeypatch.setattr(AnnotationBundle, "merge_sorted", spy_merge_sorted)
+    merged = _merge_provider_results((single_ordered,), (s_q,))
+    assert validate_calls == []
+    assert merged.data is single_ordered.data
+    assert merged.to_polars(annotations="tag")["tag"].to_list() == ["first", "second"]
+    assert rr.annotations(merged, schema="provider_a.obs")["tag"].to_list() == ["first", "second", "unm"]
+
+    # view_scope present -> falls back to full ObservationResult validation
+    viewed = rr.pick(single_ordered, station="s1", on_issue="ignore")
+    validate_calls.clear()
+    _merge_provider_results((viewed,), (s_q,))
+    assert "validate_observation_data" in validate_calls
+    assert "ZoneValue" in validate_calls
+
+    # Missing provenance.request start/end still raises FatalContractError
+    bad_req = single_ordered.model_copy(
+        update={"provenance": single_ordered.provenance.model_copy(update={"request": {}})}
+    )
+    with pytest.raises(FatalContractError, match="normalized requested window"):
+        _merge_provider_results((bad_req,), (s_q,))
+
+    # Zero-observation result with invalid outcome contract still raises ObservationDataSchemaError
+    zero_obs = _empty_result(provider_id="provider_a").model_copy(
+        update={
+            "outcomes": (
+                RetrievalOutcome(
+                    outcome_id="bad-empty",
+                    series_id="missing-series",
+                    station_id="s1",
+                    product_id="discharge_daily_mean",
+                    window=SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2)),
+                    status=OutcomeStatus.EMPTY,
+                    facts_ids=(s_q.facts[0].facts_id,),
+                ),
+            )
+        }
+    )
+    with pytest.raises(ObservationDataSchemaError, match="unknown source series"):
+        _merge_provider_results((zero_obs,), ())
+
+
+def test_filter_mask_anti_join_sort_validation_and_projection_preserve_duplicate_occurrences(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rivretrieve._internal.engine import RowsSchema
+    from rivretrieve._internal.source_annotations import (
+        anti_join_native_with_annotations,
+        filter_native_with_annotations_by_mask,
+        sort_native_by_station_with_annotations,
+        validate_bundle_for_result,
+    )
+
+    s1 = _series_def("provider_a", "s1", "discharge_daily_mean")
+    s2 = _series_def("provider_a", "s2", "stage_daily_mean")
+    schema = AnnotationSchema(
+        schema_id="provider_a.obs",
+        provider_id="provider_a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="tag", dtype="String", description="Observation tag."),),
+    )
+    ann_schema = {
+        "series_id": pl.String,
+        "facts_id": pl.String,
+        "station_id": pl.String,
+        "product_id": pl.String,
+        "time": pl.Datetime("us"),
+        "time_zone": pl.String,
+        "measured": pl.Boolean,
+        **schema.polars_schema(),
+    }
+
+    ts = datetime(2026, 1, 1)
+    ts2 = datetime(2026, 1, 2)
+    rows = pl.DataFrame(
+        {
+            "station_id": ["s2", "s1", "s1", "s1"],
+            "product_id": ["stage_daily_mean", "discharge_daily_mean", "discharge_daily_mean", "discharge_daily_mean"],
+            "time": [ts, ts, ts, ts2],
+            "value": [9.0, 1.0, 2.0, 3.0],
+            "time_zone": ["+00:00"] * 4,
+            "series_id": [s2.series_id, s1.series_id, s1.series_id, s1.series_id],
+            "facts_id": [s2.facts[0].facts_id, s1.facts[0].facts_id, s1.facts[0].facts_id, s1.facts[0].facts_id],
+            "source_unit": ["m", "m3/s", "m3/s", "m3/s"],
+        },
+        schema=RowsSchema.polars_schema,
+    )
+    # Only the 2nd occurrence at `ts` for s1 (idx=2) carries a flag, plus unmeasured slot at ts2
+    table = ObservationAnnotationTable.from_rows(
+        schema=schema,
+        rows=pl.DataFrame(
+            {
+                "series_id": [s1.series_id, s2.series_id, s1.series_id],
+                "facts_id": [s1.facts[0].facts_id, s2.facts[0].facts_id, s1.facts[0].facts_id],
+                "station_id": ["s1", "s2", "s1"],
+                "product_id": ["discharge_daily_mean", "stage_daily_mean", "discharge_daily_mean"],
+                "time": [ts, ts, ts2],
+                "time_zone": ["+00:00", "+00:00", "+00:00"],
+                "measured": [True, True, False],
+                "tag": ["second-dup", "s2-flag", "unmeasured-ts2"],
+            },
+            schema=ann_schema,
+        ),
+        measurement_indices=(2, 0, None),
+    )
+    bundle = AnnotationBundle(observation_tables={"provider_a.obs": table})
+
+    # Validate error contracts
+    with pytest.raises(FatalContractError, match="disagrees between measured and measurement index"):
+        ObservationAnnotationTable.from_rows(schema=schema, rows=table.rows, measurement_indices=(None, 0, None))
+    with pytest.raises(FatalContractError, match="cannot be negative"):
+        ObservationAnnotationTable.from_rows(schema=schema, rows=table.rows, measurement_indices=(-1, 0, None))
+    with pytest.raises(FatalContractError, match="Duplicate annotation row"):
+        ObservationAnnotationTable.from_rows(
+            schema=schema,
+            rows=table.rows.with_columns(pl.lit(True).alias("measured")),
+            measurement_indices=(0, 0, 1),
+        )
+    with pytest.raises(FatalContractError, match="missing observation row 99"):
+        validate_bundle_for_result(
+            AnnotationBundle(
+                observation_tables={
+                    "provider_a.obs": ObservationAnnotationTable.from_rows(
+                        schema=schema, rows=table.rows.head(1), measurement_indices=(99,)
+                    )
+                }
+            ),
+            rows,
+            (s1, s2),
+        )
+    with pytest.raises(FatalContractError, match="disagrees with observation row coordinates"):
+        validate_bundle_for_result(bundle, rows.with_columns(pl.col("time").dt.replace_time_zone("UTC")), (s1, s2))
+
+    # Spy on to_dicts to ensure anti_join & mask filter avoid Python dicts
+    monkeypatch.setattr(
+        pl.DataFrame, "to_dicts", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("to_dicts called"))
+    )
+
+    # Sort stably by station_id: s1 rows move to indices 0,1,2 and s2 moves to 3; second-dup must link to index 1!
+    sorted_rows, sorted_bundle = sort_native_by_station_with_annotations(rows, bundle)
+    assert sorted_rows["value"].to_list() == [1.0, 2.0, 3.0, 9.0]
+    sorted_tbl = sorted_bundle.observation_tables["provider_a.obs"]
+    assert sorted_tbl.rows["tag"].to_list() == ["second-dup", "unmeasured-ts2", "s2-flag"]
+    assert sorted_tbl.measurement_indices == (1, None, 3)
+    validate_bundle_for_result(sorted_bundle, sorted_rows, (s1, s2))
+
+    # Mask filter dropping first row of s1 (index 0): second-dup shifts from 1 -> 0
+    keep_mask = pl.Series([False, True, True, True], dtype=pl.Boolean)
+    masked_rows, masked_bundle = filter_native_with_annotations_by_mask(sorted_rows, sorted_bundle, keep_mask)
+    assert masked_rows["value"].to_list() == [2.0, 3.0, 9.0]
+    masked_tbl = masked_bundle.observation_tables["provider_a.obs"]
+    assert masked_tbl.measurement_indices == (0, None, 2)
+    validate_bundle_for_result(masked_bundle, masked_rows, (s1, s2))
+
+    # Anti-join excluding ts2 drops unmeasured-ts2 and row at ts2, preserving second-dup and s2-flag
+    excl = sorted_rows.filter(pl.col("time") == ts2)
+    aj_rows, aj_bundle = anti_join_native_with_annotations(sorted_rows, sorted_bundle, excl)
+    assert aj_rows["value"].to_list() == [1.0, 2.0, 9.0]
+    aj_tbl = aj_bundle.observation_tables["provider_a.obs"]
+    assert aj_tbl.rows["tag"].to_list() == ["second-dup", "s2-flag"]
+    assert aj_tbl.measurement_indices == (1, 2)
+    validate_bundle_for_result(aj_bundle, aj_rows, (s1, s2))
+
+    # 1:1 aligned projection fast path preserves exact series dtype & values
+    aligned_rows = pl.DataFrame(
+        {
+            "series_id": [s1.series_id, s1.series_id],
+            "facts_id": [s1.facts[0].facts_id, s1.facts[0].facts_id],
+            "station_id": ["s1", "s1"],
+            "product_id": ["discharge_daily_mean", "discharge_daily_mean"],
+            "time": [ts, ts2],
+            "time_zone": ["+00:00", "+00:00"],
+            "measured": [True, True],
+            "tag": ["t0", "t1"],
+        },
+        schema=ann_schema,
+    )
+    aligned_bundle = AnnotationBundle(
+        observation_tables={
+            "provider_a.obs": ObservationAnnotationTable.from_rows(
+                schema=schema, rows=aligned_rows, measurement_indices=(0, 1)
+            )
+        }
+    )
+    projected = aligned_bundle.project_observation_columns(2, True)
+    assert len(projected) == 1
+    assert projected[0].to_list() == ["t0", "t1"]

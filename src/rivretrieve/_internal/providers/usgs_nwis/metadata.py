@@ -39,6 +39,8 @@ def source_series(
     metadata: bool,
     monitoring_location_id: str,
     known_series: tuple[SourceSeries, ...] = (),
+    known_by_id: Mapping[str, SourceSeries] | None = None,
+    facts_cache: dict[tuple[str, str | None, str, bool], PhysicalFacts] | None = None,
 ) -> SourceSeries:
     """Validate returned source coordinates without inferring facts from route names."""
     identifier = required_string(properties, "id" if metadata else "time_series_id")
@@ -78,27 +80,37 @@ def source_series(
         for field in ("web_description", "sublocation_identifier"):
             if field not in properties or (properties[field] is not None and not isinstance(properties[field], str)):
                 raise ValueError(f"Missing or malformed {field}")
-    silent = EvidenceFact(state=EvidenceState.SOURCE_SILENT, evidence=(EVIDENCE,))
-    stat_value = _STATISTICS.get(statistic) if isinstance(statistic, str) else None
-    facts = PhysicalFacts(
-        facts_id="pending",
-        quantity=known(_QUANTITIES[parameter], EVIDENCE),
-        source_unit=known(unit, EVIDENCE),
-        normalized_unit=normalized_unit,
-        frequency=known("daily", EVIDENCE) if daily else silent,
-        statistic=known(stat_value, EVIDENCE) if stat_value else silent,
-        temporal_support=known("interval", EVIDENCE)
-        if daily
-        else (known("instantaneous", EVIDENCE) if statistic == "00011" else silent),
-        day_definition=silent,
-        timestamp_anchor=silent,
-        time_zone=silent,
-        clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
-        label_time="00:00" if daily else None,
-    )
-    facts = facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})
+    stat_key = statistic if isinstance(statistic, str) else None
+    facts_key = (parameter, stat_key, unit, daily)
+    facts = facts_cache.get(facts_key) if facts_cache is not None else None
+    if facts is None:
+        silent = EvidenceFact(state=EvidenceState.SOURCE_SILENT, evidence=(EVIDENCE,))
+        stat_value = _STATISTICS.get(statistic) if isinstance(statistic, str) else None
+        facts = PhysicalFacts(
+            facts_id="pending",
+            quantity=known(_QUANTITIES[parameter], EVIDENCE),
+            source_unit=known(unit, EVIDENCE),
+            normalized_unit=normalized_unit,
+            frequency=known("daily", EVIDENCE) if daily else silent,
+            statistic=known(stat_value, EVIDENCE) if stat_value else silent,
+            temporal_support=known("interval", EVIDENCE)
+            if daily
+            else (known("instantaneous", EVIDENCE) if statistic == "00011" else silent),
+            day_definition=silent,
+            timestamp_anchor=silent,
+            time_zone=silent,
+            clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
+            label_time="00:00" if daily else None,
+        )
+        facts = facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})
+        if facts_cache is not None:
+            facts_cache[facts_key] = facts
     sid = stable_id("usgs_nwis", station_id, NAMESPACE, identifier)
-    existing = next((item for item in known_series if item.series_id == sid), None)
+    existing = (
+        known_by_id.get(sid)
+        if known_by_id is not None
+        else next((item for item in known_series if item.series_id == sid), None)
+    )
     description = properties.get("web_description") if metadata else None
     if description is not None and not isinstance(description, str):
         raise ValueError("Malformed web_description")
