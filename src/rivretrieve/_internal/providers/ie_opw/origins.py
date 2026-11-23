@@ -83,6 +83,8 @@ _CATALOGUE_SOURCE_FACTS = {
         "source.station_product.associations",
         "source.series.fields",
         "source.product.unit_definitions",
+        "source.series.temporal_semantics",
+        "source.series.stage_vertical_reference",
     ),
     "station_product": ("source.station_product.associations",),
 }
@@ -106,6 +108,7 @@ def build_acquisition_provenance(
             "source.station.catchment_size_unit",
             "source.provider.terms",
             "source.provider.attribution",
+            "source.series.annotations",
         )
     )
     if missing := required - set(facts):
@@ -177,6 +180,8 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/ie_opw/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/ie_opw/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/ie_opw/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/ie_opw/annotations.py", "IE_OPW_SERIES_SCHEMA"),
+    ("src/rivretrieve/_internal/providers/ie_opw/annotations.py", "IE_OPW_DAILY_STAGE_SCHEMA"),
     ("src/rivretrieve/_internal/providers/ie_opw/series.py", "PRODUCT_SPECS"),
     ("src/rivretrieve/_internal/providers/ie_opw/series.py", "catalogue_product_rows"),
     ("src/rivretrieve/_internal/providers/ie_opw/series.py", "describe_associations"),

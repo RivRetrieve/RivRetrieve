@@ -1,10 +1,15 @@
-"""Published Ireland OPW Hydro-Data series mappings for offline catalogue generation.
+"""Published Ireland OPW Hydro-Data series mappings and established Step 3 physical facts.
 
-Step 2 builds the 12-product registry and station-product availability across
-OPW Hydro-Data daily ``year.json`` and instantaneous ``*_complete.zip`` routes,
-plus the explicit ``SourceUnitCodeDefinition`` mapping ``cumec`` -> ``m3/s``,
-while keeping temporal and vertical physical meanings unestablished (`None` ->
-unknown) until Step 3 retains and verifies physical-meaning witnesses.
+OPW Hydro-Data daily ``year.json`` routes publish UTC ``[00:00Z, 24:00Z]`` calendar-day
+summaries (``temporal_support="calendar_day"``, ``day_definition="+00:00"``,
+``timestamp_anchor="start"``, ``time_zone="+00:00"``, ``label_time="00:00"``). Instantaneous
+``*_complete.zip`` routes publish time-stamped measurements (``temporal_support="instantaneous"``,
+``statistic="instantaneous"``, ``timestamp_anchor="measurement_time"``, ``time_zone="+00:00"``)
+with ``frequency`` left ``not_established`` because native cadences mix 15-min ``Q``/``S``
+and 1-hour ``TWater`` (plus variable historical intervals). Stage (``S``) heights are measured
+above Ordnance Datum (``vertical_reference="above_sea_level"``), keeping ``vertical_datum``
+``not_established`` because the station table mixes ``Malin Head OSGM15``, ``Poolbeg``, and
+``Malin Head`` datums.
 """
 
 from __future__ import annotations
@@ -24,6 +29,8 @@ TWATER_NAMESPACE = "ie_opw.hydro_data.TWater"
 _ASSOCIATION_EVIDENCE = ("catalogue:ie_opw:source.station_product.associations",)
 _FIELD_EVIDENCE = ("catalogue:ie_opw:source.series.fields",)
 _UNIT_EVIDENCE = ("catalogue:ie_opw:source.product.unit_definitions",)
+_TEMPORAL_EVIDENCE = "catalogue:ie_opw:source.series.temporal_semantics"
+_STAGE_VERTICAL_EVIDENCE = "catalogue:ie_opw:source.series.stage_vertical_reference"
 
 UNIT_CUMEC_DEFINITION = SourceUnitCodeDefinition(
     provider_id="ie_opw",
@@ -46,7 +53,12 @@ class ProductSpec:
     source_unit: Literal["cumec", "m", "°C"]
     normalized_unit: Literal["m3/s", "m", "degC"]
     frequency: Literal["daily"] | None
-    statistic: Literal["mean", "min", "max"] | None
+    statistic: Literal["mean", "min", "max", "instantaneous"]
+    temporal_support: Literal["calendar_day", "instantaneous"]
+    day_definition: Literal["+00:00"] | None
+    timestamp_anchor: Literal["start", "measurement_time"]
+    time_zone: Literal["+00:00"]
+    label_time: Literal["00:00"] | None
 
     @property
     def namespace(self) -> str:
@@ -61,26 +73,81 @@ class ProductSpec:
         return f"{self.parameter}/{self.route}:{self.ts_shortname}"
 
     def series_mapping(self) -> SeriesMapping:
-        """Build Step 2 mapping with only source-verified quantity and native unit."""
+        """Build verified Step 3 physical mapping for this OPW Hydro-Data route."""
+        evidence: list[str] = [*_ASSOCIATION_EVIDENCE, _TEMPORAL_EVIDENCE]
+        if self.quantity == "stage":
+            evidence.append(_STAGE_VERTICAL_EVIDENCE)
         return SeriesMapping(
             namespace=self.namespace,
             published_id=self.ts_shortname,
             quantity=self.quantity,
             source_unit=self.source_unit,
             normalized_unit=self.normalized_unit,
+            frequency=self.frequency,
+            statistic=self.statistic,
+            time_zone=self.time_zone,
             source_unit_definition=UNIT_CUMEC_DEFINITION if self.parameter == "Q" else None,
-            evidence=_ASSOCIATION_EVIDENCE,
+            evidence=tuple(evidence),
             identity_evidence=_FIELD_EVIDENCE,
+            temporal_support=self.temporal_support,
+            day_definition=self.day_definition,
+            timestamp_anchor=self.timestamp_anchor,
+            vertical_reference="above_sea_level" if self.quantity == "stage" else None,
+            vertical_datum=None,
+            label_time=self.label_time,
         )
 
 
 PRODUCT_SPECS: tuple[ProductSpec, ...] = (
     # Discharge (Q: cumec -> m3/s)
     ProductSpec(
-        "discharge_daily_mean", "Q", "year.json", "WEB.Day.Mean", "discharge", "cumec", "m3/s", "daily", "mean"
+        "discharge_daily_mean",
+        "Q",
+        "year.json",
+        "WEB.Day.Mean",
+        "discharge",
+        "cumec",
+        "m3/s",
+        "daily",
+        "mean",
+        "calendar_day",
+        "+00:00",
+        "start",
+        "+00:00",
+        "00:00",
     ),
-    ProductSpec("discharge_daily_min", "Q", "year.json", "WEB.Day.Min", "discharge", "cumec", "m3/s", "daily", "min"),
-    ProductSpec("discharge_daily_max", "Q", "year.json", "WEB.Day.Max", "discharge", "cumec", "m3/s", "daily", "max"),
+    ProductSpec(
+        "discharge_daily_min",
+        "Q",
+        "year.json",
+        "WEB.Day.Min",
+        "discharge",
+        "cumec",
+        "m3/s",
+        "daily",
+        "min",
+        "calendar_day",
+        "+00:00",
+        "start",
+        "+00:00",
+        "00:00",
+    ),
+    ProductSpec(
+        "discharge_daily_max",
+        "Q",
+        "year.json",
+        "WEB.Day.Max",
+        "discharge",
+        "cumec",
+        "m3/s",
+        "daily",
+        "max",
+        "calendar_day",
+        "+00:00",
+        "start",
+        "+00:00",
+        "00:00",
+    ),
     ProductSpec(
         "discharge_instantaneous",
         "Q",
@@ -90,12 +157,62 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "cumec",
         "m3/s",
         None,
+        "instantaneous",
+        "instantaneous",
+        None,
+        "measurement_time",
+        "+00:00",
         None,
     ),
-    # Stage (S: m -> m)
-    ProductSpec("stage_daily_mean", "S", "year.json", "WEB.Day.Mean", "stage", "m", "m", "daily", "mean"),
-    ProductSpec("stage_daily_min", "S", "year.json", "WEB.Day.Min", "stage", "m", "m", "daily", "min"),
-    ProductSpec("stage_daily_max", "S", "year.json", "WEB.Day.Max", "stage", "m", "m", "daily", "max"),
+    # Stage (S: m -> m, Ordnance Datum)
+    ProductSpec(
+        "stage_daily_mean",
+        "S",
+        "year.json",
+        "WEB.Day.Mean",
+        "stage",
+        "m",
+        "m",
+        "daily",
+        "mean",
+        "calendar_day",
+        "+00:00",
+        "start",
+        "+00:00",
+        "00:00",
+    ),
+    ProductSpec(
+        "stage_daily_min",
+        "S",
+        "year.json",
+        "WEB.Day.Min",
+        "stage",
+        "m",
+        "m",
+        "daily",
+        "min",
+        "calendar_day",
+        "+00:00",
+        "start",
+        "+00:00",
+        "00:00",
+    ),
+    ProductSpec(
+        "stage_daily_max",
+        "S",
+        "year.json",
+        "WEB.Day.Max",
+        "stage",
+        "m",
+        "m",
+        "daily",
+        "max",
+        "calendar_day",
+        "+00:00",
+        "start",
+        "+00:00",
+        "00:00",
+    ),
     ProductSpec(
         "stage_instantaneous",
         "S",
@@ -105,6 +222,11 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "m",
         "m",
         None,
+        "instantaneous",
+        "instantaneous",
+        None,
+        "measurement_time",
+        "+00:00",
         None,
     ),
     # Water Temperature (TWater: °C -> degC)
@@ -118,6 +240,11 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "degC",
         "daily",
         "mean",
+        "calendar_day",
+        "+00:00",
+        "start",
+        "+00:00",
+        "00:00",
     ),
     ProductSpec(
         "water_temperature_daily_min",
@@ -129,6 +256,11 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "degC",
         "daily",
         "min",
+        "calendar_day",
+        "+00:00",
+        "start",
+        "+00:00",
+        "00:00",
     ),
     ProductSpec(
         "water_temperature_daily_max",
@@ -140,6 +272,11 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "degC",
         "daily",
         "max",
+        "calendar_day",
+        "+00:00",
+        "start",
+        "+00:00",
+        "00:00",
     ),
     ProductSpec(
         "water_temperature_instantaneous",
@@ -150,6 +287,11 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "°C",
         "degC",
         None,
+        "instantaneous",
+        "instantaneous",
+        None,
+        "measurement_time",
+        "+00:00",
         None,
     ),
 )
