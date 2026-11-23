@@ -3015,9 +3015,13 @@ def drive(
             # Coverage/outcome evidence describes the current source page even
             # when reuse serves held values instead of overlapping partial rows.
             if any(item.window.axis is TimeAxis.UTC for item in parsed.outcomes):
-                coverage_native, coverage_ann = filter_native_with_annotations_by_expr(
-                    parsed.rows, parsed.annotations, scope_expr, allowed_series_ids=selected_ids
-                )
+                if cache == "bypass":
+                    coverage_native = parsed.rows.filter(scope_expr.fill_null(False))
+                    coverage_ann = AnnotationBundle.empty()
+                else:
+                    coverage_native, coverage_ann = filter_native_with_annotations_by_expr(
+                        parsed.rows, parsed.annotations, scope_expr, allowed_series_ids=selected_ids
+                    )
             else:
                 coverage_native, coverage_ann = native, native_ann
             failures = (

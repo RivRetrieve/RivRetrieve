@@ -362,7 +362,7 @@ class ObservationResult(BaseModel):
         series_facts: dict[str, dict[str, PhysicalFacts]] = {
             item.series_id: {fact.facts_id: fact for fact in item.facts} for item in self.source_series
         }
-        admissions: dict[str, Admission] = {}
+        admissions: dict[tuple[str, str], Admission] = {}
         if not self.data.is_empty():
             combos = list(
                 self.data.select("series_id", "facts_id", "station_id", "product_id", "quantity", "source_unit", "unit")
@@ -379,10 +379,11 @@ class ObservationResult(BaseModel):
             for series_id, facts_id, station_id, product_id, quantity, source_unit, unit in combos:
                 definition = definitions[series_id]
                 facts = series_facts[series_id][facts_id]
-                decision = admissions.get(facts_id)
+                admission_key = (series_id, facts_id)
+                decision = admissions.get(admission_key)
                 if decision is None:
                     decision = admission(facts)
-                    admissions[facts_id] = decision
+                    admissions[admission_key] = decision
                 if not effective_scope.matches(definition) or not effective_scope.matches_facts(facts):
                     raise ObservationDataSchemaError(
                         "Observation lies outside its retained physical and identity scope"
@@ -416,10 +417,11 @@ class ObservationResult(BaseModel):
                 raise ObservationDataSchemaError("Retrieval outcome references unknown physical facts")
             if outcome.outcome_id in active_ids and outcome.status.value in ("success", "empty"):
                 for identifier in outcome.facts_ids:
-                    decision = admissions.get(identifier)
+                    admission_key = (outcome.series_id, identifier)
+                    decision = admissions.get(admission_key)
                     if decision is None:
                         decision = admission(facts_by_id[identifier])
-                        admissions[identifier] = decision
+                        admissions[admission_key] = decision
                     if decision.status != "supported":
                         raise ObservationDataSchemaError(
                             "Successful retrieval outcome requires admitted physical facts"

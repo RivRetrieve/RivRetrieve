@@ -788,3 +788,71 @@ def test_validate_series_context_dedupes_per_row_checks_and_preserves_failures(
             receipts=Receipts(provider_id=ProviderId("provider-a")),
             source_series=(definition,),
         )
+
+    # Cross-series facts_id collision must not share admissions across distinct SourceSeries
+    from rivretrieve._internal.source_series import (
+        OutcomeStatus,
+        PhysicalFacts,
+        RetrievalOutcome,
+        SeriesWindow,
+        SourceIdentity,
+        SourceSeries,
+        known,
+    )
+
+    series_1 = _series_definition()
+    series_2 = SourceSeries(
+        series_id="test-series-2",
+        provider_id="provider-a",
+        station_id="station-2",
+        product_id="flow",
+        identity=SourceIdentity(namespace="test", published_id="2", origin="catalogue", evidence=("unit-test",)),
+        facts=(
+            PhysicalFacts(
+                facts_id="test-facts",  # same facts_id as series_1, but different/unsupported physical facts
+                quantity=known("discharge", "unit-test"),
+                source_unit=known("bogus-unit", "unit-test"),
+                normalized_unit="bogus-unit",
+            ),
+        ),
+    )
+    mixed_data = _observation_df(
+        station_id=["station-1", "station-2"],
+        series_id=["test-series", "test-series-2"],
+        facts_id=["test-facts", "test-facts"],
+        source_unit=["m3/s", "bogus-unit"],
+    )
+    with pytest.raises(ObservationDataSchemaError, match="contradicts its admitted source-series facts"):
+        ObservationResult(
+            data=mixed_data,
+            provenance=_provenance(),
+            receipts=Receipts(provider_id=ProviderId("provider-a")),
+            source_series=(series_1, series_2),
+        )
+    with pytest.raises(ObservationDataSchemaError, match="admitted physical facts"):
+        ObservationResult(
+            data=_observation_df(),
+            provenance=_provenance(),
+            receipts=Receipts(provider_id=ProviderId("provider-a")),
+            source_series=(series_1, series_2),
+            outcomes=(
+                RetrievalOutcome(
+                    outcome_id="o1",
+                    series_id="test-series",
+                    station_id="station-1",
+                    product_id="flow",
+                    window=SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2)),
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("test-facts",),
+                ),
+                RetrievalOutcome(
+                    outcome_id="o2",
+                    series_id="test-series-2",
+                    station_id="station-2",
+                    product_id="flow",
+                    window=SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2)),
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("test-facts",),
+                ),
+            ),
+        )

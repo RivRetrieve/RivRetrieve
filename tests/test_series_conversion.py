@@ -327,3 +327,160 @@ def test_convert_mid_series_fact_unit_change_duplicate_timestamps_and_work_count
     assert counts["native_window"] <= 2
     assert counts["zone"] <= 1
     assert counts["admission"] <= 4
+
+
+def test_shared_preparation_scopes_allowed_facts_per_call():
+    from rivretrieve._internal.conversion import (
+        WindowFactPreparation,
+        convert_with_annotations,
+        filter_annotations_for_window,
+    )
+    from rivretrieve._internal.source_annotations import (
+        AnnotationBundle,
+        AnnotationField,
+        AnnotationSchema,
+        AnnotationScope,
+        ObservationAnnotationTable,
+    )
+
+    series_a = SourceSeries(
+        series_id="series-a",
+        provider_id="usgs_nwis",
+        station_id="07374000",
+        product_id="discharge_daily_mean",
+        identity=SourceIdentity(namespace="methodID", published_id="1", origin="response", evidence=("source",)),
+        facts=(
+            PhysicalFacts(
+                facts_id="facts-a",
+                quantity=known("discharge", "source"),
+                source_unit=known("m3/s", "source"),
+                normalized_unit="m3/s",
+            ),
+        ),
+    )
+    series_b = SourceSeries(
+        series_id="series-b",
+        provider_id="usgs_nwis",
+        station_id="07374000",
+        product_id="discharge_daily_mean",
+        identity=SourceIdentity(namespace="methodID", published_id="2", origin="response", evidence=("source",)),
+        facts=(
+            PhysicalFacts(
+                facts_id="facts-b",
+                quantity=known("discharge", "source"),
+                source_unit=known("m3/s", "source"),
+                normalized_unit="m3/s",
+            ),
+        ),
+    )
+    window = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2023, 1, 2)),
+    )
+    prep = WindowFactPreparation.for_request(window, ())
+    # Prime prep with series_a via an initial call
+    rows_a = pl.DataFrame(
+        {
+            "station_id": ["07374000"],
+            "product_id": ["discharge_daily_mean"],
+            "time": [datetime(2023, 1, 1)],
+            "value": [1.0],
+            "time_zone": ["+00:00"],
+            "series_id": ["series-a"],
+            "facts_id": ["facts-a"],
+            "source_unit": ["m3/s"],
+        },
+        schema=RowsSchema.polars_schema,
+    )
+    convert_with_annotations(rows_a, AnnotationBundle.empty(), config(), window, series=(series_a,), preparation=prep)
+    assert "facts-a" in prep.intervals
+
+    ann_schema = AnnotationSchema(
+        schema_id="usgs_nwis.qc",
+        provider_id="usgs_nwis",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="flag", dtype="String", description="Quality flag."),),
+    )
+    rows_b = pl.DataFrame(
+        {
+            "station_id": ["07374000"],
+            "product_id": ["discharge_daily_mean"],
+            "time": [datetime(2023, 1, 1)],
+            "value": [2.0],
+            "time_zone": ["+00:00"],
+            "series_id": ["series-b"],
+            "facts_id": ["facts-b"],
+            "source_unit": ["m3/s"],
+        },
+        schema=RowsSchema.polars_schema,
+    )
+    ann_df = pl.DataFrame(
+        {
+            "series_id": ["series-a", "series-b"],
+            "facts_id": ["facts-a", "facts-b"],
+            "station_id": ["07374000", "07374000"],
+            "product_id": ["discharge_daily_mean", "discharge_daily_mean"],
+            "time": [datetime(2023, 1, 1), datetime(2023, 1, 1)],
+            "time_zone": ["+00:00", "+00:00"],
+            "measured": [False, False],
+            "flag": ["from-a", "from-b"],
+        },
+        schema={
+            "series_id": pl.String,
+            "facts_id": pl.String,
+            "station_id": pl.String,
+            "product_id": pl.String,
+            "time": pl.Datetime("us"),
+            "time_zone": pl.String,
+            "measured": pl.Boolean,
+            **ann_schema.polars_schema(),
+        },
+    )
+    bundle = AnnotationBundle(
+        observation_tables={
+            "usgs_nwis.qc": ObservationAnnotationTable.from_rows(
+                schema=ann_schema, rows=ann_df, measurement_indices=(None, None)
+            )
+        }
+    )
+    _, conv_ann = convert_with_annotations(rows_b, bundle, config(), window, series=(series_b,), preparation=prep)
+    assert conv_ann.observation_tables["usgs_nwis.qc"].rows["flag"].to_list() == ["from-b"]
+
+    meas_plus_a = pl.concat([rows_a, rows_b])
+    ann_meas = pl.DataFrame(
+        {
+            "series_id": ["series-a", "series-b", "series-a", "series-b"],
+            "facts_id": ["facts-a", "facts-b", "facts-a", "facts-b"],
+            "station_id": ["07374000"] * 4,
+            "product_id": ["discharge_daily_mean"] * 4,
+            "time": [datetime(2023, 1, 1)] * 4,
+            "time_zone": ["+00:00"] * 4,
+            "measured": [True, True, False, False],
+            "flag": ["m-a", "m-b", "u-a", "u-b"],
+        },
+        schema={
+            "series_id": pl.String,
+            "facts_id": pl.String,
+            "station_id": pl.String,
+            "product_id": pl.String,
+            "time": pl.Datetime("us"),
+            "time_zone": pl.String,
+            "measured": pl.Boolean,
+            **ann_schema.polars_schema(),
+        },
+    )
+    filtered = filter_annotations_for_window(
+        meas_plus_a,
+        AnnotationBundle(
+            observation_tables={
+                "usgs_nwis.qc": ObservationAnnotationTable.from_rows(
+                    schema=ann_schema, rows=ann_meas, measurement_indices=(0, 1, None, None)
+                )
+            }
+        ),
+        window,
+        series=(series_b,),
+        preparation=prep,
+    )
+    assert filtered.observation_tables["usgs_nwis.qc"].rows["flag"].to_list() == ["m-b", "u-b"]
+    assert not hasattr(prep, "series")

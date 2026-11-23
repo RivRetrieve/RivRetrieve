@@ -35,7 +35,6 @@ from rivretrieve._internal.source_series import Admission, PhysicalFacts, Source
 class WindowFactPreparation:
     """Request-scoped per-fact admission and physical-window cache."""
 
-    series: tuple[SourceSeries, ...]
     window: RequestedWindow
     start: datetime
     end: datetime
@@ -54,7 +53,6 @@ class WindowFactPreparation:
                     raise FatalContractError(f"Conflicting physical fact definitions for {fact.facts_id!r}")
                 facts_by_id[fact.facts_id] = fact
         return cls(
-            series=series,
             window=window,
             start=_endpoint_datetime(window.start),
             end=_endpoint_datetime(window.end),
@@ -173,14 +171,16 @@ def convert_with_annotations(
     if preparation is not None:
         preparation.register_series(series)
         prep = preparation
+        allowed_facts: set[str] | None = {fact.facts_id for item in series for fact in item.facts}
     else:
         prep = WindowFactPreparation.for_request(window, series)
-    keep_mask = prep.window_keep_mask(rows, unknown_facts="raise")
+        allowed_facts = None
+    keep_mask = prep.window_keep_mask(rows, allowed_facts=allowed_facts, unknown_facts="raise")
     clipped_rows, filtered_annotations = filter_native_with_annotations_by_mask(
         rows,
         annotations,
         keep_mask,
-        unmeasured_mask_fn=lambda df: prep.window_keep_mask(df, unknown_facts="exclude"),
+        unmeasured_mask_fn=lambda df: prep.window_keep_mask(df, allowed_facts=allowed_facts, unknown_facts="exclude"),
     )
     if clipped_rows.is_empty():
         canonical = pl.DataFrame(schema=CanonicalRowsSchema.polars_schema)
@@ -244,14 +244,16 @@ def filter_annotations_for_window(
     if preparation is not None:
         preparation.register_series(series)
         prep = preparation
+        allowed_facts: set[str] | None = {fact.facts_id for item in series for fact in item.facts}
     else:
         prep = WindowFactPreparation.for_request(window, series)
-    keep_mask = prep.window_keep_mask(rows, unknown_facts="exclude")
+        allowed_facts = None
+    keep_mask = prep.window_keep_mask(rows, allowed_facts=allowed_facts, unknown_facts="exclude")
     _, filtered = filter_native_with_annotations_by_mask(
         rows,
         annotations,
         keep_mask,
-        unmeasured_mask_fn=lambda df: prep.window_keep_mask(df, unknown_facts="exclude"),
+        unmeasured_mask_fn=lambda df: prep.window_keep_mask(df, allowed_facts=allowed_facts, unknown_facts="exclude"),
     )
     return filtered
 
