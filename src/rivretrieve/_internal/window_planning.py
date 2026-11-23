@@ -155,11 +155,30 @@ def _plan_year_month(fetch_window: FetchWindow, declaration: WindowDeclaration) 
 def _plan_n_year_chunk(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
     _require(
         declaration,
-        declaration.size is not None and declaration.rendering is WindowRenderingVocabulary.DATE,
-        "a positive size and date rendering",
+        declaration.size is not None
+        and declaration.rendering in (WindowRenderingVocabulary.DATE, WindowRenderingVocabulary.YEAR),
+        "a positive size and date or year rendering",
     )
     size = declaration.size
     assert size is not None
+    if declaration.rendering is WindowRenderingVocabulary.YEAR:
+        _require(
+            declaration,
+            declaration.stop_convention is StopConvention.INCLUSIVE,
+            "an inclusive stop for year rendering",
+        )
+        cursor_year = fetch_window.start.year
+        final_year = fetch_window.end.year
+        windows = []
+        while cursor_year <= final_year:
+            stop_year = min(cursor_year + size - 1, final_year)
+            bounds = _closed_bounds(
+                datetime(cursor_year, 1, 1),
+                datetime(stop_year, 12, 31, 23, 59, 59, 999999),
+            )
+            windows.append(RenderedWindow(str(cursor_year), str(stop_year), bounds))
+            cursor_year = stop_year + 1
+        return tuple(windows)
     cursor = _datetime_from_endpoint(fetch_window, "start").replace(hour=0, minute=0, second=0, microsecond=0)
     final = _datetime_from_endpoint(fetch_window, "end").replace(hour=0, minute=0, second=0, microsecond=0)
     windows = []

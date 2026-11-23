@@ -159,7 +159,7 @@ del _credential_request_authority
 type _ExecutableTransportRequest = TransportRequest | _CredentialTransportRequest
 
 _HTTP_FIELD_NAME = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
-_SAFE_ORDINARY_HEADER_NAMES = frozenset({"accept", "content-type", "user-agent"})
+_SAFE_ORDINARY_HEADER_NAMES = frozenset({"accept", "accept-profile", "content-type", "user-agent"})
 
 
 class SecretResponseDisposition(StrEnum):
