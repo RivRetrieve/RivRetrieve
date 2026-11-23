@@ -475,6 +475,18 @@ class SharedAcquisitionProvider(Protocol):
 
 
 @runtime_checkable
+class SharedParseProvider(Protocol):
+    """Decode a multi-product payload once into per-pair ``ParsedSeries`` results."""
+
+    @staticmethod
+    def parse_group(
+        payload: Payload,
+        pair_payloads: Mapping[tuple[str, ProductId], Payload],
+        config: ProviderConfig,
+    ) -> Mapping[tuple[str, ProductId], ParsedSeries]: ...
+
+
+@runtime_checkable
 class TransportWindowDeclarationProvider(Protocol):
     """Select source window semantics from an engine-supplied transport capability."""
 
@@ -2033,14 +2045,53 @@ class _AcquiredGroup:
     acquisition: WithIssues[tuple[Payload, ...]]
     payload_slots: list[Payload | None]
     interpretation_slots: list[list[InterpretedPayload]]
+    pending_plans: list[list[_PairRetrieval]]
     remaining_consumers: list[int]
     payload_acquisition_ids: tuple[str, ...]
     remaining_plans: int
 
 
+def _effective_pair_payload(received: Payload, plan: _PairRetrieval, group_size: int) -> Payload:
+    if group_size > 1:
+        return replace(
+            received,
+            station_products=((plan.station, plan.product),),
+            scope=plan.scope,
+            known_series=plan.series,
+        )
+    return replace(
+        received,
+        scope=received.scope or plan.scope,
+        known_series=received.known_series or plan.series,
+    )
+
+
+def _all_plans_interpreted(
+    received: Payload,
+    plans: list[_PairRetrieval],
+    slot_interpretations: list[InterpretedPayload],
+    group_size: int,
+) -> bool:
+    if not plans or len(slot_interpretations) < len(plans):
+        return False
+    remaining_entries = list(slot_interpretations)
+    for item in plans:
+        context = InterpretationContext.from_payload(_effective_pair_payload(received, item, group_size))
+        matched_index = next(
+            (idx for idx, entry in enumerate(remaining_entries) if entry.context == context),
+            None,
+        )
+        if matched_index is None:
+            return False
+        remaining_entries.pop(matched_index)
+    return True
+
+
 def _acquire_group(
     raw_fetched: WithIssues[tuple[Payload, ...]],
     group: tuple[_PairRetrieval, ...],
+    *,
+    retain_bytes: bool = True,
 ) -> _AcquiredGroup:
     dependencies: dict[str, tuple[str, ...]] = {}
     payload_ids_list: list[str] = []
@@ -2068,15 +2119,16 @@ def _acquire_group(
     slot_by_acquisition_id: dict[str, int] = {}
     remaining_consumers: list[int] = []
     payload_slots: list[Payload | None] = []
+    pending_plans: list[list[_PairRetrieval]] = []
     group_size = len(group)
     for slot_index, received in enumerate(raw_fetched.value):
         slot_by_acquisition_id[received.acquisition_id] = slot_index
-        consumers = (
-            1
-            if group_size == 1
-            else sum(1 for item in group if (item.station, item.product) in received.station_products)
-        )
+        slot_plans = [
+            item for item in group if group_size == 1 or (item.station, item.product) in received.station_products
+        ]
+        consumers = len(slot_plans)
         remaining_consumers.append(consumers)
+        pending_plans.append(slot_plans)
         payload_slots.append(received if consumers > 0 else None)
 
     interpretation_slots: list[list[InterpretedPayload]] = [[] for _ in payload_slots]
@@ -2097,6 +2149,12 @@ def _acquire_group(
         for slot_index, consumers in enumerate(remaining_consumers):
             if consumers == 0:
                 interpretation_slots[slot_index].clear()
+            elif not retain_bytes:
+                slot_payload = payload_slots[slot_index]
+                if slot_payload is not None and _all_plans_interpreted(
+                    slot_payload, pending_plans[slot_index], interpretation_slots[slot_index], group_size
+                ):
+                    payload_slots[slot_index] = replace(slot_payload, content=b"")
         cleared_acquisition: WithIssues[tuple[Payload, ...]] = replace(raw_fetched, value=(), interpretations=())
     else:
         cleared_acquisition = replace(raw_fetched, value=())
@@ -2105,6 +2163,7 @@ def _acquire_group(
         acquisition=cleared_acquisition,
         payload_slots=payload_slots,
         interpretation_slots=interpretation_slots,
+        pending_plans=pending_plans,
         remaining_consumers=remaining_consumers,
         payload_acquisition_ids=tuple(payload_ids_list),
         remaining_plans=group_size,
@@ -2543,10 +2602,11 @@ def drive(
         if group_index not in acquired:
             fetch_window = group[0].fetch_window
             assert fetch_window is not None
+            group_series_ids = {key for item in group for key in item.scope.series_ids}
             group_scope = pair_scope.model_copy(
                 update={
                     "product_ids": tuple(item.product for item in group),
-                    "series_ids": tuple(dict.fromkeys(key for item in group for key in item.scope.series_ids)),
+                    "series_ids": tuple(key for key in scope.series_ids if key in group_series_ids),
                 }
             )
             try:
@@ -2562,6 +2622,7 @@ def drive(
                         known_series=tuple(series for item in group for series in item.series),
                     ),
                     group,
+                    retain_bytes=receipts is ReceiptMode.INCLUDE,
                 )
             except (TransportFailure, CredentialExchangeError) as failure:
                 acquired[group_index] = failure
@@ -2903,16 +2964,9 @@ def drive(
             received = group_state.payload_slots[received_index]
             if received is None:
                 continue
-            if len(group) > 1:
-                if (station, product) not in received.station_products:
-                    continue
-                payload = replace(
-                    received, station_products=((station, product),), scope=pair_scope, known_series=pair_series
-                )
-            else:
-                payload = replace(
-                    received, scope=received.scope or pair_scope, known_series=received.known_series or pair_series
-                )
+            if len(group) > 1 and (station, product) not in received.station_products:
+                continue
+            payload = _effective_pair_payload(received, plan, len(group))
             # Pair-local parsing must not multiply the acquired bytes or call evidence.
             # Identity is the acquisition and payload position, never URL/content equality.
             payload_key = (group_index, received_index)
@@ -2936,12 +2990,56 @@ def drive(
                 if entry.context == effective_context:
                     reused_parsed = slot_interpretations.pop(interp_index).parsed
                     break
-            parsed = reused_parsed if reused_parsed is not None else provider.parse(payload, config)
+            slot_pending = group_state.pending_plans[received_index]
+            for pending_index, pending_plan in enumerate(slot_pending):
+                if pending_plan is plan:
+                    slot_pending.pop(pending_index)
+                    break
+            if reused_parsed is not None:
+                parsed = reused_parsed
+            elif isinstance(provider, SharedParseProvider):
+                existing_contexts = [entry.context for entry in slot_interpretations]
+                unparsed_pairs: dict[tuple[str, ProductId], Payload] = {(station, product): payload}
+                for sibling_plan in slot_pending:
+                    sibling_payload = _effective_pair_payload(received, sibling_plan, len(group))
+                    sibling_context = InterpretationContext.from_payload(sibling_payload)
+                    matched_existing = False
+                    for idx, existing_ctx in enumerate(existing_contexts):
+                        if existing_ctx == sibling_context:
+                            existing_contexts.pop(idx)
+                            matched_existing = True
+                            break
+                    if not matched_existing:
+                        unparsed_pairs[(sibling_plan.station, sibling_plan.product)] = sibling_payload
+                if len(unparsed_pairs) >= 2:
+                    grouped_parsed = provider.parse_group(received, MappingProxyType(unparsed_pairs), config)
+                    if not isinstance(grouped_parsed, Mapping):
+                        raise FatalContractError("Provider parse_group must return a mapping")
+                    if set(grouped_parsed.keys()) != set(unparsed_pairs.keys()):
+                        raise FatalContractError("Provider parse_group keys must match its requested pair payloads")
+                    for pair_parsed in grouped_parsed.values():
+                        if not isinstance(pair_parsed, ParsedSeries):
+                            raise FatalContractError("Provider parse_group values must be ParsedSeries")
+                    for pair_key, pair_parsed in grouped_parsed.items():
+                        if pair_key != (station, product):
+                            slot_interpretations.append(
+                                InterpretedPayload.from_payload(unparsed_pairs[pair_key], pair_parsed)
+                            )
+                    parsed = grouped_parsed[(station, product)]
+                else:
+                    parsed = provider.parse(payload, config)
+                if receipts is ReceiptMode.OMIT and _all_plans_interpreted(
+                    received, slot_pending, slot_interpretations, len(group)
+                ):
+                    group_state.payload_slots[received_index] = replace(received, content=b"")
+            else:
+                parsed = provider.parse(payload, config)
             group_state.remaining_consumers[received_index] -= 1
             if group_state.remaining_consumers[received_index] == 0:
                 group_state.payload_slots[received_index] = None
                 group_state.interpretation_slots[received_index].clear()
-            del payload, received, effective_context, reused_parsed, slot_interpretations
+                group_state.pending_plans[received_index].clear()
+            del payload, received, effective_context, reused_parsed, slot_interpretations, slot_pending
             if not isinstance(parsed, ParsedSeries):
                 raise FatalContractError("Provider parse must return ParsedSeries")
             _validate_parsed_series(parsed)

@@ -10,8 +10,8 @@ from rivretrieve._internal.engine import (
     ZoneValue,
 )
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.providers.pe_senamhi.fetch import SenamhiSourceCoordinates, window_declaration
-from rivretrieve._internal.providers.pe_senamhi.series import MONTHLY_LEVEL_FIELDS
+from rivretrieve._internal.providers.pe_senamhi.fetch import window_declaration
+from rivretrieve._internal.providers.pe_senamhi.series import MONTHLY_LEVEL_FIELDS, SenamhiSourceCoordinates
 
 _COORDINATES = {
     ProductId(f"phisis_{resolution.lower()}_{variable.lower()}{suffix}"): SenamhiSourceCoordinates(
