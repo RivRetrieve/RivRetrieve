@@ -23,9 +23,15 @@ from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueS
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.source_acquisition import FailedSourceRequest
-from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
+from rivretrieve._internal.source_series import (
+    InventorySnapshot,
+    ParsedSeries,
+    RetrievalOutcome,
+    SeriesScope,
+    SourceSeries,
+)
 from rivretrieve._internal.time_axis import TimeAxis
-from rivretrieve._internal.transport import SecretCallTrace, TransportAttempt
+from rivretrieve._internal.transport import SecretCallTrace, TransportAttempt, TransportResponse
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -410,6 +416,20 @@ class SourceCallOrigin:
         if not isinstance(self.query, SourceQuery | UnknownOriginFact):
             raise TypeError("source-call query must be SourceQuery or UnknownOriginFact")
 
+    @classmethod
+    def from_response(cls, response: TransportResponse) -> Self:
+        """Build a source-call origin from a completed ``TransportResponse``."""
+        return cls(
+            url=response.url,
+            request_parameters=response.request_parameters,
+            status_code=response.status_code,
+            retrieved_at=response.retrieved_at,
+            content_type=response.content_type if response.content_type else UnknownOriginFact(),
+            source_path=UnknownOriginFact(),
+            query=UnknownOriginFact(),
+            attempts=response.attempts,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class Payload:
@@ -444,6 +464,59 @@ class Payload:
 
 
 @dataclass(frozen=True, slots=True)
+class InterpretationContext:
+    """Effective response and request inputs determining how one payload is interpreted.
+
+    Compare values by equality rather than hashing because source coordinates
+    and origin request parameters may wrap non-hashable mappings.
+    """
+
+    acquisition_id: str
+    source_coordinates: SourceCoordinates
+    station_products: tuple[tuple[str, ProductId], ...]
+    fetch_window: FetchWindow
+    acquisition_axis: TimeAxis
+    scope: SeriesScope | None
+    known_series: tuple[SourceSeries, ...]
+    origin: SourceCallOrigin
+    attempt_traces: tuple[TransportAttempt, ...]
+
+    @classmethod
+    def from_payload(cls, payload: Payload) -> Self:
+        """Capture the effective interpretation context of ``payload``."""
+        return cls(
+            acquisition_id=payload.acquisition_id,
+            source_coordinates=payload.source_coordinates,
+            station_products=payload.station_products,
+            fetch_window=payload.fetch_window,
+            acquisition_axis=payload.acquisition_axis,
+            scope=payload.scope,
+            known_series=payload.known_series,
+            origin=payload.origin,
+            attempt_traces=payload.attempt_traces,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class InterpretedPayload:
+    """A ``ParsedSeries`` produced during acquisition bound to its exact ``InterpretationContext``."""
+
+    context: InterpretationContext
+    parsed: ParsedSeries
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.context, InterpretationContext):
+            raise TypeError("interpreted payload context must be InterpretationContext")
+        if not isinstance(self.parsed, ParsedSeries):
+            raise TypeError("interpreted payload parsed value must be ParsedSeries")
+
+    @classmethod
+    def from_payload(cls, payload: Payload, parsed: ParsedSeries) -> Self:
+        """Bind ``parsed`` to the effective interpretation context of ``payload``."""
+        return cls(context=InterpretationContext.from_payload(payload), parsed=parsed)
+
+
+@dataclass(frozen=True, slots=True)
 class WithIssues[A]:
     value: A
     issues: tuple[Issue, ...] = ()
@@ -458,6 +531,7 @@ class SourceAcquisition(WithIssues[tuple[Payload, ...]]):
     outcomes: tuple[RetrievalOutcome, ...] = ()
     calls: tuple[SourceCallOrigin, ...] = ()
     failed_requests: tuple[FailedSourceRequest, ...] = ()
+    interpretations: tuple[InterpretedPayload, ...] = ()
 
 
 type Rows = pl.DataFrame

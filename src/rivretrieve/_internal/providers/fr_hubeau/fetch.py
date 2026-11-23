@@ -1,4 +1,4 @@
-"""fr_hubeau fetch : stations × products × rendered windows × FetchWindow × ProviderConfig × Transport → WithIssues[Payload[]].
+"""fr_hubeau fetch : stations × products × rendered windows × FetchWindow × ProviderConfig × Transport → SourceAcquisition.
 
 Contributed by: Thiago von Däniken
 """
@@ -6,25 +6,24 @@ Contributed by: Thiago von Däniken
 import json
 from collections.abc import Mapping
 from datetime import datetime
-from typing import cast
 from uuid import uuid4
 
-from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
+    InterpretedPayload,
     Payload,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
     SourceCallOrigin,
-    UnknownOriginFact,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.page_acquisition import PageStep, acquire_pages
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.fr_hubeau.config import SERIES_MAPPINGS, FrHubeauSourceCoordinates
-from rivretrieve._internal.providers.fr_hubeau.parse import parse
-from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_request
+from rivretrieve._internal.providers.fr_hubeau.parse import interpret_page, next_url_from_document
+from rivretrieve._internal.source_acquisition import FailedSourceRequest
 from rivretrieve._internal.source_series import (
     OutcomeStatus,
     RetrievalOutcome,
@@ -32,7 +31,7 @@ from rivretrieve._internal.source_series import (
     SeriesWindow,
     SourceSeries,
 )
-from rivretrieve._internal.transport import HttpMethod, Transport, TransportFailure, TransportRequest, TransportResponse
+from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _DAILY_URL = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab"
 _TEMPERATURE_URL = "https://hubeau.eaufrance.fr/api/v1/temperature/chronique"
@@ -51,9 +50,10 @@ def fetch(
     known_series: tuple[SourceSeries, ...] = (),
 ) -> SourceAcquisition:
     payloads: list[Payload] = []
-    failures = []
-    outcomes = []
-    issues = []
+    interpretations: list[InterpretedPayload] = []
+    failures: list[FailedSourceRequest] = []
+    outcomes: list[RetrievalOutcome] = []
+    issues: list[Issue] = []
     for station in stations:
         for product in products:
             source = config.products[product].coordinates
@@ -64,7 +64,7 @@ def fetch(
             if window.stop is None:
                 raise FatalContractError("fr_hubeau product requires a rendered stop")
             if coordinates.family == "daily":
-                request = TransportRequest(
+                initial = TransportRequest(
                     HttpMethod.GET,
                     _DAILY_URL,
                     {
@@ -77,7 +77,7 @@ def fetch(
                     {"Accept": "application/json"},
                 )
             elif coordinates.family == "temperature":
-                request = TransportRequest(
+                initial = TransportRequest(
                     HttpMethod.GET,
                     _TEMPERATURE_URL,
                     {
@@ -93,59 +93,75 @@ def fetch(
                 start=datetime.fromisoformat(fetch_window.start.isoformat()),
                 end=datetime.fromisoformat(fetch_window.end.isoformat()),
             )
-            visited = set()
-            calls = []
-            reason = None
-            while True:
-                response = attempt_request(transport, request)
-                if isinstance(response, (TransportFailure, CredentialExchangeError)):
-                    failed = FailedSourceRequest(uuid4().hex, definition, bounds, request, response)
-                    failures.append(failed)
-                    calls.extend(
-                        tuple(item.attempt_id for item in response.attempt_traces)
-                        if isinstance(response, TransportFailure) and response.attempt_traces
-                        else (failed.call_id or failed.event_id,)
-                    )
-                    reason = str(response)
-                    break
-                payloads.append(
-                    Payload(
-                        source,
-                        ((station, product),),
-                        fetch_window,
-                        response.content,
-                        _origin(response),
-                        response.prerequisite_calls,
-                        scope=scope,
-                        known_series=known_series,
-                        attempt_traces=response.attempt_traces,
-                    )
+
+            def _build_payload(
+                response: TransportResponse,
+                *,
+                source=source,
+                station=station,
+                product=product,
+            ) -> Payload:
+                return Payload(
+                    source,
+                    ((station, product),),
+                    fetch_window,
+                    response.content,
+                    SourceCallOrigin.from_response(response),
+                    response.prerequisite_calls,
+                    scope=scope,
+                    known_series=known_series,
+                    attempt_traces=response.attempt_traces,
                 )
-                calls.extend(item.attempt_id for item in payloads[-1].attempt_traces)
-                if not payloads[-1].attempt_traces:
-                    calls.append(payloads[-1].acquisition_id)
-                parsed = parse(payloads[-1], config)
+
+            def _step_page(
+                payload: Payload,
+                *,
+                station=station,
+                product=product,
+                definition=definition,
+            ) -> PageStep:
+                interpreted = interpret_page(payload, config)
                 if any(
                     outcome.status in (OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED, OutcomeStatus.FAILED)
-                    for outcome in parsed.outcomes
+                    for outcome in interpreted.parsed.outcomes
                 ):
-                    reason = "Hub Eau cursor chain contains an unsupported observation page"
-                    break
-                try:
-                    next_url = next_url_from_response(response.content)
-                except UnsupportedSourceStructureError as error:
-                    reason = str(error)
-                    issues.append(_cursor_issue(station, product, definition.series_id, reason))
-                    break
-                if next_url is None:
-                    break
-                if next_url in visited:
-                    reason = "Hub Eau pagination cursor cycle"
-                    issues.append(_cursor_issue(station, product, definition.series_id, reason))
-                    break
-                visited.add(next_url)
-                request = TransportRequest(HttpMethod.GET, next_url, None, {"Accept": "application/json"})
-            if reason is not None:
+                    return PageStep(
+                        parsed=interpreted.parsed,
+                        stop_reason="Hub Eau cursor chain contains an unsupported observation page",
+                    )
+                if interpreted.next_url_error is not None:
+                    return PageStep(
+                        parsed=interpreted.parsed,
+                        stop_reason=interpreted.next_url_error,
+                        issues=(_cursor_issue(station, product, definition.series_id, interpreted.next_url_error),),
+                    )
+                if interpreted.next_url is None:
+                    return PageStep(parsed=interpreted.parsed)
+                return PageStep(
+                    parsed=interpreted.parsed,
+                    next_request=TransportRequest(
+                        HttpMethod.GET, interpreted.next_url, None, {"Accept": "application/json"}
+                    ),
+                    cursor_key=interpreted.next_url,
+                )
+
+            page_acq = acquire_pages(
+                initial,
+                transport=transport,
+                window=bounds,
+                build_payload=_build_payload,
+                interpret_page=_step_page,
+                failure_targets=lambda definition=definition: (definition,),
+                on_cycle=lambda station=station, product=product, definition=definition: (
+                    "Hub Eau pagination cursor cycle",
+                    (_cursor_issue(station, product, definition.series_id, "Hub Eau pagination cursor cycle"),),
+                ),
+            )
+            payloads.extend(page_acq.payloads)
+            interpretations.extend(page_acq.interpretations)
+            failures.extend(page_acq.failed_requests)
+            issues.extend(page_acq.issues)
+            if page_acq.stop_reason is not None:
                 outcomes.append(
                     RetrievalOutcome(
                         outcome_id=uuid4().hex,
@@ -154,13 +170,17 @@ def fetch(
                         product_id=product,
                         window=bounds,
                         status=OutcomeStatus.UNRESOLVED,
-                        reason=reason,
+                        reason=page_acq.stop_reason,
                         facts_ids=tuple(f.facts_id for f in definition.facts),
-                        calls=tuple(dict.fromkeys(calls)),
+                        calls=tuple(dict.fromkeys(page_acq.calls)),
                     )
                 )
     return SourceAcquisition(
-        value=tuple(payloads), failed_requests=tuple(failures), outcomes=tuple(outcomes), issues=tuple(issues)
+        value=tuple(payloads),
+        failed_requests=tuple(failures),
+        outcomes=tuple(outcomes),
+        issues=tuple(issues),
+        interpretations=tuple(interpretations),
     )
 
 
@@ -169,27 +189,7 @@ def next_url_from_response(content: bytes) -> str | None:
         document = json.loads(content)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise UnsupportedSourceStructureError("fr_hubeau payload content is not valid JSON") from error
-    if not isinstance(document, dict):
-        raise UnsupportedSourceStructureError("fr_hubeau payload must be a JSON object")
-    value = cast("dict[str, object]", document).get("next")
-    if value is not None and not isinstance(value, str):
-        raise UnsupportedSourceStructureError("fr_hubeau response next must be a URL or null")
-    if value is not None and not value.startswith("https://hubeau.eaufrance.fr/api/"):
-        raise UnsupportedSourceStructureError("fr_hubeau response next URL is outside Hub Eau")
-    return value
-
-
-def _origin(response: TransportResponse) -> SourceCallOrigin:
-    return SourceCallOrigin(
-        response.url,
-        response.request_parameters,
-        response.status_code,
-        response.retrieved_at,
-        response.content_type if response.content_type else UnknownOriginFact(),
-        UnknownOriginFact(),
-        UnknownOriginFact(),
-        attempts=response.attempts,
-    )
+    return next_url_from_document(document)
 
 
 def _cursor_issue(station: str, product: ProductId, series_id: str, reason: str) -> Issue:

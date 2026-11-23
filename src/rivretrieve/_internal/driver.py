@@ -37,6 +37,8 @@ from rivretrieve._internal.engine import (
     FetchWindow,
     Hourly,
     Instant,
+    InterpretationContext,
+    InterpretedPayload,
     ObservationRequest,
     Payload,
     ProductWindowDeclarations,
@@ -2030,6 +2032,7 @@ class _AcquiredGroup:
 
     acquisition: WithIssues[tuple[Payload, ...]]
     payload_slots: list[Payload | None]
+    interpretation_slots: list[list[InterpretedPayload]]
     remaining_consumers: list[int]
     payload_acquisition_ids: tuple[str, ...]
     remaining_plans: int
@@ -2062,10 +2065,12 @@ def _acquire_group(
                 dependencies[origin.acquisition_id] = origin.prerequisite_acquisition_ids
     validate_acquisition_dependencies(dependencies)
 
+    slot_by_acquisition_id: dict[str, int] = {}
     remaining_consumers: list[int] = []
     payload_slots: list[Payload | None] = []
     group_size = len(group)
-    for received in raw_fetched.value:
+    for slot_index, received in enumerate(raw_fetched.value):
+        slot_by_acquisition_id[received.acquisition_id] = slot_index
         consumers = (
             1
             if group_size == 1
@@ -2074,9 +2079,32 @@ def _acquire_group(
         remaining_consumers.append(consumers)
         payload_slots.append(received if consumers > 0 else None)
 
+    interpretation_slots: list[list[InterpretedPayload]] = [[] for _ in payload_slots]
+    if isinstance(raw_fetched, SourceAcquisition):
+        if not isinstance(raw_fetched.interpretations, tuple) or any(
+            not isinstance(item, InterpretedPayload) or not isinstance(item.parsed, ParsedSeries)
+            for item in raw_fetched.interpretations
+        ):
+            raise FatalContractError("SourceAcquisition interpretations must be a tuple of InterpretedPayload values")
+        for entry in raw_fetched.interpretations:
+            slot_index = slot_by_acquisition_id.get(entry.context.acquisition_id)
+            if slot_index is None:
+                raise FatalContractError("Payload interpretation references an unknown acquisition")
+            existing_entries = interpretation_slots[slot_index]
+            if any(existing.context == entry.context for existing in existing_entries):
+                raise FatalContractError("Duplicate payload interpretation for one acquisition context")
+            existing_entries.append(entry)
+        for slot_index, consumers in enumerate(remaining_consumers):
+            if consumers == 0:
+                interpretation_slots[slot_index].clear()
+        cleared_acquisition: WithIssues[tuple[Payload, ...]] = replace(raw_fetched, value=(), interpretations=())
+    else:
+        cleared_acquisition = replace(raw_fetched, value=())
+
     return _AcquiredGroup(
-        acquisition=replace(raw_fetched, value=()),
+        acquisition=cleared_acquisition,
         payload_slots=payload_slots,
+        interpretation_slots=interpretation_slots,
         remaining_consumers=remaining_consumers,
         payload_acquisition_ids=tuple(payload_ids_list),
         remaining_plans=group_size,
@@ -2901,11 +2929,19 @@ def drive(
             acq_axis = payload.acquisition_axis
             fw_start = datetime.fromisoformat(payload.fetch_window.start.isoformat())
             fw_end = datetime.fromisoformat(payload.fetch_window.end.isoformat())
-            parsed = provider.parse(payload, config)
+            effective_context = InterpretationContext.from_payload(payload)
+            reused_parsed: ParsedSeries | None = None
+            slot_interpretations = group_state.interpretation_slots[received_index]
+            for interp_index, entry in enumerate(slot_interpretations):
+                if entry.context == effective_context:
+                    reused_parsed = slot_interpretations.pop(interp_index).parsed
+                    break
+            parsed = reused_parsed if reused_parsed is not None else provider.parse(payload, config)
             group_state.remaining_consumers[received_index] -= 1
             if group_state.remaining_consumers[received_index] == 0:
                 group_state.payload_slots[received_index] = None
-            del payload, received
+                group_state.interpretation_slots[received_index].clear()
+            del payload, received, effective_context, reused_parsed, slot_interpretations
             if not isinstance(parsed, ParsedSeries):
                 raise FatalContractError("Provider parse must return ParsedSeries")
             _validate_parsed_series(parsed)

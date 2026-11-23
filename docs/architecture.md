@@ -56,6 +56,8 @@ The stages preserve distinct responsibilities:
 - **Assemble** combines observations with the information needed to interpret and
   trace them, including outcomes without rows.
 
+When acquisition must inspect a response directly, such as following cursor pagination chains or reading a prerequisite lookup, it may attach a context-bound parsed interpretation alongside the payload; the engine reuses that interpretation when effective parsing inputs match and falls back to **Parse** otherwise.
+
 Typed contracts and runtime validation check the boundaries between these stages.
 A fetch window must contain its requested window; converted rows must remain within
 the requested bounds. Contract violations raise because invalid stage output cannot

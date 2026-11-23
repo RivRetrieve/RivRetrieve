@@ -196,8 +196,17 @@ The [shared planner](../../src/rivretrieve/_internal/window_planning.py)
 prepares bounds; providers consume those bounds without shifting them.
 [Provider stages](../../src/rivretrieve/_internal/driver.py) exchange bytes,
 source-call origins, rows, identities, inventories, outcomes and issues.
-The [Lithuania fetcher](../../src/rivretrieve/_internal/providers/lt_lhmt/fetch.py)
-is a concrete example, not a universal source policy.
+Use the shared [cursor pagination helper](../../src/rivretrieve/_internal/page_acquisition.py)
+(`acquire_pages`) for cursor-paginated endpoints. When acquisition inspects a response
+to follow pagination links, check completeness, or resolve a prerequisite lookup, it can
+attach context-bound `InterpretedPayload` entries on `SourceAcquisition.interpretations`
+so the driver reuses the `ParsedSeries` when effective inputs match and falls back to
+pure `parse(payload, config)` whenever context inputs change. The
+[Lithuania fetcher](../../src/rivretrieve/_internal/providers/lt_lhmt/fetch.py),
+[Hub'Eau fetcher](../../src/rivretrieve/_internal/providers/fr_hubeau/fetch.py),
+[USGS fetcher](../../src/rivretrieve/_internal/providers/usgs_nwis/fetch.py), and
+[Argentina INA fetcher](../../src/rivretrieve/_internal/providers/ar_ina/fetch.py)
+show these patterns as concrete examples rather than a single source policy.
 
 **Outcome:** a defensible acquisition contract, including failure and completeness
 limits. Identify necessary shared-engine changes rather than hiding them in source code.
@@ -214,8 +223,13 @@ code would otherwise encode an unsupported assumption.
 
 The [declaration example](../../src/rivretrieve/_internal/providers/lt_lhmt/declaration.py)
 and [manifest](../../src/rivretrieve/_internal/provider_manifest.py) show
-registration. The [parser example](../../src/rivretrieve/_internal/providers/lt_lhmt/parse.py)
-shows native parsing connected to source-series mappings.
+registration. The [Lithuania parser](../../src/rivretrieve/_internal/providers/lt_lhmt/parse.py),
+[Hub'Eau parser](../../src/rivretrieve/_internal/providers/fr_hubeau/parse.py),
+[USGS parser](../../src/rivretrieve/_internal/providers/usgs_nwis/parse.py), and
+[Argentina INA parser](../../src/rivretrieve/_internal/providers/ar_ina/parse.py)
+show native parsing connected to source-series mappings, single-pass page interpretation
+shared between fetch and parse, and per-page memoization of repeated series and physical
+fact definitions without retaining mutable state across pages.
 [Canada's declaration](../../src/rivretrieve/_internal/providers/ca_eccc/declaration.py)
 shows the bulk alternative. Reuse shared conversion, clipping, assembly and storage.
 
