@@ -2,6 +2,8 @@
 
 When a caller uses `rr.pick()` on a result, narrowing its observation annotations should take work proportional to the number of annotation rows examined and retained. Live retrieval and local reads should also avoid constructing intermediate values that have no consumer. Implementing and verifying this vision completes [discussion #952](https://github.com/RivRetrieve/RivRetrieve/issues/952), one effort in [Program #938](https://github.com/RivRetrieve/RivRetrieve/issues/938).
 
+Base this work on `program/938-efficient-shared-retrieval` and target its PRs there. Freddy reviews the final PR from that branch into `main` once the whole Program is ready. [Program branch decision](https://github.com/RivRetrieve/RivRetrieve/issues/938#issuecomment-7101159123)
+
 ## Where to remove work
 
 - **Selection.** In `ObservationAnnotationTable.narrow()`, the engine already records the annotation positions to keep. It then reconstructs a set of those positions for each input row. Use the selection already made. Preserve annotation order, remap measured annotations to their selected observations, and retain unmeasured source slots according to the selected series and physical facts.
