@@ -167,6 +167,7 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
         pytest.param("at_ehyd", marks=pytest.mark.recorded("maintenance/observations/at_ehyd/retrieval")),
         pytest.param("ar_ina", marks=pytest.mark.recorded("maintenance/observations/ar_ina/retrieval")),
         pytest.param("co_ideam", marks=pytest.mark.recorded("maintenance/observations/co_ideam/retrieval")),
+        pytest.param("ee_est", marks=pytest.mark.recorded("maintenance/observations/ee_est/retrieval")),
     ],
 )
 def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, monkeypatch, tmp_path, request):
@@ -244,6 +245,22 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             statistic="mean",
         )
         start, end = "2023-05-01", "2023-05-10"
+    elif provider == "ee_est":
+        from tests.test_ee_est_recorded_public import _response_matching_request
+
+        class _EeEstReplay:
+            def send(self, req):
+                return _response_matching_request(retained_evidence_root, "em-sja8821000-q-mean-2026", req)
+
+        monkeypatch.setattr(discovery, "HttpClient", _EeEstReplay)
+        selection = rr.find(
+            provider=provider,
+            station="SJA8821000",
+            quantity="discharge",
+            frequency="daily",
+            statistic="mean",
+        )
+        start, end = "2026-01-01", "2026-01-10"
     elif provider == "ch_foen":
         from tests.test_partial_explicit_scope import _official_replay
 

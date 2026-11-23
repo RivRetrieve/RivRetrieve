@@ -523,3 +523,78 @@ def test_ch_foen_official_numeric_guards_reject_unrepresentable_cells(
         assert changed.rows.height == baseline.rows.height
         assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
         assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
+
+
+@pytest.mark.parametrize("route_kind", ["estmodel", "f_hydroseire"])
+@pytest.mark.parametrize("mutation", [*BAD, "boolean", "zero", "finite", "null"])
+@pytest.mark.recorded("maintenance/observations/ee_est/retrieval")
+def test_ee_est_numeric_guards_reject_unrepresentable_cells(
+    retained_evidence_root: Path, route_kind: str, mutation: str
+) -> None:
+    from rivretrieve._internal.providers.ee_est.config import FHydroseireCoordinates
+    from rivretrieve._internal.providers.ee_est.config import config as ee_config
+    from rivretrieve._internal.providers.ee_est.parse import parse as ee_parse
+    from rivretrieve._internal.providers.ee_est.series import source_series as ee_source_series
+    from rivretrieve._internal.source_series import OutcomeStatus
+
+    root = retained_evidence_root / "maintenance/observations/ee_est/retrieval/web"
+    if route_kind == "estmodel":
+        slug, prod_id, field_name, jaam_kood = "em-sja8821000-q-mean-2026", "discharge_daily_mean", "value", None
+    else:
+        slug, prod_id, field_name, jaam_kood = (
+            "fh-41061-q-avg-dst-spring-2024",
+            "discharge_hourly_mean",
+            "vaartus",
+            41061,
+        )
+    body = (root / f"{slug}.body").read_bytes()
+    receipt = json.loads((root / f"{slug}.receipt.json").read_text())
+    cfg = ee_config()
+    prod = ProductId(prod_id)
+    coords = (
+        cfg.products[prod].coordinates
+        if jaam_kood is None
+        else SourceCoordinates(FHydroseireCoordinates("Äravool avg", prod_id, jaam_kood))
+    )
+    win = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2027, 1, 1)),
+    )
+    origin = SourceCallOrigin(
+        str(receipt["url"]),
+        {},
+        int(receipt["http_status"]),
+        datetime.fromisoformat(str(receipt["retrieved_at"])),
+        "application/json",
+        UnknownOriginFact(),
+        UnknownOriginFact(),
+    )
+    source = Payload(
+        coords,
+        (("SJA8821000", prod),),
+        win,
+        body,
+        origin,
+        (),
+        known_series=(ee_source_series("SJA8821000", prod_id, jaam_kood=jaam_kood),),
+    )
+    baseline = ee_parse(source, cfg)
+    assert baseline.rows.height > 0
+
+    doc = json.loads(body)
+    marker = "__EE_EST_NUMERIC_CELL__"
+    doc[0][field_name] = marker
+    raw_token = "true" if mutation == "boolean" else TOKENS[mutation]
+    mutated_bytes = json.dumps(doc).encode().replace(json.dumps(marker).encode(), raw_token.encode())
+
+    changed = ee_parse(replace(source, content=mutated_bytes), cfg)
+    if mutation in (*BAD, "boolean"):
+        assert [item.status for item in changed.outcomes] == [OutcomeStatus.FAILED], (route_kind, mutation)
+        assert changed.outcomes[0].reason
+        assert changed.rows.is_empty()
+    else:
+        assert [item.status for item in changed.outcomes] == [item.status for item in baseline.outcomes]
+        assert all(item.status is OutcomeStatus.SUCCESS for item in changed.outcomes)
+        assert changed.rows.height == baseline.rows.height
+        assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
+        assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
