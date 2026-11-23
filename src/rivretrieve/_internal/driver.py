@@ -852,6 +852,8 @@ def _reconcile_acquired_inventories(
             event.window.axis is snapshot_window.axis
             and event.window.start <= snapshot_window.end
             and event.window.end >= snapshot_window.start
+            and (not scope.station_ids or event.series.station_id in scope.station_ids)
+            and (not scope.product_ids or event.series.product_id in scope.product_ids)
             for event in acquired.failed_requests
         ) or any(
             outcome.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
@@ -2049,6 +2051,8 @@ class _AcquiredGroup:
     remaining_consumers: list[int]
     payload_acquisition_ids: tuple[str, ...]
     remaining_plans: int
+    group_scope: SeriesScope
+    group_recorded: bool = False
 
 
 def _effective_pair_payload(received: Payload, plan: _PairRetrieval, group_size: int) -> Payload:
@@ -2092,6 +2096,7 @@ def _acquire_group(
     group: tuple[_PairRetrieval, ...],
     *,
     retain_bytes: bool = True,
+    group_scope: SeriesScope | None = None,
 ) -> _AcquiredGroup:
     dependencies: dict[str, tuple[str, ...]] = {}
     payload_ids_list: list[str] = []
@@ -2159,6 +2164,19 @@ def _acquire_group(
     else:
         cleared_acquisition = replace(raw_fetched, value=())
 
+    resolved_group_scope = (
+        group_scope
+        if group_scope is not None
+        else group[0].scope
+        if len(group) == 1
+        else group[0].scope.model_copy(
+            update={
+                "station_ids": tuple(dict.fromkeys(item.station for item in group)),
+                "product_ids": tuple(dict.fromkeys(str(item.product) for item in group)),
+                "series_ids": tuple(dict.fromkeys(key for item in group for key in item.scope.series_ids)),
+            }
+        )
+    )
     return _AcquiredGroup(
         acquisition=cleared_acquisition,
         payload_slots=payload_slots,
@@ -2167,6 +2185,7 @@ def _acquire_group(
         remaining_consumers=remaining_consumers,
         payload_acquisition_ids=tuple(payload_ids_list),
         remaining_plans=group_size,
+        group_scope=resolved_group_scope,
     )
 
 
@@ -2236,32 +2255,132 @@ def _public_issues(issues: tuple[Issue, ...]) -> tuple[Issue, ...]:
     return tuple(projected)
 
 
+def _acquisition_issue_scope(
+    issue: Issue,
+    fetched: WithIssues[tuple[Payload, ...]],
+    group: tuple[_PairRetrieval, ...],
+    group_scope: SeriesScope,
+) -> SeriesScope:
+    """Resolve the acquisition scope attributable to one source-acquisition issue."""
+    if len(group) == 1:
+        return group[0].scope
+    pair_scopes = {(item.station, str(item.product)): item.scope for item in group}
+    details = issue.details or {}
+    station_id = details.get("station_id")
+    product_id = details.get("product_id")
+    if isinstance(station_id, str) and isinstance(product_id, str) and (station_id, product_id) in pair_scopes:
+        return pair_scopes[(station_id, product_id)]
+    if isinstance(fetched, SourceAcquisition):
+        outcome_id = details.get("outcome_id")
+        if isinstance(outcome_id, str):
+            for outcome in fetched.outcomes:
+                if outcome.outcome_id == outcome_id:
+                    pair = (outcome.station_id, outcome.product_id)
+                    if pair in pair_scopes:
+                        return pair_scopes[pair]
+                    break
+        series_id = details.get("series_id")
+        if isinstance(series_id, str):
+            for item in group:
+                for known in item.series:
+                    if known.series_id == series_id:
+                        return item.scope
+            for known in fetched.series:
+                if known.series_id == series_id:
+                    pair = (known.station_id, known.product_id)
+                    if pair in pair_scopes:
+                        return pair_scopes[pair]
+    return group_scope
+
+
+def _call_identity(call: Mapping[str, object]) -> object:
+    return call.get("acquisition_id", call.get("call_id"))
+
+
+def _group_dependencies(group: list[dict[str, object]]) -> tuple[str, ...]:
+    dependencies = next(
+        (call["prerequisite_acquisition_ids"] for call in group if "prerequisite_acquisition_ids" in call), ()
+    )
+    assert isinstance(dependencies, tuple)
+    return cast(tuple[str, ...], dependencies)
+
+
+def _insert_dependent_call_groups(
+    calls: list[dict[str, object]],
+    dependent_groups: list[tuple[list[dict[str, object]], tuple[str, ...]]],
+    *,
+    missing_message: str,
+) -> tuple[dict[str, object], ...]:
+    """Place dependent call groups after all of their prerequisite support calls."""
+    pending = list(dependent_groups)
+    while pending:
+        present = {identity for call in calls if (identity := _call_identity(call)) is not None}
+        ready: list[tuple[list[dict[str, object]], tuple[str, ...]]] = []
+        deferred: list[tuple[list[dict[str, object]], tuple[str, ...]]] = []
+        for entry in pending:
+            if all(dep in present for dep in entry[1]):
+                ready.append(entry)
+            else:
+                deferred.append(entry)
+        if not ready:
+            raise FatalContractError(missing_message)
+        # Inserting later siblings first keeps the original order when groups share
+        # the same prerequisite position. Calls within each group stay unchanged.
+        for group, dependencies in reversed(ready):
+            positions = [index for index, call in enumerate(calls) if _call_identity(call) in dependencies]
+            calls[max(positions) + 1 : max(positions) + 1] = group
+        pending = deferred
+    return tuple(calls)
+
+
+def _order_support_calls(
+    non_payload_calls: tuple[dict[str, object], ...],
+    payload_calls: tuple[dict[str, object], ...],
+) -> tuple[dict[str, object], ...]:
+    """Keep independent auxiliary calls ahead of payloads and defer payload-dependent ones."""
+    if not non_payload_calls:
+        return payload_calls
+    groups: dict[object, list[dict[str, object]]] = {}
+    for index, call in enumerate(non_payload_calls):
+        identity = _call_identity(call)
+        groups.setdefault(("id", identity) if identity is not None else ("pos", index), []).append(call)
+    leading: list[dict[str, object]] = []
+    leading_ids: set[object] = set()
+    deferred: list[tuple[list[dict[str, object]], tuple[str, ...]]] = []
+    for group in groups.values():
+        dependencies = _group_dependencies(group)
+        if not dependencies or all(dep in leading_ids for dep in dependencies):
+            leading.extend(group)
+            leading_ids.update(identity for call in group if (identity := _call_identity(call)) is not None)
+        else:
+            deferred.append((group, dependencies))
+    return _insert_dependent_call_groups(
+        [*leading, *payload_calls],
+        deferred,
+        missing_message="Auxiliary acquisition lacks its prerequisite call evidence",
+    )
+
+
 def _calls_with_failed_acquisitions(
     payload_calls: tuple[dict[str, object], ...], failed_calls: tuple[dict[str, object], ...]
 ) -> tuple[dict[str, object], ...]:
     """Place failed acquisitions after their explicit support, preserving call groups."""
     groups: dict[object, list[dict[str, object]]] = {}
     for call in failed_calls:
-        groups.setdefault(call.get("acquisition_id", call.get("call_id")), []).append(call)
-    calls = list(payload_calls)
+        groups.setdefault(_call_identity(call), []).append(call)
     independent: list[dict[str, object]] = []
-    # Inserting later siblings first keeps the original order when groups share
-    # the same prerequisite position. Calls within each group stay unchanged.
-    for group in reversed(groups.values()):
-        dependencies = next(
-            (call["prerequisite_acquisition_ids"] for call in group if "prerequisite_acquisition_ids" in call), ()
-        )
-        assert isinstance(dependencies, tuple)
+    dependent: list[tuple[list[dict[str, object]], tuple[str, ...]]] = []
+    for group in groups.values():
+        dependencies = _group_dependencies(group)
         if not dependencies:
-            independent[0:0] = group
-            continue
-        positions = [
-            index for index, call in enumerate(calls) if call.get("acquisition_id", call.get("call_id")) in dependencies
-        ]
-        if not positions:
-            raise FatalContractError("Failed acquisition lacks its prerequisite call evidence")
-        calls[max(positions) + 1 : max(positions) + 1] = group
-    return (*independent, *calls)
+            independent.extend(group)
+        else:
+            dependent.append((group, dependencies))
+    return _insert_dependent_call_groups(
+        [*independent, *payload_calls],
+        dependent,
+        missing_message="Failed acquisition lacks its prerequisite call evidence",
+    )
 
 
 def _unique_calls(calls: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
@@ -2623,6 +2742,7 @@ def drive(
                     ),
                     group,
                     retain_bytes=receipts is ReceiptMode.INCLUDE,
+                    group_scope=group_scope,
                 )
             except (TransportFailure, CredentialExchangeError) as failure:
                 acquired[group_index] = failure
@@ -2667,53 +2787,66 @@ def drive(
                 fresh_outcomes.append(outcome)
             continue
         group_state = result
+        if not group_state.group_recorded:
+            group_state.group_recorded = True
+            fetched = group_state.acquisition
+            if isinstance(fetched, SourceAcquisition) and fetched.calls:
+                group_station_products = tuple((item.station, str(item.product)) for item in group)
+                # These origins support this acquired inventory. Give the existing
+                # evidence records content identities so compaction can retain their
+                # dependencies without storing unlimited anonymous call history.
+                auxiliary_calls = tuple(
+                    {
+                        **(record := _origin_call(origin)),
+                        "prerequisite_acquisition_ids": origin.prerequisite_acquisition_ids,
+                        "call_id": origin.acquisition_id
+                        or stable_id(
+                            "source-call-origin",
+                            tuple(snapshot.snapshot_id for snapshot in fetched.inventories)
+                            or tuple(outcome.outcome_id for outcome in fetched.outcomes)
+                            or group_state.payload_acquisition_ids,
+                            json.dumps(encode_source_call(record), sort_keys=True),
+                        ),
+                        "station_products": group_station_products,
+                    }
+                    for origin in fetched.calls
+                )
+                references = tuple(
+                    str(call["call_id"])
+                    for call, origin in zip(auxiliary_calls, fetched.calls, strict=True)
+                    if origin.acquisition_id is None
+                )
+                bound_outcomes, bound_inventories, bound_issues = _bind_acquisition_evidence(
+                    fetched.outcomes, fetched.inventories, fetched.issues, references
+                )
+                fetched = replace(fetched, outcomes=bound_outcomes, inventories=bound_inventories, issues=bound_issues)
+                group_state.acquisition = fetched
+                non_payload_calls.extend(auxiliary_calls)
+            all_issues.extend(
+                issue.model_copy(
+                    update={
+                        "details": {
+                            **(issue.details or {}),
+                            "inventory_scope": _acquisition_issue_scope(
+                                issue, fetched, group, group_state.group_scope
+                            ).model_dump(mode="json"),
+                        }
+                    }
+                )
+                if issue.code in {"source.inventory_unresolved", "source.request_failed"}
+                else issue
+                for issue in fetched.issues
+            )
+            if isinstance(fetched, SourceAcquisition):
+                _merge_definitions(definitions, fetched.series)
+                _merge_definitions(fresh_definitions, fetched.series)
+                inventories.extend(fetched.inventories)
+                fresh_inventories.extend(fetched.inventories)
+                outcomes.extend(fetched.outcomes)
+                fresh_outcomes.extend(fetched.outcomes)
         fetched = group_state.acquisition
         acquisition_outcome_start = len(fresh_outcomes)
-        auxiliary_calls: tuple[dict[str, object], ...] = ()
-        if isinstance(fetched, SourceAcquisition) and fetched.calls:
-            # These origins support this acquired inventory. Give the existing
-            # evidence records content identities so compaction can retain their
-            # dependencies without storing unlimited anonymous call history.
-            auxiliary_calls = tuple(
-                {
-                    **(record := _origin_call(origin)),
-                    "prerequisite_acquisition_ids": origin.prerequisite_acquisition_ids,
-                    "call_id": origin.acquisition_id
-                    or stable_id(
-                        "source-call-origin",
-                        tuple(snapshot.snapshot_id for snapshot in fetched.inventories)
-                        or tuple(outcome.outcome_id for outcome in fetched.outcomes)
-                        or group_state.payload_acquisition_ids,
-                        json.dumps(encode_source_call(record), sort_keys=True),
-                    ),
-                    "station_products": ((station, str(product)),),
-                }
-                for origin in fetched.calls
-            )
-            references = tuple(
-                str(call["call_id"])
-                for call, origin in zip(auxiliary_calls, fetched.calls, strict=True)
-                if origin.acquisition_id is None
-            )
-            bound_outcomes, bound_inventories, bound_issues = _bind_acquisition_evidence(
-                fetched.outcomes, fetched.inventories, fetched.issues, references
-            )
-            fetched = replace(fetched, outcomes=bound_outcomes, inventories=bound_inventories, issues=bound_issues)
-        all_issues.extend(
-            issue.model_copy(
-                update={"details": {**(issue.details or {}), "inventory_scope": pair_scope.model_dump(mode="json")}}
-            )
-            if issue.code in {"source.inventory_unresolved", "source.request_failed"}
-            else issue
-            for issue in fetched.issues
-        )
         if isinstance(fetched, SourceAcquisition):
-            _merge_definitions(definitions, fetched.series)
-            _merge_definitions(fresh_definitions, fetched.series)
-            inventories.extend(fetched.inventories)
-            fresh_inventories.extend(fetched.inventories)
-            outcomes.extend(fetched.outcomes)
-            fresh_outcomes.extend(fetched.outcomes)
             # Transaction-level failures are known before any individual page is
             # assembled. Restore held concrete successes first, so later partial
             # page rows cannot overlap them. Inventory-only unknown failures do
@@ -2797,7 +2930,6 @@ def drive(
                             replaced_facts_ids=matching_facts,
                         )
                     )
-            non_payload_calls.extend(auxiliary_calls)
             for event in fetched.failed_requests:
                 target = event.series
                 if len(group) > 1 and (target.station_id, target.product_id) != (station, product):
@@ -3410,12 +3542,19 @@ def drive(
                             )
                         )
         if isinstance(fetched, SourceAcquisition):
+            pair_fetched_outcomes = (
+                fetched.outcomes
+                if len(group) == 1
+                else tuple(
+                    item for item in fetched.outcomes if (item.station_id, item.product_id) == (station, str(product))
+                )
+            )
             reconciled = _reconcile_acquired_inventories(
                 fetched,
                 tuple(transaction_parsed),
                 pair_scope,
                 window,
-                durable_outcomes=tuple(fresh_outcomes[acquisition_outcome_start:]),
+                durable_outcomes=(*pair_fetched_outcomes, *fresh_outcomes[acquisition_outcome_start:]),
             )
             inventories.extend(reconciled)
             fresh_inventories.extend(reconciled)
@@ -3566,7 +3705,10 @@ def drive(
         provenance, tuple(payload_provenance), source_series_by_payload=tuple(source_series_by_payload)
     )
     acquired_calls = _unique_calls(
-        (*non_payload_calls, *_calls_with_failed_acquisitions(enriched.calls_made, tuple(failed_calls)))
+        _calls_with_failed_acquisitions(
+            _order_support_calls(tuple(non_payload_calls), enriched.calls_made),
+            tuple(failed_calls),
+        )
     )
     available_definitions = dict(definitions)
     if manifest is not None:
