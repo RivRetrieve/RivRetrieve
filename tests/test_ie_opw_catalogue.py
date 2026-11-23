@@ -158,11 +158,12 @@ def test_exclusion_rules_filter_non_rivers_and_keep_borderline_river_gauges() ->
     assert is_excluded_station(_opw_station("27066", stn_class="Level & Flow", wto="FERGUS ESTY."))
     assert is_excluded_station(_opw_station("12002", stn_class="Level & Flow", wto="SLANEY"))
     assert is_excluded_station(_opw_station("34083", stn_class="Level", wto="LOUGH MASK"))
+    assert is_excluded_station(_opw_station("30089", stn_class="Level", wto="L     CORRIB", catchment_size="0.00 km²"))
     assert is_excluded_station(_opw_station("29002", stn_class="Level & Flow", wto="RAHASANE TURLOUGH"))
     assert is_excluded_station(_opw_station("30034", stn_class="Inactive", wto="CONG CANAL"))
 
     for kept in ("01041", "30061", "26075", "35071", "03055", "34018", "30017", "09045", "10047"):
-        wto = "CORRIB ESTY." if kept == "30061" else "RIVER"
+        wto = "CORRIB ESTY." if kept == "30061" else "L.    MELVIN" if kept == "35071" else "RIVER"
         assert not is_excluded_station(_opw_station(kept, wto=wto)), kept
 
 
