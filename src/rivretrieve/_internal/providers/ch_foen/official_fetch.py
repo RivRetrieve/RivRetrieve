@@ -9,6 +9,7 @@ from uuid import uuid4
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
+    InterpretedPayload,
     Payload,
     ProviderConfig,
     RenderedWindow,
@@ -21,6 +22,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.ch_foen.official_config import TIMESTAMP_PRECISION, OfficialRoute
+from rivretrieve._internal.providers.ch_foen.official_parse import parse_records
 from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget, attempt_request
 from rivretrieve._internal.source_series import OutcomeStatus, RetrievalOutcome, SeriesScope, SeriesWindow, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, ReplaySafety, Transport, TransportFailure, TransportRequest
@@ -51,7 +53,14 @@ def fetch(
                 raise FatalContractError("Official Swiss acquisition requires official route coordinates")
             for window in rendered_windows[product]:
                 acquire = partial(
-                    _acquire, station, product, coordinates, transport=transport, scope=scope, known_series=known_series
+                    _acquire,
+                    station,
+                    product,
+                    coordinates,
+                    config,
+                    transport=transport,
+                    scope=scope,
+                    known_series=known_series,
                 )
                 results.append(acquire_window(window, precision=timestamp_precision, acquire=acquire))
     return SourceAcquisition(
@@ -59,10 +68,11 @@ def fetch(
         calls=tuple(item for result in results for item in result.calls),
         outcomes=tuple(item for result in results for item in result.outcomes),
         failed_requests=tuple(item for result in results for item in result.failed_requests),
+        interpretations=tuple(item for result in results for item in result.interpretations),
     )
 
 
-def _acquire(station, product, coordinates, window, transport, scope, known_series) -> WindowAcquisition:
+def _acquire(station, product, coordinates, config, window, transport, scope, known_series) -> WindowAcquisition:
     if window.bounds is None or window.stop is None:
         raise FatalContractError("Official Swiss acquisition requires engine-rendered bounds")
     query = _query(station, coordinates, window)
@@ -106,9 +116,10 @@ def _acquire(station, product, coordinates, window, transport, scope, known_seri
         attempt_traces=response.attempt_traces,
         acquisition_id=call_id,
     )
-    meaning, reason = response_meaning(response.content, coordinates.route)
     if not 200 <= response.status_code < 300:
-        meaning, reason = WindowResponseMeaning.COMPLETE, f"Source returned HTTP {response.status_code}"
+        meaning, reason, records = WindowResponseMeaning.COMPLETE, f"Source returned HTTP {response.status_code}", None
+    else:
+        meaning, reason, records = _decode_response_meaning(response.content, coordinates.route)
     if reason is not None:
         outcome = RetrievalOutcome(
             outcome_id=uuid4().hex,
@@ -137,17 +148,28 @@ def _acquire(station, product, coordinates, window, transport, scope, known_seri
         known_series,
         attempt_traces=response.attempt_traces,
     )
-    return WindowAcquisition(SourceAcquisition((payload,)))
+    if records is None:
+        raise FatalContractError("Official Swiss successful response lacks decoded records")
+    parsed = parse_records(payload, config, records)
+    del records
+    return WindowAcquisition(
+        SourceAcquisition(
+            (payload,),
+            interpretations=(InterpretedPayload.from_payload(payload, parsed),),
+        )
+    )
 
 
-def response_meaning(content: bytes, route: str) -> tuple[WindowResponseMeaning, str | None]:
-    """Classify the envelope, leaving observation interpretation to parsing."""
+def _decode_response_meaning(
+    content: bytes, route: str
+) -> tuple[WindowResponseMeaning, str | None, list[object] | None]:
+    """Decode and classify the envelope once, returning raw observation records on success."""
     try:
         document = json.loads(content)
     except (ValueError, UnicodeDecodeError):
-        return WindowResponseMeaning.COMPLETE, "Source response is not valid JSON"
+        return WindowResponseMeaning.COMPLETE, "Source response is not valid JSON", None
     if not isinstance(document, dict):
-        return WindowResponseMeaning.COMPLETE, "Source response is not an object"
+        return WindowResponseMeaning.COMPLETE, "Source response is not an object", None
     errors = document.get("errors")
     if errors:
         overflow = (
@@ -162,7 +184,7 @@ def response_meaning(content: bytes, route: str) -> tuple[WindowResponseMeaning,
             )
         )
         return (
-            (WindowResponseMeaning.OVERFLOW, "Source rejected the interval because it exceeds the row limit")
+            (WindowResponseMeaning.OVERFLOW, "Source rejected the interval because it exceeds the row limit", None)
             if overflow
             else (
                 WindowResponseMeaning.COMPLETE,
@@ -178,15 +200,22 @@ def response_meaning(content: bytes, route: str) -> tuple[WindowResponseMeaning,
                     ensure_ascii=False,
                     sort_keys=True,
                 ),
+                None,
             )
         )
     try:
         records = document["data"]["water"]["observations"][route]
     except (KeyError, TypeError):
-        return WindowResponseMeaning.COMPLETE, "Source response lacks the requested observation route"
+        return WindowResponseMeaning.COMPLETE, "Source response lacks the requested observation route", None
     if not isinstance(records, list):
-        return WindowResponseMeaning.COMPLETE, "Source observation route is not an array"
-    return WindowResponseMeaning.COMPLETE, None
+        return WindowResponseMeaning.COMPLETE, "Source observation route is not an array", None
+    del document
+    return WindowResponseMeaning.COMPLETE, None, records
+
+
+def response_meaning(content: bytes, route: str) -> tuple[WindowResponseMeaning, str | None]:
+    """Classify the envelope, leaving observation interpretation to parsing."""
+    return _decode_response_meaning(content, route)[:2]
 
 
 def _query(station: str, coordinates: OfficialRoute, window: RenderedWindow) -> str:

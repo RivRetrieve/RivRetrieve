@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 import polars as pl
 
@@ -34,11 +36,20 @@ _INT64_MIN = -(1 << 63)
 _INT64_MAX = (1 << 63) - 1
 
 
-def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
-    """Parse one SYKE observation page: at most one station-product pair."""
+@dataclass(frozen=True, slots=True)
+class FiSykePageInterpretation:
+    """Decoded observation page result and optional OData next-page link."""
+
+    parsed: ParsedSeries | None
+    next_link: object = None
+
+
+def _parse_rows(payload: Payload, provider_config: ProviderConfig, rows: list[object]) -> ParsedSeries:
     if len(payload.station_products) != 1:
         raise FatalContractError("fi_syke payload must identify exactly one station-product pair")
     station, product = payload.station_products[0]
+    if not isinstance(rows, list):
+        raise UnsupportedSourceStructureError("fi_syke observation response must be a JSON object with a value array")
 
     window = SeriesWindow(
         start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
@@ -47,14 +58,6 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
     scope = payload.scope or SeriesScope(provider_ids=("fi_syke",), station_ids=(station,), product_ids=(str(product),))
     evidence = f"source-call:{payload.acquisition_id}"
-
-    try:
-        document = json.loads(payload.content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise UnsupportedSourceStructureError("fi_syke observation response is not valid JSON") from error
-    if not isinstance(document, dict) or not isinstance(document.get("value"), list):
-        raise UnsupportedSourceStructureError("fi_syke observation response must be a JSON object with a value array")
-    rows = document["value"]
 
     series = describe_series(station, str(product))
     fact = series.facts[0]
@@ -97,7 +100,8 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     for raw_row in rows:
         if not isinstance(raw_row, dict) or "Aika" not in raw_row or "Arvo" not in raw_row:
             raise UnsupportedSourceStructureError("fi_syke observation row lacks Aika or Arvo")
-        label = raw_row["Aika"]
+        row = cast("dict[str, object]", raw_row)
+        label = row["Aika"]
         if not isinstance(label, str):
             raise UnsupportedSourceStructureError("fi_syke observation timestamp is not a string")
         try:
@@ -106,7 +110,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             naive_time = datetime.fromisoformat(label).replace(tzinfo=None)
         except ValueError as error:
             raise UnsupportedSourceStructureError(f"fi_syke malformed observation timestamp {label!r}") from error
-        value = raw_row["Arvo"]
+        value = row["Arvo"]
         if value is not None and not isinstance(value, (int, float, str)):
             raise UnsupportedSourceStructureError("fi_syke observation value is not numeric")
         try:
@@ -126,9 +130,9 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             }
         )
         if str(product) in _ANNOTATION_PRODUCTS:
-            if "Lippu_id" not in raw_row:
+            if "Lippu_id" not in row:
                 raise UnsupportedSourceStructureError("fi_syke observation row lacks Lippu_id")
-            flag_code = raw_row["Lippu_id"]
+            flag_code = row["Lippu_id"]
             if flag_code is not None and (
                 isinstance(flag_code, bool)
                 or not isinstance(flag_code, int)
@@ -181,3 +185,40 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     else:
         annotations = AnnotationBundle.empty()
     return ParsedSeries(combined, (series,), (inventory,), (outcome,), (), annotations)
+
+
+def interpret_page(payload: Payload, provider_config: ProviderConfig) -> FiSykePageInterpretation:
+    """Decode and interpret one SYKE observation page once for fetch-time handoff."""
+    if len(payload.station_products) != 1:
+        raise FatalContractError("fi_syke payload must identify exactly one station-product pair")
+    try:
+        document = json.loads(payload.content)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return FiSykePageInterpretation(parsed=None, next_link=None)
+    if not isinstance(document, dict) or not isinstance(document.get("value"), list):
+        return FiSykePageInterpretation(parsed=None, next_link=None)
+    next_link = document.get("odata.nextLink")
+    rows = document["value"]
+    del document
+    try:
+        parsed = _parse_rows(payload, provider_config, rows)
+    except UnsupportedSourceStructureError:
+        return FiSykePageInterpretation(parsed=None, next_link=next_link)
+    finally:
+        del rows
+    return FiSykePageInterpretation(parsed=parsed, next_link=next_link)
+
+
+def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+    """Parse one SYKE observation page: at most one station-product pair."""
+    if len(payload.station_products) != 1:
+        raise FatalContractError("fi_syke payload must identify exactly one station-product pair")
+    try:
+        document = json.loads(payload.content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise UnsupportedSourceStructureError("fi_syke observation response is not valid JSON") from error
+    if not isinstance(document, dict) or not isinstance(document.get("value"), list):
+        raise UnsupportedSourceStructureError("fi_syke observation response must be a JSON object with a value array")
+    rows = document["value"]
+    del document
+    return _parse_rows(payload, provider_config, rows)
