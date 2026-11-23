@@ -1,12 +1,28 @@
-"""Published Belgium - Wallonia (`be_wal`) KiWIS series mappings for offline catalogue generation.
+"""Published Belgium - Wallonia (`be_wal`) KiWIS series identities and physical facts.
 
-Step 2 establishes the full 62-product native ladder across standard discharge
-(``Débit``), ultrasonic discharge (``Débit ultrason``), gauge-zero stage
-(``Hauteur`` / ``Hauteur sonde``), elevation stage (``Hauteur absolue`` under
-``Hauteur`` / ``Hauteur sonde``), and water temperature (``Température Eau`` /
-``Temperature Eau``) alongside verified station-product ``KiWIS.ts_id``
-associations while keeping temporal and vertical physical meanings unestablished
-(``None`` -> ``unknown``) until Step 3 certifies meaning witnesses.
+Step 3 establishes full physical meaning across the 62-product native ladder
+(standard ``Débit``, ultrasonic ``Débit ultrason``, gauge-zero ``Hauteur`` /
+``Hauteur sonde``, sea-level ``Hauteur absolue`` under ``Hauteur`` / ``Hauteur sonde``,
+and water temperature ``Température Eau`` / ``Temperature Eau``):
+
+- Fixed CET ``+01:00`` ``time_zone`` on all 62 products (queried monotonically via
+  KiWIS ``timezone=UTC`` and losslessly re-expressed in ``+01:00``, matching
+  ``station_utcoffset="-60"``).
+- ``10..52`` aggregate cadences (``PT1H``, ``P1D``, ``P1M``, ``P1Y``):
+  ``temporal_support="interval"`` and ``timestamp_anchor="start"`` per SPW's
+  ``Guide d'utilisation`` V1.0 p. 43 (``'constant jusqu'au suivant'``); daily
+  ``20/21/22`` products set ``day_definition="+01:00"``, ``label_time="00:00"``,
+  and ``ClippingAxis.CALENDAR_DATE``; monthly ``40/41/42`` and yearly ``50/51/52``
+  products set ``label_time="00:00"`` and ``ClippingAxis.SOURCE_TIMESTAMP``.
+- ``05-*.Complet`` high-resolution ``cmd*`` series (varying station spacing
+  ``5 min``, ``10 min``, or ``1h`` with ``ts_spacing=""``): keep ``frequency=None``,
+  ``statistic=None``, ``temporal_support=None``, ``timestamp_anchor=None``,
+  ``day_definition=None``, and ``label_time=None``.
+- Stage vertical reference: ``"gauge_zero"`` (``vertical_datum=None``) on
+  ``stage_*`` (negative stages witnessed on ``L8910`` and ``L8470`` despite
+  ``station_gauge_datum`` values), and ``"above_sea_level"`` (``vertical_datum=None``
+  since ``7102`` and ``8001`` report ``station_gauge_datum_unit="---"``) on
+  ``stage_absolute_*``.
 """
 
 from __future__ import annotations
@@ -23,33 +39,36 @@ from rivretrieve._internal.provider_series import SeriesMapping
 from rivretrieve._internal.source_series import SourceIdentity
 
 KIWIS_NAMESPACE = "KiWIS.ts_id"
-_ASSOCIATION_EVIDENCE = ("catalogue:be_wal:source.station_product.kiwis_tslist",)
-_FIELD_EVIDENCE = ("catalogue:be_wal:source.series.fields",)
+_ASSOCIATION_EVIDENCE = "catalogue:be_wal:source.station_product.kiwis_tslist"
+_FIELD_EVIDENCE = "catalogue:be_wal:source.series.fields"
+_TEMPORAL_EVIDENCE = "catalogue:be_wal:source.series.temporal_semantics"
+_VERTICAL_EVIDENCE = "catalogue:be_wal:source.series.stage_vertical_reference"
 
-_CADENCES_FULL: tuple[tuple[str, str], ...] = (
-    ("complete", "05-{stem}.Complet"),
-    ("hourly_mean", "10-{stem}.1h.Moyen"),
-    ("hourly_min", "11-{stem}.1h.Minimum"),
-    ("hourly_max", "12-{stem}.1h.Maximum"),
-    ("daily_mean", "20-{stem}.Jour.Moyen"),
-    ("daily_min", "21-{stem}.Jour.Minimum"),
-    ("daily_max", "22-{stem}.Jour.Maximum"),
-    ("monthly_mean", "40-{stem}.Mois.Moyen"),
-    ("monthly_min", "41-{stem}.Mois.Minimum"),
-    ("monthly_max", "42-{stem}.Mois.Maximum"),
-    ("yearly_mean", "50-{stem}.An.Moyen"),
-    ("yearly_min", "51-{stem}.An.Minimum"),
-    ("yearly_max", "52-{stem}.An.Maximum"),
+_CADENCES_FULL: tuple[
+    tuple[str, str, Literal["hourly", "daily", "monthly", "yearly"] | None, Literal["mean", "min", "max"] | None],
+    ...,
+] = (
+    ("complete", "05-{stem}.Complet", None, None),
+    ("hourly_mean", "10-{stem}.1h.Moyen", "hourly", "mean"),
+    ("hourly_min", "11-{stem}.1h.Minimum", "hourly", "min"),
+    ("hourly_max", "12-{stem}.1h.Maximum", "hourly", "max"),
+    ("daily_mean", "20-{stem}.Jour.Moyen", "daily", "mean"),
+    ("daily_min", "21-{stem}.Jour.Minimum", "daily", "min"),
+    ("daily_max", "22-{stem}.Jour.Maximum", "daily", "max"),
+    ("monthly_mean", "40-{stem}.Mois.Moyen", "monthly", "mean"),
+    ("monthly_min", "41-{stem}.Mois.Minimum", "monthly", "min"),
+    ("monthly_max", "42-{stem}.Mois.Maximum", "monthly", "max"),
+    ("yearly_mean", "50-{stem}.An.Moyen", "yearly", "mean"),
+    ("yearly_min", "51-{stem}.An.Minimum", "yearly", "min"),
+    ("yearly_max", "52-{stem}.An.Maximum", "yearly", "max"),
 )
 
-_CADENCES_NO_YEARLY: tuple[tuple[str, str], ...] = tuple(
-    item for item in _CADENCES_FULL if not item[0].startswith("yearly_")
-)
+_CADENCES_NO_YEARLY = tuple(item for item in _CADENCES_FULL if item[2] != "yearly")
 
 
 @dataclass(frozen=True, slots=True)
 class ProductSpec:
-    """Native KiWIS mapping for one SPW Hydrométrie hydrological product."""
+    """Native KiWIS mapping and verified physical contract for one SPW Hydrométrie hydrological product."""
 
     product_id: str
     family: Literal["discharge", "discharge_ultrasonic", "stage", "stage_absolute", "water_temperature"]
@@ -58,17 +77,37 @@ class ProductSpec:
     quantity: Literal["discharge", "stage", "temperature"]
     source_unit: str
     normalized_unit: str
+    frequency: Literal["hourly", "daily", "monthly", "yearly"] | None
+    statistic: Literal["mean", "min", "max"] | None
 
     def series_mapping(self, *, published_id: str | None = None) -> SeriesMapping:
-        """Build Step 2 mapping with only source-verified quantity and native unit."""
+        """Build verified Step 3 source mapping across temporal, vertical, and unit dimensions."""
+        is_complete = self.frequency is None
+        vertical_reference = (
+            "gauge_zero" if self.family == "stage" else "above_sea_level" if self.family == "stage_absolute" else None
+        )
+        evidence = (
+            (_ASSOCIATION_EVIDENCE, _TEMPORAL_EVIDENCE, _VERTICAL_EVIDENCE)
+            if self.quantity == "stage"
+            else (_ASSOCIATION_EVIDENCE, _TEMPORAL_EVIDENCE)
+        )
         return SeriesMapping(
             namespace=KIWIS_NAMESPACE,
             published_id=published_id or self.native_id,
             quantity=self.quantity,
             source_unit=self.source_unit,
             normalized_unit=self.normalized_unit,
-            evidence=_ASSOCIATION_EVIDENCE,
-            identity_evidence=_FIELD_EVIDENCE,
+            frequency=self.frequency,
+            statistic=self.statistic,
+            time_zone="+01:00",
+            evidence=evidence,
+            identity_evidence=(_FIELD_EVIDENCE,),
+            temporal_support=None if is_complete else "interval",
+            day_definition="+01:00" if self.frequency == "daily" else None,
+            timestamp_anchor=None if is_complete else "start",
+            vertical_reference=vertical_reference,
+            vertical_datum=None,
+            label_time="00:00" if self.frequency in {"daily", "monthly", "yearly"} else None,
         )
 
 
@@ -83,7 +122,15 @@ def _family_specs() -> tuple[ProductSpec, ...]:
             Literal["discharge", "stage", "temperature"],
             str,
             str,
-            tuple[tuple[str, str], ...],
+            tuple[
+                tuple[
+                    str,
+                    str,
+                    Literal["hourly", "daily", "monthly", "yearly"] | None,
+                    Literal["mean", "min", "max"] | None,
+                ],
+                ...,
+            ],
         ],
         ...,
     ] = (
@@ -121,7 +168,7 @@ def _family_specs() -> tuple[ProductSpec, ...]:
         ),
     )
     for family, prefix, stem, params, quantity, src_unit, norm_unit, cadences in families:
-        for suffix, pattern in cadences:
+        for suffix, pattern, frequency, statistic in cadences:
             specs.append(
                 ProductSpec(
                     product_id=f"{prefix}_{suffix}",
@@ -131,6 +178,8 @@ def _family_specs() -> tuple[ProductSpec, ...]:
                     quantity=quantity,
                     source_unit=src_unit,
                     normalized_unit=norm_unit,
+                    frequency=frequency,
+                    statistic=statistic,
                 )
             )
     return tuple(specs)
@@ -184,7 +233,7 @@ def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
                     namespace=mapping.namespace,
                     published_id=ts_id_str,
                     origin="catalogue",
-                    evidence=_ASSOCIATION_EVIDENCE,
+                    evidence=(_ASSOCIATION_EVIDENCE,),
                 ),
                 variant=ts_id_str,
                 facts=(mapping.physical_facts(),),
