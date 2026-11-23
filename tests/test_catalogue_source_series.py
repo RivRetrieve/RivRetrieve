@@ -84,7 +84,8 @@ def test_scoped_materialization_constructs_only_selected_coordinates(monkeypatch
 
 
 @pytest.mark.parametrize(
-    "provider", ["ar_ina", "at_ehyd", "no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis", "co_ideam"]
+    "provider",
+    ["ar_ina", "at_ehyd", "no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis", "co_ideam", "ie_opw"],
 )
 def test_catalogue_fact_identity_includes_exact_facts_and_evidence(provider):
     from rivretrieve._internal.source_series import stable_id
@@ -256,3 +257,36 @@ def test_materialization_preserves_generated_and_explicit_series_identity(series
         ).encode()
     ).hexdigest()
     assert inventories[0].snapshot_id == expected_snapshot
+
+
+def test_ie_opw_packaged_series_meaning_preserves_utc_daily_instantaneous_and_mixed_od_stage():
+    from rivretrieve._internal.source_series import ClippingAxis
+
+    artifact = load_packaged_catalogue_artifact(BASE / "ie_opw/catalogue")
+    series, _ = catalogue_series(artifact, scope=SeriesScope(station_ids=("01041",)))
+    by_product = {item.product_id: item.facts[0] for item in series}
+    assert len(by_product) == 12
+
+    assert by_product["discharge_daily_mean"].frequency.value == "daily"
+    assert by_product["discharge_daily_mean"].statistic.value == "mean"
+    assert by_product["discharge_daily_mean"].temporal_support.value == "calendar_day"
+    assert by_product["discharge_daily_mean"].day_definition.value == "+00:00"
+    assert by_product["discharge_daily_mean"].timestamp_anchor.value == "start"
+    assert by_product["discharge_daily_mean"].time_zone.value == "+00:00"
+    assert by_product["discharge_daily_mean"].clipping_axis is ClippingAxis.CALENDAR_DATE
+    assert by_product["discharge_daily_mean"].label_time == "00:00"
+    assert by_product["discharge_daily_mean"].vertical_reference.value is None
+
+    assert by_product["stage_daily_mean"].vertical_reference.value == "above_sea_level"
+    assert by_product["stage_daily_mean"].vertical_datum.value is None
+
+    assert by_product["stage_instantaneous"].frequency.value is None
+    assert by_product["stage_instantaneous"].statistic.value == "instantaneous"
+    assert by_product["stage_instantaneous"].temporal_support.value == "instantaneous"
+    assert by_product["stage_instantaneous"].day_definition.value is None
+    assert by_product["stage_instantaneous"].timestamp_anchor.value == "measurement_time"
+    assert by_product["stage_instantaneous"].time_zone.value == "+00:00"
+    assert by_product["stage_instantaneous"].vertical_reference.value == "above_sea_level"
+    assert by_product["stage_instantaneous"].vertical_datum.value is None
+    assert by_product["stage_instantaneous"].clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
+    assert by_product["stage_instantaneous"].label_time is None
