@@ -50,6 +50,7 @@ SOURCE_FIELDS = {
     "dk_vanda": ("stationId", {"catchmentAreaKm2": "km2"}),
     "fr_hubeau": ("code_station", {"superficie_topo": None, "superficie_reelle": None}),
     "fr_hydroportail": ("bookmarkCode", {}),
+    "ie_opw": ("station_no", {"CATCHMENT_SIZE": None}),
     "lt_lhmt": ("code", {}),
     "no_nve": (
         "stationId",
@@ -156,6 +157,8 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
                 if provider == "co_ideam"
                 else "maintenance/catalogue/dk_vanda/official"
                 if provider == "dk_vanda"
+                else "maintenance/catalogue/ie_opw/official"
+                if provider == "ie_opw"
                 else f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"
             ),
         )
@@ -176,6 +179,8 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         if provider == "co_ideam"
         else retained_evidence_root / "maintenance/catalogue/dk_vanda/official/native.parquet"
         if provider == "dk_vanda"
+        else retained_evidence_root / "maintenance/catalogue/ie_opw/official/native.parquet"
+        if provider == "ie_opw"
         else retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     )
     native = pl.read_parquet(native_path)
@@ -276,7 +281,7 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         )
         assert_frame_equal(restored, native.select(identity, field))
         assert set(rows["source_dtype"]) == {str(native.schema[field])}
-        if provider == "ba_fhmzbih":
+        if provider in {"ba_fhmzbih", "ie_opw"}:
             # These retained native area columns contain only complete quantities
             # or blanks/nulls. This check does not certify missing source originals.
             assert rows["source_unit"].to_list() == [
