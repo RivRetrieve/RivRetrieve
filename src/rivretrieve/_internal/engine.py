@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from math import isfinite
@@ -27,6 +27,7 @@ from rivretrieve._internal.source_series import (
     InventorySnapshot,
     ParsedSeries,
     RetrievalOutcome,
+    ScopeState,
     SeriesScope,
     SourceSeries,
 )
@@ -514,6 +515,37 @@ class InterpretedPayload:
     def from_payload(cls, payload: Payload, parsed: ParsedSeries) -> Self:
         """Bind ``parsed`` to the effective interpretation context of ``payload``."""
         return cls(context=InterpretationContext.from_payload(payload), parsed=parsed)
+
+
+def narrow_payload_for_pair(payload: Payload, station: str, product: ProductId) -> Payload:
+    """Return a single station-product view of ``payload`` matching the driver's parse boundary."""
+    pair_known = tuple(
+        item for item in payload.known_series if item.station_id == station and item.product_id == str(product)
+    )
+    pair_scope = payload.scope
+    if pair_scope is not None:
+        updates: dict[str, object] = {
+            "station_ids": (station,),
+            "product_ids": (str(product),),
+        }
+        if pair_scope.series_ids:
+            known_identities = {item.series_id: item for item in payload.known_series}
+            local_ids = tuple(
+                key
+                for key in pair_scope.series_ids
+                if key not in known_identities
+                or (known_identities[key].station_id == station and known_identities[key].product_id == str(product))
+            )
+            updates["series_ids"] = local_ids
+            if not local_ids and not pair_scope.variants:
+                updates["state"] = ScopeState.EMPTY
+        pair_scope = pair_scope.model_copy(update=updates)
+    return replace(
+        payload,
+        station_products=((station, product),),
+        scope=pair_scope,
+        known_series=pair_known,
+    )
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,7 +8,7 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.pe_senamhi.config import config, window_declarations
 from rivretrieve._internal.providers.pe_senamhi.fetch import SenamhiSourceCoordinates, fetch
-from rivretrieve._internal.providers.pe_senamhi.parse import parse
+from rivretrieve._internal.providers.pe_senamhi.parse import parse, parse_group
 from rivretrieve._internal.providers.registration import LiveStages, ProviderDeclaration
 from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import Transport
@@ -31,7 +31,15 @@ def _fetch(
         if not isinstance(route, SenamhiSourceCoordinates):
             raise FatalContractError("SENAMHI products require SENAMHI source coordinates")
         coordinates[product] = route
-    return fetch(stations, coordinates, rendered_windows, transport, scope=scope, known_series=known_series)
+    return fetch(
+        stations,
+        coordinates,
+        rendered_windows,
+        transport,
+        scope=scope,
+        known_series=known_series,
+        config=config,
+    )
 
 
 class _Stages:
@@ -48,6 +56,7 @@ class _Stages:
     )
     fetch = staticmethod(_fetch)
     parse = staticmethod(parse)
+    parse_group = staticmethod(parse_group)
 
 
 declaration = ProviderDeclaration(
