@@ -8,7 +8,7 @@ Start with Kratzert’s [audit of 19 providers](https://github.com/RivRetrieve/R
 
 Use the contracts and examples in Steps 4 and 5 of the [provider port guide](../../docs/maintenance/provider-ports.md).
 
-- When acquisition already interprets a page or prerequisite response, pass that interpretation to parsing when the product, scope and known-series context match. USGS and Hub’Eau demonstrate pagination, and Argentina demonstrates a prerequisite lookup. [Acquisition handoff in #949](https://github.com/RivRetrieve/RivRetrieve/pull/970)
+- When acquisition already interprets a page or prerequisite response, let the driver reuse the result when the full `InterpretationContext` matches the one captured during acquisition. USGS and Hub’Eau demonstrate pagination, and Argentina demonstrates a prerequisite lookup. [Acquisition handoff in #949](https://github.com/RivRetrieve/RivRetrieve/pull/970)
 - When several selected products consume one response, decode it once and retain each product’s result or failure. Lithuania, Peru and Austria show how this works both for responses inspected during acquisition and for those first decoded during parsing. [Shared-product decoding in #950](https://github.com/RivRetrieve/RivRetrieve/pull/990)
 
 Remove superseded parsing or reuse mechanisms from migrated paths. Record why an already efficient live path needs no change. Compiled-store providers benefit from the [shared-table work](https://github.com/RivRetrieve/RivRetrieve/issues/953), and catalogue-only providers have no observations to retrieve. Changes to HTTP request grouping and malformed-pagination behavior belong to separate follow-up work.
@@ -23,4 +23,4 @@ Demonstrate that the repeated work identified on a migrated path is gone. For re
 
 ## Final Program review
 
-Once all #938 work is complete and verified, open one PR from `program/938-efficient-shared-retrieval` into `main`. Adversarially review the combined changes, address findings, assign the PR to `kratzert`, and leave it open for his final review.
+Follow the [Program’s final-review decision](https://github.com/RivRetrieve/RivRetrieve/issues/938#issuecomment-7101159123). Once all #938 work is complete and verified, open one PR from `program/938-efficient-shared-retrieval` into `main`. Adversarially review the combined changes, address findings, assign the PR to `kratzert`, and leave it open for his final review.
