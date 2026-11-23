@@ -1728,3 +1728,141 @@ def test_no_nve_single_decode_and_single_sha256(monkeypatch: pytest.MonkeyPatch)
         assert actual.inventories == expected.inventories
         assert actual.outcomes == expected.outcomes
         assert actual.issues == expected.issues
+
+
+@pytest.mark.parametrize("cache_mode", ["bypass", "refresh"])
+def test_ch_foen_overflow_subdivision_with_child_transport_failure(tmp_path: Path, cache_mode: str) -> None:
+    import re
+    from datetime import timedelta
+    from functools import partial
+
+    from rivretrieve._internal.providers.ch_foen import official_fetch as foen_fetch_mod
+    from rivretrieve._internal.providers.ch_foen import official_parse as foen_parse_mod
+    from rivretrieve._internal.providers.ch_foen.official_config import config, window_declarations
+    from rivretrieve._internal.providers.ch_foen.official_series import source_series
+    from rivretrieve._internal.source_series import RestrictionKind
+    from rivretrieve._internal.store import StoreRoot
+
+    archive_series = source_series(
+        "2018",
+        "data_10min_mean",
+        "Q",
+        "Variant",
+        units=("m3/s",),
+        evidence="synthetic:unit",
+        temporal_evidence="synthetic:time",
+        origin="catalogue",
+    )
+    req = ObservationRequest(
+        provider_id=ProviderId("ch_foen"),
+        stations=("2018",),
+        products=(ProductId("discharge_10min_mean"),),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2025, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2025, 1, 1, 0, 0, 3)),
+        ),
+        known_series=(archive_series,),
+        scope=SeriesScope(restriction=RestrictionKind.EXPLICIT, series_ids=(archive_series.series_id,)),
+    )
+
+    class _OverflowChild503Transport:
+        def __init__(self, *, fail_all_children: bool = False) -> None:
+            self.fail_all_children = fail_all_children
+
+        def send(self, request):
+            body = request.body.replace('\\"', '"')
+            start, end = [
+                datetime.fromisoformat(item).replace(tzinfo=None)
+                for item in re.findall(r'_(?:gte|lt): "([^"]+)"', body)
+            ]
+            if (end - start) > timedelta(days=3):
+                doc = {
+                    "data": None,
+                    "errors": [
+                        {
+                            "errorType": "ValidationError",
+                            "message": (
+                                "Query returned more than 10000 rows. Please narrow your query using filters or "
+                                "specify a limit."
+                            ),
+                            "path": ["water", "observations", "data_10min_mean"],
+                        }
+                    ],
+                }
+                return TransportResponse(
+                    json.dumps(doc).encode(), 200, datetime(2026, 1, 1, tzinfo=UTC), "application/json", request.url, {}
+                )
+            if self.fail_all_children or start >= datetime(2025, 1, 1, 0, 0, 1):
+                return TransportResponse(
+                    b"service-unavailable", 503, datetime(2026, 1, 1, tzinfo=UTC), "text/plain", request.url, {}
+                )
+            doc = {
+                "data": {
+                    "water": {
+                        "observations": {
+                            "data_10min_mean": [
+                                {
+                                    "station": {"no": "2018"},
+                                    "parameterName": "Q",
+                                    "tsName": "Variant",
+                                    "unitSymbol": "m3/s",
+                                    "timestamp": "2025-01-01T00:00:00Z",
+                                    "value": 10.0,
+                                    "releaseState": "3",
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+            return TransportResponse(
+                json.dumps(doc).encode(), 200, datetime(2026, 1, 1, tzinfo=UTC), "application/json", request.url, {}
+            )
+
+    class _Stages:
+        pass
+
+    _Stages.config = config()
+    _Stages.window_declarations = window_declarations()
+    _Stages.fetch = staticmethod(partial(foen_fetch_mod.fetch, timestamp_precision=timedelta(seconds=1)))
+    _Stages.parse = staticmethod(foen_parse_mod.parse)
+
+    store = StoreRoot(tmp_path / f"store_{cache_mode}") if cache_mode == "refresh" else None
+    result = driver_module.drive(
+        req,
+        _Stages(),
+        provenance=_provenance(req),
+        cache=cache_mode,
+        store=store,
+        transport=_OverflowChild503Transport(),
+    )
+    assert result.canonical_rows["value"].to_list() == [10.0]
+    assert [o.status for o in result.outcomes] == [OutcomeStatus.FAILED, OutcomeStatus.SUCCESS]
+    assert any(
+        issue.code == "source.request_failed" and issue.details.get("status_code") == 503 for issue in result.issues
+    )
+    calls = result.provenance.calls_made
+    failed_idx = next(i for i, c in enumerate(calls) if c.get("status_code") == 503)
+    overflow_idx = next(
+        i for i, c in enumerate(calls) if c.get("status_code") == 200 and not c.get("prerequisite_acquisition_ids")
+    )
+    assert overflow_idx < failed_idx
+    overflow_id = calls[overflow_idx]["call_id"]
+    assert overflow_id in calls[failed_idx]["prerequisite_acquisition_ids"]
+
+    all_failed_store = StoreRoot(tmp_path / f"store_all_failed_{cache_mode}") if cache_mode == "refresh" else None
+    all_failed = driver_module.drive(
+        req,
+        _Stages(),
+        provenance=_provenance(req),
+        cache=cache_mode,
+        store=all_failed_store,
+        transport=_OverflowChild503Transport(fail_all_children=True),
+    )
+    assert all_failed.canonical_rows.height == 0
+    failed_outcomes = [o for o in all_failed.outcomes if o.status is OutcomeStatus.FAILED]
+    assert len(failed_outcomes) == 2
+    af_calls = all_failed.provenance.calls_made
+    assert len([c for c in af_calls if c.get("status_code") == 503]) == 2
+    assert af_calls[0]["status_code"] == 200
+    assert all(af_calls[0]["call_id"] in c["prerequisite_acquisition_ids"] for c in af_calls[1:])

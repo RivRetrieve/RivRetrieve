@@ -1640,3 +1640,197 @@ def test_review_regressions_unhashable_pe_column_and_explicit_mixed_series_ids_o
     assert decode_count == transport.calls  # 1 decode per response (never 2x on mixed EXPLICIT series_ids)
     assert fallback_calls == 0
     assert sorted(res.canonical_rows["value"].to_list()) == [1.25, 2.5]
+
+
+@pytest.mark.parametrize("cache_mode", ["bypass", "refresh"])
+def test_pe_senamhi_shared_failed_responses_do_not_duplicate_issues(tmp_path: Path, cache_mode: str) -> None:
+    import json
+
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.providers.pe_senamhi.declaration import declaration
+    from rivretrieve._internal.store import StoreRoot
+    from rivretrieve._internal.transport import TransportResponse
+    from tests.test_internal_driver import _provenance
+
+    stages = declaration.observations.stages
+    station = "214901"
+    p1 = ProductId("monthly_archive_nivel_del_rio_06h")
+    p2 = ProductId("monthly_archive_nivel_del_rio_10h")
+    body = json.dumps({"status": False, "message": "Sin datos"}).encode()
+
+    class _Trans:
+        def send(self, request):
+            return TransportResponse(
+                content=body,
+                status_code=200,
+                retrieved_at=datetime(2026, 9, 27, tzinfo=UTC),
+                content_type="application/json",
+                url=request.url,
+                request_parameters=request.params,
+            )
+
+    req = ObservationRequest(
+        provider_id=ProviderId("pe_senamhi"),
+        stations=(station,),
+        products=(p1, p2),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2024, 1, 5)),
+            WindowEndpoint.from_datetime(datetime(2024, 3, 15, 23, 59, 59)),
+        ),
+    )
+    store = StoreRoot(tmp_path / f"store_{cache_mode}") if cache_mode == "refresh" else None
+    res = drive(req, stages, provenance=_provenance(req), cache=cache_mode, store=store, transport=_Trans())
+    assert len(res.outcomes) == 6
+    assert len(res.issues) == 6
+    outcome_ids = [issue.details["outcome_id"] for issue in res.issues]
+    assert len(set(outcome_ids)) == 6
+
+
+def test_shared_acquisition_calls_issues_and_reconciliation_recorded_once_per_group(tmp_path: Path) -> None:
+    from rivretrieve._internal.driver import drive
+    from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget
+    from rivretrieve._internal.store import StoreRoot
+    from rivretrieve._internal.transport import HttpMethod, TransportFailure, TransportFailureReason, TransportRequest
+    from tests.test_internal_driver import _provenance
+
+    products, cfg, decls = _shared_config()
+    p1, p2 = products
+    station = "st-1"
+    s1 = _series_def(station, p1)
+    s2 = _series_def(station, p2)
+
+    class _ProviderWithGroupCallsAndIssues:
+        config = cfg
+        window_declarations = decls
+        shared_acquisition_products = (products,)
+
+        def fetch(self, stations, fetched_products, windows, fetch_window, config, transport, *, scope, known_series):
+            p1_payload = Payload(
+                cfg.products[p1].coordinates,
+                ((station, p1),),
+                fetch_window,
+                b"{}",
+                _origin(),
+                (),
+                scope,
+                known_series,
+                acquisition_id="p1-payload",
+            )
+            aux_origin = SourceCallOrigin(
+                "https://example.invalid/meta",
+                {},
+                200,
+                datetime(2026, 1, 1, tzinfo=UTC),
+                "application/json",
+                UnknownOriginFact(),
+                UnknownOriginFact(),
+                acquisition_id="aux-call-1",
+            )
+            p2_outcome = RetrievalOutcome(
+                outcome_id="p2-unresolved-out",
+                series_id=s2.series_id,
+                station_id=station,
+                product_id=str(p2),
+                window=SeriesWindow(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2)),
+                status=OutcomeStatus.UNRESOLVED,
+                facts_ids=(s2.facts[0].facts_id,),
+                reason="p2 failed during shared fetch",
+                retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+                calls=("aux-call-1",),
+            )
+            issues = (
+                Issue(
+                    severity="warning",
+                    code="source.inventory_unresolved",
+                    message="p1 unresolved issue",
+                    details={"station_id": station, "product_id": str(p1)},
+                    provider_id=ProviderId("throwaway"),
+                ),
+                Issue(
+                    severity="error",
+                    code="source.request_failed",
+                    message="p2 request issue",
+                    details={"outcome_id": p2_outcome.outcome_id},
+                    provider_id=ProviderId("throwaway"),
+                ),
+                Issue(
+                    severity="warning",
+                    code="source.inventory_unresolved",
+                    message="group unresolved issue",
+                    details={"station_id": station},
+                    provider_id=ProviderId("throwaway"),
+                ),
+            )
+            snapshot = InventorySnapshot(
+                snapshot_id="shared-snap-1",
+                scope=SeriesScope(provider_ids=("throwaway",), station_ids=(station,), product_ids=(str(p1), str(p2))),
+                members=(s1.series_id, s2.series_id),
+                completeness=InventoryCompleteness.COMPLETE,
+                member_facts=((s1.series_id, (s1.facts[0].facts_id,)), (s2.series_id, (s2.facts[0].facts_id,))),
+                window=SeriesWindow(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2)),
+                acquired_at=datetime(2026, 1, 1, tzinfo=UTC),
+                access="shared-test",
+                origin="response",
+                evidence=("test",),
+            )
+            req_p2 = TransportRequest(HttpMethod.GET, "https://example.invalid/p2")
+            failed_p2 = FailedSourceRequest(
+                "p2-fail-ev",
+                SourceRequestTarget(station, str(p2)),
+                SeriesWindow(start=datetime(2024, 1, 1), end=datetime(2024, 1, 2)),
+                req_p2,
+                TransportFailure(req_p2, TransportFailureReason.HTTP_STATUS, 1, status_code=503),
+                prerequisite_acquisition_ids=("aux-call-1",),
+            )
+            return SourceAcquisition(
+                value=(p1_payload,),
+                issues=issues,
+                series=(s1, s2),
+                inventories=(snapshot,),
+                outcomes=(p2_outcome,),
+                calls=(aux_origin,),
+                failed_requests=(failed_p2,),
+            )
+
+        def parse(self, payload, provider_config):
+            return _parsed_for_pair(
+                payload,
+                values=[(datetime(2024, 1, 1), 3.0), (datetime(2024, 1, 2), 4.0)],
+                series_override=s1,
+            )
+
+    req = ObservationRequest(
+        provider_id=ProviderId("throwaway"),
+        stations=(station,),
+        products=products,
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2024, 1, 2)),
+        ),
+        known_series=(s1, s2),
+    )
+    res = drive(
+        req,
+        _ProviderWithGroupCallsAndIssues(),
+        provenance=_provenance(req),
+        cache="refresh",
+        store=StoreRoot(tmp_path / "store"),
+    )
+
+    aux_calls = [c for c in res.provenance.calls_made if c.get("call_id") == "aux-call-1"]
+    assert len(aux_calls) == 1
+    assert set(aux_calls[0]["station_products"]) == {(station, str(p1)), (station, str(p2))}
+
+    p1_issues = [i for i in res.issues if i.message == "p1 unresolved issue"]
+    p2_issues = [i for i in res.issues if i.message == "p2 request issue"]
+    grp_issues = [i for i in res.issues if i.message == "group unresolved issue"]
+    assert len(p1_issues) == 1
+    assert len(p2_issues) == 1
+    assert len(grp_issues) == 1
+    assert p1_issues[0].details["inventory_scope"]["product_ids"] == [str(p1)]
+    assert p2_issues[0].details["inventory_scope"]["product_ids"] == [str(p2)]
+    assert set(grp_issues[0].details["inventory_scope"]["product_ids"]) == {str(p1), str(p2)}
+
+    p1_snaps = [s for s in res.inventories if s.scope.product_ids == (str(p1),)]
+    assert len(p1_snaps) == 1
+    assert p1_snaps[0].completeness is InventoryCompleteness.COMPLETE

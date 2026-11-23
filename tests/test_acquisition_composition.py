@@ -1035,3 +1035,61 @@ def test_late_page_refresh_failure_retains_held_data_and_independent_fact_outcom
     assert len(held_a) == 1 and held_a[0].retrieved_at == t_held
     assert len(failed_a) == 1
     assert len(fresh_b) == 1 and fresh_b[0].retrieved_at == t_fresh
+
+
+def test_failed_acquisition_chains_and_partial_missing_prerequisites():
+    from rivretrieve._internal.driver import _calls_with_failed_acquisitions
+    from rivretrieve._internal.issues import FatalContractError
+
+    parent = {"call_id": "overflow-parent", "acquisition_id": "overflow-parent"}
+    failed_child = {
+        "call_id": "failed-child",
+        "acquisition_id": "failed-child",
+        "prerequisite_acquisition_ids": ("overflow-parent",),
+    }
+    failed_grandchild = {
+        "call_id": "failed-grandchild",
+        "acquisition_id": "failed-grandchild",
+        "prerequisite_acquisition_ids": ("failed-child",),
+    }
+    assert _calls_with_failed_acquisitions((parent,), (failed_grandchild, failed_child)) == (
+        parent,
+        failed_child,
+        failed_grandchild,
+    )
+
+    partial = {
+        "call_id": "partial-missing",
+        "acquisition_id": "partial-missing",
+        "prerequisite_acquisition_ids": ("overflow-parent", "missing"),
+    }
+    with pytest.raises(FatalContractError, match="Failed acquisition lacks its prerequisite call evidence"):
+        _calls_with_failed_acquisitions((parent,), (partial,))
+
+
+def test_order_support_calls_handles_leading_deferred_and_missing_prerequisites():
+    from rivretrieve._internal.driver import _order_support_calls
+    from rivretrieve._internal.issues import FatalContractError
+
+    leading = {"call_id": "overflow-parent", "acquisition_id": "overflow-parent"}
+    payload = {
+        "call_id": "payload-1",
+        "acquisition_id": "payload-1",
+        "prerequisite_acquisition_ids": ("overflow-parent",),
+    }
+    post_payload = {
+        "call_id": "aux-after",
+        "acquisition_id": "aux-after",
+        "prerequisite_acquisition_ids": ("payload-1",),
+    }
+    chained = {"call_id": "aux-chain", "acquisition_id": "aux-chain", "prerequisite_acquisition_ids": ("aux-after",)}
+    assert _order_support_calls((chained, leading, post_payload), (payload,)) == (
+        leading,
+        payload,
+        post_payload,
+        chained,
+    )
+
+    dangling = {"call_id": "aux-missing", "acquisition_id": "aux-missing", "prerequisite_acquisition_ids": ("missing",)}
+    with pytest.raises(FatalContractError, match="Auxiliary acquisition lacks its prerequisite call evidence"):
+        _order_support_calls((dangling,), (payload,))
