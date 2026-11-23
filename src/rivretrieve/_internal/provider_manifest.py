@@ -13,6 +13,7 @@ BUILTIN_PROVIDER_IDS = (
     "fi_syke",
     "fr_hubeau",
     "fr_hydroportail",
+    "ie_opw",
     "lt_lhmt",
     "no_nve",
     "pe_senamhi",

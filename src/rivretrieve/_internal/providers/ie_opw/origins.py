@@ -51,7 +51,7 @@ STATION_METADATA_NOTICE = (
     "is blank across river stations and `station_gauge_datum` is staff-gauge datum height "
     "above Ordnance Datum). Contains Irish Public Sector Information licensed under a "
     "Creative Commons Attribution 4.0 International (CC BY 4.0) licence "
-    "(source http://waterlevel.ie - provided by the Office of Public Works.)."
+    "(source http://waterlevel.ie/hydro-data/ - provided by the Office of Public Works.)."
 )
 
 STATION_METADATA_FIELDS = (
@@ -167,14 +167,19 @@ def build_acquisition_provenance(
     )
 
 
+NATIVE_TABLE_ACQUISITION_IDS = ("opw-hydro-stations-json", "opw-geojson-root")
 CATALOGUE_SUPPORTING_INPUTS: dict[str, tuple[str, ...]] = {}
 CATALOGUE_BUILD_DECLARATIONS = (
     ("maintenance/catalogue/ie_opw/official/selection.json", None),
     ("src/rivretrieve/_internal/providers/ie_opw/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/ie_opw/origins.py", "NATIVE_TABLE_ACQUISITION_IDS"),
+    ("src/rivretrieve/_internal/providers/ie_opw/origins.py", "CATALOGUE_SUPPORTING_INPUTS"),
     ("src/rivretrieve/_internal/providers/ie_opw/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/ie_opw/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/ie_opw/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/ie_opw/series.py", "PRODUCT_SPECS"),
+    ("src/rivretrieve/_internal/providers/ie_opw/series.py", "catalogue_product_rows"),
+    ("src/rivretrieve/_internal/providers/ie_opw/series.py", "describe_associations"),
     ("src/rivretrieve/_internal/providers/ie_opw/generate_catalogue.py", "read_catalogue_sources"),
     ("src/rivretrieve/_internal/providers/ie_opw/station_metadata.py", "project_station_metadata"),
-    ("src/rivretrieve/_internal/providers/ie_opw/series.py", "describe_associations"),
 )

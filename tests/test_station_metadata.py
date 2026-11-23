@@ -365,6 +365,8 @@ def test_metadata_declarations_cover_providers_without_unreviewed_names():
             if provider == "co_ideam"
             else "maintenance/catalogue/dk_vanda/official/selection.json"
             if provider == "dk_vanda"
+            else "maintenance/catalogue/ie_opw/official/selection.json"
+            if provider == "ie_opw"
             else "maintenance/catalogue/station_metadata/review.json"
         )
         assert (review, None) in origins.CATALOGUE_BUILD_DECLARATIONS

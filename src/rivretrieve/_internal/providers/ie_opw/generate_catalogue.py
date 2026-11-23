@@ -319,12 +319,16 @@ def _check_complete_zip_bytes(
         text = archive.read("tsvalues.csv").decode("utf-8-sig")
 
     headers: dict[str, str] = {}
+    has_columns_header = False
     non_null = 0
     for line in io.StringIO(text):
         stripped = line.rstrip("\r\n")
         if not stripped:
             continue
         if stripped.startswith("#"):
+            if stripped == "#Timestamp;Value;Quality Code":
+                has_columns_header = True
+                continue
             key, sep, val = stripped[1:].partition(";")
             if sep:
                 headers[key] = val
@@ -332,9 +336,13 @@ def _check_complete_zip_bytes(
         parts = stripped.split(";")
         if len(parts) < 2:
             raise FatalContractError(f"Malformed OPW CSV data line on {station_no}/{parameter}: {stripped!r}")
+        if not parts[0].endswith("Z"):
+            raise FatalContractError(f"Expected UTC 'Z' timestamp in OPW ZIP on {station_no}/{parameter}: {parts[0]!r}")
         if parts[1].strip():
             non_null += 1
 
+    if not has_columns_header:
+        raise FatalContractError(f"OPW ZIP missing '#Timestamp;Value;Quality Code' header on {station_no}/{parameter}")
     if headers.get("station_no") != station_no:
         raise FatalContractError(f"OPW ZIP station_no {headers.get('station_no')!r} disagrees with {station_no!r}")
     if headers.get("stationparameter_name") != parameter:
@@ -343,7 +351,7 @@ def _check_complete_zip_bytes(
         raise FatalContractError(f"OPW ZIP ts_shortname {headers.get('ts_shortname')!r} != {spec.ts_shortname!r}")
     if headers.get("ts_unitsymbol") != spec.source_unit:
         raise FatalContractError(f"OPW ZIP unit {headers.get('ts_unitsymbol')!r} != {spec.source_unit!r}")
-    if headers.get("tz") != "UTC0":
+    if headers.get("tz", "UTC0") != "UTC0":
         raise FatalContractError(f"OPW ZIP tz {headers.get('tz')!r} != 'UTC0'")
 
     if non_null > 0:

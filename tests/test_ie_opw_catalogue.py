@@ -256,7 +256,8 @@ def test_complete_zip_parser_distinguishes_empty_and_populated_series() -> None:
     with zipfile.ZipFile(empty_buf, "w") as zf:
         zf.writestr(
             "tsvalues.csv",
-            "#station_no;14124\n#stationparameter_name;Q\n#ts_shortname;WEB.Cmd.Runoff\n#ts_unitsymbol;cumec\n#tz;UTC0\n#rows;0\n",
+            "#station_no;14124\n#stationparameter_name;Q\n#ts_shortname;WEB.Cmd.Runoff\n"
+            "#ts_unitsymbol;cumec\n#rows;0\n#Timestamp;Value;Quality Code\n",
         )
     assert _check_complete_zip_bytes(empty_buf.getvalue(), station_no="14124", parameter="Q")[0] == "unavailable"
 
@@ -264,7 +265,8 @@ def test_complete_zip_parser_distinguishes_empty_and_populated_series() -> None:
     with zipfile.ZipFile(pop_buf, "w") as zf:
         zf.writestr(
             "tsvalues.csv",
-            "#station_no;14124\n#stationparameter_name;TWater\n#ts_shortname;WEB.Cmd.P-Water-Temp\n#ts_unitsymbol;°C\n#tz;UTC0\n"
+            "#station_no;14124\n#stationparameter_name;TWater\n#ts_shortname;WEB.Cmd.P-Water-Temp\n"
+            "#ts_unitsymbol;°C\n#Timestamp;Value;Quality Code\n"
             "2025-10-06T00:00:00.000Z;;-1\n2025-10-06T01:00:00.000Z;11.6;254\n",
         )
     assert _check_complete_zip_bytes(pop_buf.getvalue(), station_no="14124", parameter="TWater")[0] == "available"
