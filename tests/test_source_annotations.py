@@ -1911,3 +1911,150 @@ def test_merge_single_station_ordered_data_unsorted_annotations_and_contract_gua
     )
     with pytest.raises(ObservationDataSchemaError, match="unknown source series"):
         _merge_provider_results((zero_obs,), ())
+
+
+def test_filter_mask_anti_join_sort_validation_and_projection_preserve_duplicate_occurrences(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rivretrieve._internal.engine import RowsSchema
+    from rivretrieve._internal.source_annotations import (
+        anti_join_native_with_annotations,
+        filter_native_with_annotations_by_mask,
+        sort_native_by_station_with_annotations,
+        validate_bundle_for_result,
+    )
+
+    s1 = _series_def("provider_a", "s1", "discharge_daily_mean")
+    s2 = _series_def("provider_a", "s2", "stage_daily_mean")
+    schema = AnnotationSchema(
+        schema_id="provider_a.obs",
+        provider_id="provider_a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="tag", dtype="String", description="Observation tag."),),
+    )
+    ann_schema = {
+        "series_id": pl.String,
+        "facts_id": pl.String,
+        "station_id": pl.String,
+        "product_id": pl.String,
+        "time": pl.Datetime("us"),
+        "time_zone": pl.String,
+        "measured": pl.Boolean,
+        **schema.polars_schema(),
+    }
+
+    ts = datetime(2026, 1, 1)
+    ts2 = datetime(2026, 1, 2)
+    rows = pl.DataFrame(
+        {
+            "station_id": ["s2", "s1", "s1", "s1"],
+            "product_id": ["stage_daily_mean", "discharge_daily_mean", "discharge_daily_mean", "discharge_daily_mean"],
+            "time": [ts, ts, ts, ts2],
+            "value": [9.0, 1.0, 2.0, 3.0],
+            "time_zone": ["+00:00"] * 4,
+            "series_id": [s2.series_id, s1.series_id, s1.series_id, s1.series_id],
+            "facts_id": [s2.facts[0].facts_id, s1.facts[0].facts_id, s1.facts[0].facts_id, s1.facts[0].facts_id],
+            "source_unit": ["m", "m3/s", "m3/s", "m3/s"],
+        },
+        schema=RowsSchema.polars_schema,
+    )
+    # Only the 2nd occurrence at `ts` for s1 (idx=2) carries a flag, plus unmeasured slot at ts2
+    table = ObservationAnnotationTable.from_rows(
+        schema=schema,
+        rows=pl.DataFrame(
+            {
+                "series_id": [s1.series_id, s2.series_id, s1.series_id],
+                "facts_id": [s1.facts[0].facts_id, s2.facts[0].facts_id, s1.facts[0].facts_id],
+                "station_id": ["s1", "s2", "s1"],
+                "product_id": ["discharge_daily_mean", "stage_daily_mean", "discharge_daily_mean"],
+                "time": [ts, ts, ts2],
+                "time_zone": ["+00:00", "+00:00", "+00:00"],
+                "measured": [True, True, False],
+                "tag": ["second-dup", "s2-flag", "unmeasured-ts2"],
+            },
+            schema=ann_schema,
+        ),
+        measurement_indices=(2, 0, None),
+    )
+    bundle = AnnotationBundle(observation_tables={"provider_a.obs": table})
+
+    # Validate error contracts
+    with pytest.raises(FatalContractError, match="disagrees between measured and measurement index"):
+        ObservationAnnotationTable.from_rows(schema=schema, rows=table.rows, measurement_indices=(None, 0, None))
+    with pytest.raises(FatalContractError, match="cannot be negative"):
+        ObservationAnnotationTable.from_rows(schema=schema, rows=table.rows, measurement_indices=(-1, 0, None))
+    with pytest.raises(FatalContractError, match="Duplicate annotation row"):
+        ObservationAnnotationTable.from_rows(
+            schema=schema,
+            rows=table.rows.with_columns(pl.lit(True).alias("measured")),
+            measurement_indices=(0, 0, 1),
+        )
+    with pytest.raises(FatalContractError, match="missing observation row 99"):
+        validate_bundle_for_result(
+            AnnotationBundle(
+                observation_tables={
+                    "provider_a.obs": ObservationAnnotationTable.from_rows(
+                        schema=schema, rows=table.rows.head(1), measurement_indices=(99,)
+                    )
+                }
+            ),
+            rows,
+            (s1, s2),
+        )
+    with pytest.raises(FatalContractError, match="disagrees with observation row coordinates"):
+        validate_bundle_for_result(bundle, rows.with_columns(pl.col("time").dt.replace_time_zone("UTC")), (s1, s2))
+
+    # Spy on to_dicts to ensure anti_join & mask filter avoid Python dicts
+    monkeypatch.setattr(
+        pl.DataFrame, "to_dicts", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("to_dicts called"))
+    )
+
+    # Sort stably by station_id: s1 rows move to indices 0,1,2 and s2 moves to 3; second-dup must link to index 1!
+    sorted_rows, sorted_bundle = sort_native_by_station_with_annotations(rows, bundle)
+    assert sorted_rows["value"].to_list() == [1.0, 2.0, 3.0, 9.0]
+    sorted_tbl = sorted_bundle.observation_tables["provider_a.obs"]
+    assert sorted_tbl.rows["tag"].to_list() == ["second-dup", "unmeasured-ts2", "s2-flag"]
+    assert sorted_tbl.measurement_indices == (1, None, 3)
+    validate_bundle_for_result(sorted_bundle, sorted_rows, (s1, s2))
+
+    # Mask filter dropping first row of s1 (index 0): second-dup shifts from 1 -> 0
+    keep_mask = pl.Series([False, True, True, True], dtype=pl.Boolean)
+    masked_rows, masked_bundle = filter_native_with_annotations_by_mask(sorted_rows, sorted_bundle, keep_mask)
+    assert masked_rows["value"].to_list() == [2.0, 3.0, 9.0]
+    masked_tbl = masked_bundle.observation_tables["provider_a.obs"]
+    assert masked_tbl.measurement_indices == (0, None, 2)
+    validate_bundle_for_result(masked_bundle, masked_rows, (s1, s2))
+
+    # Anti-join excluding ts2 drops unmeasured-ts2 and row at ts2, preserving second-dup and s2-flag
+    excl = sorted_rows.filter(pl.col("time") == ts2)
+    aj_rows, aj_bundle = anti_join_native_with_annotations(sorted_rows, sorted_bundle, excl)
+    assert aj_rows["value"].to_list() == [1.0, 2.0, 9.0]
+    aj_tbl = aj_bundle.observation_tables["provider_a.obs"]
+    assert aj_tbl.rows["tag"].to_list() == ["second-dup", "s2-flag"]
+    assert aj_tbl.measurement_indices == (1, 2)
+    validate_bundle_for_result(aj_bundle, aj_rows, (s1, s2))
+
+    # 1:1 aligned projection fast path preserves exact series dtype & values
+    aligned_rows = pl.DataFrame(
+        {
+            "series_id": [s1.series_id, s1.series_id],
+            "facts_id": [s1.facts[0].facts_id, s1.facts[0].facts_id],
+            "station_id": ["s1", "s1"],
+            "product_id": ["discharge_daily_mean", "discharge_daily_mean"],
+            "time": [ts, ts2],
+            "time_zone": ["+00:00", "+00:00"],
+            "measured": [True, True],
+            "tag": ["t0", "t1"],
+        },
+        schema=ann_schema,
+    )
+    aligned_bundle = AnnotationBundle(
+        observation_tables={
+            "provider_a.obs": ObservationAnnotationTable.from_rows(
+                schema=schema, rows=aligned_rows, measurement_indices=(0, 1)
+            )
+        }
+    )
+    projected = aligned_bundle.project_observation_columns(2, True)
+    assert len(projected) == 1
+    assert projected[0].to_list() == ["t0", "t1"]

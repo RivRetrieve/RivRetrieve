@@ -27,7 +27,9 @@ from rivretrieve._internal.issues import (
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.source_annotations import AnnotationBundle, AnnotationSelection
 from rivretrieve._internal.source_series import (
+    Admission,
     InventorySnapshot,
+    PhysicalFacts,
     RetrievalOutcome,
     SeriesScope,
     SourceSeries,
@@ -357,27 +359,44 @@ class ObservationResult(BaseModel):
         if any(item.provider_id != self.provenance.provider_id for item in self.source_series):
             raise ObservationDataSchemaError("Result contains another provider's source-series definition")
         effective_scope = self.view_scope or self.scope
-        for row in self.data.iter_rows(named=True):
-            definition = definitions.get(row["series_id"])
-            if definition is None:
-                raise ObservationDataSchemaError("Observation references an unknown source-series identity")
-            facts = next((item for item in definition.facts if item.facts_id == row["facts_id"]), None)
-            if facts is None:
-                raise ObservationDataSchemaError("Observation references unknown physical facts")
-            decision = admission(facts)
-            ZoneValue(row["time_zone"])
-            if not effective_scope.matches(definition) or not effective_scope.matches_facts(facts):
-                raise ObservationDataSchemaError("Observation lies outside its retained physical and identity scope")
-            if (
-                definition.provider_id != self.provenance.provider_id
-                or definition.station_id != row["station_id"]
-                or definition.product_id != row["product_id"]
-                or decision.status != "supported"
-                or facts.quantity.value != row["quantity"]
-                or facts.source_unit.value != row["source_unit"]
-                or decision.target_unit != row["unit"]
-            ):
-                raise ObservationDataSchemaError("Observation contradicts its admitted source-series facts")
+        series_facts: dict[str, dict[str, PhysicalFacts]] = {
+            item.series_id: {fact.facts_id: fact for fact in item.facts} for item in self.source_series
+        }
+        admissions: dict[str, Admission] = {}
+        if not self.data.is_empty():
+            combos = list(
+                self.data.select("series_id", "facts_id", "station_id", "product_id", "quantity", "source_unit", "unit")
+                .unique(maintain_order=True)
+                .iter_rows()
+            )
+            for series_id, facts_id, _st, _prod, _qty, _su, _u in combos:
+                if series_id not in definitions:
+                    raise ObservationDataSchemaError("Observation references an unknown source-series identity")
+                if facts_id not in series_facts[series_id]:
+                    raise ObservationDataSchemaError("Observation references unknown physical facts")
+            for tz_raw in self.data["time_zone"].unique(maintain_order=True).to_list():
+                ZoneValue(tz_raw)
+            for series_id, facts_id, station_id, product_id, quantity, source_unit, unit in combos:
+                definition = definitions[series_id]
+                facts = series_facts[series_id][facts_id]
+                decision = admissions.get(facts_id)
+                if decision is None:
+                    decision = admission(facts)
+                    admissions[facts_id] = decision
+                if not effective_scope.matches(definition) or not effective_scope.matches_facts(facts):
+                    raise ObservationDataSchemaError(
+                        "Observation lies outside its retained physical and identity scope"
+                    )
+                if (
+                    definition.provider_id != self.provenance.provider_id
+                    or definition.station_id != station_id
+                    or definition.product_id != product_id
+                    or decision.status != "supported"
+                    or facts.quantity.value != quantity
+                    or facts.source_unit.value != source_unit
+                    or decision.target_unit != unit
+                ):
+                    raise ObservationDataSchemaError("Observation contradicts its admitted source-series facts")
         active_ids = {outcome.outcome_id for outcome in self.outcomes}
         support_ids = {outcome.outcome_id for outcome in self.supporting_outcomes}
         if len(support_ids) != len(self.supporting_outcomes):
@@ -392,15 +411,19 @@ class ObservationResult(BaseModel):
                 raise ObservationDataSchemaError("Retrieval outcome references an unknown source series")
             if definition.station_id != outcome.station_id or definition.product_id != outcome.product_id:
                 raise ObservationDataSchemaError("Retrieval outcome contradicts its source-series coordinates")
-            facts_by_id = {item.facts_id: item for item in definition.facts}
+            facts_by_id = series_facts[outcome.series_id]
             if any(identifier not in facts_by_id for identifier in outcome.facts_ids):
                 raise ObservationDataSchemaError("Retrieval outcome references unknown physical facts")
-            if (
-                outcome.outcome_id in active_ids
-                and outcome.status.value in ("success", "empty")
-                and any(admission(facts_by_id[identifier]).status != "supported" for identifier in outcome.facts_ids)
-            ):
-                raise ObservationDataSchemaError("Successful retrieval outcome requires admitted physical facts")
+            if outcome.outcome_id in active_ids and outcome.status.value in ("success", "empty"):
+                for identifier in outcome.facts_ids:
+                    decision = admissions.get(identifier)
+                    if decision is None:
+                        decision = admission(facts_by_id[identifier])
+                        admissions[identifier] = decision
+                    if decision.status != "supported":
+                        raise ObservationDataSchemaError(
+                            "Successful retrieval outcome requires admitted physical facts"
+                        )
         return self
 
     @model_validator(mode="before")

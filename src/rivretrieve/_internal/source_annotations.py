@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -354,16 +354,21 @@ class ObservationAnnotationTable:
         indices = tuple(measurement_indices)
         if len(indices) != rows.height:
             raise FatalContractError("Annotation measurement_indices length must match row count")
-        seen_indices: set[int] = set()
-        measured_flags = rows["measured"].to_list()
-        for row_idx, (measured, meas_idx) in enumerate(zip(measured_flags, indices, strict=True)):
-            if measured != (meas_idx is not None):
-                raise FatalContractError(
-                    f"Annotation row {row_idx} in {schema.schema_id!r} disagrees between measured and measurement index"
-                )
-            if meas_idx is not None:
-                if meas_idx < 0:
-                    raise FatalContractError("Observation annotation measurement index cannot be negative")
+        if rows.height == 0:
+            return cls(schema=schema, rows=rows, measurement_indices=())
+        idx_series = pl.Series("_mi", indices, dtype=pl.Int64)
+        disagree = rows["measured"].ne_missing(idx_series.is_not_null())
+        if disagree.any():
+            row_idx = int(disagree.arg_true()[0])
+            raise FatalContractError(
+                f"Annotation row {row_idx} in {schema.schema_id!r} disagrees between measured and measurement index"
+            )
+        if (idx_series < 0).any():
+            raise FatalContractError("Observation annotation measurement index cannot be negative")
+        non_null = idx_series.drop_nulls()
+        if non_null.n_unique() != non_null.len():
+            seen_indices: set[int] = set()
+            for meas_idx in non_null.to_list():
                 if meas_idx in seen_indices:
                     raise FatalContractError(
                         f"Duplicate annotation row for measurement index {meas_idx} in {schema.schema_id!r}"
@@ -395,11 +400,16 @@ class ObservationAnnotationTable:
         return int((~self.rows["measured"]).sum())
 
     def with_utc_timestamps(
-        self, utc_times: Sequence[datetime], naive_dtype: pl.DataType
+        self, utc_times: pl.Series | Sequence[datetime], naive_dtype: pl.DataType
     ) -> ObservationAnnotationTable:
+        time_col = (
+            (utc_times.cast(naive_dtype) if utc_times.dtype != naive_dtype else utc_times).alias("time")
+            if isinstance(utc_times, pl.Series)
+            else pl.Series("time", list(utc_times), dtype=naive_dtype)
+        )
         updated_rows = self.rows.with_columns(
-            pl.Series("time", list(utc_times), dtype=naive_dtype),
-            pl.Series("time_zone", ["+00:00"] * self.rows.height, dtype=pl.String()),
+            time_col,
+            pl.lit("+00:00", dtype=pl.String()).alias("time_zone"),
         )
         return ObservationAnnotationTable(
             schema=self.schema,
@@ -420,11 +430,7 @@ class ObservationAnnotationTable:
                 "time",
                 "time_zone",
                 (~pl.col("measured")).alias("_unmeasured"),
-                pl.Series(
-                    "_measurement_index",
-                    [-1 if idx is None else idx for idx in self.measurement_indices],
-                    dtype=pl.Int64,
-                ),
+                pl.Series("_measurement_index", self.measurement_indices, dtype=pl.Int64).fill_null(-1),
             ).alias("_sort_key")
         )["_sort_key"].is_sorted()
 
@@ -527,34 +533,61 @@ def _sort_observation_annotation_rows(
     combined_rows: pl.DataFrame,
     combined_indices: Sequence[int | None],
 ) -> ObservationAnnotationTable:
-    sort_keys = list(
-        combined_rows.select(
-            "station_id", "product_id", "series_id", "facts_id", "time", "time_zone", "measured"
-        ).iter_rows()
-    )
-    order = sorted(
-        range(combined_rows.height),
-        key=lambda i: (
-            sort_keys[i][0],
-            sort_keys[i][1],
-            sort_keys[i][2],
-            sort_keys[i][3],
-            sort_keys[i][4],
-            sort_keys[i][5],
-            not sort_keys[i][6],
-            combined_indices[i] if combined_indices[i] is not None else -1,
-        ),
-    )
-    if order == list(range(combined_rows.height)):
+    if combined_rows.height <= 1:
         return ObservationAnnotationTable.from_rows(
             schema=schema,
             rows=combined_rows,
             measurement_indices=combined_indices,
         )
+    mi_series = pl.Series("_rr_mi", combined_indices, dtype=pl.Int64)
+    is_sorted = combined_rows.select(
+        pl.struct(
+            "station_id",
+            "product_id",
+            "series_id",
+            "facts_id",
+            "time",
+            "time_zone",
+            (~pl.col("measured")).alias("_rr_unmeasured"),
+            mi_series.fill_null(-1).alias("_rr_mi_key"),
+        ).alias("_rr_key")
+    )["_rr_key"].is_sorted()
+    if is_sorted:
+        return ObservationAnnotationTable.from_rows(
+            schema=schema,
+            rows=combined_rows,
+            measurement_indices=combined_indices,
+        )
+    order = (
+        combined_rows.select(
+            "station_id",
+            "product_id",
+            "series_id",
+            "facts_id",
+            "time",
+            "time_zone",
+            (~pl.col("measured")).alias("_rr_unmeasured"),
+        )
+        .with_columns(mi_series.fill_null(-1).alias("_rr_mi_key"))
+        .with_row_index("_rr_pos")
+        .sort(
+            [
+                "station_id",
+                "product_id",
+                "series_id",
+                "facts_id",
+                "time",
+                "time_zone",
+                "_rr_unmeasured",
+                "_rr_mi_key",
+            ],
+            maintain_order=True,
+        )["_rr_pos"]
+    )
     return ObservationAnnotationTable.from_rows(
         schema=schema,
-        rows=combined_rows[order],
-        measurement_indices=[combined_indices[i] for i in order],
+        rows=combined_rows.select(pl.all().gather(order)),
+        measurement_indices=mi_series.gather(order).to_list(),
     )
 
 
@@ -680,32 +713,96 @@ class AnnotationBundle:
         )
         if not ordered_names:
             return []
-        buffers: dict[str, list[Any]] = {name: [None] * row_count for name in ordered_names}
-        filled: dict[str, set[int]] = {name: set() for name in ordered_names}
-        for table in self.observation_tables.values():
-            table_fields = set(table.schema.field_names())
-            active_fields = [name for name in ordered_names if name in table_fields]
-            if not active_fields:
+        if row_count == 0:
+            for table in self.observation_tables.values():
+                if table.row_count > 0 and table.unmeasured_count < table.row_count:
+                    raise FatalContractError("Observation annotation measurement index exceeds observation row count")
+            return [pl.Series(name, [], dtype=field_dtypes[name]) for name in ordered_names]
+
+        tables = tuple(self.observation_tables.values())
+        if len(tables) == 1:
+            table = tables[0]
+            if table.row_count == 0 or table.unmeasured_count == table.row_count:
+                return [
+                    pl.repeat(None, row_count, dtype=field_dtypes[name], eager=True).alias(name)
+                    for name in ordered_names
+                ]
+            idx_series = pl.Series("_mi", table.measurement_indices, dtype=pl.Int64)
+            if table.unmeasured_count == 0:
+                if (idx_series >= row_count).any():
+                    raise FatalContractError("Observation annotation measurement index exceeds observation row count")
+                if table.row_count == row_count and idx_series.is_sorted() and int(idx_series[-1]) == row_count - 1:
+                    return [table.rows[name] for name in ordered_names]
+                meas_rows = table.rows.select(*ordered_names).with_columns(idx_series.alias("_mi"))
+            else:
+                meas_mask = table.rows["measured"]
+                meas_idx = idx_series.filter(meas_mask)
+                if (meas_idx >= row_count).any():
+                    raise FatalContractError("Observation annotation measurement index exceeds observation row count")
+                meas_rows = table.rows.filter(meas_mask).select(*ordered_names).with_columns(meas_idx.alias("_mi"))
+            base = pl.DataFrame({"_mi": pl.arange(0, row_count, eager=True, dtype=pl.Int64)})
+            projected = base.join(meas_rows, on="_mi", how="left", maintain_order="left")
+            return [projected[name] for name in ordered_names]
+
+        ordered_set = set(ordered_names)
+        base = pl.DataFrame({"_mi": pl.arange(0, row_count, eager=True, dtype=pl.Int64)})
+        projected_cols: dict[str, pl.Series] = {}
+        presence_masks: dict[str, pl.Series] = {}
+        for table in tables:
+            active_fields = [name for name in table.schema.field_names() if name in ordered_set]
+            if not active_fields or table.row_count == 0 or table.unmeasured_count == table.row_count:
                 continue
-            indices = table.measurement_indices
+            idx_series = pl.Series("_mi", table.measurement_indices, dtype=pl.Int64)
+            if table.unmeasured_count == 0:
+                meas_idx = idx_series
+                meas_rows = table.rows.select(*active_fields)
+            else:
+                meas_mask = table.rows["measured"]
+                meas_idx = idx_series.filter(meas_mask)
+                meas_rows = table.rows.filter(meas_mask).select(*active_fields)
+            if (meas_idx >= row_count).any():
+                raise FatalContractError("Observation annotation measurement index exceeds observation row count")
+            if (
+                table.unmeasured_count == 0
+                and table.row_count == row_count
+                and idx_series.is_sorted()
+                and int(idx_series[-1]) == row_count - 1
+            ):
+                table_presence = pl.repeat(True, row_count, dtype=pl.Boolean, eager=True)
+                joined = meas_rows
+            else:
+                joined = base.join(
+                    meas_rows.with_columns(meas_idx.alias("_mi"), pl.lit(True, dtype=pl.Boolean).alias("_present")),
+                    on="_mi",
+                    how="left",
+                    maintain_order="left",
+                )
+                table_presence = joined["_present"].fill_null(False)
             for field_name in active_fields:
-                col_values = table.rows[field_name].to_list()
-                buf = buffers[field_name]
-                seen = filled[field_name]
-                for row_pos, meas_idx in enumerate(indices):
-                    if meas_idx is None:
-                        continue
-                    if meas_idx >= row_count:
-                        raise FatalContractError(
-                            "Observation annotation measurement index exceeds observation row count"
-                        )
-                    if meas_idx in seen:
-                        raise ValueError(
-                            f"Conflicting annotation rows for field {field_name!r} at observation row {meas_idx}"
-                        )
-                    seen.add(meas_idx)
-                    buf[meas_idx] = col_values[row_pos]
-        return [pl.Series(name, buffers[name], dtype=field_dtypes[name]) for name in ordered_names]
+                col_series = joined[field_name]
+                if field_name not in projected_cols:
+                    projected_cols[field_name] = col_series
+                    presence_masks[field_name] = table_presence
+                    continue
+                conflict = presence_masks[field_name] & table_presence
+                if conflict.any():
+                    conflict_idx = int(conflict.arg_true()[0])
+                    raise ValueError(
+                        f"Conflicting annotation rows for field {field_name!r} at observation row {conflict_idx}"
+                    )
+                projected_cols[field_name] = pl.DataFrame(
+                    {"_cur": col_series, "_prev": projected_cols[field_name], "_p": table_presence}
+                ).select(pl.when(pl.col("_p")).then(pl.col("_cur")).otherwise(pl.col("_prev")).alias(field_name))[
+                    field_name
+                ]
+                presence_masks[field_name] = presence_masks[field_name] | table_presence
+
+        return [
+            projected_cols[name]
+            if name in projected_cols
+            else pl.repeat(None, row_count, dtype=field_dtypes[name], eager=True).alias(name)
+            for name in ordered_names
+        ]
 
     def join_series_columns(self, frame: pl.DataFrame, selection: AnnotationSelection) -> pl.DataFrame:
         """Left-join requested series-scope annotation fields onto a ``series()`` frame."""
@@ -866,32 +963,74 @@ def validate_bundle_for_result(
     """Validate annotation table alignment against observation rows and series definitions."""
     if not bundle.observation_tables:
         return
+    coord_cols = ("series_id", "facts_id", "station_id", "product_id", "time", "time_zone")
     known_series_facts: dict[tuple[str, str], tuple[str, str]] | None = None
-    obs_coords = list(data.select("series_id", "facts_id", "station_id", "product_id", "time", "time_zone").iter_rows())
-    row_count = len(obs_coords)
+    obs_coords = data.select(coord_cols)
+    row_count = obs_coords.height
     for table in bundle.observation_tables.values():
-        table_coords = list(
-            table.rows.select("series_id", "facts_id", "station_id", "product_id", "time", "time_zone").iter_rows()
-        )
-        for pos, meas_idx in enumerate(table.measurement_indices):
-            coords = cast("tuple[str, str, str, str, datetime, str]", table_coords[pos])
-            if meas_idx is not None:
-                if meas_idx >= row_count:
+        if table.row_count == 0:
+            continue
+        meas_mask = table.rows["measured"]
+        if table.unmeasured_count < table.row_count:
+            meas_positions = meas_mask.arg_true()
+            idx_series = pl.Series("_mi", table.measurement_indices, dtype=pl.Int64)
+            meas_indices = idx_series.filter(meas_mask)
+            oob_mask = meas_indices >= row_count
+            tz_mismatch = getattr(obs_coords.schema["time"], "time_zone", None) != getattr(
+                table.rows.schema["time"], "time_zone", None
+            )
+            if oob_mask.any():
+                bad_oob_i = int(oob_mask.arg_true()[0])
+                oob_pos = int(meas_positions[bad_oob_i])
+                oob_idx = int(meas_indices[bad_oob_i])
+                if bad_oob_i > 0 and tz_mismatch:
+                    first_pos = int(meas_positions[0])
                     raise FatalContractError(
-                        f"Annotation row {pos} in {table.schema.schema_id!r} references missing observation row {meas_idx}"
+                        f"Annotation row {first_pos} in {table.schema.schema_id!r} disagrees with observation row coordinates"
                     )
-                if obs_coords[meas_idx] != coords:
-                    raise FatalContractError(
-                        f"Annotation row {pos} in {table.schema.schema_id!r} disagrees with observation row coordinates"
-                    )
-            elif source_series:
-                if known_series_facts is None:
-                    known_series_facts = {
-                        (item.series_id, facts.facts_id): (item.station_id, item.product_id)
-                        for item in source_series
-                        for facts in item.facts
-                    }
-                if known_series_facts.get((coords[0], coords[1])) != (coords[2], coords[3]):
+                if bad_oob_i > 0 and not tz_mismatch:
+                    sub_ann = table.rows.filter(meas_mask).head(bad_oob_i).select(coord_cols)
+                    sub_obs = obs_coords.select(pl.all().gather(meas_indices.head(bad_oob_i)))
+                    diffs = [sub_ann[c].ne_missing(sub_obs[c]) for c in coord_cols]
+                    any_diff = diffs[0]
+                    for d in diffs[1:]:
+                        any_diff = any_diff | d
+                    if any_diff.any():
+                        bad_pos = int(meas_positions[int(any_diff.arg_true()[0])])
+                        raise FatalContractError(
+                            f"Annotation row {bad_pos} in {table.schema.schema_id!r} disagrees with observation row coordinates"
+                        )
+                raise FatalContractError(
+                    f"Annotation row {oob_pos} in {table.schema.schema_id!r} references missing observation row {oob_idx}"
+                )
+            if tz_mismatch:
+                first_pos = int(meas_positions[0])
+                raise FatalContractError(
+                    f"Annotation row {first_pos} in {table.schema.schema_id!r} disagrees with observation row coordinates"
+                )
+            ann_meas = table.rows.filter(meas_mask).select(coord_cols)
+            obs_aligned = obs_coords.select(pl.all().gather(meas_indices))
+            diffs = [ann_meas[c].ne_missing(obs_aligned[c]) for c in coord_cols]
+            any_diff = diffs[0]
+            for d in diffs[1:]:
+                any_diff = any_diff | d
+            if any_diff.any():
+                bad_pos = int(meas_positions[int(any_diff.arg_true()[0])])
+                raise FatalContractError(
+                    f"Annotation row {bad_pos} in {table.schema.schema_id!r} disagrees with observation row coordinates"
+                )
+        if source_series and table.unmeasured_count > 0:
+            if known_series_facts is None:
+                known_series_facts = {
+                    (item.series_id, facts.facts_id): (item.station_id, item.product_id)
+                    for item in source_series
+                    for facts in item.facts
+                }
+            unmeasured_pairs = (
+                table.rows.filter(~meas_mask).select("series_id", "facts_id", "station_id", "product_id").unique()
+            )
+            for sid, fid, st, prod in unmeasured_pairs.iter_rows():
+                if known_series_facts.get((sid, fid)) != (st, prod):
                     raise FatalContractError(
                         f"Unmeasured annotation slot in {table.schema.schema_id!r} references unknown series or facts"
                     )
@@ -905,6 +1044,135 @@ def with_annotations(result: ObservationResult, bundle: AnnotationBundle) -> Obs
     return copied
 
 
+def filter_native_with_annotations_by_mask(
+    rows: pl.DataFrame,
+    bundle: AnnotationBundle,
+    keep_mask: pl.Series,
+    *,
+    unmeasured_mask_fn: Callable[[pl.DataFrame], pl.Series] | None = None,
+    unmeasured_predicate: Callable[[dict[str, object]], bool] | None = None,
+    unmeasured_expr: pl.Expr | None = None,
+    allowed_series_ids: set[str] | None = None,
+) -> tuple[pl.DataFrame, AnnotationBundle]:
+    """Filter native observation rows by a boolean mask while keeping annotations aligned."""
+    if keep_mask.len() != rows.height:
+        raise FatalContractError("Annotation filter mask length must match observation row count")
+    mask = (
+        keep_mask
+        if keep_mask.dtype == pl.Boolean and keep_mask.null_count() == 0
+        else keep_mask.cast(pl.Boolean).fill_null(False)
+    )
+    all_rows_kept = rows.is_empty() or bool(mask.all())
+    filtered_rows = rows if all_rows_kept else rows.filter(mask)
+    if bundle.is_empty:
+        return filtered_rows, bundle
+    needs_unmeasured_filter = (
+        unmeasured_mask_fn is not None
+        or unmeasured_predicate is not None
+        or unmeasured_expr is not None
+        or allowed_series_ids is not None
+    )
+    cum = mask.cast(pl.Int64).cum_sum() - 1 if not all_rows_kept and not rows.is_empty() else None
+    obs_tables: dict[str, ObservationAnnotationTable] = {}
+    for schema_id, table in bundle.observation_tables.items():
+        if table.row_count == 0:
+            continue
+        if all_rows_kept and not rows.is_empty() and (table.unmeasured_count == 0 or not needs_unmeasured_filter):
+            obs_tables[schema_id] = table
+            continue
+        measured_mask = table.rows["measured"]
+        if table.unmeasured_count == table.row_count or rows.is_empty():
+            meas_keep = pl.repeat(False, table.row_count, dtype=pl.Boolean, eager=True)
+            new_mi_series = pl.repeat(None, table.row_count, dtype=pl.Int64, eager=True)
+        else:
+            idx_series = pl.Series("_mi", table.measurement_indices, dtype=pl.Int64)
+            in_bounds = measured_mask & (idx_series >= 0) & (idx_series < rows.height)
+            if cum is None:
+                meas_keep = in_bounds
+                new_mi_series = idx_series
+            else:
+                safe_idx = idx_series.fill_null(0).clip(0, rows.height - 1)
+                meas_keep = in_bounds & mask.gather(safe_idx)
+                new_mi_series = pl.DataFrame({"_m": meas_keep, "_n": cum.gather(safe_idx)}).select(
+                    pl.when(pl.col("_m")).then(pl.col("_n")).otherwise(None).alias("_mi")
+                )["_mi"]
+
+        if table.unmeasured_count == 0:
+            unm_keep = pl.repeat(False, table.row_count, dtype=pl.Boolean, eager=True)
+        elif not needs_unmeasured_filter:
+            unm_keep = ~measured_mask
+        else:
+            unmeasured_all = ~measured_mask
+            cand_pos = unmeasured_all.arg_true()
+            candidate_rows = table.rows.filter(unmeasured_all)
+            if allowed_series_ids is not None:
+                if not allowed_series_ids:
+                    cand_pos = cand_pos.head(0)
+                    candidate_rows = candidate_rows.head(0)
+                else:
+                    sid_keep = candidate_rows["series_id"].is_in(list(allowed_series_ids))
+                    cand_pos = cand_pos.filter(sid_keep)
+                    candidate_rows = candidate_rows.filter(sid_keep)
+            if unmeasured_expr is not None and not candidate_rows.is_empty():
+                expr_keep = candidate_rows.select(unmeasured_expr.fill_null(False).alias("_k"))["_k"]
+                cand_pos = cand_pos.filter(expr_keep)
+                candidate_rows = candidate_rows.filter(expr_keep)
+            if unmeasured_mask_fn is not None and not candidate_rows.is_empty():
+                fn_raw = unmeasured_mask_fn(candidate_rows)
+                fn_keep = (
+                    fn_raw
+                    if fn_raw.dtype == pl.Boolean and fn_raw.null_count() == 0
+                    else fn_raw.cast(pl.Boolean).fill_null(False)
+                )
+                cand_pos = cand_pos.filter(fn_keep)
+                candidate_rows = candidate_rows.filter(fn_keep)
+            if unmeasured_predicate is not None and not candidate_rows.is_empty():
+                pred_keep = pl.Series(
+                    "_p", [bool(unmeasured_predicate(d)) for d in candidate_rows.to_dicts()], dtype=pl.Boolean
+                )
+                cand_pos = cand_pos.filter(pred_keep)
+            if cand_pos.is_empty():
+                unm_keep = pl.repeat(False, table.row_count, dtype=pl.Boolean, eager=True)
+            elif cand_pos.len() == table.unmeasured_count:
+                unm_keep = unmeasured_all
+            else:
+                pos_df = pl.DataFrame(
+                    {
+                        "_pos": cand_pos.cast(pl.Int64),
+                        "_keep": pl.repeat(True, cand_pos.len(), dtype=pl.Boolean, eager=True),
+                    }
+                )
+                unm_keep = (
+                    pl.DataFrame({"_pos": pl.arange(0, table.row_count, eager=True, dtype=pl.Int64)})
+                    .join(pos_df, on="_pos", how="left", maintain_order="left")["_keep"]
+                    .fill_null(False)
+                )
+
+        keep_pos_mask = meas_keep | unm_keep
+        if bool(keep_pos_mask.all()):
+            if all_rows_kept:
+                obs_tables[schema_id] = table
+            else:
+                obs_tables[schema_id] = ObservationAnnotationTable.from_rows(
+                    schema=table.schema,
+                    rows=table.rows,
+                    measurement_indices=new_mi_series.to_list(),
+                )
+        elif bool(keep_pos_mask.any()):
+            obs_tables[schema_id] = ObservationAnnotationTable.from_rows(
+                schema=table.schema,
+                rows=table.rows.filter(keep_pos_mask),
+                measurement_indices=new_mi_series.filter(keep_pos_mask).to_list(),
+            )
+
+    ser_tables: dict[str, SeriesAnnotationTable] = {}
+    for schema_id, table in bundle.series_tables.items():
+        narrowed = table if allowed_series_ids is None else table.narrow(allowed_series_ids)
+        if narrowed.row_count > 0:
+            ser_tables[schema_id] = narrowed
+    return filtered_rows, AnnotationBundle(observation_tables=obs_tables, series_tables=ser_tables)
+
+
 def filter_native_with_annotations(
     rows: pl.DataFrame,
     bundle: AnnotationBundle,
@@ -916,7 +1184,45 @@ def filter_native_with_annotations(
 ) -> tuple[pl.DataFrame, AnnotationBundle]:
     """Filter native observation rows by ``kept_indices`` while keeping annotations aligned."""
     kept_list = list(kept_indices)
-    filtered_rows = rows if len(kept_list) == rows.height and kept_list == list(range(rows.height)) else rows[kept_list]
+    if not kept_list:
+        return filter_native_with_annotations_by_mask(
+            rows,
+            bundle,
+            pl.repeat(False, rows.height, dtype=pl.Boolean, eager=True),
+            unmeasured_predicate=unmeasured_predicate,
+            unmeasured_expr=unmeasured_expr,
+            allowed_series_ids=allowed_series_ids,
+        )
+    is_strictly_ascending = (
+        kept_list[0] >= 0
+        and kept_list[-1] < rows.height
+        and all(kept_list[i] < kept_list[i + 1] for i in range(len(kept_list) - 1))
+    )
+    if is_strictly_ascending:
+        if len(kept_list) == rows.height:
+            keep_mask = pl.repeat(True, rows.height, dtype=pl.Boolean, eager=True)
+        else:
+            pos_df = pl.DataFrame(
+                {
+                    "_pos": pl.Series("_pos", kept_list, dtype=pl.Int64),
+                    "_keep": pl.repeat(True, len(kept_list), dtype=pl.Boolean, eager=True),
+                }
+            )
+            keep_mask = (
+                pl.DataFrame({"_pos": pl.arange(0, rows.height, eager=True, dtype=pl.Int64)})
+                .join(pos_df, on="_pos", how="left", maintain_order="left")["_keep"]
+                .fill_null(False)
+            )
+        return filter_native_with_annotations_by_mask(
+            rows,
+            bundle,
+            keep_mask,
+            unmeasured_predicate=unmeasured_predicate,
+            unmeasured_expr=unmeasured_expr,
+            allowed_series_ids=allowed_series_ids,
+        )
+
+    filtered_rows = rows[kept_list]
     if bundle.is_empty:
         return filtered_rows, bundle
     old_to_new = {old: new for new, old in enumerate(kept_list)}
@@ -990,12 +1296,15 @@ def filter_native_with_annotations_by_expr(
     """Filter native rows and aligned annotations (including unmeasured slots) using one Polars expression."""
     if rows.is_empty() and bundle.is_empty:
         return rows, bundle
-    keep_rows = rows.select(predicate.alias("_k"))["_k"].to_list() if not rows.is_empty() else []
-    kept_indices = [idx for idx, flag in enumerate(keep_rows) if flag]
-    return filter_native_with_annotations(
+    keep_mask = (
+        rows.select(predicate.fill_null(False).alias("_k"))["_k"]
+        if not rows.is_empty()
+        else pl.Series("_k", [], dtype=pl.Boolean)
+    )
+    return filter_native_with_annotations_by_mask(
         rows,
         bundle,
-        kept_indices,
+        keep_mask,
         unmeasured_expr=predicate,
         allowed_series_ids=allowed_series_ids,
     )
@@ -1009,18 +1318,28 @@ def anti_join_native_with_annotations(
     """Remove native rows and annotations matching keys present in ``exclude_rows``."""
     if exclude_rows.is_empty() or (rows.is_empty() and bundle.is_empty):
         return rows, bundle
-    keys_frame = exclude_rows.select("series_id", "facts_id", "time", "time_zone").unique()
-    exclude_keys = set(keys_frame.iter_rows())
-    kept_indices = [
-        idx
-        for idx, key in enumerate(rows.select("series_id", "facts_id", "time", "time_zone").iter_rows())
-        if key not in exclude_keys
-    ]
-    return filter_native_with_annotations(
+    key_cols = ["series_id", "facts_id", "time", "time_zone"]
+    marker_frame = (
+        exclude_rows.select(key_cols).unique().with_columns(pl.lit(False, dtype=pl.Boolean).alias("_rr_keep"))
+    )
+
+    def _keep_mask_for(frame: pl.DataFrame) -> pl.Series:
+        if frame.is_empty():
+            return pl.Series("_rr_keep", [], dtype=pl.Boolean)
+        joined = frame.select(key_cols).join(
+            marker_frame,
+            on=key_cols,
+            how="left",
+            maintain_order="left",
+            nulls_equal=True,
+        )
+        return joined["_rr_keep"].fill_null(True)
+
+    return filter_native_with_annotations_by_mask(
         rows,
         bundle,
-        kept_indices,
-        unmeasured_predicate=lambda r: (r["series_id"], r["facts_id"], r["time"], r["time_zone"]) not in exclude_keys,
+        _keep_mask_for(rows),
+        unmeasured_mask_fn=_keep_mask_for,
     )
 
 
@@ -1116,25 +1435,43 @@ def sort_native_by_station_with_annotations(
     """Stably sort partition rows by ``station_id`` and preserve aligned annotations."""
     if rows.height <= 1 and bundle.is_empty:
         return rows, bundle
-    if rows.height > 1:
-        stations = rows["station_id"].to_list()
-        row_order = sorted(range(rows.height), key=lambda idx: stations[idx])
-        sorted_rows = rows if row_order == list(range(rows.height)) else rows[row_order]
-        old_to_new = {old: new for new, old in enumerate(row_order)}
-    else:
+    rows_sorted = rows.height <= 1 or rows["station_id"].is_sorted()
+    if rows_sorted and all(
+        table.row_count <= 1 or table.rows["station_id"].is_sorted() for table in bundle.observation_tables.values()
+    ):
+        return rows, bundle
+    if rows_sorted:
         sorted_rows = rows
-        old_to_new = {0: 0} if rows.height == 1 else {}
+        old_to_new_series: pl.Series | None = None
+    else:
+        sorted_with_idx = rows.with_row_index("_rr_old_idx").sort("station_id", maintain_order=True)
+        old_to_new_series = sorted_with_idx["_rr_old_idx"].arg_sort().cast(pl.Int64)
+        sorted_rows = sorted_with_idx.drop("_rr_old_idx")
     obs_tables: dict[str, ObservationAnnotationTable] = {}
     for schema_id, table in bundle.observation_tables.items():
         if table.row_count == 0:
             continue
-        ann_stations = table.rows["station_id"].to_list()
-        ann_order = sorted(range(table.row_count), key=lambda pos: ann_stations[pos])
-        sorted_ann_rows = table.rows if ann_order == list(range(table.row_count)) else table.rows[ann_order]
-        new_indices = [
-            None if table.measurement_indices[pos] is None else old_to_new[cast("int", table.measurement_indices[pos])]
-            for pos in ann_order
-        ]
+        ann_sorted = table.row_count <= 1 or table.rows["station_id"].is_sorted()
+        if rows_sorted and ann_sorted:
+            obs_tables[schema_id] = table
+            continue
+        mi_series = pl.Series("_mi", table.measurement_indices, dtype=pl.Int64)
+        if old_to_new_series is None or rows.height == 0:
+            mapped_mi = mi_series
+        else:
+            mapped_mi = pl.DataFrame(
+                {
+                    "_mi": mi_series,
+                    "_mapped": old_to_new_series.gather(mi_series.fill_null(0).clip(0, rows.height - 1)),
+                }
+            ).select(pl.when(pl.col("_mi").is_not_null()).then(pl.col("_mapped")).otherwise(None).alias("_mi"))["_mi"]
+        if ann_sorted:
+            sorted_ann_rows = table.rows
+            new_indices = mapped_mi.to_list()
+        else:
+            sorted_tbl = table.rows.with_columns(mapped_mi.alias("_rr_new_mi")).sort("station_id", maintain_order=True)
+            sorted_ann_rows = sorted_tbl.drop("_rr_new_mi")
+            new_indices = sorted_tbl["_rr_new_mi"].to_list()
         obs_tables[schema_id] = ObservationAnnotationTable.from_rows(
             schema=table.schema,
             rows=sorted_ann_rows,
@@ -1148,16 +1485,30 @@ def advance_partition_key_ordinals(
     key_counts: dict[tuple[str, str, datetime, str], int] | None = None,
 ) -> list[int]:
     """Compute and advance per-key ``_occurrence_ordinal`` indices for ``partition_rows``."""
-    row_ordinals: list[int] = []
-    counts = key_counts if key_counts is not None else {}
     if partition_rows.is_empty():
-        return row_ordinals
-    for row in partition_rows.select("series_id", "facts_id", "time", "time_zone").iter_rows():
-        key = cast("tuple[str, str, datetime, str]", row)
-        ordinal = counts.get(key, 0)
-        counts[key] = ordinal + 1
-        row_ordinals.append(ordinal)
-    return row_ordinals
+        return []
+    key_cols = ("series_id", "facts_id", "time", "time_zone")
+    within_ord = partition_rows.select(pl.int_range(pl.len(), dtype=pl.Int64).over(*key_cols).alias("_ord"))["_ord"]
+    if key_counts is None:
+        return within_ord.to_list()
+    counts_df = partition_rows.group_by(*key_cols, maintain_order=False).len()
+    non_zero_rows: list[tuple[str, str, datetime, str, int]] = []
+    for sid, fid, ts, tz, count in counts_df.iter_rows():
+        key = cast("tuple[str, str, datetime, str]", (sid, fid, ts, tz))
+        prior = key_counts.get(key, 0)
+        key_counts[key] = prior + int(count)
+        if prior > 0:
+            non_zero_rows.append((sid, fid, ts, tz, prior))
+    if not non_zero_rows:
+        return within_ord.to_list()
+    offset_schema = {**{c: partition_rows.schema[c] for c in key_cols}, "_offset": pl.Int64()}
+    offset_frame = pl.DataFrame(non_zero_rows, schema=offset_schema, orient="row")
+    offsets = (
+        partition_rows.select(key_cols)
+        .join(offset_frame, on=list(key_cols), how="left", maintain_order="left")["_offset"]
+        .fill_null(0)
+    )
+    return (within_ord + offsets).to_list()
 
 
 def encode_observation_table_for_parquet(
@@ -1188,35 +1539,73 @@ def decode_observation_table_from_parquet(
         )
     if parquet_rows.is_empty():
         return ObservationAnnotationTable.empty(schema)
-    counts: dict[tuple[str, str, datetime, str], int] = {}
-    row_index_by_key: dict[tuple[str, str, datetime, str, int], tuple[int, tuple[str, str]]] = {}
-    for idx, row in enumerate(
-        engine_rows.select("series_id", "facts_id", "time", "time_zone", "station_id", "product_id").iter_rows()
-    ):
-        sid, fid, ts, tz, st, prod = cast("tuple[str, str, datetime, str, str, str]", row)
-        key = (sid, fid, ts, tz)
-        ordinal = counts.get(key, 0)
-        counts[key] = ordinal + 1
-        row_index_by_key[(sid, fid, ts, tz, ordinal)] = (idx, (st, prod))
+    expected_schema = {**OBSERVATION_STRUCTURAL_SCHEMA, **schema.polars_schema()}
+    for name, expected_dtype in expected_schema.items():
+        if parquet_rows.schema[name] != expected_dtype:
+            raise FatalContractError(
+                f"Observation annotation column {name!r} dtype mismatch in {schema.schema_id!r}: "
+                f"expected {expected_dtype}, got {parquet_rows.schema[name]}"
+            )
+    for name in OBSERVATION_STRUCTURAL_SCHEMA:
+        if parquet_rows[name].null_count() > 0:
+            raise FatalContractError(f"Observation annotation structural column {name!r} cannot contain null values")
+    occ_col = parquet_rows["_occurrence_ordinal"]
+    if not occ_col.dtype.is_integer() or occ_col.null_count() > 0:
+        raise FatalContractError(
+            f"Stored annotation _occurrence_ordinal column in {schema.schema_id!r} must be non-null integer"
+        )
+    occ_i64 = occ_col.cast(pl.Int64) if occ_col.dtype != pl.Int64() else occ_col
+    if ((~parquet_rows["measured"]) & (occ_i64 != -1)).any():
+        raise FatalContractError(
+            f"Unmeasured stored annotation row in {schema.schema_id!r} must use _occurrence_ordinal == -1"
+        )
 
-    measurement_indices: list[int | None] = []
-    for row in parquet_rows.select(
-        "series_id", "facts_id", "station_id", "product_id", "time", "time_zone", "measured", "_occurrence_ordinal"
-    ).iter_rows():
-        sid, fid, st, prod, ts, tz, measured, occ_ord = cast("tuple[str, str, str, str, datetime, str, bool, int]", row)
-        if not measured:
-            if occ_ord != -1:
-                raise FatalContractError(
-                    f"Unmeasured stored annotation row in {schema.schema_id!r} must use _occurrence_ordinal == -1"
-                )
-            measurement_indices.append(None)
-            continue
-        match = row_index_by_key.get((sid, fid, ts, tz, occ_ord))
-        if match is None or match[1] != (st, prod):
+    measured_mask = parquet_rows["measured"]
+    if not measured_mask.any():
+        measurement_indices: list[int | None] = [None] * parquet_rows.height
+    else:
+        if engine_rows.is_empty():
             raise FatalContractError(
                 f"Stored measured annotation row in {schema.schema_id!r} has no matching observation row"
             )
-        measurement_indices.append(match[0])
+        key_cols = ["series_id", "facts_id", "time", "time_zone"]
+        engine_indexed = engine_rows.select(
+            *key_cols,
+            pl.col("station_id").alias("_eng_station_id"),
+            pl.col("product_id").alias("_eng_product_id"),
+            pl.int_range(pl.len(), dtype=pl.Int64).alias("_eng_idx"),
+            pl.int_range(pl.len(), dtype=pl.Int64).over(*key_cols).alias("_occurrence_ordinal"),
+        )
+        lookup_left = parquet_rows.select(
+            *key_cols,
+            "station_id",
+            "product_id",
+            "measured",
+            occ_i64.alias("_occurrence_ordinal"),
+        )
+        joined = lookup_left.join(
+            engine_indexed,
+            on=[*key_cols, "_occurrence_ordinal"],
+            how="left",
+            maintain_order="left",
+        )
+        bad_measured = joined.select(
+            (
+                pl.col("measured")
+                & (
+                    pl.col("_eng_idx").is_null()
+                    | (pl.col("_eng_station_id") != pl.col("station_id"))
+                    | (pl.col("_eng_product_id") != pl.col("product_id"))
+                )
+            ).alias("_bad")
+        )["_bad"]
+        if bad_measured.any():
+            raise FatalContractError(
+                f"Stored measured annotation row in {schema.schema_id!r} has no matching observation row"
+            )
+        measurement_indices = joined.select(
+            pl.when(pl.col("measured")).then(pl.col("_eng_idx")).otherwise(None).alias("_mi")
+        )["_mi"].to_list()
 
     clean_rows = parquet_rows.drop("_occurrence_ordinal")
     return ObservationAnnotationTable.from_rows(

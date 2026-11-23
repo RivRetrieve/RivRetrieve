@@ -1093,3 +1093,49 @@ def test_parquet_roundtrip_recovers_duplicate_timestamps_and_null_without_native
     decoded = decode_observation_table_from_parquet(encoded, _OBS_SCHEMA, partition_rows)
     assert decoded.measurement_indices == (0, 1, 2, None)
     pl_testing.assert_frame_equal(decoded.rows, table.rows)
+
+
+def test_parquet_decode_recovers_sparse_second_occurrence_and_rejects_bad_ordinals() -> None:
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.source_annotations import (
+        decode_observation_table_from_parquet,
+        encode_observation_table_for_parquet,
+    )
+
+    series = _series_def()
+    ts = datetime(2024, 6, 1, 0, 0)
+    partition_rows = pl.DataFrame(
+        {
+            "station_id": [series.station_id] * 3,
+            "product_id": [series.product_id] * 3,
+            "time": [ts, ts, ts],
+            "value": [20.0, None, 10.0],
+            "time_zone": ["+00:00"] * 3,
+            "series_id": [series.series_id] * 3,
+            "facts_id": [series.facts[0].facts_id] * 3,
+            "source_unit": ["m"] * 3,
+        },
+        schema=RowsSchema.polars_schema,
+    )
+    # Only the 2nd occurrence (index 1, null value) has an annotation, plus an unmeasured slot
+    sparse_table = _make_obs_table(
+        series,
+        [ts, ts],
+        [True, False],
+        ["only-second-occurrence", "unm-slot"],
+        [["B"], None],
+        [1, None],
+    )
+    encoded = encode_observation_table_for_parquet(sparse_table, partition_rows)
+    assert encoded["_occurrence_ordinal"].to_list() == [1, -1]
+    decoded = decode_observation_table_from_parquet(encoded, _OBS_SCHEMA, partition_rows)
+    assert decoded.measurement_indices == (1, None)
+    pl_testing.assert_frame_equal(decoded.rows, sparse_table.rows)
+
+    bad_unmeasured = encoded.with_columns(pl.Series("_occurrence_ordinal", [1, 0], dtype=pl.Int64))
+    with pytest.raises(FatalContractError, match="Unmeasured stored annotation row"):
+        decode_observation_table_from_parquet(bad_unmeasured, _OBS_SCHEMA, partition_rows)
+
+    missing_match = encoded.with_columns(pl.Series("_occurrence_ordinal", [99, -1], dtype=pl.Int64))
+    with pytest.raises(FatalContractError, match="no matching observation row"):
+        decode_observation_table_from_parquet(missing_match, _OBS_SCHEMA, partition_rows)
