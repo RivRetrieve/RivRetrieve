@@ -56,6 +56,19 @@ The stages preserve distinct responsibilities:
 - **Assemble** combines observations with the information needed to interpret and
   trace them, including outcomes without rows.
 
+When a provider's fetch stage must inspect a response directly, such as following
+cursor pagination chains, checking a response envelope, or reading a prerequisite
+lookup, it narrows each consumer pair with `narrow_payload_for_pair` when a payload
+serves multiple pairs, attaches context-bound `InterpretedPayload` entries alongside
+the payload, and drops decoded source structures before returning. The engine reuses
+each interpretation when effective parsing inputs match and falls back to **Parse**
+otherwise. When a provider implements `SharedParseProvider` and at least two
+co-acquired products share a response without pre-interpretation, the engine invokes
+`parse_group` once per shared payload so source bytes decode once into isolated
+per-product `ParsedSeries` outputs. The provider releases intermediate decoded
+structures before returning, and the engine clears unretained response bytes once every
+remaining consumer plan has an interpretation.
+
 Typed contracts and runtime validation check the boundaries between these stages.
 A fetch window must contain its requested window; converted rows must remain within
 the requested bounds. Contract violations raise because invalid stage output cannot

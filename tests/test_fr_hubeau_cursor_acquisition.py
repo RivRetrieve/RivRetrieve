@@ -1,13 +1,15 @@
 """Authored cursor chains preserve receipts without accepting failed observation scopes."""
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 
+import polars.testing as pt
 import pytest
 
 from rivretrieve._internal import engine
 from rivretrieve._internal.driver import drive
-from rivretrieve._internal.observations import ObservationProvenance, ReceiptMode
+from rivretrieve._internal.observations import ObservationProvenance, ReceiptAuthorship, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.fr_hubeau.config import config, window_declarations
 from rivretrieve._internal.providers.fr_hubeau.fetch import fetch
@@ -226,3 +228,253 @@ def test_hubeau_fetch_requests_page_size_2500_and_follows_next_without_original_
     assert dict(transport.requests[0].params or {}) == expected_params
     assert transport.requests[1].url == next_url
     assert transport.requests[1].params is None
+
+
+@pytest.mark.parametrize(
+    ("product", "station", "rows_per_page", "next_prefix"),
+    [
+        (
+            ProductId("discharge_daily_mean"),
+            STATION,
+            [
+                [
+                    {
+                        "code_station": STATION,
+                        "grandeur_hydro_elab": "QmnJ",
+                        "date_obs_elab": f"2000-01-0{day}",
+                        "resultat_obs_elab": 10.0 + day,
+                        "code_statut": 16,
+                        "libelle_statut": "Validée",
+                    }
+                ]
+                for day in (1, 2, 3)
+            ],
+            "https://hubeau.eaufrance.fr/api/v2/hydrometrie/obs_elab?cursor=p",
+        ),
+        (
+            ProductId("water_temperature_reported"),
+            "01001336",
+            [
+                [
+                    {
+                        "code_station": "01001336",
+                        "code_parametre": "1301",
+                        "code_unite": "27",
+                        "symbole_unite": "°C",
+                        "date_mesure_temp": f"2000-01-0{day}",
+                        "heure_mesure_temp": "12:00:00",
+                        "resultat": 8.0 + day,
+                        "code_qualification": "1",
+                        "libelle_qualification": "Bonne",
+                    }
+                ]
+                for day in (1, 2, 3)
+            ],
+            "https://hubeau.eaufrance.fr/api/v1/temperature/chronique?page=",
+        ),
+    ],
+)
+def test_hubeau_paginated_retrieval_decodes_each_page_once_and_skips_driver_parse(
+    monkeypatch, product, station, rows_per_page, next_prefix
+):
+    import rivretrieve._internal.providers.fr_hubeau.parse as hubeau_parse
+
+    pages = [
+        json.dumps(
+            {
+                "data": rows,
+                "next": f"{next_prefix}{idx + 2}" if idx < len(rows_per_page) - 1 else None,
+            }
+        ).encode()
+        for idx, rows in enumerate(rows_per_page)
+    ]
+
+    driver_parse_calls = 0
+    json_loads_calls = 0
+    real_loads = hubeau_parse.json.loads
+
+    def counted_loads(*args, **kwargs):
+        nonlocal json_loads_calls
+        json_loads_calls += 1
+        return real_loads(*args, **kwargs)
+
+    monkeypatch.setattr(hubeau_parse.json, "loads", counted_loads)
+
+    class ReusedStages:
+        config = config()
+        window_declarations = window_declarations()
+        fetch = staticmethod(fetch)
+
+        @staticmethod
+        def parse(payload, provider_config):
+            nonlocal driver_parse_calls
+            driver_parse_calls += 1
+            return parse(payload, provider_config)
+
+    class BaselineStages:
+        config = config()
+        window_declarations = window_declarations()
+
+        @staticmethod
+        def fetch(*args, **kwargs):
+            return replace(fetch(*args, **kwargs), interpretations=())
+
+        parse = staticmethod(parse)
+
+    request = engine.ObservationRequest(
+        ProviderId("fr_hubeau"),
+        (station,),
+        (product,),
+        engine.RequestedWindow(
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 3, 23, 59, 59, 999999)),
+        ),
+    )
+    provenance = ObservationProvenance(source="Hub Eau", provider_id=ProviderId("fr_hubeau"))
+
+    reused = drive(
+        request,
+        ReusedStages(),
+        transport=Transport(*pages),
+        receipts=ReceiptMode.INCLUDE,
+        provenance=provenance,
+    )
+    assert driver_parse_calls == 0
+    assert json_loads_calls == 3
+
+    baseline = drive(
+        request,
+        BaselineStages(),
+        transport=Transport(*pages),
+        receipts=ReceiptMode.INCLUDE,
+        provenance=provenance,
+    )
+    pt.assert_frame_equal(reused.canonical_rows, baseline.canonical_rows)
+    assert [
+        (
+            o.series_id,
+            o.station_id,
+            o.product_id,
+            o.window,
+            o.status,
+            o.facts_ids,
+            o.reason,
+            o.retrieved_at,
+            len(o.calls),
+        )
+        for o in reused.outcomes
+    ] == [
+        (
+            o.series_id,
+            o.station_id,
+            o.product_id,
+            o.window,
+            o.status,
+            o.facts_ids,
+            o.reason,
+            o.retrieved_at,
+            len(o.calls),
+        )
+        for o in baseline.outcomes
+    ]
+    assert [
+        (i.scope, i.members, i.member_facts, i.completeness, i.access, i.origin, i.window, i.reason)
+        for i in reused.inventories
+    ] == [
+        (i.scope, i.members, i.member_facts, i.completeness, i.access, i.origin, i.window, i.reason)
+        for i in baseline.inventories
+    ]
+    assert reused.source_series == baseline.source_series
+    assert reused.issues == baseline.issues
+    assert [e.content for e in reused.receipts.entries] == [e.content for e in baseline.receipts.entries]
+    assert reused.annotations.observation_tables.keys() == baseline.annotations.observation_tables.keys()
+    for schema_id, table in reused.annotations.observation_tables.items():
+        pt.assert_frame_equal(table.rows, baseline.annotations.observation_tables[schema_id].rows)
+
+
+@pytest.mark.parametrize("late_failure", ["http_503", "cursor_cycle"])
+def test_hubeau_refresh_retains_held_data_and_original_retrieved_at_on_late_failure_or_cycle(tmp_path, late_failure):
+    old_time = datetime(2026, 9, 20, tzinfo=UTC)
+    new_time = datetime(2026, 9, 25, tzinfo=UTC)
+
+    class DatedTransport(Transport):
+        def __init__(self, instant, *responses):
+            super().__init__(*responses)
+            self.instant = instant
+
+        def send(self, request):
+            self.requests.append(request)
+            content = next(self.responses)
+            if content == "fail":
+                raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
+            return TransportResponse(content, 200, self.instant, "application/json", request.url, request.params or {})
+
+    class Stages:
+        config = config()
+        window_declarations = window_declarations()
+        fetch = staticmethod(fetch)
+        parse = staticmethod(parse)
+
+    request = engine.ObservationRequest(
+        ProviderId("fr_hubeau"),
+        (STATION,),
+        (PRODUCT,),
+        engine.RequestedWindow(
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+            engine.WindowEndpoint.from_datetime(datetime(2000, 1, 2)),
+        ),
+    )
+    store = StoreRoot(tmp_path / "store")
+    provenance = ObservationProvenance(source="Hub Eau", provider_id=ProviderId("fr_hubeau"))
+
+    seed = drive(
+        request,
+        Stages(),
+        transport=DatedTransport(old_time, page()),
+        cache="reuse",
+        store=store,
+        provenance=provenance,
+    )
+    assert seed.canonical_rows.height == 1
+
+    fresh_page1 = json.dumps(
+        {
+            "data": [
+                {
+                    "code_station": STATION,
+                    "grandeur_hydro_elab": "QmnJ",
+                    "date_obs_elab": "2000-01-01",
+                    "resultat_obs_elab": 99.0,
+                }
+            ],
+            "next": NEXT,
+        }
+    ).encode()
+    fresh_page2 = "fail" if late_failure == "http_503" else json.dumps({"data": [], "next": NEXT}).encode()
+
+    refreshed = drive(
+        request,
+        Stages(),
+        transport=DatedTransport(new_time, fresh_page1, fresh_page2),
+        cache="refresh",
+        receipts=ReceiptMode.INCLUDE,
+        store=store,
+        provenance=provenance,
+    )
+
+    pt.assert_frame_equal(refreshed.canonical_rows, seed.canonical_rows)
+    assert refreshed.provenance.served_intervals
+    assert all(interval.retrieved_at == old_time for interval in refreshed.provenance.served_intervals)
+    manifest = StoreReader().status(store, ProviderId("fr_hubeau")).manifest
+    assert {item.retrieved_at for item in manifest.coverage} == {old_time}
+    unresolved = next(outcome for outcome in refreshed.outcomes if outcome.status is OutcomeStatus.UNRESOLVED)
+    assert len(unresolved.calls) == 2
+    assert set(unresolved.calls).issubset({call["call_id"] for call in refreshed.provenance.calls_made})
+    if late_failure == "cursor_cycle":
+        assert "cycle" in (unresolved.reason or "")
+        assert any(issue.code == "source.acquisition_incomplete" for issue in refreshed.issues)
+    else:
+        assert any(issue.code == "source.request_failed" for issue in refreshed.issues)
+    assert len(refreshed.receipts.entries) == (1 if late_failure == "http_503" else 2) + 1
+    assert refreshed.receipts.entries[0].authorship is ReceiptAuthorship.STORE_EXCERPT
+    assert all(entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD for entry in refreshed.receipts.entries[1:])

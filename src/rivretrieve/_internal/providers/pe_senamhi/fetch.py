@@ -5,16 +5,16 @@ must enforce that interval before combining responses, including revised values.
 This module leaves parsing and public registration to their respective stages.
 """
 
-import json
+import hashlib
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
 from uuid import uuid4
 
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
+    InterpretedPayload,
     Payload,
+    ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
     SourceCallOrigin,
@@ -24,24 +24,15 @@ from rivretrieve._internal.engine import (
     WindowDeclaration,
     WindowGranularity,
     WindowRenderingVocabulary,
+    narrow_payload_for_pair,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.pe_senamhi.series import series_mappings
+from rivretrieve._internal.providers.pe_senamhi.parse import decode_response, interpret_decoded_group
+from rivretrieve._internal.providers.pe_senamhi.series import SenamhiSourceCoordinates, series_mappings
 from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_request
 from rivretrieve._internal.source_series import OutcomeStatus, RetrievalOutcome, SeriesScope, SeriesWindow, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportFailure, TransportRequest, TransportResponse
-
-
-@dataclass(frozen=True, slots=True)
-class SenamhiSourceCoordinates:
-    subsystem: Literal["phisis", "monthly_archive"]
-    resolution: Literal["DAILY", "HOURLY"] | None
-    variable: str
-    unit: str
-
-    def __post_init__(self) -> None:
-        series_mappings(self.subsystem, self.resolution, self.variable, self.unit)
 
 
 def window_declaration(coordinates: SenamhiSourceCoordinates) -> WindowDeclaration:
@@ -67,6 +58,7 @@ def fetch(
     *,
     scope: SeriesScope | None = None,
     known_series: tuple[SourceSeries, ...] = (),
+    config: ProviderConfig | None = None,
 ) -> SourceAcquisition:
     """Acquire every rendered partition using one already resolved transport.
 
@@ -95,6 +87,7 @@ def fetch(
     failures = []
     outcomes = []
     issues = []
+    interpretations: list[InterpretedPayload] = []
     acquired_series: dict[str, SourceSeries] = {}
     for station in stations:
         for (_, _, _, _, window), products in groups.items():
@@ -136,7 +129,7 @@ def fetch(
                 attempt_traces=response.attempt_traces,
             )
             payloads.append(payload)
-            reason = _response_failure(response.content, route, station)
+            data, reason = decode_response(response.content, route, station)
             if reason is not None:
                 for definition in definitions:
                     outcome = RetrievalOutcome(
@@ -167,12 +160,28 @@ def fetch(
                             },
                         )
                     )
+            if config is not None:
+                response_hash = hashlib.sha256(response.content).hexdigest() if reason is None else None
+                pair_payloads = {
+                    (station, product): narrow_payload_for_pair(payload, station, product) for product in products
+                }
+                interpreted = interpret_decoded_group(
+                    payload,
+                    pair_payloads,
+                    data if reason is None else None,
+                    config,
+                    response_hash=response_hash,
+                )
+                for pair_key, parsed in interpreted.items():
+                    interpretations.append(InterpretedPayload.from_payload(pair_payloads[pair_key], parsed))
+            del data
     return SourceAcquisition(
         value=tuple(payloads),
         series=tuple(acquired_series.values()),
         failed_requests=tuple(failures),
         outcomes=tuple(outcomes),
         issues=tuple(issues),
+        interpretations=tuple(interpretations),
     )
 
 
@@ -210,28 +219,4 @@ def _origin(response: TransportResponse) -> SourceCallOrigin:
 
 
 def _response_failure(content: bytes, route: SenamhiSourceCoordinates, station: str) -> str | None:
-    try:
-        document = json.loads(content)
-    except (ValueError, UnicodeDecodeError):
-        return "Malformed SENAMHI JSON response"
-    if not isinstance(document, dict) or type(document.get("status")) is not bool:
-        return "Malformed SENAMHI response envelope"
-    if not document["status"]:
-        message = document.get("message")
-        return "SENAMHI failed response: " + (message if isinstance(message, str) else "unpublished reason")
-    data = document.get("data")
-    if not isinstance(data, dict):
-        return "Malformed SENAMHI response data"
-    if route.subsystem == "monthly_archive":
-        if not isinstance(data.get("columns"), list) or not isinstance(data.get("readings"), list):
-            return "Malformed SENAMHI monthly response structure"
-    else:
-        rows = "daily" if route.resolution == "DAILY" else "hourly"
-        if not isinstance(data.get(rows), list) or any(not isinstance(row, dict) for row in data[rows]):
-            return "Malformed SENAMHI PHISIS response structure"
-        identity = data.get("station")
-        if not isinstance(identity, dict) or identity.get("code") != station:
-            return "SENAMHI response does not match the requested station"
-        if (data.get("type"), data.get("variable"), data.get("unit")) != (route.resolution, route.variable, route.unit):
-            return "SENAMHI response does not match the requested product"
-    return None
+    return decode_response(content, route, station)[1]
