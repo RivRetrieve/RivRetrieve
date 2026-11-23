@@ -93,3 +93,24 @@ def test_all_18_products_establish_physical_meaning_and_dimensional_admission() 
         assert cat_row["period_type"] == "interval"
         assert cat_row["period_anchor"] == "unknown"
         assert cat_row["unit"] == dec.target_unit
+
+
+def test_source_series_memoizes_physical_facts_and_matches_packaged_catalogue() -> None:
+    from rivretrieve._internal.catalogues.source_series import catalogue_series
+    from rivretrieve._internal.providers.ee_est.series import source_series
+    from tests._catalogue import catalogue_reader
+
+    materialized, _ = catalogue_series(catalogue_reader("ee_est").artifact)
+    packaged = {(row.station_id, row.product_id): row for row in materialized}
+
+    em_a = source_series("SJA8821000", "discharge_daily_mean")
+    em_b = source_series("SJA7331000", "discharge_daily_mean")
+    assert em_a.facts[0] is em_b.facts[0]
+    assert em_a.series_id == packaged[("SJA8821000", "discharge_daily_mean")].series_id
+    assert em_a.facts[0].facts_id == packaged[("SJA8821000", "discharge_daily_mean")].facts[0].facts_id
+
+    fh_a = source_series("SJA8821000", "stage_hourly_mean", jaam_kood=41061)
+    fh_b = source_series("SJA7331000", "stage_hourly_mean", jaam_kood=41062)
+    assert fh_a.facts[0] is fh_b.facts[0]
+    assert fh_a.series_id == packaged[("SJA8821000", "stage_hourly_mean")].series_id
+    assert fh_a.facts[0].facts_id == packaged[("SJA8821000", "stage_hourly_mean")].facts[0].facts_id
