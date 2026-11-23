@@ -557,7 +557,7 @@ def read_catalogue_sources(
             raise FatalContractError(f"Estonia selected body disagrees with recording identity for {kind!r}")
         raw = read_original(evidence_root, reference, input_receipt=input_receipt)
         recordings.append(reference)
-        if kind == "terms":
+        if kind in {"terms", "series_meaning"}:
             continue
         payload = json.loads(raw)
         if kind == "fh_absent":
