@@ -451,7 +451,6 @@ def test_ch_foen_reuses_archive_and_recent_interpretations_with_exact_parity(
     assert parse_calls == 0
     assert all(ref() is None for ref in decoded_refs)
 
-    # Empty data_live response also reuses UNRESOLVED interpretation.
     assert result.canonical_rows.height == 4
 
     class _BaselineStages:
@@ -702,7 +701,7 @@ def test_ch_foen_overflow_subdivision_malformed_row_and_refresh_failure_parity(
     )
     _assert_driver_results_identical(impl_fail, base_fail)
 
-    # Phase 4: non-2xx (e.g. HTTP 302 redirect) skips JSON decode cleanly.
+    # Phase 4: non-2xx (e.g. HTTP 302 redirect) skips JSON decode cleanly both via driver and directly via fetch().
     transport.phase = "non_2xx_302"
     captured.clear()
     json_calls = 0
@@ -712,6 +711,30 @@ def test_ch_foen_overflow_subdivision_malformed_row_and_refresh_failure_parity(
     assert json_calls == 0
     assert parse_calls == 0
     assert any(o.status is OutcomeStatus.FAILED and "HTTP 302" in (o.reason or "") for o in res_302.outcomes)
+
+    from rivretrieve._internal.engine import _make_fetch_window as _mk_fw
+    from rivretrieve._internal.window_planning import plan_windows as foen_plan_windows
+
+    fw_direct = _mk_fw(req.window.start, req.window.end)
+    rendered_direct = {
+        ProductId("discharge_10min_mean"): foen_plan_windows(
+            fw_direct, window_declarations().products[ProductId("discharge_10min_mean")]
+        )
+    }
+    direct_302 = fetch_with_precision(
+        ("2018",),
+        (ProductId("discharge_10min_mean"),),
+        rendered_direct,
+        fw_direct,
+        config(),
+        transport,
+    )
+    assert json_calls == 0
+    assert direct_302.value == ()
+    assert direct_302.interpretations == ()
+    assert len(direct_302.outcomes) == 1
+    assert direct_302.outcomes[0].status is OutcomeStatus.FAILED
+    assert direct_302.outcomes[0].reason == "Source returned HTTP 302"
     monkeypatch.setattr(foen_fetch_mod, "json", json)
     monkeypatch.setattr(foen_parse_mod, "json", json)
 
@@ -933,7 +956,7 @@ def test_fi_syke_three_page_pagination_single_decode_and_parity(
     _Stages.fetch = staticmethod(_recording_fetch)
     _Stages.parse = staticmethod(spied_parse)
 
-    counted_json = types.SimpleNamespace(loads=counted_loads)
+    counted_json = types.SimpleNamespace(loads=counted_loads, JSONDecodeError=json.JSONDecodeError)
     monkeypatch.setattr(syke_parse_mod, "json", counted_json)
     if hasattr(syke_fetch_mod, "json"):
         monkeypatch.setattr(syke_fetch_mod, "json", counted_json)
@@ -1019,7 +1042,7 @@ def test_fi_syke_late_page_failure_cycle_and_bad_nextlink_parity(monkeypatch: py
         _Stages.fetch = staticmethod(lambda *a, **kw: captured.append(r := syke_fetch_mod.fetch(*a, **kw)) or r)
         _Stages.parse = staticmethod(spied_parse)
 
-        counted_json = types.SimpleNamespace(loads=counted_loads)
+        counted_json = types.SimpleNamespace(loads=counted_loads, JSONDecodeError=json.JSONDecodeError)
         monkeypatch.setattr(syke_parse_mod, "json", counted_json)
         if hasattr(syke_fetch_mod, "json"):
             monkeypatch.setattr(syke_fetch_mod, "json", counted_json)
@@ -1169,9 +1192,15 @@ def test_fi_syke_late_page_failure_cycle_and_bad_nextlink_parity(monkeypatch: py
     _MultiStages.fetch = staticmethod(lambda *a, **kw: captured_multi.append(r := syke_fetch_mod.fetch(*a, **kw)) or r)
     _MultiStages.parse = staticmethod(spied_parse_multi)
 
-    monkeypatch.setattr(syke_parse_mod, "json", types.SimpleNamespace(loads=counted_loads_multi))
+    monkeypatch.setattr(
+        syke_parse_mod, "json", types.SimpleNamespace(loads=counted_loads_multi, JSONDecodeError=json.JSONDecodeError)
+    )
     if hasattr(syke_fetch_mod, "json"):
-        monkeypatch.setattr(syke_fetch_mod, "json", types.SimpleNamespace(loads=counted_loads_multi))
+        monkeypatch.setattr(
+            syke_fetch_mod,
+            "json",
+            types.SimpleNamespace(loads=counted_loads_multi, JSONDecodeError=json.JSONDecodeError),
+        )
     impl_multi = driver_module.drive(
         req_multi, _MultiStages(), provenance=_provenance(req_multi), transport=_MultiProductTransport()
     )
@@ -1375,6 +1404,67 @@ def test_fi_syke_context_mismatch_falls_back_to_parse() -> None:
     res = driver_module.drive(req, _Stages(), provenance=_provenance(req), transport=_Transport())
     assert parse_calls == 1
     assert res.canonical_rows["value"].to_list() == [5.0]
+
+    # Also verify non-default attempts/attempt_traces flow through SourceCallOrigin.from_response cleanly.
+    from rivretrieve._internal.transport import TransportAttempt
+
+    class _TracedTransport:
+        def send(self, request):
+            doc = {"value": [{"Paikka_Id": 894, "Aika": "1959-01-01T00:00:00", "Arvo": 6.0, "Lippu_id": None}]}
+            return TransportResponse(
+                json.dumps(doc).encode(),
+                200,
+                datetime(2026, 11, 8, tzinfo=UTC),
+                "application/json",
+                request.url,
+                dict(request.params or {}),
+                attempts=2,
+                attempt_traces=(
+                    TransportAttempt(
+                        attempt_id="syke-attempt-1",
+                        url=request.url,
+                        request_parameters=dict(request.params or {}),
+                        retrieved_at=datetime(2026, 11, 8, tzinfo=UTC),
+                        status_code=503,
+                    ),
+                    TransportAttempt(
+                        attempt_id="syke-attempt-2",
+                        url=request.url,
+                        request_parameters=dict(request.params or {}),
+                        retrieved_at=datetime(2026, 11, 8, tzinfo=UTC),
+                        status_code=200,
+                        content_type="application/json",
+                    ),
+                ),
+            )
+
+    parse_calls = 0
+    captured_traced: list[SourceAcquisition] = []
+    _Stages.fetch = staticmethod(lambda *a, **kw: captured_traced.append(r := syke_fetch_mod.fetch(*a, **kw)) or r)
+    traced_res = driver_module.drive(req, _Stages(), provenance=_provenance(req), transport=_TracedTransport())
+    assert parse_calls == 0
+    assert traced_res.canonical_rows["value"].to_list() == [6.0]
+    assert captured_traced[0].value[0].origin.attempts == 2
+    assert len(captured_traced[0].value[0].attempt_traces) == 2
+
+    # And FatalContractError propagates out of interpret_page/fetch without suppression.
+    with pytest.raises(FatalContractError):
+        syke_parse_mod.interpret_page(
+            replace(
+                captured_traced[0].value[0],
+                station_products=(("894", ProductId("discharge_reported")), ("895", ProductId("stage_reported"))),
+            ),
+            config(),
+        )
+    with pytest.raises(FatalContractError):
+        syke_fetch_mod.fetch(
+            (),
+            (ProductId("discharge_reported"),),
+            {},
+            captured_traced[0].value[0].fetch_window,
+            config(),
+            _TracedTransport(),
+        )
 
 
 def test_br_ana_telemetry_and_daily_single_decode_and_single_sha256(monkeypatch: pytest.MonkeyPatch) -> None:
