@@ -78,8 +78,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "712c3b1ac792a82a63738d76c0732131ba74385ec2164b39cee77d796b2c4718",
-      "contentSize": "321871 B"
+      "sha256": "fcc11377e7bea73f3f742cd52cdea53c41cbecf482decf27e9a208c9c57ba2a3",
+      "contentSize": "153097 B"
     },
     {
       "@id": "provenance_facts.parquet",
