@@ -86,18 +86,19 @@ def test_public_recorded_station_410730_stage_success(
 
     monkeypatch.setattr(discovery, "HttpClient", _Replay)
     selection = _select_stage_daily_mean("410730")
-    result = rr.fetch(selection, start="2026-09-01", end="2026-09-10", cache="bypass")
+    result = rr.fetch(selection, start="2026-09-01", end="2026-09-10", cache="bypass", on_issue="ignore")
 
     raw, _ = _load_capture(retained_evidence_root, "timeseriesvalues-410730-stage-24hr-success")
     clipped = [row for row in json.loads(raw)[0]["data"] if "2026-09-01" <= row[0][:10] <= "2026-09-10"]
     assert result.data.height == len(clipped) == 10
     assert result.data["unit"].unique().to_list() == ["m"]
     assert sorted(result.data["value"].to_list()) == pytest.approx(sorted(row[1] for row in clipped))
-    assert not any(issue.code == "source.quality_code" for issue in result.issues)
+    table = rr.annotations(result, schema="au_bom.quality")
+    assert table.height == result.data.height
 
 
 @pytest.mark.recorded(_SCOPE)
-def test_public_recorded_station_410730_discharge_quality_e_issue(
+def test_public_recorded_station_410730_discharge_quality_e_annotations(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class _Replay:
@@ -118,11 +119,14 @@ def test_public_recorded_station_410730_discharge_quality_e_issue(
     discharge_rows = result.data.filter(result.data["product_id"] == "discharge_daily_mean_24hr")
     assert discharge_rows.height == 8
     assert discharge_rows["unit"].unique().to_list() == ["m3/s"]
-    # Issues are emitted per source row from the engine's wider padded-window
-    # response (11 rows), not the window the caller actually requested (8 rows).
-    quality_issues = [issue for issue in result.issues if issue.code == "source.quality_code"]
-    assert len(quality_issues) == 11
-    assert all(issue.severity == "info" for issue in quality_issues)
+    # The annotation table mirrors result.data's row scope exactly, the same
+    # settled convention ch_foen's releaseState/releaseStatus annotations use:
+    # the engine's wider padded-window response (11 source rows) is clipped to
+    # the caller's requested window before the annotation table is built, so no
+    # row describes an observation the caller cannot see in result.data.
+    table = rr.annotations(result, schema="au_bom.quality")
+    assert table.height == discharge_rows.height == 8
+    assert table["Quality_Code_Name"].to_list() == ["quality-E"] * 8
 
 
 @pytest.mark.recorded(_SCOPE)

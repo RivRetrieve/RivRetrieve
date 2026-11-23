@@ -99,7 +99,9 @@ def test_public_fetch_combines_duplicate_ts_id_and_converts_units(monkeypatch: p
     assert len({item.series_id for item in result.source_series}) == 2
 
 
-def test_public_fetch_emits_quality_issue_without_dropping_the_value(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_public_fetch_attaches_quality_code_annotation_without_dropping_the_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     station = "410730"
     list_bytes = _list_json(station, [("1598010", "DMQaQc.Merged.DailyMean.24HR", "Water Course Level", "m")])
     values_bytes = _values_json([("1598010", [("2026-09-01T00:00:00.000+10:00", 0.745, -1, "quality-E")])])
@@ -113,12 +115,12 @@ def test_public_fetch_emits_quality_issue_without_dropping_the_value(monkeypatch
 
     monkeypatch.setattr(discovery, "HttpClient", _Transport)
     selection = _select_stage_daily_mean(station)
-    result = rr.fetch(selection, start="2026-09-01", end="2026-09-01", cache="bypass", on_issue="ignore")
+    result = rr.fetch(selection, start="2026-09-01", end="2026-09-01", cache="bypass")
 
     assert result.data["value"].to_list() == [pytest.approx(0.745)]
-    quality_issues = [issue for issue in result.issues if issue.code == "source.quality_code"]
-    assert len(quality_issues) == 1
-    assert quality_issues[0].severity == "info"
+    annotated = result.to_polars(annotations=True)
+    assert annotated["Quality_Code"].to_list() == [-1]
+    assert annotated["Quality_Code_Name"].to_list() == ["quality-E"]
 
 
 def test_public_fetch_surfaces_no_match_for_an_unresolved_product(monkeypatch: pytest.MonkeyPatch) -> None:
