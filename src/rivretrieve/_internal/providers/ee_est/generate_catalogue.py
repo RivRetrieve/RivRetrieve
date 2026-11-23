@@ -36,6 +36,7 @@ from rivretrieve._internal.providers.ee_est.series import (
     PRODUCT_SPECS,
     catalogue_product_rows,
     describe_associations,
+    parse_jaam_kood,
 )
 
 ALLOWED_WATERBODY_TYPES: frozenset[str] = frozenset({"Jõgi", "Oja", "Peakraav"})
@@ -66,25 +67,6 @@ ASSOCIATION_SCHEMA = pl.Schema(
 )
 
 _EM_EXPECTED_UNITS = {"Q": "m³/s", "H": "m", "T": "°C"}
-
-
-def parse_jaam_kood(kood_str: object) -> tuple[int, ...]:
-    """Parse integer `jaam_kood` candidates from semicolon-delimited `f_seirejaamad.kood`."""
-    if kood_str is None:
-        return ()
-    if not isinstance(kood_str, str):
-        raise FatalContractError(f"Expected string or null kood in f_seirejaamad, got {type(kood_str).__name__}")
-    codes: list[int] = []
-    for part in kood_str.split(";"):
-        token = part.strip()
-        if not token:
-            continue
-        if not token.isdigit():
-            raise FatalContractError(f"Unexpected non-numeric kood token {token!r} in f_seirejaamad")
-        code = int(token)
-        if code not in codes:
-            codes.append(code)
-    return tuple(codes)
 
 
 def station_native_table(
