@@ -28,6 +28,7 @@ and water temperature ``Température Eau`` / ``Temperature Eau``):
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
 from typing import Literal
 
 import polars as pl
@@ -36,9 +37,10 @@ from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import SeriesMapping
-from rivretrieve._internal.source_series import SourceIdentity
+from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, SourceSeries, stable_id
 
 KIWIS_NAMESPACE = "KiWIS.ts_id"
+KIWIS_URL = "https://hydrometrie.wallonie.be/services/KiWIS/KiWIS"
 _ASSOCIATION_EVIDENCE = "catalogue:be_wal:source.station_product.kiwis_tslist"
 _FIELD_EVIDENCE = "catalogue:be_wal:source.series.fields"
 _TEMPORAL_EVIDENCE = "catalogue:be_wal:source.series.temporal_semantics"
@@ -192,6 +194,95 @@ SPEC_BY_ROUTE_KEY: dict[tuple[str, str], ProductSpec] = {
 }
 
 
+def validate_station_id(station_id: str) -> str:
+    """Validate an SPW ``station_no`` identifier cleanly before HTTP parameterization."""
+    if (
+        not isinstance(station_id, str)
+        or not station_id
+        or not station_id.isascii()
+        or station_id.strip() != station_id
+        or any(ch in "/?#" or ch.isspace() for ch in station_id)
+    ):
+        raise FatalContractError(f"be_wal station_id must be a canonical non-blank identifier: {station_id!r}")
+    return station_id
+
+
+def validate_ts_id(ts_id: str) -> str:
+    """Validate a KiWIS positive integer ``ts_id`` identifier string."""
+    if not isinstance(ts_id, str) or not ts_id or not ts_id.isascii() or not ts_id.isdigit() or int(ts_id) <= 0:
+        raise FatalContractError(f"be_wal KiWIS ts_id must be a positive ASCII digit string: {ts_id!r}")
+    return ts_id
+
+
+@cache
+def physical_facts(product_id: str) -> PhysicalFacts:
+    """Return cached canonical PhysicalFacts for one Wallonia product."""
+    spec = PRODUCT_BY_ID.get(product_id)
+    if spec is None:
+        raise FatalContractError(f"Unsupported be_wal product {product_id!r}")
+    return spec.series_mapping().physical_facts()
+
+
+def source_series(
+    station_id: str,
+    product_id: str,
+    *,
+    ts_id: str,
+    origin: Literal["catalogue", "mapping", "response"] = "response",
+) -> SourceSeries:
+    """Build one concrete ``SourceSeries`` matching packaged ``source_series.json`` identities and facts."""
+    validate_station_id(station_id)
+    validate_ts_id(ts_id)
+    fact = physical_facts(product_id)
+    return SourceSeries(
+        series_id=stable_id("be_wal", station_id, KIWIS_NAMESPACE, ts_id),
+        provider_id="be_wal",
+        station_id=station_id,
+        product_id=product_id,
+        identity=SourceIdentity(
+            namespace=KIWIS_NAMESPACE,
+            published_id=ts_id,
+            origin=origin,
+            evidence=(_ASSOCIATION_EVIDENCE,),
+        ),
+        variant=ts_id,
+        facts=(fact,),
+    )
+
+
+def _fact_signature(fact: PhysicalFacts) -> tuple[object, ...]:
+    return (
+        fact.quantity.value,
+        fact.source_unit.value,
+        fact.normalized_unit,
+        fact.frequency.value,
+        fact.statistic.value,
+        fact.temporal_support.value,
+        fact.day_definition.value,
+        fact.timestamp_anchor.value,
+        fact.time_zone.value,
+        fact.vertical_reference.value,
+        fact.vertical_datum.value,
+        fact.clipping_axis,
+        fact.label_time,
+    )
+
+
+def reused_series(definition: SourceSeries, known_series: tuple[SourceSeries, ...]) -> SourceSeries:
+    """Preserve prior established identity, variant, and matching fact IDs when available."""
+    candidate = next((item for item in known_series if item.series_id == definition.series_id), None)
+    if candidate is None:
+        return definition
+    retained = {_fact_signature(fact): fact for fact in candidate.facts}
+    return definition.model_copy(
+        update={
+            "identity": candidate.identity,
+            "variant": candidate.variant,
+            "facts": tuple(retained.get(_fact_signature(fact), fact) for fact in definition.facts),
+        }
+    )
+
+
 def catalogue_product_rows() -> list[dict[str, object]]:
     """Build deterministic product catalogue rows matching `PRODUCT_CATALOG_SCHEMA`."""
     return [
@@ -199,7 +290,7 @@ def catalogue_product_rows() -> list[dict[str, object]]:
             provider_id="be_wal",
             product_id=spec.product_id,
             native_id=spec.native_id,
-            facts=spec.series_mapping().physical_facts(),
+            facts=physical_facts(spec.product_id),
         )
         for spec in sorted(PRODUCT_SPECS, key=lambda item: item.product_id)
     ]
@@ -222,7 +313,7 @@ def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
             raise FatalContractError(f"Unsupported be_wal product {product_id!r}")
         if str(ts_name) != spec.native_id:
             raise FatalContractError(f"be_wal ts_name {ts_name!r} disagrees with {spec.native_id!r}")
-        ts_id_str = str(ts_id)
+        ts_id_str = validate_ts_id(str(ts_id))
         mapping = spec.series_mapping(published_id=ts_id_str)
         descriptions.append(
             SourceDescription(
@@ -236,7 +327,7 @@ def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
                     evidence=(_ASSOCIATION_EVIDENCE,),
                 ),
                 variant=ts_id_str,
-                facts=(mapping.physical_facts(),),
+                facts=(physical_facts(spec.product_id),),
             )
         )
     return SourceDescriptions(provider_id="be_wal", descriptions=tuple(descriptions))
