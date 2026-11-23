@@ -4,7 +4,7 @@ Contributed by: Thiago von Däniken
 """
 
 import json
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from math import isfinite
 from typing import cast
@@ -24,6 +24,27 @@ from rivretrieve._internal.source_series import ParsedSeries
 
 _INT64_MIN = -(1 << 63)
 _INT64_MAX = (1 << 63) - 1
+
+
+@dataclass(frozen=True, slots=True)
+class FrHubeauPageInterpretation:
+    """Single-decode Hub'Eau page parse together with validated pagination link state."""
+
+    parsed: ParsedSeries
+    next_url: str | None
+    next_url_error: str | None = None
+
+
+def next_url_from_document(document: object) -> str | None:
+    """Extract and validate Hub'Eau's pagination ``next`` URL from a decoded JSON document."""
+    if not isinstance(document, dict):
+        raise UnsupportedSourceStructureError("fr_hubeau payload must be a JSON object")
+    value = cast("dict[str, object]", document).get("next")
+    if value is not None and not isinstance(value, str):
+        raise UnsupportedSourceStructureError("fr_hubeau response next must be a URL or null")
+    if value is not None and not value.startswith("https://hubeau.eaufrance.fr/api/"):
+        raise UnsupportedSourceStructureError("fr_hubeau response next URL is outside Hub Eau")
+    return value
 
 
 def _optional_int64(row: dict[str, object], field: str) -> int | None:
@@ -46,9 +67,10 @@ def _optional_str(row: dict[str, object], field: str) -> str | None:
     return value
 
 
-def _parse_native(
+def _parse_native_document(
     payload: Payload,
     provider_config: ProviderConfig,
+    document: object,
     *,
     annotations_out: list[dict[str, int | str | None]] | None = None,
 ) -> WithIssues[Rows]:
@@ -58,10 +80,6 @@ def _parse_native(
     coordinates = payload.source_coordinates.value
     if not isinstance(coordinates, FrHubeauSourceCoordinates):
         raise FatalContractError("fr_hubeau payload has invalid source coordinates")
-    try:
-        document = json.loads(payload.content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise UnsupportedSourceStructureError("fr_hubeau payload content is not valid JSON") from error
     if not isinstance(document, dict):
         raise UnsupportedSourceStructureError("fr_hubeau payload must be a JSON object")
     root = cast("dict[str, object]", document)
@@ -135,6 +153,19 @@ def _parse_native(
     return WithIssues(frame)
 
 
+def _parse_native(
+    payload: Payload,
+    provider_config: ProviderConfig,
+    *,
+    annotations_out: list[dict[str, int | str | None]] | None = None,
+) -> WithIssues[Rows]:
+    try:
+        document = json.loads(payload.content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise UnsupportedSourceStructureError("fr_hubeau payload content is not valid JSON") from error
+    return _parse_native_document(payload, provider_config, document, annotations_out=annotations_out)
+
+
 def _naive(value: object) -> datetime:
     if not isinstance(value, str):
         raise UnsupportedSourceStructureError("fr_hubeau observation timestamp must be a string")
@@ -166,10 +197,28 @@ def _value(row: dict[str, object], field: str) -> float | None:
     return number
 
 
-def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+def interpret_page(payload: Payload, provider_config: ProviderConfig) -> FrHubeauPageInterpretation:
+    """Decode one Hub'Eau response once into parsed rows, annotations, and validated pagination state."""
     coordinates = payload.source_coordinates.value
     if not isinstance(coordinates, FrHubeauSourceCoordinates):
         raise FatalContractError("fr_hubeau payload has invalid source coordinates")
+    document: object = None
+    decode_error: Exception | None = None
+    try:
+        document = json.loads(payload.content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        decode_error = error
+
+    def _native_from_decoded(
+        tagged: Payload,
+        cfg: ProviderConfig,
+        *,
+        annotations_out: list[dict[str, int | str | None]],
+    ) -> WithIssues[Rows]:
+        if decode_error is not None:
+            raise UnsupportedSourceStructureError("fr_hubeau payload content is not valid JSON") from decode_error
+        return _parse_native_document(tagged, cfg, document, annotations_out=annotations_out)
+
     captured_annotations: list[dict[str, int | str | None]] = []
     parsed = parse_mapped_series(
         payload,
@@ -178,26 +227,45 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         mappings={
             **SERIES_MAPPINGS,
         },
-        native_parse=lambda tagged, cfg: _parse_native(tagged, cfg, annotations_out=captured_annotations),
+        native_parse=lambda tagged, cfg: _native_from_decoded(tagged, cfg, annotations_out=captured_annotations),
     )
     if parsed.rows.is_empty():
-        return replace(parsed, annotations=AnnotationBundle.empty())
-    if len(captured_annotations) != parsed.rows.height:
-        raise FatalContractError("fr_hubeau parsed rows and observation annotations count mismatch")
-    schema = FR_HUBEAU_OBS_ELAB_SCHEMA if coordinates.family == "daily" else FR_HUBEAU_TEMPERATURE_SCHEMA
-    dtypes = {"Int64": pl.Int64(), "String": pl.String()}
-    ann_frame = parsed.rows.select(
-        "series_id", "facts_id", "station_id", "product_id", "time", "time_zone"
-    ).with_columns(
-        pl.lit(True).cast(pl.Boolean()).alias("measured"),
-        *(
-            pl.Series(field.name, [item[field.name] for item in captured_annotations], dtype=dtypes[field.dtype])
-            for field in schema.fields
-        ),
-    )
-    ann_table = ObservationAnnotationTable.from_rows(
-        schema=schema,
-        rows=ann_frame,
-        measurement_indices=list(range(parsed.rows.height)),
-    )
-    return replace(parsed, annotations=AnnotationBundle(observation_tables={schema.schema_id: ann_table}))
+        parsed_result = replace(parsed, annotations=AnnotationBundle.empty())
+    else:
+        if len(captured_annotations) != parsed.rows.height:
+            raise FatalContractError("fr_hubeau parsed rows and observation annotations count mismatch")
+        schema = FR_HUBEAU_OBS_ELAB_SCHEMA if coordinates.family == "daily" else FR_HUBEAU_TEMPERATURE_SCHEMA
+        dtypes = {"Int64": pl.Int64(), "String": pl.String()}
+        ann_frame = parsed.rows.select(
+            "series_id", "facts_id", "station_id", "product_id", "time", "time_zone"
+        ).with_columns(
+            pl.lit(True).cast(pl.Boolean()).alias("measured"),
+            *(
+                pl.Series(field.name, [item[field.name] for item in captured_annotations], dtype=dtypes[field.dtype])
+                for field in schema.fields
+            ),
+        )
+        ann_table = ObservationAnnotationTable.from_rows(
+            schema=schema,
+            rows=ann_frame,
+            measurement_indices=list(range(parsed.rows.height)),
+        )
+        parsed_result = replace(parsed, annotations=AnnotationBundle(observation_tables={schema.schema_id: ann_table}))
+
+    if decode_error is not None:
+        return FrHubeauPageInterpretation(
+            parsed=parsed_result,
+            next_url=None,
+            next_url_error="fr_hubeau payload content is not valid JSON",
+        )
+    try:
+        next_url = next_url_from_document(document)
+        next_url_error = None
+    except UnsupportedSourceStructureError as error:
+        next_url = None
+        next_url_error = str(error)
+    return FrHubeauPageInterpretation(parsed=parsed_result, next_url=next_url, next_url_error=next_url_error)
+
+
+def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+    return interpret_page(payload, provider_config).parsed
