@@ -109,7 +109,13 @@ STATION_METADATA_FIELDS = (
 
 _CATALOGUE_SOURCE_FACTS = {
     "station": ("source.station.registry", "source.station.estmodel_registry"),
-    "product": ("source.station_product.associations", "source.series.fields", "source.series.hourly_fields"),
+    "product": (
+        "source.station_product.associations",
+        "source.series.fields",
+        "source.series.hourly_fields",
+        "source.series.temporal_semantics",
+        "source.series.stage_vertical_reference",
+    ),
     "station_product": ("source.station_product.associations",),
 }
 
@@ -133,6 +139,7 @@ def build_acquisition_provenance(
             "source.station.drainage_area_unit",
             "source.provider.terms",
             "source.provider.attribution",
+            "source.series.annotations",
         )
     )
     if missing := required - set(facts):
@@ -206,6 +213,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/ee_est/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/ee_est/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/ee_est/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/ee_est/annotations.py", "EE_EST_ESTMODEL_SCHEMA"),
     ("src/rivretrieve/_internal/providers/ee_est/series.py", "PRODUCT_SPECS"),
     ("src/rivretrieve/_internal/providers/ee_est/series.py", "catalogue_product_rows"),
     ("src/rivretrieve/_internal/providers/ee_est/series.py", "describe_associations"),
