@@ -159,10 +159,14 @@ before the request: BoM's own series identity, like its `series_id` (see
 below), is confirmed only once a response names a concrete source series,
 not from the offline catalogue alone. `rr.series(result)["variant"]` resolves
 to `"09hr"` only once the response is back. Restricting by `variant` before
-fetching still resolves correctly, as shown above, but raises
+fetching still resolves correctly, as shown above, but warns
 `selection.unresolved_inventory` on the way, since the catalogue cannot
-settle the restriction by itself. Restricting an already-fetched result
-instead has no such warning, because the real identities are known by then:
+settle the restriction by itself. Because of this, the request still fetches
+both the `24hr` and `09hr` series over HTTP before discarding the one that
+does not match, emitting a second warning (`source.no_match`) for the
+discarded one; `result.data` ends up correct either way. Restricting an
+already-fetched result instead has no such warnings, because the real
+identities are known by then:
 
 ```python
 full_result = rr.fetch(selection, start="2026-10-28", end="2026-11-01", cache="bypass")
