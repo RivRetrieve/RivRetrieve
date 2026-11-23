@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime, timedelta
 
 import polars as pl
@@ -59,7 +60,10 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     coords = provider_config.products[product].coordinates.value
     if not isinstance(coords, AuBomTimeseriesValuesCoordinates):
         raise FatalContractError(f"au_bom product has invalid source coordinates: {product}")
-    return _parse_values(payload, station, product)
+    try:
+        return _parse_values(payload, station, product)
+    except UnsupportedSourceStructureError as error:
+        return _failed_values(payload, station, product, str(error))
 
 
 def _parse_list_prerequisite(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
@@ -154,6 +158,37 @@ def _parse_list_prerequisite(payload: Payload, provider_config: ProviderConfig) 
     )
 
 
+def _failed_values(payload: Payload, station: str, product: ProductId, reason: str) -> ParsedSeries:
+    """Isolate a malformed getTimeseriesValues response as a FAILED outcome instead of crashing the batch.
+
+    Mirrors _parse_list_prerequisite's own UnsupportedSourceStructureError handling so a single
+    malformed values response cannot abort healthy stations/products sharing the same request.
+    """
+    window = SeriesWindow(
+        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+    )
+    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+    outcome = RetrievalOutcome(
+        outcome_id=stable_id(payload.acquisition_id, station, str(product), "values-failed"),
+        series_id=None,
+        station_id=station,
+        product_id=str(product),
+        window=window,
+        status=OutcomeStatus.FAILED,
+        reason=reason,
+        retrieved_at=retrieved,
+    )
+    issue = Issue(
+        severity="error",
+        code="source.unsupported_structure",
+        message=reason,
+        details={"station_id": station, "product_id": str(product)},
+        provider_id=_PROVIDER_ID,
+    )
+    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), (outcome,), (issue,))
+
+
 def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedSeries:
     if payload.content == b"":
         raise UnsupportedSourceStructureError(f"BoM getTimeseriesValues response for {station} {product} is empty")
@@ -174,11 +209,17 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
 
     frames: list[pl.DataFrame] = []
     definitions: dict[str, SourceSeries] = {}
-    inventories: list[InventorySnapshot] = []
     outcomes: list[RetrievalOutcome] = []
     ann_rows: list[dict[str, object]] = []
     ann_measurement_indices: list[int] = []
     row_offset = 0
+    # Every block in one getTimeseriesValues response is part of the SAME acquisition
+    # and the SAME scope (duplicate ts_id at one station publishes more than one block
+    # here, #645/#646). One combined InventorySnapshot below -- not one per block -- so
+    # a later cache="reuse" lookup sees every resolved series as a member of this scope,
+    # instead of only whichever block's snapshot a reversed scan happens to see first.
+    all_members: list[str] = []
+    all_member_facts: list[tuple[str, tuple[str, ...]]] = []
 
     for block in blocks:
         if not isinstance(block, dict) or "ts_id" not in block or "columns" not in block or "data" not in block:
@@ -220,20 +261,8 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
                 retrieved_at=retrieved,
             )
             outcomes.append(outcome)
-            inventories.append(
-                InventorySnapshot(
-                    snapshot_id=stable_id(payload.acquisition_id, series.series_id, "unsupported-inventory"),
-                    scope=scope,
-                    members=(series.series_id,),
-                    member_facts=((series.series_id, (fact.facts_id,)),),
-                    completeness=InventoryCompleteness.COMPLETE,
-                    access="getTimeseriesValues",
-                    origin="response",
-                    acquired_at=retrieved,
-                    window=window,
-                    evidence=(evidence,),
-                )
-            )
+            all_members.append(series.series_id)
+            all_member_facts.append((series.series_id, (fact.facts_id,)))
             continue
 
         numeric_rows: list[dict[str, object]] = []
@@ -259,7 +288,7 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
                 )
             naive_time = timestamp.replace(tzinfo=None)
             value = raw_row[value_index]
-            if value is not None and not isinstance(value, (int, float)):
+            if value is not None and (type(value) not in (int, float) or not math.isfinite(value)):
                 raise UnsupportedSourceStructureError(f"BoM getTimeseriesValues value for ts_id {ts_id} is not numeric")
             numeric_rows.append(
                 {
@@ -315,20 +344,22 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
                 coverage="interval",
             )
         )
-        inventories.append(
-            InventorySnapshot(
-                snapshot_id=stable_id(payload.acquisition_id, series.series_id, "values-inventory"),
-                scope=scope,
-                members=(series.series_id,),
-                member_facts=((series.series_id, (fact.facts_id,)),),
-                completeness=InventoryCompleteness.COMPLETE,
-                access="getTimeseriesValues",
-                origin="response",
-                acquired_at=retrieved,
-                window=window,
-                evidence=(evidence,),
-            )
-        )
+        all_members.append(series.series_id)
+        all_member_facts.append((series.series_id, (fact.facts_id,)))
+    inventories = (
+        InventorySnapshot(
+            snapshot_id=stable_id(payload.acquisition_id, station, str(product), "values-inventory"),
+            scope=scope,
+            members=tuple(all_members),
+            member_facts=tuple(all_member_facts),
+            completeness=InventoryCompleteness.COMPLETE,
+            access="getTimeseriesValues",
+            origin="response",
+            acquired_at=retrieved,
+            window=window,
+            evidence=(evidence,),
+        ),
+    )
     combined = pl.concat(frames) if frames else pl.DataFrame(schema=RowsSchema.polars_schema)
     if ann_rows:
         ann_frame = pl.DataFrame(

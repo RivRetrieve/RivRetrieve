@@ -104,6 +104,23 @@ def test_build_products_has_18_rows_matching_the_settled_scope() -> None:
     assert set(products["unit"].unique().to_list()) == {"m3/s", "m", "degC"}
 
 
+def test_describe_catalogue_source_unit_is_boms_native_unit_not_the_canonical_one() -> None:
+    """source_unit must be BoM's native unit (cumec/m/°C), not the already-converted canonical one (#965)."""
+    from dataclasses import dataclass
+
+    from rivretrieve._internal.providers.au_bom.catalogue_series import describe_catalogue
+
+    @dataclass
+    class _StubArtifact:
+        products: pl.DataFrame
+
+    descriptions = describe_catalogue(_StubArtifact(products=build_products()))
+    source_units = {d.product_id: d.facts[0].source_unit.value for d in descriptions.descriptions}
+    assert {source_units[p] for p in source_units if p.startswith("discharge")} == {"cumec"}
+    assert {source_units[p] for p in source_units if p.startswith("stage")} == {"m"}
+    assert {source_units[p] for p in source_units if p.startswith("water_temperature")} == {"°C"}
+
+
 def test_georefsystem_to_epsg_conversion_maps_known_and_unknown_values() -> None:
     conversion = GeorefsystemToEpsgConversion()
     native_column = NativeColumn("station_georefsystem")
@@ -125,3 +142,15 @@ def test_georefsystem_conversion_rejects_other_canonical_columns() -> None:
     conversion = GeorefsystemToEpsgConversion()
     with pytest.raises(ValueError, match="only defined for crs"):
         conversion.apply("latitude", NativeColumn("station_georefsystem"), {"station_georefsystem": "WGS84"})
+
+
+def test_georefsystem_conversion_treats_a_missing_value_as_unknown_not_an_error() -> None:
+    """Matches build_stations()'s own falsy guard (#965): a null station_georefsystem
+
+    must not crash the origin certifier differently than build_stations() handles the
+    exact same missing-field case; both now agree on "unknown".
+    """
+    conversion = GeorefsystemToEpsgConversion()
+    native_column = NativeColumn("station_georefsystem")
+    assert conversion.apply("crs", native_column, {"station_georefsystem": None}) == "unknown"
+    assert conversion.apply("crs", native_column, {"station_georefsystem": ""}) == "unknown"

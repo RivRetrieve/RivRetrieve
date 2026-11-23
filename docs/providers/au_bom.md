@@ -277,6 +277,14 @@ an identified outcome alongside independent successful records. Check
 
 BoM's service does not publish a numeric request-rate limit.
 
+A small number of stations carry physically implausible coordinates exactly as
+BoM's own `getStationList` publishes them. Several Seqwater (Queensland)
+stations report a longitude near -153.6° to -153.9° (the Pacific Ocean, not
+Queensland), and a separate group reports a latitude near -85.5°
+(Antarctica) alongside inconsistent longitudes. RivRetrieve preserves these
+values unchanged rather than silently discarding or correcting them; check
+a station's coordinates against another source before relying on them.
+
 ## Terms and citation
 
 BoM's Water Data Online portal states:

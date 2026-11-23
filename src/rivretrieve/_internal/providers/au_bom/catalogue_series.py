@@ -1,7 +1,8 @@
-"""Publisher field definitions for BoM catalogue-only discovery."""
+"""Publisher field definitions for BoM's offline catalogue description."""
 
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
+from rivretrieve._internal.providers.au_bom.config import NATIVE_UNIT_SYMBOLS
 from rivretrieve._internal.providers.au_bom.series import PRODUCT_DEFINITIONS
 from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, known
 
@@ -18,7 +19,7 @@ def describe_catalogue(artifact: PackagedCatalogArtifact) -> SourceDescriptions:
         facts = PhysicalFacts(
             facts_id=product_id,
             quantity=known(definition.quantity, EVIDENCE),
-            source_unit=known(row["unit"], EVIDENCE),
+            source_unit=known(NATIVE_UNIT_SYMBOLS[definition.quantity], EVIDENCE),
             normalized_unit=row["unit"],
             frequency=known(definition.frequency, EVIDENCE),
             statistic=known(definition.statistic, EVIDENCE),
