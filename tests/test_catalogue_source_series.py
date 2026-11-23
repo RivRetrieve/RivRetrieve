@@ -84,7 +84,8 @@ def test_scoped_materialization_constructs_only_selected_coordinates(monkeypatch
 
 
 @pytest.mark.parametrize(
-    "provider", ["ar_ina", "at_ehyd", "no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis", "co_ideam"]
+    "provider",
+    ["ar_ina", "at_ehyd", "no_nve", "br_ana", "ch_foen", "ca_eccc", "pl_imgw", "usgs_nwis", "co_ideam", "ee_est"],
 )
 def test_catalogue_fact_identity_includes_exact_facts_and_evidence(provider):
     from rivretrieve._internal.source_series import stable_id
@@ -256,3 +257,31 @@ def test_materialization_preserves_generated_and_explicit_series_identity(series
         ).encode()
     ).hexdigest()
     assert inventories[0].snapshot_id == expected_snapshot
+
+
+def test_ee_est_packaged_series_meaning_preserves_utc_vs_daily_silence_and_gauge_zero():
+    from rivretrieve._internal.source_series import ClippingAxis
+
+    artifact = load_packaged_catalogue_artifact(BASE / "ee_est/catalogue")
+    series, _ = catalogue_series(artifact, scope=SeriesScope(station_ids=("SJA8821000",)))
+    by_product = {item.product_id: item.facts[0] for item in series}
+    assert len(by_product) == 18
+
+    assert by_product["discharge_daily_mean"].frequency.value == "daily"
+    assert by_product["discharge_daily_mean"].statistic.value == "mean"
+    assert by_product["discharge_daily_mean"].temporal_support.value == "interval"
+    assert by_product["discharge_daily_mean"].time_zone.value is None
+    assert by_product["discharge_daily_mean"].day_definition.value is None
+    assert by_product["discharge_daily_mean"].clipping_axis is ClippingAxis.CALENDAR_DATE
+    assert by_product["discharge_daily_mean"].label_time == "00:00"
+
+    assert by_product["stage_daily_mean"].vertical_reference.value == "gauge_zero"
+    assert by_product["stage_daily_mean"].vertical_datum.value is None
+
+    assert by_product["stage_hourly_mean"].frequency.value == "hourly"
+    assert by_product["stage_hourly_mean"].source_unit.value == "cm"
+    assert by_product["stage_hourly_mean"].time_zone.value == "+00:00"
+    assert by_product["stage_hourly_mean"].vertical_reference.value == "gauge_zero"
+    assert by_product["stage_hourly_mean"].vertical_datum.value is None
+    assert by_product["stage_hourly_mean"].clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
+    assert by_product["stage_hourly_mean"].label_time is None
