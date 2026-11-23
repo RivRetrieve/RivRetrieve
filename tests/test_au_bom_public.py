@@ -167,6 +167,36 @@ def test_public_fetch_cache_reuse_keeps_every_duplicate_ts_id_series(monkeypatch
     assert sorted(reused.data["value"].to_list()) == [pytest.approx(1.887), pytest.approx(2.5)]
 
 
+def test_public_fetch_reports_a_clear_unsupported_unit_outcome_not_a_generic_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A series BoM reports in an unexpected unit gets a named UNSUPPORTED outcome (#965 follow-up).
+
+    fetch.py excludes a unit-mismatched ts_id before ever issuing a values call, so
+    _parse_values's own admission()-based UNSUPPORTED branch can no longer see it; this
+    checks _parse_list_prerequisite reports the same mismatch with its own clear reason,
+    instead of the generic "cannot settle the requested source scope" fallback that fires
+    when a product genuinely gets no outcome of its own.
+    """
+    station = "410730"
+    list_bytes = _list_json(station, [("1598010", "DMQaQc.Merged.DailyMean.24HR", "Water Course Level", "cm")])
+
+    class _Transport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = dict(request.params or {})
+            return TransportResponse(list_bytes, 200, _RETRIEVED_AT, "application/json", request.url, params)
+
+    monkeypatch.setattr(discovery, "HttpClient", _Transport)
+    selection = _select_stage_daily_mean(station)
+    result = rr.fetch(selection, start="2026-09-01", end="2026-09-01", cache="bypass", on_issue="ignore")
+
+    from rivretrieve._internal.source_series import OutcomeStatus
+
+    assert result.data.is_empty()
+    assert any(o.status is OutcomeStatus.UNSUPPORTED and "cm" in (o.reason or "") for o in result.outcomes)
+    assert any(i.code == "source.unsupported_unit" and "cm" in i.message for i in result.issues)
+
+
 def test_public_fetch_surfaces_no_match_for_an_unresolved_product(monkeypatch: pytest.MonkeyPatch) -> None:
     station = "410730"
     # The list response only carries discharge for this ts_name, leaving the requested

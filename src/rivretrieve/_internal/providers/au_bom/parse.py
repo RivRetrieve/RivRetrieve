@@ -67,7 +67,8 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
 
 
 def _parse_list_prerequisite(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
-    """Resolve NO_MATCH for any product this station's ts_id lookup did not resolve.
+    """Resolve NO_MATCH, or UNSUPPORTED for a reported-but-wrong-unit series, for any product
+    this station's ts_id lookup did not resolve into a genuine values request.
 
     A product the lookup *did* resolve has its own values Payload (or
     FailedSourceRequest) owning the real outcome; this never double-reports it.
@@ -112,20 +113,38 @@ def _parse_list_prerequisite(payload: Payload, provider_config: ProviderConfig) 
         coords = provider_config.products[product].coordinates.value
         if not isinstance(coords, AuBomTimeseriesValuesCoordinates):
             raise FatalContractError(f"au_bom product has invalid source coordinates: {product}")
-        if ts_id_map.get((coords.native_id, coords.parametertype_name), ()):
+        pairs = ts_id_map.get((coords.native_id, coords.parametertype_name), ())
+        # fetch.py applies this exact same unit filter before deciding whether to issue a
+        # values call; a series excluded there never reaches _parse_values at all, so this
+        # path -- not the (now unreachable) admission() check inside _parse_values -- is
+        # where a reported-but-wrong-unit series must be told apart from a genuinely absent
+        # one and given its own clear reason instead of a generic unresolved-scope fallback.
+        expected_unit = NATIVE_UNIT_SYMBOLS[_QUANTITY_BY_PRODUCT_ID[str(product)]]
+        if any(unit == expected_unit for _, unit in pairs):
             # The matching values Payload (or its FailedSourceRequest) owns this product's outcome.
             continue
-        reason = (
-            f"BoM getTimeseriesList lists no ts_id for station {station} series "
-            f"{coords.native_id!r} ({coords.parametertype_name})"
-        )
+        if pairs:
+            reported_units = sorted({unit for _, unit in pairs})
+            reason = (
+                f"BoM getTimeseriesList reports station {station} series {coords.native_id!r} "
+                f"({coords.parametertype_name}) in {reported_units!r}, not the expected {expected_unit!r}"
+            )
+            status = OutcomeStatus.UNSUPPORTED
+            issue_code = "source.unsupported_unit"
+        else:
+            reason = (
+                f"BoM getTimeseriesList lists no ts_id for station {station} series "
+                f"{coords.native_id!r} ({coords.parametertype_name})"
+            )
+            status = OutcomeStatus.NO_MATCH
+            issue_code = "source.no_match"
         outcome = RetrievalOutcome(
             outcome_id=stable_id(payload.acquisition_id, station, str(product), "list-no-match"),
             series_id=None,
             station_id=station,
             product_id=str(product),
             window=window,
-            status=OutcomeStatus.NO_MATCH,
+            status=status,
             reason=reason,
             retrieved_at=retrieved,
         )
@@ -146,7 +165,7 @@ def _parse_list_prerequisite(payload: Payload, provider_config: ProviderConfig) 
         issues.append(
             Issue(
                 severity="warning",
-                code="source.no_match",
+                code=issue_code,
                 message=reason,
                 details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
                 provider_id=_PROVIDER_ID,
