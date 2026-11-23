@@ -113,6 +113,7 @@ nav:
       - Colombia (IDEAM): providers/co_ideam.md
       - Czechia (CHMI): providers/cz_chmi.md
       - Denmark (VandA): providers/dk_vanda.md
+      - Estonia (Keskkonnaagentuur): providers/ee_est.md
       - Finland (Syke): providers/fi_syke.md
       - France (Hub'Eau): providers/fr_hubeau.md
       - France (HydroPortail): providers/fr_hydroportail.md
