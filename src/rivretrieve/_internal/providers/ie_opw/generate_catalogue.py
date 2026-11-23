@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import re
 import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -93,6 +94,7 @@ EXCLUDED_LAKE_STATIONS: frozenset[str] = frozenset(
         "30082",
         "30083",
         "30084",
+        "30089",  # Angligham (L     CORRIB standing-lake level gauge)
         "34081",
         "34082",
         "34083",
@@ -179,6 +181,10 @@ def _blank_to_none(value: object) -> str | None:
     return stripped if stripped else None
 
 
+_LAKE_WTO_RE = re.compile(r"(?:^|\s)L\.?\s+\S")
+_KEPT_LAKE_OUTLET_STATIONS: frozenset[str] = frozenset({"26075", "35071"})
+
+
 def is_excluded_station(row: Mapping[str, Any]) -> bool:
     """Return True when an OPW station is barred (>41000) or outside flowing watercourses."""
     sno = row.get("station_no")
@@ -194,6 +200,8 @@ def is_excluded_station(row: Mapping[str, Any]) -> bool:
     if not isinstance(wto, str):
         raise FatalContractError(f"OPW WTO_OBJECT on {sno} must be a string")
     wto_upper = wto.upper()
+    if sno not in _KEPT_LAKE_OUTLET_STATIONS and _LAKE_WTO_RE.search(wto_upper):
+        return True
     return sno != "30061" and ("ESTY" in wto_upper or "ESTUARY" in wto_upper)
 
 
