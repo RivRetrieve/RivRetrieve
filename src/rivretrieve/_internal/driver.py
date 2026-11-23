@@ -2790,7 +2790,7 @@ def drive(
                 item.series_id
                 for item in parsed.outcomes
                 if item.series_id is not None and item.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
-            } | set(native["series_id"].to_list())
+            } | set(native["series_id"].unique().to_list())
             # A prerequisite payload (e.g. a series lookup) can identify a series and publish
             # a series-scope annotation for it while carrying no outcome of its own; the child
             # payload that fetches observations owns that outcome. Keep such a payload's own
