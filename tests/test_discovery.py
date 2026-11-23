@@ -184,6 +184,20 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "water_temperature_reported",
     ],
     "fr_hydroportail": ["discharge_instantaneous", "stage_instantaneous"],
+    "ie_opw": [
+        "discharge_daily_max",
+        "discharge_daily_mean",
+        "discharge_daily_min",
+        "discharge_instantaneous",
+        "stage_daily_max",
+        "stage_daily_mean",
+        "stage_daily_min",
+        "stage_instantaneous",
+        "water_temperature_daily_max",
+        "water_temperature_daily_mean",
+        "water_temperature_daily_min",
+        "water_temperature_instantaneous",
+    ],
     "lt_lhmt": [
         "discharge_daily_mean",
         "stage_daily_mean",
@@ -245,6 +259,7 @@ EXPECTED_PRODUCT_IDS = sorted(
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["pe_senamhi"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["dk_vanda"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["fi_syke"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["ie_opw"])
 )
 
 
@@ -288,6 +303,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "fi_syke",
         "fr_hubeau",
         "fr_hydroportail",
+        "ie_opw",
         "lt_lhmt",
         "no_nve",
         "pe_senamhi",
