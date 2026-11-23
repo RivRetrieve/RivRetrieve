@@ -76,8 +76,8 @@ class _EeEstStages:
     parse = staticmethod(parse)
 
 
-def _envelope_from_capture(root: Path, slug: str) -> RecordingEnvelope:
-    base = root / _SCOPE / "web" / slug
+def _envelope_from_capture(root: Path, slug: str, *, subdir: str = "web") -> RecordingEnvelope:
+    base = root / _SCOPE / subdir / slug
     body = base.with_suffix(".body").read_bytes()
     receipt = json.loads(base.with_suffix(".receipt.json").read_text())
     url = str(receipt["url"])
