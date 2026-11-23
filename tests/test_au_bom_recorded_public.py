@@ -92,7 +92,19 @@ def test_public_recorded_station_410730_stage_success(
     clipped = [row for row in json.loads(raw)[0]["data"] if "2026-09-01" <= row[0][:10] <= "2026-09-10"]
     assert result.data.height == len(clipped) == 10
     assert result.data["unit"].unique().to_list() == ["m"]
-    assert sorted(result.data["value"].to_list()) == pytest.approx(sorted(row[1] for row in clipped))
+    # Compare each value against the capture's value for that same date, not just the sorted
+    # set of values: sorting alone would miss a value silently attached to the wrong time.
+    expected_by_date = {row[0][:10]: row[1] for row in clipped}
+    actual_by_date = dict(
+        zip(
+            (t.date().isoformat() for t in result.data["time"].to_list()),
+            result.data["value"].to_list(),
+            strict=True,
+        )
+    )
+    assert actual_by_date.keys() == expected_by_date.keys()
+    for date_key, expected_value in expected_by_date.items():
+        assert actual_by_date[date_key] == pytest.approx(expected_value)
     table = rr.annotations(result, schema="au_bom.quality")
     assert table.height == result.data.height
 
@@ -218,6 +230,13 @@ def test_public_recorded_values_call_transport_failure_reports_an_error_issue(
         ]
     ).encode("utf-8")
 
+    invalid_body, invalid_receipt = _load_capture(retained_evidence_root, "timeseriesvalues-invalid-ts-id")
+    # The retained body is the genuine evidence this test exists to exercise, not just its
+    # receipt metadata: confirm it is really BoM's documented InvalidParameterValue failure
+    # before treating this capture as a faithful stand-in for a real HTTP 500 transport error.
+    assert json.loads(invalid_body)["code"] == "InvalidParameterValue"
+    assert invalid_receipt.get("http_status") == 500
+
     class _Replay:
         def send(self, request: TransportRequest) -> TransportResponse:
             params = request.params or {}
@@ -230,16 +249,13 @@ def test_public_recorded_values_call_transport_failure_reports_an_error_issue(
                     request.url,
                     dict(params),
                 )
-            _, receipt = _load_capture(retained_evidence_root, "timeseriesvalues-invalid-ts-id")
-            if receipt.get("http_status") == 500:
-                raise TransportFailure(
-                    request,
-                    TransportFailureReason.HTTP_STATUS,
-                    1,
-                    status_code=500,
-                    category=TransportFailureCategory.HTTP_STATUS,
-                )
-            raise AssertionError("expected the retained failure receipt to carry http_status 500")
+            raise TransportFailure(
+                request,
+                TransportFailureReason.HTTP_STATUS,
+                1,
+                status_code=500,
+                category=TransportFailureCategory.HTTP_STATUS,
+            )
 
     monkeypatch.setattr(discovery, "HttpClient", _Replay)
     selection = rr.find(provider="au_bom", station="410730", quantity="discharge", frequency="daily", statistic="mean")

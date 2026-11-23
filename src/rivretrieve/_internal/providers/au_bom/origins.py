@@ -72,9 +72,13 @@ class GeorefsystemToEpsgConversion(FieldConversion):
         if canonical_column != "crs":
             raise ValueError("au_bom georefsystem conversion is only defined for crs")
         value = native_row[str(native_column)]
+        if value is None:
+            # Matches build_stations()'s own falsy guard: a missing station_georefsystem
+            # is "unknown", not a malformed row -- only a genuinely wrong type is an error.
+            return "unknown"
         if not isinstance(value, str):
             raise ValueError("station_georefsystem must be a string")
-        return _epsg_for_georefsystem(value)
+        return _epsg_for_georefsystem(value) if value else "unknown"
 
 
 STATION_CATALOGUE_ORIGINS = {

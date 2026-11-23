@@ -353,8 +353,15 @@ def test_parse_values_rejects_a_timestamp_without_the_plus_ten_offset() -> None:
         _origin(),
         (),
     )
-    with pytest.raises(UnsupportedSourceStructureError, match=r"\+10:00"):
-        parse(payload, config())
+    parsed = parse(payload, config())
+    assert parsed.rows.height == 0
+    assert len(parsed.outcomes) == 1
+    assert parsed.outcomes[0].status is OutcomeStatus.FAILED
+    assert "+10:00" in parsed.outcomes[0].reason
+    assert len(parsed.issues) == 1
+    assert parsed.issues[0].severity == "error"
+    assert parsed.issues[0].code == "source.unsupported_structure"
+    assert "+10:00" in parsed.issues[0].message
 
 
 def test_assembled_drive_shares_one_list_call_and_converts_units() -> None:

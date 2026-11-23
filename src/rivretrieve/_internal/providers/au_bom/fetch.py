@@ -22,9 +22,11 @@ from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.au_bom.config import (
+    NATIVE_UNIT_SYMBOLS,
     AuBomTimeseriesListCoordinates,
     AuBomTimeseriesValuesCoordinates,
 )
+from rivretrieve._internal.providers.au_bom.series import PRODUCT_DEFINITIONS
 from rivretrieve._internal.source_acquisition import (
     FailedSourceRequest,
     SourceRequestTarget,
@@ -42,6 +44,7 @@ from rivretrieve._internal.transport import (
 _URL = "https://www.bom.gov.au/waterdata/services"
 _LIST_RETURNFIELDS = "ts_id,ts_name,parametertype_name,ts_unitsymbol,station_no"
 _VALUES_RETURNFIELDS = "Timestamp,Value,Quality Code,Quality Code Name"
+_QUANTITY_BY_PRODUCT_ID = {d.product_id: d.quantity for d in PRODUCT_DEFINITIONS}
 
 
 def _base_params(request: str) -> dict[str, str]:
@@ -167,6 +170,13 @@ def fetch(
             if not isinstance(coords, AuBomTimeseriesValuesCoordinates):
                 raise FatalContractError(f"au_bom product has invalid source coordinates: {product}")
             pairs = ts_id_map.get((coords.native_id, coords.parametertype_name), ())
+            # parse.py hardcodes each product's native unit rather than trusting this
+            # per-series ts_unitsymbol (the values response itself carries no unit at
+            # all); verify it here, at the boundary where both are available, so a
+            # series BoM ever reports in a different unit is excluded rather than
+            # silently mislabeled as the assumed one.
+            expected_unit = NATIVE_UNIT_SYMBOLS[_QUANTITY_BY_PRODUCT_ID[str(product)]]
+            pairs = tuple(pair for pair in pairs if pair[1] == expected_unit)
             if not pairs:
                 continue
             ts_ids = tuple(ts_id for ts_id, _ in pairs)

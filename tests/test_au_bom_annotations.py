@@ -11,11 +11,11 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.engine import Payload, WindowEndpoint, _make_fetch_window
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.au_bom.annotations import AU_BOM_QUALITY_SCHEMA
 from rivretrieve._internal.providers.au_bom.config import config
 from rivretrieve._internal.providers.au_bom.parse import parse
 from rivretrieve._internal.source_annotations import AnnotationScope
+from rivretrieve._internal.source_series import OutcomeStatus
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
 from tests.test_au_bom_retrieval import _origin
 
@@ -94,28 +94,37 @@ def test_parse_values_block_without_quality_columns_gets_no_annotation_rows() ->
     assert parsed.annotations.is_empty
 
 
+def _assert_isolated_structure_failure(parsed, match: str) -> None:
+    """A malformed values response is an isolated FAILED outcome, never a raised exception (#965)."""
+    assert parsed.rows.height == 0
+    assert len(parsed.outcomes) == 1
+    assert parsed.outcomes[0].status is OutcomeStatus.FAILED
+    assert match in parsed.outcomes[0].reason
+    assert len(parsed.issues) == 1
+    assert parsed.issues[0].severity == "error"
+    assert parsed.issues[0].code == "source.unsupported_structure"
+    assert match in parsed.issues[0].message
+
+
 def test_parse_values_rejects_quality_code_without_quality_code_name() -> None:
     content = _values_json(
         [
             ("1573010", "Timestamp,Value,Quality Code", [["2026-09-01T00:00:00.000+10:00", 1.5, 10]]),
         ]
     )
-    with pytest.raises(UnsupportedSourceStructureError, match="Quality Code Name"):
-        parse(_payload(content), config())
+    _assert_isolated_structure_failure(parse(_payload(content), config()), "Quality Code Name")
 
 
 def test_parse_values_rejects_a_non_integer_quality_code() -> None:
     columns = "Timestamp,Value,Quality Code,Quality Code Name"
     content = _values_json([("1573010", columns, [["2026-09-01T00:00:00.000+10:00", 1.5, "ten", "quality-A"]])])
-    with pytest.raises(UnsupportedSourceStructureError, match="Quality Code"):
-        parse(_payload(content), config())
+    _assert_isolated_structure_failure(parse(_payload(content), config()), "Quality Code")
 
 
 def test_parse_values_rejects_a_non_string_quality_code_name() -> None:
     columns = "Timestamp,Value,Quality Code,Quality Code Name"
     content = _values_json([("1573010", columns, [["2026-09-01T00:00:00.000+10:00", 1.5, 10, 7]])])
-    with pytest.raises(UnsupportedSourceStructureError, match="Quality Code Name"):
-        parse(_payload(content), config())
+    _assert_isolated_structure_failure(parse(_payload(content), config()), "Quality Code Name")
 
 
 def test_parse_values_duplicate_ts_id_keeps_annotations_aligned_to_their_own_rows() -> None:
