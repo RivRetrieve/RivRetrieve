@@ -222,6 +222,7 @@ def test_blank_process_environment_shadows_dotenv_and_remains_missing(
         rr.fetch(selection, start="2024-01-02", end="2024-01-02")
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_committed_environment_template_stays_unresolved_when_copied_unchanged(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -297,6 +298,7 @@ def test_credential_echo_preserves_safe_status_and_exposes_no_secret(
     assert result.receipts.entries == ()
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_providers_reloads_the_working_dotenv_each_call(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -764,6 +766,8 @@ def test_public_exchange_real_redirect_refusal(
     targets = []
 
     class Target(BaseHTTPRequestHandler):
+        disable_nagle_algorithm = True
+
         def do_GET(self):
             targets.append(dict(self.headers))
             self.send_response(200)
@@ -773,10 +777,12 @@ def test_public_exchange_real_redirect_refusal(
             pass
 
     target = ThreadingHTTPServer(("127.0.0.1", 0), Target)
-    target_thread = Thread(target=target.serve_forever, daemon=True)
+    target_thread = Thread(target=target.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     target_thread.start()
 
     class Source(BaseHTTPRequestHandler):
+        disable_nagle_algorithm = True
+
         def do_GET(self):
             if (redirected_call == "exchange" and self.path == "/token") or (
                 redirected_call == "data" and self.path.startswith("/data")
@@ -794,7 +800,7 @@ def test_public_exchange_real_redirect_refusal(
             pass
 
     source = ThreadingHTTPServer(("127.0.0.1", 0), Source)
-    source_thread = Thread(target=source.serve_forever, daemon=True)
+    source_thread = Thread(target=source.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     source_thread.start()
     origin = f"http://127.0.0.1:{source.server_port}"
     try:
@@ -1042,3 +1048,78 @@ def test_optional_key_does_not_satisfy_or_block_required_credentials(
     assert discovery._resolve_credentials(("credential_test",), require_all=True) == {
         "credential_test": {"REQUIRED_KEY": "required-value"},
     }
+
+
+def test_public_exchange_token_cache_shares_refreshes_rotates_and_recovers_across_fetches(
+    monkeypatch,
+    tmp_path,
+    stub_packaged_catalogue_artifact,
+) -> None:
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from rivretrieve._internal.transport import HttpClient
+
+    _exchange_environment(monkeypatch, tmp_path)
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    selection = _register_exchange(monkeypatch, stub_packaged_catalogue_artifact)
+    clock = _ExchangeClock()
+    lock = threading.Lock()
+    token_seq = 0
+    force_401_once = False
+    exchange_requests: list[TransportRequest] = []
+    data_requests: list[TransportRequest] = []
+
+    def sender(request, timeout_seconds):
+        nonlocal token_seq, force_401_once
+        with lock:
+            if request.url.endswith("/token"):
+                exchange_requests.append(request)
+                token_seq += 1
+                token = f"protocol-bearer-{token_seq}"
+                return f'{{"token":"{token}"}}'.encode(), 200, "application/json"
+            data_requests.append(request)
+            if force_401_once:
+                force_401_once = False
+                return b"Unauthorized", 401, "text/plain"
+        return b'{"data":[]}', 200, "application/json"
+
+    monkeypatch.setattr(discovery, "HttpClient", lambda: HttpClient(sender=sender, clock=clock, sleeper=lambda _: None))
+    monkeypatch.setattr(discovery, "_SystemClock", lambda: clock)
+
+    # Sequential fetches reuse the process-cached bearer token.
+    rr.fetch(selection, start="2024-01-02", end="2024-01-02", on_issue="ignore")
+    rr.fetch(selection, start="2024-01-03", end="2024-01-03", on_issue="ignore")
+    assert len(exchange_requests) == 1
+    assert len(data_requests) == 2
+    assert [req.headers["Authorization"] for req in data_requests] == ["Bearer protocol-bearer-1"] * 2
+
+    # Concurrent fetches share the cached token without extra exchanges.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [
+            pool.submit(rr.fetch, selection, start="2024-01-04", end="2024-01-04", on_issue="ignore") for _ in range(4)
+        ]
+        for future in futures:
+            future.result()
+    assert len(exchange_requests) == 1
+    assert len(data_requests) == 6
+
+    # HTTP 401 on a cached token invalidates the entry, refreshes once, and retries.
+    force_401_once = True
+    rr.fetch(selection, start="2024-01-05", end="2024-01-05", on_issue="ignore")
+    assert len(exchange_requests) == 2
+    assert data_requests[-2].headers["Authorization"] == "Bearer protocol-bearer-1"
+    assert data_requests[-1].headers["Authorization"] == "Bearer protocol-bearer-2"
+
+    # Advancing monotonic clock past refresh_after_seconds triggers a fresh exchange.
+    clock.value += 3300.0
+    rr.fetch(selection, start="2024-01-06", end="2024-01-06", on_issue="ignore")
+    assert len(exchange_requests) == 3
+    assert data_requests[-1].headers["Authorization"] == "Bearer protocol-bearer-3"
+
+    # Changing credentials in the environment misses the cache and re-exchanges.
+    monkeypatch.setenv("EXCHANGE_PASSWORD", "rotated-password-sentinel")
+    rr.fetch(selection, start="2024-01-07", end="2024-01-07", on_issue="ignore")
+    assert len(exchange_requests) == 4
+    assert exchange_requests[-1].headers["Password"] == "rotated-password-sentinel"
+    assert data_requests[-1].headers["Authorization"] == "Bearer protocol-bearer-4"

@@ -8,7 +8,11 @@ changing code. Use Python 3.13 or later and [uv](https://docs.astral.sh/uv/).
 
 Run these commands from the source checkout. `uv sync --extra map` installs the
 locked project, development tools and optional map dependency. It creates the
-local environment; it does not download provider observations.
+local environment; it does not download provider observations. Pass `--frozen`
+to `uv sync` and `uv run` on workstations configured with a local package mirror
+so `uv.lock` stays on public PyPI URLs. `.github/workflows/check-lockfile.yml`
+checks lockfile consistency against public PyPI and verifies public PyPI
+package sources on pull requests and pushes to `main` and `port/**`.
 
 ```sh
 uv sync --extra map
@@ -38,10 +42,13 @@ directives when the supported public surface grows, without exposing private hel
 The homepage comes from the root README through `docs/hooks.py`. Edit that source,
 not the generated `docs/index.md`. Schema and provider tables come from
 `scripts/generate_reference.py`; regenerate them only when their underlying facts
-change and commit the updated tables.
+change and commit the updated tables. The coverage map (`docs/assets/coverage-map.png`)
+and station explorer (`docs/assets/station-explorer/`) are generated during documentation
+builds rather than committed; render the map locally before running `mkdocs build --strict`.
 
 ```sh
 uv run python scripts/generate_reference.py --check
+uv run python docs/scripts/coverage_map.py --out docs/assets/coverage-map.png
 uv run pytest --logic-only tests/test_documentation.py tests/test_reference_contracts.py
 uv run mkdocs build --strict
 ```

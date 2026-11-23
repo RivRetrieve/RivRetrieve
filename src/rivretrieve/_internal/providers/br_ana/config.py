@@ -4,6 +4,7 @@ Contributed by: Thiago von Däniken
 """
 
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Literal
 
 from rivretrieve._internal.engine import (
@@ -94,20 +95,26 @@ _CONFIG = ProviderConfig(
         ),
     },
 )
-# Current OpenAPI permits DIAS_30. Real overlapping requests establish a whole-day
-# backward range INCLUDING the anchor date. Fixed spans avoid short-tail overlap.
+# Current OpenAPI permits DIAS_30. Real overlapping requests establish exact
+# whole-day backward ranges on the native wall-clock axis INCLUDING the anchor
+# date, with zero timezone drift; fetch_padding=0 keeps 30-day spans in one call.
 _WINDOW = WindowDeclaration(
     WindowGranularity("fixed-backward-span"),
     WindowRenderingVocabulary.DATE,
     StopConvention.INCLUSIVE,
     30,
+    fetch_padding=timedelta(0),
 )
-# Current conventional requests select monthly headers. Whole-month inclusive
-# requests also remain below the source's documented 366-day cap.
+# Conventional daily endpoints store monthly records keyed on YYYY-MM-01 and
+# enforce a documented 366-day cap. Whole-month spans of at most 12 calendar
+# months always start on day 01 (never dropping the opening month) and remain
+# <= 366 inclusive days even across leap years.
 _DAILY_WINDOW = WindowDeclaration(
-    WindowGranularity("year-month"),
+    WindowGranularity("capped-month-span"),
     WindowRenderingVocabulary.DATE,
     StopConvention.INCLUSIVE,
+    12,
+    fetch_padding=timedelta(0),
 )
 _WINDOWS = ProductWindowDeclarations(
     {

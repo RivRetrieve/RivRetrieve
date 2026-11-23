@@ -194,7 +194,7 @@ def test_missing_monitoring_location_mapping_is_fatal():
 
 def test_continuous_inclusive_chunks_preserve_endpoints_without_gaps():
     start = datetime(2000, 1, 1, 12, 13, 14, 123456)
-    end = start + timedelta(days=2200, hours=4)
+    end = start + timedelta(days=730, hours=4)
     window = engine._make_fetch_window(
         engine.WindowEndpoint.from_datetime(start), engine.WindowEndpoint.from_datetime(end)
     )
@@ -205,7 +205,7 @@ def test_continuous_inclusive_chunks_preserve_endpoints_without_gaps():
         for w in rendered
     ]
     assert pairs[0][0] == start and pairs[-1][1] == end
-    assert all(stop - begin < timedelta(days=1100) for begin, stop in pairs)
+    assert all(stop - begin < timedelta(days=365) for begin, stop in pairs)
     assert all(left[1] + timedelta(microseconds=1) == right[0] for left, right in zip(pairs, pairs[1:], strict=False))
     assert config().products[ProductId("discharge_instantaneous")].coordinates.value.statistic_code is None
 
@@ -243,7 +243,7 @@ def test_internal_parser_error_is_never_isolated_as_source_failure(monkeypatch):
 def test_continuous_span_failure_does_not_block_independent_siblings(failed_span):
     product = ProductId("discharge_instantaneous")
     start = datetime(2000, 1, 1, 12)
-    stop = start + timedelta(days=2201)
+    stop = start + timedelta(days=731)
     window = engine._make_fetch_window(
         engine.WindowEndpoint.from_datetime(start), engine.WindowEndpoint.from_datetime(stop)
     )
@@ -881,7 +881,7 @@ def test_continuous_independent_success_persists_while_failed_span_retries(tmp_p
         (product,),
         engine.RequestedWindow(
             engine.WindowEndpoint.from_datetime(datetime(2000, 1, 3)),
-            engine.WindowEndpoint.from_datetime(datetime(2006, 1, 20)),
+            engine.WindowEndpoint.from_datetime(datetime(2002, 1, 20)),
         ),
     )
 
@@ -935,3 +935,39 @@ def test_incomplete_cursor_links_actual_http_retry_attempts():
     unresolved = next(item for item in result.outcomes if item.status is OutcomeStatus.UNRESOLVED)
     assert unresolved.calls == expected
     assert len(expected) == 4
+
+
+def test_colliding_public_ids_route_to_distinct_source_locations(tmp_path):
+    import hashlib
+
+    from rivretrieve._internal.providers.usgs_nwis.declaration import _load_monitoring_locations
+
+    mapping = {"001": "CA574-001", "USGS-001": "USGS-001"}
+    raw = json.dumps(mapping).encode()
+    (tmp_path / "monitoring_locations.json").write_bytes(raw)
+    (tmp_path / "croissant.json").write_text(
+        json.dumps(
+            {"distribution": [{"contentUrl": "monitoring_locations.json", "sha256": hashlib.sha256(raw).hexdigest()}]}
+        )
+    )
+    resolved = _load_monitoring_locations(tmp_path)
+    transport = Transport(page(), page())
+    window = engine._make_fetch_window(
+        engine.WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+        engine.WindowEndpoint.from_datetime(datetime(2000, 1, 7)),
+    )
+    for station, product in (
+        ("001", ProductId("discharge_daily_mean")),
+        ("USGS-001", ProductId("stage_instantaneous")),
+    ):
+        fetch(
+            (station,),
+            (product,),
+            {product: (engine.RenderedWindow("2000-01-01", "2000-01-07"),)},
+            window,
+            config(),
+            transport,
+            monitoring_locations=resolved,
+        )
+    assert [request.params["monitoring_location_id"] for request in transport.requests] == ["CA574-001", "USGS-001"]
+    assert [request.params["parameter_code"] for request in transport.requests] == ["00060", "00065"]

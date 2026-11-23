@@ -8,6 +8,8 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 PHYSICAL_FILTERS = {
     "stage_reported": {"quantity": "stage"},
     "water_temperature_reported": {"quantity": "temperature"},
@@ -75,12 +77,8 @@ def test_bosnia_public_path_clips_converts_and_keeps_exact_receipts(retained_evi
 
 
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",
     "tests/test_data/fr_hydroportail_H_padded.recording.json",
     "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
 )
@@ -92,7 +90,7 @@ def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(retaine
             "discharge_daily_mean",
             "2025-01-03",
             "2025-01-03",
-            ("fr_hubeau_1011000101_QmnJ_padded.recording.json",),
+            ("fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",),
             1,
         ),
         (
@@ -100,7 +98,7 @@ def test_france_public_paths_clip_and_preserve_quality_codes_in_receipts(retaine
             "water_temperature_reported",
             "2008-07-09",
             "2008-07-10T23:59:59",
-            tuple(f"fr_hubeau_01001336_temp_padded_p{i}.recording.json" for i in range(1, 6)),
+            ("fr_hubeau_size2500/fr_hubeau_01001336_temp_padded.recording.json",),
             37,
         ),
         (

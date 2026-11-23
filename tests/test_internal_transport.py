@@ -441,6 +441,8 @@ def test_scoped_credentials_do_not_cross_real_requests_redirect() -> None:
     observed = []
 
     class Target(BaseHTTPRequestHandler):
+        disable_nagle_algorithm = True
+
         def do_GET(self):
             observed.append(self.headers.get("X-API-Key"))
             self.send_response(200)
@@ -451,11 +453,13 @@ def test_scoped_credentials_do_not_cross_real_requests_redirect() -> None:
             pass
 
     target = ThreadingHTTPServer(("127.0.0.1", 0), Target)
-    target_thread = Thread(target=target.serve_forever, daemon=True)
+    target_thread = Thread(target=target.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     target_thread.start()
     target_url = f"http://127.0.0.1:{target.server_port}/target"
 
     class Redirect(BaseHTTPRequestHandler):
+        disable_nagle_algorithm = True
+
         def do_GET(self):
             self.send_response(302)
             self.send_header("Location", target_url)
@@ -465,7 +469,7 @@ def test_scoped_credentials_do_not_cross_real_requests_redirect() -> None:
             pass
 
     source = ThreadingHTTPServer(("127.0.0.1", 0), Redirect)
-    source_thread = Thread(target=source.serve_forever, daemon=True)
+    source_thread = Thread(target=source.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     source_thread.start()
     source_origin = f"http://127.0.0.1:{source.server_port}"
     try:

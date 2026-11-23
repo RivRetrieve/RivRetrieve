@@ -1167,7 +1167,7 @@ def test_observation_result_carries_shared_acquisition_provenance(
 ) -> None:
     from tests._catalogue import catalogue_path
 
-    original = load_packaged_catalogue_artifact(catalogue_path("jp_mlit")).acquisition_provenance
+    original = load_packaged_catalogue_artifact(catalogue_path("lt_lhmt")).acquisition_provenance
     assert original is not None
     shared = original.model_copy(update={"header": original.header.model_copy(update={"provider_id": "test_provider"})})
     artifact = replace(

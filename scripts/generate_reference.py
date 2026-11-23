@@ -11,6 +11,7 @@ from rivretrieve._internal.observations import ObservationDataSchema
 from rivretrieve._internal.provider_manifest import BUILTIN_PROVIDER_IDS
 from rivretrieve._internal.providers.registration import BulkStore, CatalogueOnly, LiveStages, load_manifest
 from rivretrieve._internal.selection import QUERY_VOCABULARIES, _series_frame
+from rivretrieve._internal.source_annotations import CATALOG_SCHEMA
 from rivretrieve._internal.source_series import SeriesScope
 from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA, STATION_METADATA_SCHEMA
 
@@ -52,6 +53,10 @@ def render_tables() -> str:
             "Only value is nullable. Time precision can vary while remaining Datetime. "
             "The zone belongs to each row, not the timestamp dtype. "
             "See `ObservationResult` above for units and meanings.\n",
+            _schema("Annotation catalog frame", pl.Schema(CATALOG_SCHEMA)),
+            "Returned by `annotations(value)` when `schema` is omitted. "
+            "`unmeasured_count` counts observation-grain source slots with `measured=False`; "
+            "series-grain rows report `0`.\n",
         )
     )
     parts.extend(

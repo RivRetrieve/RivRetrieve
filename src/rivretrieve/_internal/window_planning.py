@@ -71,7 +71,8 @@ def _plan_iso_instant(fetch_window: FetchWindow, declaration: WindowDeclaration)
         steps, remainder = divmod(stop - epoch, precision)
         stop = epoch + (steps + bool(remainder)) * precision
         fetch_window = _closed_bounds(start, stop - timedelta(microseconds=1))
-    return (RenderedWindow(_iso_z(start), _iso_z(stop), fetch_window),)
+    rendered_stop = stop + declaration.stop_extension if declaration.stop_extension is not None else stop
+    return (RenderedWindow(_iso_z(start), _iso_z(rendered_stop), fetch_window),)
 
 
 def _plan_date(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
@@ -97,12 +98,15 @@ def _plan_year(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tup
         and declaration.rendering in (WindowRenderingVocabulary.YEAR, WindowRenderingVocabulary.DATE),
         "size None and year or date rendering",
     )
-    start_year = _datetime_from_endpoint(fetch_window, "start").year
-    end_year = _datetime_from_endpoint(fetch_window, "end").year
+    first = _datetime_from_endpoint(fetch_window, "start")
+    final = _datetime_from_endpoint(fetch_window, "end")
+    month = declaration.year_start_month
+    start_year = first.year - (first.month < month)
+    end_year = final.year - (final.month < month)
     windows = []
     for year in range(start_year, end_year + 1):
-        start = datetime(year, 1, 1)
-        stop = datetime(year, 12, 31)
+        start = datetime(year, month, 1)
+        stop = datetime(year + 1, month, 1) - timedelta(days=1)
         bounds = _closed_bounds(start, datetime.combine(stop.date(), time.max))
         if declaration.rendering is WindowRenderingVocabulary.YEAR:
             windows.append(RenderedWindow(str(year), None, bounds))
@@ -191,11 +195,12 @@ def _plan_capped_span(fetch_window: FetchWindow, declaration: WindowDeclaration)
     ):
         cursor = _datetime_from_endpoint(fetch_window, "start")
         final = _datetime_from_endpoint(fetch_window, "end")
+        extension = declaration.stop_extension or timedelta(0)
         windows = []
         tick = timedelta(microseconds=1)
         while cursor <= final:
             stop = min(cursor + timedelta(days=size) - tick, final)
-            windows.append(RenderedWindow(_iso_z(cursor), _iso_z(stop), _closed_bounds(cursor, stop)))
+            windows.append(RenderedWindow(_iso_z(cursor), _iso_z(stop + extension), _closed_bounds(cursor, stop)))
             cursor = stop + tick
         return tuple(windows)
     cursor = _datetime_from_endpoint(fetch_window, "start").replace(hour=0, minute=0, second=0, microsecond=0)
@@ -250,6 +255,44 @@ def _plan_fixed_backward_span(fetch_window: FetchWindow, declaration: WindowDecl
     return tuple(reversed(windows))
 
 
+def _month_from_index(month_index: int) -> datetime:
+    year, zero_month = divmod(month_index, 12)
+    return datetime(year, zero_month + 1, 1)
+
+
+def _plan_capped_month_span(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
+    """Cover fetch dates by disjoint whole-month spans of at most ``size`` calendar months."""
+    _require(
+        declaration,
+        declaration.size is not None
+        and declaration.rendering is WindowRenderingVocabulary.DATE
+        and declaration.stop_convention is StopConvention.INCLUSIVE,
+        "a positive size, date rendering and an inclusive stop",
+    )
+    size = declaration.size
+    assert size is not None
+    start_dt = _datetime_from_endpoint(fetch_window, "start")
+    end_dt = _datetime_from_endpoint(fetch_window, "end")
+    cursor_index = start_dt.year * 12 + (start_dt.month - 1)
+    final_index = end_dt.year * 12 + (end_dt.month - 1)
+    windows = []
+    while cursor_index <= final_index:
+        span_end_index = min(cursor_index + size - 1, final_index)
+        cursor = _month_from_index(cursor_index)
+        span_end_month = _month_from_index(span_end_index)
+        stop = span_end_month.replace(day=monthrange(span_end_month.year, span_end_month.month)[1])
+        bounds = _closed_bounds(cursor, datetime.combine(stop.date(), time.max))
+        windows.append(
+            RenderedWindow(
+                cursor.date().isoformat(),
+                _render_date_stop(stop, declaration.stop_convention),
+                bounds,
+            )
+        )
+        cursor_index = span_end_index + 1
+    return tuple(windows)
+
+
 def _plan_none(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
     _require(
         declaration,
@@ -266,6 +309,7 @@ _GRANULARITY_PLANNERS: dict[str, _Planner] = {
     "year-month": _plan_year_month,
     "n-year-chunk": _plan_n_year_chunk,
     "capped-span": _plan_capped_span,
+    "capped-month-span": _plan_capped_month_span,
     "fixed-backward-span": _plan_fixed_backward_span,
     "none": _plan_none,
 }

@@ -34,6 +34,7 @@ print(preview.write_csv(float_precision=3), end="")
 
 print(result.data.height)
 print(result.issues)
+print(rr.annotations(result).select("name", "dtype").rows())
 ```
 
 Output:
@@ -45,9 +46,11 @@ time,time_zone,value,unit
 2024-01-03T00:00:00.000000,unknown,1.159,m3/s
 7
 ()
+[('code_statut', 'Int64'), ('libelle_statut', 'String'), ('code_qualification', 'Int64'), ('libelle_qualification', 'String'), ('code_methode', 'Int64'), ('libelle_methode', 'String')]
 ```
 
-The request returned seven daily values and no retrieval issues (the empty tuple `()`).
+The request returned seven daily values, the six `fr_hubeau.obs_elab` annotation
+fields, and no retrieval issues (the empty tuple `()`).
 An empty issue tuple does not mean the source has approved the quality of the values.
 The values are source-published daily means, returned in m³/s. RivRetrieve does not
 calculate them from instantaneous observations. Bare dates include the whole first
@@ -124,11 +127,26 @@ instant or an interval, or what sampling or averaging period applies.
 
 ## Data status
 
-The source publishes qualification and method metadata alongside hydrometric values.
-RivRetrieve does not turn those fields into a quality ranking or add observation
-quality flags to the returned table. A returned value alone does not establish
-its validation status. See [Usage](../usage.md#receipts-optional) to retain source
-material when that metadata matters to the analysis.
+Hub'Eau publishes qualification, status, and method fields alongside observations.
+RivRetrieve retains those verbatim fields in two observation-grain schemas without
+turning them into a quality ranking:
+
+- `fr_hubeau.obs_elab` (hydrometry daily/monthly series): `code_statut` (`Int64`),
+  `libelle_statut` (`String`), `code_qualification` (`Int64`),
+  `libelle_qualification` (`String`), `code_methode` (`Int64`), and
+  `libelle_methode` (`String`).
+- `fr_hubeau.temperature_chronique` (continuous temperature series):
+  `code_qualification` (`String`) and `libelle_qualification` (`String`).
+
+Use `rr.annotations(result)` to list attached fields and
+`result.to_polars(annotations=True)` or `result.to_pandas(annotations=True)` to
+project them onto returned rows. Because `code_qualification` has type `Int64` in
+`fr_hubeau.obs_elab` and `String` in `fr_hubeau.temperature_chronique`, narrow
+a mixed hydrometry-and-temperature result with `rr.pick(...)` before calling
+`to_polars(annotations=True)`, or read each table directly with
+`rr.annotations(result, schema=...)`. See [Usage](../usage.md#source-annotations)
+for details on inspecting and exporting source annotations, and
+[receipts](../usage.md#receipts-optional) to retain raw publisher bytes.
 
 ## Terms and citation
 
@@ -166,4 +184,4 @@ in RivRetrieve.
 | [HydroPortail — Le site hydrométrique](https://hydro.eaufrance.fr/aide/le-site-hydrometrique) | 2026-09-21 |
 
 The station count describes the packaged catalogue. The example observations were
-retrieved on 2026-09-21.
+retrieved on 2026-11-20.

@@ -59,40 +59,68 @@ def encode_catalogue(providers: list[dict], stations: pl.DataFrame, series: Iter
     """
     provider_indexes = {item["provider_id"]: index for index, item in enumerate(providers)}
     records = []
-    station_indexes = {}
-    for row in stations.iter_rows(named=True):
-        key = (row["provider_id"], row["station_id"])
-        if key in station_indexes:
-            raise ValueError(f"Duplicate station identity: {key}")
-        station_indexes[key] = len(records)
-        records.append(
-            [
-                provider_indexes[key[0]],
-                key[1],
-                row["station_name"],
-                row["latitude"],
-                row["longitude"],
-                row["crs"],
-                list(dict.fromkeys(name for name in (row["water_body_name_value"] or []) if name and name.strip())),
-            ]
-        )
+    station_indexes: dict[tuple[str, str], int] = {}
+    if stations.height:
+        s_cols = stations.select(
+            "provider_id",
+            "station_id",
+            "station_name",
+            "latitude",
+            "longitude",
+            "crs",
+            "water_body_name_value",
+        ).to_dict(as_series=False)
+        for prov, sid, s_name, lat, lon, crs, wb_names in zip(
+            s_cols["provider_id"],
+            s_cols["station_id"],
+            s_cols["station_name"],
+            s_cols["latitude"],
+            s_cols["longitude"],
+            s_cols["crs"],
+            s_cols["water_body_name_value"],
+            strict=True,
+        ):
+            key = (prov, sid)
+            if key in station_indexes:
+                raise ValueError(f"Duplicate station identity: {key}")
+            station_indexes[key] = len(records)
+            records.append(
+                [
+                    provider_indexes[prov],
+                    sid,
+                    s_name,
+                    lat,
+                    lon,
+                    crs,
+                    list(dict.fromkeys(name for name in (wb_names or ()) if name and name.strip())),
+                ]
+            )
     facts = []
-    fact_indexes = {}
+    fact_indexes: dict[str, int] = {}
+    segment_index_cache: dict[int, tuple[object, int]] = {}
     series_records = []
     for item in series:
         references = []
         for segment in item.facts:
-            profile = {
-                field: {"value": getattr(segment, field).value, "state": getattr(segment, field).state.value}
-                for field in FACT_FIELDS
-            }
-            profile["normalized_unit"] = segment.normalized_unit
-            profile["admission"] = admission(segment).status
-            key = json.dumps(profile, ensure_ascii=False, separators=(",", ":"))
-            if key not in fact_indexes:
-                fact_indexes[key] = len(facts)
-                facts.append(profile)
-            references.append(fact_indexes[key])
+            seg_key = id(segment)
+            cached_seg = segment_index_cache.get(seg_key)
+            if cached_seg is None:
+                profile = {
+                    field: {"value": getattr(segment, field).value, "state": getattr(segment, field).state.value}
+                    for field in FACT_FIELDS
+                }
+                profile["normalized_unit"] = segment.normalized_unit
+                profile["admission"] = admission(segment).status
+                key = json.dumps(profile, ensure_ascii=False, separators=(",", ":"))
+                idx = fact_indexes.get(key)
+                if idx is None:
+                    idx = len(facts)
+                    fact_indexes[key] = idx
+                    facts.append(profile)
+                segment_index_cache[seg_key] = (segment, idx)
+            else:
+                idx = cached_seg[1]
+            references.append(idx)
         series_records.append(
             [
                 station_indexes[(item.provider_id, item.station_id)],

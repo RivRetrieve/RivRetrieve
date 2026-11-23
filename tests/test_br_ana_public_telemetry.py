@@ -46,8 +46,8 @@ def isolated_public_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 class _AuthenticatedReplay:
     def __init__(self, retained_evidence_root) -> None:
         self.recording = read_recording(
-            (retained_evidence_root / "tests/recordings/br_ana")
-            / "telemetry_15400000_2024-01-04_DIAS_30.recording.json"
+            (retained_evidence_root / "tests/recordings/br_ana_window_perf")
+            / "telemetry_15400000_2024-01-02_DIAS_30.recording.json"
         )
         self.replay = ReplayTransport((self.recording,))
         self.exchange_calls = 0
@@ -111,7 +111,7 @@ def test_public_fetch_requires_both_ana_credentials_before_transport() -> None:
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
-@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf/telemetry_15400000_2024-01-02_DIAS_30.recording.json")
 def test_public_native_midnight_values_receipts_and_provenance(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch, product: str
 ) -> None:
@@ -170,7 +170,7 @@ def test_public_native_midnight_values_receipts_and_provenance(
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
-@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf/telemetry_15400000_2024-01-02_DIAS_30.recording.json")
 def test_public_cache_reuse_needs_no_new_exchange_or_observation(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch, product: str
 ) -> None:
@@ -197,7 +197,7 @@ def test_public_cache_reuse_needs_no_new_exchange_or_observation(
     assert transport.exchange_calls == transport.observation_calls == 1
 
 
-@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf/telemetry_15400000_2024-01-02_DIAS_30.recording.json")
 def test_unrestricted_telemetry_keeps_incomplete_inventory_and_reacquires(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch
 ) -> None:

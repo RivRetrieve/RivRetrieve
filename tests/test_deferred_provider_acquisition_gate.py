@@ -19,7 +19,7 @@ from rivretrieve._internal.catalogues.artifact import (
     load_packaged_catalogue_artifact,
 )
 from tests._catalogue import catalogue_path, catalogue_reader
-from tests._provenance import legacy_provenance
+from tests._provenance import canonical_legacy_provenance, legacy_document, legacy_provenance
 
 
 @pytest.mark.derived("tests/test_data/br_ana_inventory/capture.json")
@@ -55,6 +55,7 @@ def test_brazil_inventory_and_adopted_candidates_are_certified(retained_evidence
     assert artifact.provider_info["citation"] is None
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_brazil_discovery_exposes_only_documented_adopted_products() -> None:
     assert "br_ana" in rr.providers().get_column("provider_id").to_list()
     assert rr.products(provider="br_ana") == [
@@ -76,9 +77,9 @@ def test_brazil_unacquired_station_support_is_not_source_silence() -> None:
     evidence = brazil.acquisition_provenance
     assert evidence is not None
     assert {group.reason for group in evidence.header.withheld_facts} == {"no_acquisition_record_established"}
-    japan = load_packaged_catalogue_artifact(catalogue_path("jp_mlit"), on_issue="raise")
-    assert japan.provider_info["license"] is None
-    origins_text = (catalogue_path("jp_mlit").parent / "origins.py").read_text(encoding="utf-8")
+    czech = load_packaged_catalogue_artifact(catalogue_path("cz_chmi"), on_issue="raise")
+    assert czech.provider_info["license"] is None
+    origins_text = (catalogue_path("cz_chmi").parent / "origins.py").read_text(encoding="utf-8")
     assert "NotPublished" in origins_text
 
 
@@ -90,8 +91,9 @@ def test_brazil_requires_provenance_at_the_packaged_boundary(tmp_path: Path) -> 
         load_packaged_catalogue_artifact(copied, on_issue="raise")
 
 
-def test_brazil_selection_retains_unknown_candidate_reason_and_source_evidence() -> None:
-    artifact = load_packaged_catalogue_artifact(catalogue_path("br_ana"))
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+def test_brazil_selection_retains_unknown_candidate_reason_and_source_evidence(packaged_catalogue_inputs) -> None:
+    artifact = packaged_catalogue_inputs.load(catalogue_path("br_ana"))
     candidate = artifact.station_products.filter(
         (pl.col("availability") == "unknown") & (pl.col("product_id") == "stage_instantaneous")
     ).row(0, named=True)
@@ -113,8 +115,8 @@ def test_brazil_selection_retains_unknown_candidate_reason_and_source_evidence()
 
 
 def test_packaged_evidence_rejects_retired_schema(tmp_path: Path) -> None:
-    copied = tmp_path / "jp_mlit"
-    shutil.copytree(catalogue_path("jp_mlit"), copied)
+    copied = tmp_path / "cz_chmi"
+    shutil.copytree(catalogue_path("cz_chmi"), copied)
     payload = json.loads((copied / "provenance.json").read_text(encoding="utf-8"))
     assert payload["schema_version"] == 3
     payload["schema_version"] = 1
@@ -125,10 +127,8 @@ def test_packaged_evidence_rejects_retired_schema(tmp_path: Path) -> None:
 
 
 def test_acquisition_provenance_v2_rejects_legacy_and_mixed_withheld_shapes() -> None:
-    provenance = load_packaged_catalogue_artifact(catalogue_path("br_ana"), on_issue="raise").acquisition_provenance
-    assert provenance is not None
-    provenance = legacy_provenance(provenance)
-    payload = provenance.model_dump(mode="json")
+    provenance = canonical_legacy_provenance("br_ana")
+    payload = legacy_document(catalogue_path("br_ana") / "provenance.json")
     assert payload["schema_version"] == 2
     assert payload["withheld_facts"]
     assert all("fact" not in item for item in payload["withheld_facts"])
@@ -247,8 +247,8 @@ def test_deferred_terms_match_completed_survey_exactly(
 
 def test_packaged_reader_normalizes_genuine_v2_to_the_same_evidence(tmp_path: Path) -> None:
     """Exercise the deliberate v2 file compatibility boundary, not a runtime facade."""
-    copied = tmp_path / "jp_mlit"
-    shutil.copytree(catalogue_path("jp_mlit"), copied)
+    copied = tmp_path / "cz_chmi"
+    shutil.copytree(catalogue_path("cz_chmi"), copied)
     expected = load_packaged_catalogue_artifact(copied, on_issue="raise").acquisition_provenance
     assert expected is not None
     (copied / "provenance.json").write_text(legacy_provenance(expected).model_dump_json())

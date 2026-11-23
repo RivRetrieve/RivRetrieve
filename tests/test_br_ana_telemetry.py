@@ -51,7 +51,8 @@ class _Stages:
 
 
 def _recording(retained_evidence_root, anchor: str) -> Path:
-    return (retained_evidence_root / "tests/recordings/br_ana") / f"telemetry_15400000_{anchor}_DIAS_30.recording.json"
+    directory = "tests/recordings/br_ana_window_perf" if anchor == "2024-01-02" else "tests/recordings/br_ana"
+    return (retained_evidence_root / directory) / f"telemetry_15400000_{anchor}_DIAS_30.recording.json"
 
 
 def _request(product: ProductId, start: str, end: str) -> ObservationRequest:
@@ -105,7 +106,7 @@ def _run(
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
-@pytest.mark.recorded("tests/recordings/br_ana")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf/telemetry_15400000_2024-01-02_DIAS_30.recording.json")
 def test_independent_midnight_probe_through_actual_engine(retained_evidence_root, product: ProductId) -> None:
     # Independent author did not see the port or its output. Exactly three assertions.
     harness = BoundaryProbeHarness(((_PROVIDER, product),))
@@ -113,7 +114,7 @@ def test_independent_midnight_probe_through_actual_engine(retained_evidence_root
         LiveBoundaryProbe(
             provider_id=_PROVIDER,
             product_id=product,
-            recordings=(read_recording(_recording(retained_evidence_root, "2024-01-04")),),
+            recordings=(read_recording(_recording(retained_evidence_root, "2024-01-02")),),
             assertions={
                 READING_COUNT: 5,
                 FIRST_WALL_CLOCK_TIME: WallClockExpectation("2024-01-01T23:30:00", "unknown"),
@@ -136,9 +137,9 @@ def test_independent_midnight_probe_through_actual_engine(retained_evidence_root
 @pytest.mark.parametrize(
     ("start", "end", "anchors"),
     [
-        ("2023-12-05", "2024-01-02", ("2023-12-05", "2024-01-04")),
-        ("2023-12-05", "2024-01-29", ("2024-01-01", "2024-01-31")),
-        ("2023-11-17", "2023-12-03", ("2023-12-05",)),
+        ("2023-12-03", "2024-01-04", ("2023-12-05", "2024-01-04")),
+        ("2023-12-03", "2024-01-31", ("2024-01-01", "2024-01-31")),
+        ("2023-11-06", "2023-12-05", ("2023-12-05",)),
     ],
 )
 @pytest.mark.recorded("tests/recordings/br_ana")
@@ -181,7 +182,7 @@ def test_fixed_spans_match_recorded_native_values_and_preserve_nulls(
 
 
 @pytest.mark.parametrize("product", _PRODUCTS)
-@pytest.mark.recorded("tests/recordings/br_ana")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf/telemetry_15400000_2024-01-02_DIAS_30.recording.json")
 def test_cache_reuses_native_values_without_double_conversion(
     retained_evidence_root, product: ProductId, tmp_path: Path
 ) -> None:
@@ -191,7 +192,7 @@ def test_cache_reuses_native_values_without_double_conversion(
         product,
         "2024-01-01T23:30:00",
         "2024-01-02T00:30:00",
-        ("2024-01-04",),
+        ("2024-01-02",),
         cache="reuse",
         store=store,
         explicit_adopted=True,
@@ -216,14 +217,17 @@ def test_wrong_anchor_fails_exact_replay(retained_evidence_root) -> None:
         _run(retained_evidence_root, _PRODUCTS[0], "2024-01-02T23:30:00", "2024-01-03T00:30:00", ("2024-01-04",))
 
 
-def _payload(retained_evidence_root, product: ProductId, anchor: str = "2024-01-04"):
+def _payload(retained_evidence_root, product: ProductId, anchor: str = "2024-01-02"):
     # Capture payload from real fetch, preserving its exact source tags and origin.
     from rivretrieve._internal.coverage import RequestedInterval
     from rivretrieve._internal.driver import _padded_interval
     from rivretrieve._internal.window_planning import plan_windows
 
-    window = _padded_interval(RequestedInterval(datetime(2024, 1, 1), datetime(2024, 1, 2)))
     declaration = window_declarations().products[product]
+    window = _padded_interval(
+        RequestedInterval(datetime(2024, 1, 1), datetime(2024, 1, 2)),
+        padding=declaration.fetch_padding,
+    )
     return fetch(
         ("15400000",),
         (product,),
@@ -235,7 +239,7 @@ def _payload(retained_evidence_root, product: ProductId, anchor: str = "2024-01-
 
 
 @pytest.mark.parametrize("field", ["Cota_Adotada", "Vazao_Adotada", "Data_Hora_Medicao", "codigoestacao"])
-@pytest.mark.recorded("tests/recordings/br_ana")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf/telemetry_15400000_2024-01-02_DIAS_30.recording.json")
 def test_missing_required_fields_fail_loud_from_corrupted_recording(retained_evidence_root, field: str) -> None:
     # Adversarial corruption only: not a source observation fixture or boundary expectation.
     product = ProductId("stage_instantaneous" if field == "Cota_Adotada" else "discharge_instantaneous")
@@ -248,7 +252,7 @@ def test_missing_required_fields_fail_loud_from_corrupted_recording(retained_evi
 
 
 @pytest.mark.parametrize("bad_value", ["", "NaN", "Infinity", "not-a-number", True, 1, "9" * 400])
-@pytest.mark.recorded("tests/recordings/br_ana")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf/telemetry_15400000_2024-01-02_DIAS_30.recording.json")
 def test_invalid_values_fail_loud_from_corrupted_recording(retained_evidence_root, bad_value: object) -> None:
     payload = _payload(retained_evidence_root, ProductId("stage_instantaneous"))
     document = json.loads(payload.content)
@@ -260,12 +264,14 @@ def test_invalid_values_fail_loud_from_corrupted_recording(retained_evidence_roo
 
 @pytest.mark.recorded("tests/recordings/br_ana")
 def test_real_null_values_and_status_are_retained(retained_evidence_root) -> None:
-    result = _run(retained_evidence_root, ProductId("stage_instantaneous"), "2023-11-18", "2023-12-03", ("2023-12-05",))
+    result = _run(retained_evidence_root, ProductId("stage_instantaneous"), "2023-11-18", "2023-12-05", ("2023-12-05",))
     assert result.canonical_rows["value"].null_count() > 0
-    assert any(issue.details["source_status"] is None for issue in result.issues if issue.code == "source_status")
+    assert not result.issues
+    ann = result.annotations.observation_tables["br_ana.telemetry_cota"].rows
+    assert None in ann["Cota_Adotada_Status"].to_list()
 
 
-@pytest.mark.recorded("tests/recordings/br_ana")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf/telemetry_15400000_2024-01-02_DIAS_30.recording.json")
 def test_duplicate_multiplicity_is_not_a_quality_selection_rule(retained_evidence_root) -> None:
     # Deliberately repeated *real* source bytes challenge multiplicity handling only.
     payload = _payload(retained_evidence_root, ProductId("stage_instantaneous"))
@@ -299,3 +305,51 @@ def test_exact_detailed_recording_does_not_establish_adopted_equivalence(retaine
     assert all(row["Cota_Manual"] is None and row["Cota_Display"] is None for row in rows)
     # Numeric comparison disproves equality; it does not establish units, datum,
     # temporal support, or general absence of the all-null manual/display fields.
+
+
+@pytest.mark.parametrize("product", _PRODUCTS)
+def test_telemetry_declaration_disables_fetch_padding(product: ProductId) -> None:
+    from datetime import timedelta
+
+    declaration = window_declarations().products[product]
+    assert declaration.granularity == "fixed-backward-span"
+    assert declaration.size == 30
+    assert declaration.fetch_padding == timedelta(0)
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "expected_anchors"),
+    [
+        ("2026-10-22", "2026-11-20", ["2026-11-20"]),
+        ("2026-10-21", "2026-11-20", ["2026-10-21", "2026-11-20"]),
+    ],
+)
+def test_telemetry_driver_avoids_padding_split_on_thirty_day_window(
+    start: str, end: str, expected_anchors: list[str]
+) -> None:
+    from datetime import UTC
+
+    from rivretrieve._internal.transport import TransportResponse
+
+    anchors: list[str] = []
+
+    class _EmptyTransport:
+        def send(self, request):
+            anchors.append(str(request.params["Data de Busca (yyyy-MM-dd)"]))
+            assert request.params["Range Intervalo de busca"] == "DIAS_30"
+            return TransportResponse(
+                content=b'{"items":[]}',
+                status_code=200,
+                retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+                content_type="application/json",
+                url=request.url,
+                request_parameters=request.params,
+            )
+
+    drive(
+        _request(ProductId("stage_instantaneous"), start, end),
+        _Stages(),
+        provenance=ObservationProvenance(source="test-telemetry-window", provider_id=_PROVIDER),
+        transport=_EmptyTransport(),
+    )
+    assert anchors == expected_anchors

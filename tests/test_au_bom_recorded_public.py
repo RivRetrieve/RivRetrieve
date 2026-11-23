@@ -58,9 +58,14 @@ def _synthetic_empty_values(request: TransportRequest) -> TransportResponse:
     params = request.params or {}
     ts_ids = str(params.get("ts_id", "")).split(",")
     body = json.dumps(
-        [{"ts_id": ts_id, "rows": "0", "columns": "Timestamp,Value,Quality Code,Quality Code Name", "data": []} for ts_id in ts_ids]
+        [
+            {"ts_id": ts_id, "rows": "0", "columns": "Timestamp,Value,Quality Code,Quality Code Name", "data": []}
+            for ts_id in ts_ids
+        ]
     ).encode("utf-8")
-    return TransportResponse(body, 200, datetime(2026, 11, 4, tzinfo=UTC), "application/json", request.url, dict(params))
+    return TransportResponse(
+        body, 200, datetime(2026, 11, 4, tzinfo=UTC), "application/json", request.url, dict(params)
+    )
 
 
 def _select_stage_daily_mean(station: str) -> rr.Selection:
@@ -68,7 +73,9 @@ def _select_stage_daily_mean(station: str) -> rr.Selection:
 
 
 @pytest.mark.recorded(_SCOPE)
-def test_public_recorded_station_410730_stage_success(retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_public_recorded_station_410730_stage_success(
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     class _Replay:
         def send(self, request: TransportRequest) -> TransportResponse:
             if (request.params or {}).get("request") == "getTimeseriesList":
@@ -79,18 +86,19 @@ def test_public_recorded_station_410730_stage_success(retained_evidence_root: Pa
 
     monkeypatch.setattr(discovery, "HttpClient", _Replay)
     selection = _select_stage_daily_mean("410730")
-    result = rr.fetch(selection, start="2026-09-01", end="2026-09-10", cache="bypass")
+    result = rr.fetch(selection, start="2026-09-01", end="2026-09-10", cache="bypass", on_issue="ignore")
 
     raw, _ = _load_capture(retained_evidence_root, "timeseriesvalues-410730-stage-24hr-success")
     clipped = [row for row in json.loads(raw)[0]["data"] if "2026-09-01" <= row[0][:10] <= "2026-09-10"]
     assert result.data.height == len(clipped) == 10
     assert result.data["unit"].unique().to_list() == ["m"]
     assert sorted(result.data["value"].to_list()) == pytest.approx(sorted(row[1] for row in clipped))
-    assert not any(issue.code == "source.quality_code" for issue in result.issues)
+    table = rr.annotations(result, schema="au_bom.quality")
+    assert table.height == result.data.height
 
 
 @pytest.mark.recorded(_SCOPE)
-def test_public_recorded_station_410730_discharge_quality_e_issue(
+def test_public_recorded_station_410730_discharge_quality_e_annotations(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class _Replay:
@@ -111,11 +119,14 @@ def test_public_recorded_station_410730_discharge_quality_e_issue(
     discharge_rows = result.data.filter(result.data["product_id"] == "discharge_daily_mean_24hr")
     assert discharge_rows.height == 8
     assert discharge_rows["unit"].unique().to_list() == ["m3/s"]
-    # Issues are emitted per source row from the engine's wider padded-window
-    # response (11 rows), not the window the caller actually requested (8 rows).
-    quality_issues = [issue for issue in result.issues if issue.code == "source.quality_code"]
-    assert len(quality_issues) == 11
-    assert all(issue.severity == "info" for issue in quality_issues)
+    # The annotation table mirrors result.data's row scope exactly, the same
+    # settled convention ch_foen's releaseState/releaseStatus annotations use:
+    # the engine's wider padded-window response (11 source rows) is clipped to
+    # the caller's requested window before the annotation table is built, so no
+    # row describes an observation the caller cannot see in result.data.
+    table = rr.annotations(result, schema="au_bom.quality")
+    assert table.height == discharge_rows.height == 8
+    assert table["Quality_Code_Name"].to_list() == ["quality-E"] * 8
 
 
 @pytest.mark.recorded(_SCOPE)
@@ -134,9 +145,7 @@ def test_public_recorded_station_138020a_duplicate_ts_id_split_with_published_nu
             return _synthetic_empty_values(request)  # the 09HR sibling pair, not under test here
 
     monkeypatch.setattr(discovery, "HttpClient", _Replay)
-    selection = rr.find(
-        provider="au_bom", station="138020A", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="au_bom", station="138020A", quantity="discharge", frequency="daily", statistic="mean")
     result = rr.fetch(selection, start="2026-09-01", end="2026-09-10", cache="bypass", on_issue="ignore")
 
     statuses = {outcome.status for outcome in result.outcomes}
@@ -214,7 +223,12 @@ def test_public_recorded_values_call_transport_failure_reports_an_error_issue(
             params = request.params or {}
             if params.get("request") == "getTimeseriesList":
                 return TransportResponse(
-                    synthetic_list, 200, datetime(2026, 11, 4, tzinfo=UTC), "application/json", request.url, dict(params)
+                    synthetic_list,
+                    200,
+                    datetime(2026, 11, 4, tzinfo=UTC),
+                    "application/json",
+                    request.url,
+                    dict(params),
                 )
             _, receipt = _load_capture(retained_evidence_root, "timeseriesvalues-invalid-ts-id")
             if receipt.get("http_status") == 500:

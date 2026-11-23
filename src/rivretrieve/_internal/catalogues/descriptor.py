@@ -11,7 +11,6 @@ from typing import Literal, TypedDict, cast
 
 import polars as pl
 
-from rivretrieve._internal.acquisition_provenance import verified_source_terms
 from rivretrieve._internal.catalogue_origins import (
     Authored,
     Documented,
@@ -23,6 +22,7 @@ from rivretrieve._internal.catalogue_origins import (
 from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
 from rivretrieve._internal.catalogues.evidence import EVIDENCE_FILENAMES, EVIDENCE_SCHEMAS, CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import PROVIDER_INFO_CATALOG_SCHEMA, CatalogueDtype
+from rivretrieve._internal.catalogues.terms import verified_catalogue_terms
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.station_metadata import SOURCE_METADATA_SCHEMA, source_metadata_frame
 
@@ -367,7 +367,7 @@ def build_catalogue_descriptor(
             _organization(issuer)
             for issuer in dict.fromkeys(source.issuer for source in evidence.header.source_records)
         ],
-        **verified_source_terms(evidence.header.source_records),
+        **verified_catalogue_terms(evidence),
         "distribution": distributions,
         "recordSet": record_sets,
         "subjectOf": {

@@ -49,7 +49,7 @@ def test_public_discovery_keeps_overlapping_station_identity_separate():
             {"quantity": "discharge", "frequency": "daily", "statistic": "mean"},
             "2025-01-03",
             "2025-01-03",
-            "fr_hubeau_1011000101_QmnJ_padded.recording.json",
+            "fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",
             "https://hubeau.eaufrance.fr/",
         ),
         (
@@ -64,7 +64,7 @@ def test_public_discovery_keeps_overlapping_station_identity_separate():
     ],
 )
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",
     "tests/test_data/fr_hydroportail_station_Q_padded.recording.json",
 )
 def test_public_fetch_receipts_and_exports_preserve_service(

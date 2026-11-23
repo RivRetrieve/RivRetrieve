@@ -406,6 +406,75 @@ def _payload(
     )
 
 
+@pytest.mark.parametrize("acquisition_axis", ["native", "utc"])
+def test_drive_enforces_payload_interval_ownership_without_deduplicating_rows(acquisition_axis):
+    from dataclasses import replace
+
+    from rivretrieve._internal.time_axis import TimeAxis
+
+    coordinates = SourceCoordinates({"parameter": "height"})
+    config = _config(coordinates)
+    request = _request(_windows()[0], ("station-1",))
+    axis = TimeAxis(acquisition_axis)
+    # UTC ownership must compare instants, not the source's +02:00 labels.
+    offset = 2 if axis is TimeAxis.UTC else 0
+    zone = "+02:00" if offset else "+00:00"
+    boundary = datetime(2026, 1, 2, 12 - offset)
+    windows = (
+        _make_fetch_window(
+            WindowEndpoint.from_datetime(datetime(2026, 1, 2)),
+            WindowEndpoint.from_datetime(boundary - timedelta(microseconds=1)),
+        ),
+        _make_fetch_window(
+            WindowEndpoint.from_datetime(boundary),
+            WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23)),
+        ),
+    )
+    payloads = tuple(
+        replace(
+            _payload("station-1", coordinates, window),
+            content=f"original response {index}".encode(),
+            acquisition_axis=axis,
+        )
+        for index, window in enumerate(windows)
+    )
+    snapshots = (
+        pl.concat(
+            [_rows("station-1", 11, 100.0, time_zone=zone)] * 2 + [_rows("station-1", 12, 999.0, time_zone=zone)]
+        ),
+        pl.concat([_rows("station-1", 11, 888.0, time_zone=zone), _rows("station-1", 12, 200.0, time_zone=zone)]),
+    )
+
+    class PartitionedProvider:
+        window_declarations = _LEVEL_WINDOW_DECLARATIONS
+
+        def __init__(self):
+            self.config = config
+
+        def fetch(self, *args, **kwargs):
+            return WithIssues(payloads)
+
+        def parse(self, payload, supplied_config):
+            index = next(i for i, original in enumerate(payloads) if original.content == payload.content)
+            assert payload.content is payloads[index].content
+            return _parsed(snapshots[index], payload, supplied_config)
+
+    result = driver_module.drive(
+        request,
+        PartitionedProvider(),
+        provenance=_provenance(request),
+        receipts=ReceiptMode.INCLUDE,
+    )
+    expected = pl.DataFrame(
+        {
+            "time": [datetime(2026, 1, 2, 11), datetime(2026, 1, 2, 11), datetime(2026, 1, 2, 12)],
+            "value": [1.0, 1.0, 2.0],
+        }
+    )
+    pl_testing.assert_frame_equal(result.canonical_rows.select("time", "value"), expected)
+    assert tuple(entry.content for entry in result.receipts.entries) == tuple(payload.content for payload in payloads)
+
+
 def _origin() -> SourceCallOrigin:
     unknown = UnknownOriginFact()
     return SourceCallOrigin(unknown, unknown, unknown, unknown, unknown, unknown, unknown)
@@ -1892,3 +1961,74 @@ def test_issue_context_marker_cannot_overwrite_publisher_context():
     with pytest.raises(FatalContractError, match="conflicts with storage-only context"):
         driver_module._issue_with_acquisition_references(original, ("authored-acquisition",))
     assert driver_module._public_issues((original,)) == (original,)
+
+
+@pytest.mark.parametrize(
+    ("fetch_padding", "expected_start", "expected_end", "expected_pairs"),
+    [
+        (
+            None,
+            datetime(2026, 10, 20),
+            datetime(2026, 11, 22),
+            (("2026-09-24", "2026-10-23"), ("2026-10-24", "2026-11-22")),
+        ),
+        (timedelta(0), datetime(2026, 10, 22), datetime(2026, 11, 20), (("2026-10-22", "2026-11-20"),)),
+    ],
+)
+def test_driver_honors_declaration_fetch_padding_override(
+    fetch_padding: timedelta | None,
+    expected_start: datetime,
+    expected_end: datetime,
+    expected_pairs: tuple[tuple[str, str], ...],
+) -> None:
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2026, 10, 22)),
+        WindowEndpoint.from_datetime(datetime(2026, 11, 20)),
+    )
+    request = _request(requested, ("station-1",))
+    seen_windows: list[tuple[FetchWindow, tuple[tuple[str, str | None], ...]]] = []
+    product = ProductId("level")
+    provider_config = ProviderConfig(
+        zone=ZoneValue("+00:00"),
+        products={
+            product: ProductConfig(
+                coordinates=SourceCoordinates({"parameter": "height"}),
+                unit=Unit.CM,
+                semantics=Instant(),
+            )
+        },
+    )
+    declarations = ProductWindowDeclarations(
+        {
+            product: WindowDeclaration(
+                WindowGranularity("fixed-backward-span"),
+                WindowRenderingVocabulary.DATE,
+                StopConvention.INCLUSIVE,
+                size=30,
+                fetch_padding=fetch_padding,
+            )
+        }
+    )
+
+    class _Provider:
+        config = provider_config
+        window_declarations = declarations
+
+        def fetch(self, stations, products, windows, window, config, transport, **_kwargs):
+            seen_windows.append((window, tuple((item.start, item.stop) for item in windows[product])))
+            return WithIssues(())
+
+        def parse(self, payload, config):
+            raise AssertionError("parse should not run without payloads")
+
+    driver_module.drive(
+        request,
+        _Provider(),
+        provenance=_provenance(request),
+        receipts=ReceiptMode.OMIT,
+    )
+    assert len(seen_windows) == 1
+    actual_window, actual_pairs = seen_windows[0]
+    assert actual_window.start == WindowEndpoint.from_datetime(expected_start)
+    assert actual_window.end == WindowEndpoint.from_datetime(expected_end)
+    assert actual_pairs == expected_pairs

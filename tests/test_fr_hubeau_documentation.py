@@ -18,17 +18,26 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = Path("tests/test_data/french_provider_documentation")
+HUBEAU_DOC_RECORDING = Path("tests/test_data/fr_hubeau_size2500/fr_hubeau-0.recording.json")
 
 
-@pytest.mark.recorded("tests/test_data/french_provider_documentation")
-@pytest.mark.parametrize("provider,block_count", [("fr_hubeau", 1), ("fr_hydroportail", 3)])
+@pytest.mark.recorded(
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau-0.recording.json",
+    "tests/test_data/french_provider_documentation",
+)
+@pytest.mark.parametrize("provider,block_count", [("fr_hubeau", 1), ("fr_hydroportail", 4)])
 def test_french_page_examples_and_displayed_outputs(
     retained_evidence_root, monkeypatch, tmp_path, provider, block_count
 ):
     page = (ROOT / f"docs/providers/{provider}.md").read_text()
     blocks = re.findall(r"```python\n(.*?)```\n\nOutput:\n\n```text\n(.*?)```", page, re.DOTALL)
     assert len(blocks) == page.count("```python") == block_count
-    replay = ReplayTransport(sorted((retained_evidence_root / EVIDENCE).glob(f"{provider}-*.recording.json")))
+    recordings = (
+        (retained_evidence_root / HUBEAU_DOC_RECORDING,)
+        if provider == "fr_hubeau"
+        else sorted((retained_evidence_root / EVIDENCE).glob(f"{provider}-*.recording.json"))
+    )
+    replay = ReplayTransport(recordings)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.chdir(tmp_path)
     namespace = {}
@@ -39,6 +48,10 @@ def test_french_page_examples_and_displayed_outputs(
         assert output.getvalue() == expected, index
     if provider == "fr_hubeau":
         assert not namespace["result"].issues
+        assert "fr_hubeau.obs_elab" in page
+        assert "fr_hubeau.temperature_chronique" in page
+        assert namespace["rr"].annotations(namespace["result"])["schema"].unique().to_list() == ["fr_hubeau.obs_elab"]
+        assert "code_qualification" in namespace["result"].to_polars(annotations=True).columns
     else:
         assert [(issue.severity, issue.code) for issue in namespace["result"].issues] == [
             ("info", "provenance.license_not_established"),
@@ -47,6 +60,7 @@ def test_french_page_examples_and_displayed_outputs(
         assert namespace["rr"].series(namespace["result"])["variant"].to_list() == ["validated"]
         assert namespace["rr"].series(namespace["most_valid_result"])["variant"].to_list() == ["most_valid"]
         assert namespace["most_valid_result"].issues == namespace["result"].issues
+        assert namespace["rr"].annotations(namespace["result"])["name"].to_list() == ["s", "q", "m", "c"]
 
 
 @pytest.mark.parametrize("provider", ["fr_hubeau", "fr_hydroportail"])

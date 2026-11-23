@@ -68,6 +68,17 @@ def test_recent_public_retrieval_preserves_original_response(monkeypatch, retain
     assert first.receipts.entries[0].content == body
     assert first.provenance.endpoints == (receipt["url"],)
     assert len(requests) == 1
+    assert rr.annotations(first).select("schema", "name", "dtype", "row_count", "unmeasured_count").rows() == [
+        ("ch_foen.recent", "releaseStatus", "Int64", first.data.height, 0)
+    ]
+    raw_status_by_time = {
+        datetime.fromisoformat(row["timestamp"]).replace(tzinfo=None): row["releaseStatus"]
+        for row in json.loads(body)["data"]["water"]["observations"]["data_live"]
+    }
+    projected = first.to_polars(annotations=True).sort("time")
+    assert [row["releaseStatus"] for row in projected.iter_rows(named=True)] == [
+        raw_status_by_time[row["time"]] for row in projected.iter_rows(named=True)
+    ]
 
 
 @pytest.mark.recorded(_SCOPE)
@@ -130,6 +141,8 @@ def test_archive_public_original_response_composition(monkeypatch, retained_evid
     assert {item.variant for item in result.source_series if item.series_id in returned_ids} == original_variants
     assert result.receipts.entries[0].content == body
     assert result.provenance.endpoints == (receipt["url"],)
+    # Historical boundary capture omitted releaseState from its selection set.
+    assert rr.annotations(result).is_empty()
 
 
 @pytest.mark.recorded(_SCOPE)
@@ -224,6 +237,21 @@ def test_archive_public_exact_requests_preserve_rows_and_cache(monkeypatch, reta
         assert len(requests) == 1
         assert len(result.receipts.entries) == 1
         assert result.receipts.entries[0].content == body
+        assert rr.annotations(result).select("schema", "name", "dtype", "row_count", "unmeasured_count").rows() == [
+            ("ch_foen.archive", "releaseState", "String", result.data.height, 0)
+        ]
+        variant_by_id = {item.series_id: item.variant for item in definitions}
+        raw_state_by_key = {
+            (row["tsName"], datetime.fromisoformat(row["timestamp"]).replace(tzinfo=None), row["unitSymbol"]): row[
+                "releaseState"
+            ]
+            for row in json.loads(body)["data"]["water"]["observations"][expected["route"]]
+        }
+        projected = result.to_polars(annotations=True).sort(columns)
+        assert [row["releaseState"] for row in projected.iter_rows(named=True)] == [
+            raw_state_by_key[(variant_by_id[row["series_id"]], row["time"], row["source_unit"])]
+            for row in projected.iter_rows(named=True)
+        ]
         if not cache_checked and len(variants) > 1:
             cached = rr.fetch(
                 rr.pick(selection, variant=sorted(variants)),
@@ -233,6 +261,10 @@ def test_archive_public_exact_requests_preserve_rows_and_cache(monkeypatch, reta
                 on_issue="raise",
             )
             pt.assert_frame_equal(cached.data.sort(columns), result.data.sort(columns))
+            pt.assert_frame_equal(
+                cached.to_polars(annotations=True).sort(columns),
+                result.to_polars(annotations=True).sort(columns),
+            )
             assert cached.provenance.retrieved_at == result.provenance.retrieved_at
             assert len(requests) == 1
             cache_checked = True

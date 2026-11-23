@@ -1,5 +1,7 @@
 """Canada catalogue claims follow the explicit compiled-store path."""
 
+import pytest
+
 
 def test_catalogue_and_compiler_share_station_independent_publisher_facts():
     from rivretrieve._internal.providers.ca_eccc.series import source_description, source_series
@@ -41,6 +43,7 @@ def test_generated_products_use_authoritative_hydat_table_coordinates():
     )
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_daily_mean_filter_preserves_established_interval_support():
     import rivretrieve as rr
 

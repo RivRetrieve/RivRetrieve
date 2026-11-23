@@ -164,6 +164,9 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
             ),
         ),
         pytest.param("br_ana", marks=pytest.mark.recorded("tests/recordings/br_ana")),
+        pytest.param("at_ehyd", marks=pytest.mark.recorded("maintenance/observations/at_ehyd/retrieval")),
+        pytest.param("ar_ina", marks=pytest.mark.recorded("maintenance/observations/ar_ina/retrieval")),
+        pytest.param("co_ideam", marks=pytest.mark.recorded("maintenance/observations/co_ideam/retrieval")),
     ],
 )
 def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, monkeypatch, tmp_path, request):
@@ -182,6 +185,65 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             variant="consistido",
         )
         start, end = "2020-01-10", "2020-01-20"
+    elif provider == "at_ehyd":
+        from tests.test_at_ehyd_recorded_public import _response_matching_request
+
+        class _AtEhydReplay:
+            def send(self, req):
+                name = (
+                    "messstellen-info-209486"
+                    if req.url.endswith("/Messstellen/info")
+                    else "owf-209486-file5-q-tagesmittel"
+                )
+                return _response_matching_request(retained_evidence_root, "access", name, req)
+
+        monkeypatch.setattr(discovery, "HttpClient", _AtEhydReplay)
+        selection = rr.find(
+            provider=provider,
+            station="209486",
+            quantity="discharge",
+            frequency="daily",
+            statistic="mean",
+        )
+        start, end = "2023-01-01", "2023-01-10"
+    elif provider == "ar_ina":
+        from tests.test_ar_ina_recorded_public import _response_matching_request
+
+        class _ArInaReplay:
+            def send(self, req):
+                return _response_matching_request(
+                    retained_evidence_root,
+                    "retrieval",
+                    "a5-obs-26605-var40-planned-20240101-20240105",
+                    req,
+                    strict_params=True,
+                )
+
+        monkeypatch.setattr(discovery, "HttpClient", _ArInaReplay)
+        selection = rr.find(
+            provider=provider,
+            station="8",
+            quantity="discharge",
+            frequency="daily",
+            statistic="mean",
+        )
+        start, end = "2024-01-01T00:00:00", "2024-01-05T00:00:00"
+    elif provider == "co_ideam":
+        from tests.test_co_ideam_recorded_public import _response_matching_request
+
+        class _CoIdeamReplay:
+            def send(self, req):
+                return _response_matching_request(retained_evidence_root, "access", "s3-0011017010-q-media-d", req)
+
+        monkeypatch.setattr(discovery, "HttpClient", _CoIdeamReplay)
+        selection = rr.find(
+            provider=provider,
+            station="0011017010",
+            quantity="discharge",
+            frequency="daily",
+            statistic="mean",
+        )
+        start, end = "2023-05-01", "2023-05-10"
     elif provider == "ch_foen":
         from tests.test_partial_explicit_scope import _official_replay
 

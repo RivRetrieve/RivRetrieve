@@ -14,6 +14,8 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 
 class AlteredResponseTransport:
     def __init__(self, recordings, alter):
@@ -108,8 +110,8 @@ def test_bosnia_external_index_failure_is_retained_not_fatal(retained_evidence_r
 
 
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
-    "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QIXnJ_padded.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",
 )
 @pytest.mark.parametrize("next_value", [123, "https://example.org/untrusted"])
 def test_france_invalid_pagination_preserves_independent_series(
@@ -117,7 +119,7 @@ def test_france_invalid_pagination_preserves_independent_series(
 ):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     recordings = tuple(
-        read_recording(retained_evidence_root / "tests/test_data" / name)
+        read_recording(retained_evidence_root / "tests/test_data/fr_hubeau_size2500" / name)
         for name in (
             "fr_hubeau_1011000101_QmnJ_padded.recording.json",
             "fr_hubeau_1011000101_QIXnJ_padded.recording.json",
@@ -195,18 +197,13 @@ def test_hydroportail_contradictory_temporal_title_is_unsupported(retained_evide
 
 
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_padded.recording.json",
 )
 def test_temperature_published_unit_spelling_survives_public_result(retained_evidence_root: Path, monkeypatch):
-    recordings = tuple(
+    recordings = (
         read_recording(
-            retained_evidence_root / "tests/test_data" / f"fr_hubeau_01001336_temp_padded_p{i}.recording.json"
-        )
-        for i in range(1, 6)
+            retained_evidence_root / "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_padded.recording.json"
+        ),
     )
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(recordings))
     result = rr.fetch(
@@ -218,18 +215,13 @@ def test_temperature_published_unit_spelling_survives_public_result(retained_evi
 
 
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_padded.recording.json",
 )
 def test_temperature_contradictory_response_unit_is_not_admitted(retained_evidence_root: Path, monkeypatch):
-    recordings = tuple(
+    recordings = (
         read_recording(
-            retained_evidence_root / "tests/test_data" / f"fr_hubeau_01001336_temp_padded_p{i}.recording.json"
-        )
-        for i in range(1, 6)
+            retained_evidence_root / "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_padded.recording.json"
+        ),
     )
 
     def alter(request, body):
@@ -250,11 +242,8 @@ def test_temperature_contradictory_response_unit_is_not_admitted(retained_eviden
 
 
 @pytest.mark.recorded(
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p1.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p2.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p3.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p4.recording.json",
-    "tests/test_data/fr_hubeau_01001336_temp_padded_p5.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_multipage_padded_p1.recording.json",
+    "tests/test_data/fr_hubeau_size2500/fr_hubeau_01001336_temp_multipage_padded_p2.recording.json",
 )
 def test_france_late_bad_continuation_cannot_certify_partial_interval(
     retained_evidence_root: Path, monkeypatch, tmp_path
@@ -262,9 +251,11 @@ def test_france_late_bad_continuation_cannot_certify_partial_interval(
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     recordings = tuple(
         read_recording(
-            retained_evidence_root / "tests/test_data" / f"fr_hubeau_01001336_temp_padded_p{i}.recording.json"
+            retained_evidence_root
+            / "tests/test_data/fr_hubeau_size2500"
+            / f"fr_hubeau_01001336_temp_multipage_padded_p{i}.recording.json"
         )
-        for i in range(1, 6)
+        for i in range(1, 3)
     )
     last = recordings[-1].content
 
@@ -285,15 +276,15 @@ def test_france_late_bad_continuation_cannot_certify_partial_interval(
     monkeypatch.setattr(discovery, "HttpClient", lambda: Counted(recordings, alter))
     broad = rr.find(provider="fr_hubeau", station="01001336", quantity="temperature")
     selection = rr.pick(broad, series_id=broad.series[0].series_id)
-    kwargs = {"start": "2008-07-09", "end": "2008-07-10T23:59:59", "on_issue": "ignore", "receipts": True}
+    kwargs = {"start": "2008-07-09", "end": "2008-10-22T23:59:59", "on_issue": "ignore", "receipts": True}
     partial = rr.fetch(selection, cache="refresh", **kwargs)
     assert partial.data.is_empty()
     assert any(outcome.status == "unresolved" and outcome.reason and outcome.calls for outcome in partial.outcomes)
     assert rr.cache_status("fr_hubeau").coverage == ()
-    assert len(partial.receipts.entries) == 5
-    assert len(calls) == 5
+    assert len(partial.receipts.entries) == 2
+    assert len(calls) == 2
     reused = rr.fetch(selection, cache="reuse", **kwargs)
-    assert len(calls) == 10
+    assert len(calls) == 4
     assert any(outcome.status == "unresolved" for outcome in reused.outcomes)
     assert rr.cache_status("fr_hubeau").coverage == ()
     assert_frame_equal(reused.data, partial.data)

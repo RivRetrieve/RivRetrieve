@@ -115,12 +115,10 @@ def test_legacy_capture_keeps_exact_omitted_version_request_and_safe_credentials
 @pytest.mark.recorded("tests/test_data/no_nve_1.200.0_1003_1440_2025-07-08_2025-07-14.recording.json")
 def test_source_quality_and_correction_codes_remain_uninterpreted_diagnostics(retained_evidence_root):
     parsed = parse(_payload(retained_evidence_root, ProductId("water_temperature_daily_mean")), config())
-    assert {issue.code for issue in parsed.issues} == {"source_quality_code", "source_correction_code"}
-    assert {issue.severity for issue in parsed.issues} == {"info"}
+    assert parsed.issues == ()
     assert "quality" not in parsed.rows.columns
-    quality = next(issue for issue in parsed.issues if issue.code == "source_quality_code")
-    assert quality.details["source_quality_code"] == 1
-    assert quality.details["count"] == 6
+    ann = parsed.annotations.observation_tables["no_nve.observations"]
+    assert ann.rows["quality"].to_list().count(1) == 6
 
 
 @pytest.mark.recorded("tests/test_data/no_nve_1.200.0_1000_1440_1900-01-01_1900-01-07.recording.json")
@@ -146,8 +144,8 @@ def test_recorded_inclusive_instant_stop_and_null_values_are_preserved(retained_
     assert midnight.rows["value"].null_count() == 4
     assert day_end.rows.height == 5
     assert day_end.rows["time"].to_list()[-1] == datetime(2023, 3, 27, 11)
-    quality = next(issue for issue in midnight.issues if issue.code == "source_quality_code")
-    assert quality.details["source_quality_code"] == 2
+    assert midnight.issues == ()
+    assert 2 in midnight.annotations.observation_tables["no_nve.observations"].rows["quality"].to_list()
 
 
 @pytest.mark.recorded("tests/test_data/no_nve_103.3.0_1003_60_2025-07-08_2025-07-14.recording.json")

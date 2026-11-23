@@ -17,6 +17,8 @@ from rivretrieve._internal.source_series import (
 from rivretrieve._internal.store.authority import compact_evidence, compact_inventories
 from rivretrieve._internal.time_axis import TimeAxis
 
+pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
 _START = datetime(2020, 1, 1)
 _END = datetime(2020, 1, 31)
 
@@ -321,11 +323,13 @@ def test_public_repeated_usgs_refresh_retains_only_current_acquisitions(tmp_path
     monkeypatch.setattr(transport, "send", stamped)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
+    # With two-day padding, Jan 5 starts on Jan 3; the 365-day boundary
+    # falls on Jan 3 of the next non-leap year, keeping both offset rows there.
     counts = []
     for day in range(20, 24):
         stamp = datetime(2026, 9, day, tzinfo=UTC)
         transport.value = day
-        rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="refresh", on_issue="raise")
+        rr.fetch(selected, start="2002-01-05", end="2003-02-01", cache="refresh", on_issue="raise")
         document = json.loads((tmp_path / "usgs_nwis/store/manifest.json").read_text())
         counts.append(
             (
@@ -343,7 +347,7 @@ def test_public_repeated_usgs_refresh_retains_only_current_acquisitions(tmp_path
     failure_counts = []
     for day in range(24, 27):
         stamp = datetime(2026, 9, day, tzinfo=UTC)
-        partial = rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="refresh", on_issue="ignore")
+        partial = rr.fetch(selected, start="2002-01-05", end="2003-02-01", cache="refresh", on_issue="ignore")
         assert partial.data.height == 2
         document = json.loads((tmp_path / "usgs_nwis/store/manifest.json").read_text())
         failure_counts.append(
@@ -362,7 +366,7 @@ def test_public_repeated_usgs_refresh_retains_only_current_acquisitions(tmp_path
     assert {item["retrieved_at"] for item in supporting} == {"2026-09-23T00:00:00Z"}
     transport.failed_first = transport.failed_second = False
     stamp = datetime(2026, 9, 27, tzinfo=UTC)
-    rr.fetch(selected, start="2000-01-03", end="2003-02-01", cache="refresh", on_issue="raise")
+    rr.fetch(selected, start="2002-01-05", end="2003-02-01", cache="refresh", on_issue="raise")
     document = json.loads((tmp_path / "usgs_nwis/store/manifest.json").read_text())
     assert len(document["outcomes"]) == len(document["source_calls"]) == 2
     assert document["issues"] == []
@@ -482,14 +486,11 @@ def test_public_repeated_nve_metadata_origins_have_bounded_explicit_dependencies
         active_calls = {identity for item in document["outcomes"] for identity in item["calls"]}
         assert all(call["call_id"] in active_calls for call in observation_calls)
         if with_observations:
-            assert all("acquisition_ids" not in (issue.details or {}) for issue in result.issues)
-            assert {
-                issue["details"]["source_quality_code"]
-                for issue in document["issues"]
-                if "source_quality_code" in (issue["details"] or {})
-            } == {day}
-            active_ids = {call for item in document["outcomes"] for call in item["calls"]}
-            assert all(set(issue["details"]["acquisition_ids"]).issubset(active_ids) for issue in document["issues"])
+            assert result.issues == ()
+            assert document["issues"] == []
+            assert rr.annotations(result, schema="no_nve.observations").select("quality", "correction").rows() == [
+                (day, 1)
+            ] * len(versions)
 
     assert counts == [counts[0]] * 4
     assert len(requests) == 4 * (len(versions) + 1)

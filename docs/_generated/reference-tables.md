@@ -133,6 +133,21 @@ See `metadata` above and [station metadata](station-metadata.md) for name altern
 
 Only value is nullable. Time precision can vary while remaining Datetime. The zone belongs to each row, not the timestamp dtype. See `ObservationResult` above for units and meanings.
 
+### Annotation catalog frame
+
+| Column | Polars dtype |
+| --- | --- |
+| `scope` | `String` |
+| `schema` | `String` |
+| `name` | `String` |
+| `dtype` | `String` |
+| `row_count` | `Int64` |
+| `unmeasured_count` | `Int64` |
+| `description` | `String` |
+| `reference_url` | `String` |
+
+Returned by `annotations(value)` when `schema` is omitted. `unmeasured_count` counts observation-grain source slots with `measured=False`; series-grain rows report `0`.
+
 
 ## Shipped software capabilities
 
@@ -142,20 +157,25 @@ Counts describe packaged inventory accounting only. They do not establish countr
 
 | Provider | Observation kind | Required credential variables | Stations | Available pairs | Unknown pairs | Unavailable pairs |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
+| `ar_ina` | live | none | 829 | 2611 | 8166 | 0 |
+| `at_ehyd` | live | none | 746 | 4837 | 3369 | 0 |
 | `au_bom` | live | none | 8120 | 94412 | 51748 | 0 |
 | `ba_fhmzbih` | live | none | 60 | 132 | 48 | 0 |
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
 | `ch_foen` | live | none | 1341 | 7008 | 41268 | 0 |
+| `co_ideam` | live | none | 1372 | 19690 | 0 | 7750 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
+| `dk_vanda` | live | none | 1565 | 1733 | 2962 | 0 |
+| `fi_syke` | live | none | 2543 | 2543 | 5086 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
-| `jp_mlit` | live | none | 1023 | 0 | 4092 | 0 |
 | `lt_lhmt` | live | none | 97 | 0 | 194 | 0 |
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
+| `pe_senamhi` | live | none | 771 | 1170 | 10395 | 0 |
 | `pl_imgw` | bulk store | none | 1301 | 0 | 3903 | 0 |
 | `th_thaiwater` | live | none | 825 | 1096 | 554 | 0 |
-| `usgs_nwis` | live | none | 27934 | 61214 | 0 | 106390 |
+| `usgs_nwis` | live | none | 29642 | 63502 | 0 | 114350 |
 
 ### Packaged access coordinates
 
@@ -163,6 +183,30 @@ Access coordinates and declared units come from products.parquet. These are inte
 
 | Provider | Product | Canonical unit |
 | --- | --- | --- |
+| `ar_ina` | `discharge_daily_mean` | `m3/s` |
+| `ar_ina` | `discharge_instantaneous` | `m3/s` |
+| `ar_ina` | `discharge_monthly_max` | `m3/s` |
+| `ar_ina` | `discharge_monthly_mean` | `m3/s` |
+| `ar_ina` | `discharge_monthly_min` | `m3/s` |
+| `ar_ina` | `stage_4hourly` | `m` |
+| `ar_ina` | `stage_daily_mean` | `m` |
+| `ar_ina` | `stage_hourly` | `m` |
+| `ar_ina` | `stage_instantaneous` | `m` |
+| `ar_ina` | `stage_monthly_max` | `m` |
+| `ar_ina` | `stage_monthly_mean` | `m` |
+| `ar_ina` | `stage_monthly_min` | `m` |
+| `ar_ina` | `stage_weekly_mean` | `m` |
+| `at_ehyd` | `owf_abfl_monatsmaxima` | `m3/s` |
+| `at_ehyd` | `owf_abfl_monatsminima` | `m3/s` |
+| `at_ehyd` | `owf_abfl_tagesmittel` | `m3/s` |
+| `at_ehyd` | `owf_wasserst_monatsmaxima` | `m` |
+| `at_ehyd` | `owf_wasserst_monatsminima` | `m` |
+| `at_ehyd` | `owf_wasserst_tagesmittel` | `m` |
+| `at_ehyd` | `owf_wassertemp_monatsmittel` | `degC` |
+| `at_ehyd` | `pegel_bgis_abfluss` | `m3/s` |
+| `at_ehyd` | `pegel_bgis_wasserstand` | `m` |
+| `at_ehyd` | `pegel_longterm_abfluss` | `m3/s` |
+| `at_ehyd` | `pegel_longterm_wasserstand` | `m` |
 | `au_bom` | `discharge_daily_max` | `m3/s` |
 | `au_bom` | `discharge_daily_mean_09hr` | `m3/s` |
 | `au_bom` | `discharge_daily_mean_24hr` | `m3/s` |
@@ -228,21 +272,43 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `ch_foen` | `water_temperature_1year_mean` | `degC` |
 | `ch_foen` | `water_temperature_1year_min` | `degC` |
 | `ch_foen` | `water_temperature_recent` | `degC` |
+| `co_ideam` | `caudal_h` | `m3/s` |
+| `co_ideam` | `nivel_h` | `m` |
+| `co_ideam` | `nv_media_a` | `m` |
+| `co_ideam` | `nv_media_d` | `m` |
+| `co_ideam` | `nv_media_m` | `m` |
+| `co_ideam` | `nv_mn_a` | `m` |
+| `co_ideam` | `nv_mn_d` | `m` |
+| `co_ideam` | `nv_mn_m` | `m` |
+| `co_ideam` | `nv_mx_a` | `m` |
+| `co_ideam` | `nv_mx_d` | `m` |
+| `co_ideam` | `nv_mx_m` | `m` |
+| `co_ideam` | `q_media_a` | `m3/s` |
+| `co_ideam` | `q_media_d` | `m3/s` |
+| `co_ideam` | `q_media_m` | `m3/s` |
+| `co_ideam` | `q_mn_a` | `m3/s` |
+| `co_ideam` | `q_mn_d` | `m3/s` |
+| `co_ideam` | `q_mn_m` | `m3/s` |
+| `co_ideam` | `q_mx_a` | `m3/s` |
+| `co_ideam` | `q_mx_d` | `m3/s` |
+| `co_ideam` | `q_mx_m` | `m3/s` |
 | `cz_chmi` | `discharge_daily_mean` | `m3/s` |
 | `cz_chmi` | `discharge_hourly_mean` | `m3/s` |
 | `cz_chmi` | `stage_daily_mean` | `m` |
 | `cz_chmi` | `stage_hourly_mean` | `m` |
 | `cz_chmi` | `water_temperature_daily_mean` | `degC` |
+| `dk_vanda` | `discharge` | `l/s` |
+| `dk_vanda` | `stage` | `cm` |
+| `dk_vanda` | `temperature` | `degC` |
+| `fi_syke` | `discharge_reported` | `m3/s` |
+| `fi_syke` | `stage_reported` | `m` |
+| `fi_syke` | `water_temperature_reported` | `degC` |
 | `fr_hubeau` | `discharge_daily_max` | `m3/s` |
 | `fr_hubeau` | `discharge_daily_mean` | `m3/s` |
 | `fr_hubeau` | `stage_daily_max` | `m` |
 | `fr_hubeau` | `water_temperature_reported` | `degC` |
 | `fr_hydroportail` | `discharge_instantaneous` | `m3/s` |
 | `fr_hydroportail` | `stage_instantaneous` | `m` |
-| `jp_mlit` | `discharge_daily` | `m3/s` |
-| `jp_mlit` | `discharge_hourly` | `m3/s` |
-| `jp_mlit` | `stage_daily` | `m` |
-| `jp_mlit` | `stage_hourly` | `m` |
 | `lt_lhmt` | `discharge_daily_mean` | `m3/s` |
 | `lt_lhmt` | `stage_daily_mean` | `m` |
 | `no_nve` | `discharge_daily_mean` | `m3/s` |
@@ -254,6 +320,21 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `no_nve` | `water_temperature_daily_mean` | `degC` |
 | `no_nve` | `water_temperature_hourly_mean` | `degC` |
 | `no_nve` | `water_temperature_instantaneous` | `degC` |
+| `pe_senamhi` | `monthly_archive_n_niv_inst_00` | `m` |
+| `pe_senamhi` | `monthly_archive_n_niv_inst_10` | `m` |
+| `pe_senamhi` | `monthly_archive_n_nivelagua` | `m` |
+| `pe_senamhi` | `monthly_archive_n_nivelmedio` | `m` |
+| `pe_senamhi` | `monthly_archive_nivel_del_rio_06h` | `m` |
+| `pe_senamhi` | `monthly_archive_nivel_del_rio_10h` | `m` |
+| `pe_senamhi` | `monthly_archive_nivel_del_rio_14h` | `m` |
+| `pe_senamhi` | `monthly_archive_nivel_del_rio_18h` | `m` |
+| `pe_senamhi` | `monthly_archive_nivel_del_rio_promedio` | `m` |
+| `pe_senamhi` | `phisis_daily_flow` | `m3/s` |
+| `pe_senamhi` | `phisis_daily_level` | `m` |
+| `pe_senamhi` | `phisis_daily_level_above_sea_level` | `m` |
+| `pe_senamhi` | `phisis_hourly_flow` | `m3/s` |
+| `pe_senamhi` | `phisis_hourly_level` | `m` |
+| `pe_senamhi` | `phisis_hourly_level_above_sea_level` | `m` |
 | `pl_imgw` | `discharge_daily` | `m3/s` |
 | `pl_imgw` | `stage_daily` | `m` |
 | `pl_imgw` | `water_temperature_daily` | `degC` |

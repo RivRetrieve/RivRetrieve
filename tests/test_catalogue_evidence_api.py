@@ -15,6 +15,7 @@ from rivretrieve._internal.observations import ObservationProvenance
 ROOT = Path(__file__).parents[1]
 
 
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_real_selection_exposes_normalized_metadata_without_legacy_aliases():
     selection = rr.find(
         provider="fr_hydroportail", station="1232000101", quantity="discharge", statistic="instantaneous"

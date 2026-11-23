@@ -308,11 +308,21 @@ def test_parse_values_builds_rows_preserves_published_null_and_splits_duplicate_
     ]
 
 
-def test_parse_values_emits_info_issue_for_a_non_quality_a_code() -> None:
+def test_parse_values_attaches_quality_code_annotations_for_every_row() -> None:
     fetch_win = _make_fetch_window(
-        WindowEndpoint.from_datetime(datetime(2026, 9, 1)), WindowEndpoint.from_datetime(datetime(2026, 9, 1))
+        WindowEndpoint.from_datetime(datetime(2026, 9, 1)), WindowEndpoint.from_datetime(datetime(2026, 9, 2))
     )
-    content = _values_json([("1573010", [("2026-09-01T00:00:00.000+10:00", 1.5, -1, "quality-E")])])
+    content = _values_json(
+        [
+            (
+                "1573010",
+                [
+                    ("2026-09-01T00:00:00.000+10:00", 1.5, -1, "quality-E"),
+                    ("2026-09-02T00:00:00.000+10:00", 1.6, 10, "quality-A"),
+                ],
+            )
+        ]
+    )
     payload = Payload(
         config().products[_DISCHARGE_DAILY].coordinates,
         (("410730", _DISCHARGE_DAILY),),
@@ -322,11 +332,12 @@ def test_parse_values_emits_info_issue_for_a_non_quality_a_code() -> None:
         (),
     )
     parsed = parse(payload, config())
-    assert len(parsed.issues) == 1
-    assert parsed.issues[0].severity == "info"
-    assert parsed.issues[0].code == "source.quality_code"
-    assert parsed.issues[0].details is not None
-    assert parsed.issues[0].details["source_quality_code_name"] == "quality-E"
+    assert parsed.issues == ()
+    table = parsed.annotations.observation_tables["au_bom.quality"]
+    assert table.row_count == 2
+    assert table.rows["Quality_Code"].to_list() == [-1, 10]
+    assert table.rows["Quality_Code_Name"].to_list() == ["quality-E", "quality-A"]
+    assert table.rows["measured"].to_list() == [True, True]
 
 
 def test_parse_values_rejects_a_timestamp_without_the_plus_ten_offset() -> None:

@@ -78,7 +78,18 @@ for provider_id in provider_ids:
     selection = rr.find(provider=provider_id, station=station_id)
     selections.append(rr.from_bundle(rr.to_bundle(selection)))
     frames.append(rr.metadata(selections[-1], view="source"))
-    if provider_id in {"br_ana", "ca_eccc", "cz_chmi", "fr_hubeau", "jp_mlit", "lt_lhmt", "no_nve", "usgs_nwis"}:
+    if provider_id in {
+        "ar_ina",
+        "at_ehyd",
+        "br_ana",
+        "ca_eccc",
+        "co_ideam",
+        "cz_chmi",
+        "fr_hubeau",
+        "lt_lhmt",
+        "no_nve",
+        "usgs_nwis",
+    }:
         expected_notice = import_module(f"rivretrieve._internal.providers.{provider_id}.origins").STATION_METADATA_NOTICE
         assert isinstance(expected_notice, str) and expected_notice.strip()
         descriptor = rr.describe(provider_id)
@@ -162,11 +173,10 @@ assert effective["source_value"] is None
 assert effective["state"] == "source_null"
 for provider, station, role, field, raw, numeric, unit, datum in [
     ("usgs_nwis", "07374000", "elevation", "alt_va", " 0.00", "0.00", "feet", "NAVD88"),
-    ("jp_mlit", "301011281104010", "drainage_area", "流域面積", "142.00km2", "142.00", "km2", None),
-    ("jp_mlit", "301011281104010", "elevation", "零点高", "0.000m", "0.000", "m", None),
     ("ba_fhmzbih", "4024", "drainage_area", "metadata_CATCHMENT_SIZE", "1600.00 km²", "1600.00", "km²", None),
     ("ch_foen", "2004", "drainage_area", "Catchment size", "713 km2", "713", "km2", None),
     ("ch_foen", "2004", "elevation", "Station altitude", "432 m a.s.l.", "432", "m", "LN02"),
+    ("at_ehyd", "209486", "drainage_area", "orogr.Einzugsgebiet [km²]", "55,3", "55,3", "km²", None),
 ]:
     gauge = rr.find(provider=provider, station=station)
     source = rr.metadata(gauge, view="source").filter(pl.col("source_field") == field).row(0, named=True)
@@ -179,6 +189,21 @@ for provider, station, role, field, raw, numeric, unit, datum in [
     assert summary[f"{role}_unit"][index] == source["source_unit"] == unit
     if role == "elevation":
         assert summary["elevation_datum"][index] == source["source_datum"] == datum
+
+ar_ina_gauge = rr.find(provider="ar_ina", station="8")
+ar_ina_summary = rr.metadata(ar_ina_gauge).row(0, named=True)
+assert ar_ina_summary["station_name"] == "Andresito"
+assert ar_ina_summary["water_body_name_field"] == ["rio"]
+assert ar_ina_summary["water_body_name_value"] == ["IGUAZU"]
+assert ar_ina_summary["drainage_area_value"] is None
+assert ar_ina_summary["elevation_value"] is None
+ar_ina_source = rr.metadata(ar_ina_gauge, view="source")
+assert dict(ar_ina_source.select("attribute_role", "state").iter_rows()) == {
+    "station_name": "value",
+    "water_body_name": "value",
+    "drainage_area": "no_metadata",
+    "elevation": "no_metadata",
+}
 
 empty = rr.pick(rr.pick(selection, quantity="discharge"), quantity="stage")
 assert_frame_equal(rr.metadata(empty, view="source"), pl.DataFrame(schema=schema))

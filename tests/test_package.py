@@ -26,6 +26,7 @@ def test_init_public_surface_exports_catalogue_and_retrieval_functions() -> None
 
     assert "__version__" in vars(rivretrieve)
     assert module_defined_names == [
+        "annotations",
         "as_frame",
         "audit_cache",
         "cache_status",
@@ -68,21 +69,23 @@ def test_init_public_surface_exports_catalogue_and_retrieval_functions() -> None
 def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     providers_root = Path(__file__).parents[1] / "src/rivretrieve/_internal/providers"
     expected_station_products = {
+        "ar_ina": (10_777, 0, 0),
+        "at_ehyd": (8_206, 0, 0),
         "ba_fhmzbih": (180, 0, 0),
         "br_ana": (107_484, 0, 0),
         "ca_eccc": (16_114, 0, 0),
         "ch_foen": (48_276, 0, 0),
+        "co_ideam": (27_440, 0, 0),
         "cz_chmi": (4_155, 0, 0),
         # Native inventories acquired 2026-09-21; these are snapshot checks.
         "fr_hubeau": (20_297, 0, 0),
         "fr_hydroportail": (12_818, 0, 0),
-        "jp_mlit": (4_092, 0, 0),
         "lt_lhmt": (194, 0, 0),
         "no_nve": (44_118, 0, 0),
         "pl_imgw": (3_903, 0, 0),
         "th_thaiwater": (1_650, 0, 0),
         # Modern metadata UTC ranges do not establish calendar observation support.
-        "usgs_nwis": (167_604, 0, 0),
+        "usgs_nwis": (177_852, 0, 0),
         "za_dws": (8_715, 0, 0),
     }
     expected_station_product_columns = (
@@ -96,14 +99,16 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "last_catalogue_check",
     )
     provider_ids = (
+        "ar_ina",
+        "at_ehyd",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "co_ideam",
         "cz_chmi",
         "fr_hubeau",
         "fr_hydroportail",
-        "jp_mlit",
         "lt_lhmt",
         "no_nve",
         "pl_imgw",
@@ -112,7 +117,13 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "za_dws",
     )
     expected_provider_terms: dict[str, tuple[str | None, str | None]] = dict.fromkeys(provider_ids, (None, None))
+    expected_provider_terms["ar_ina"] = ("Creative Commons Atribución 4.0 Internacional", None)
+    expected_provider_terms["at_ehyd"] = ("CC BY 4.0", "Datenquelle: ehyd.gv.at")
     expected_provider_terms["ch_foen"] = ("Freie Nutzung. Quellenangabe ist Pflicht.", None)
+    expected_provider_terms["co_ideam"] = (
+        "Creative Commons Attribution | Share Alike 4.0 International",
+        "Instituto de Hidrología, Meteorología y Estudios Ambientales - IDEAM, Bogotá D.C.",
+    )
     expected_provider_terms["no_nve"] = (
         "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) "
         "which is compatible with CC Navngivelse 3.0 Norge (CC BY 3.0).",
@@ -155,7 +166,9 @@ def test_usgs_legacy_calendar_period_claims_remain_independent_evidence(retained
         retained_evidence_root / "research/usgs-modern-coverage/legacy-catalogue/station_products.parquet"
     )
     modern = pl.read_parquet(root / "src/rivretrieve/_internal/providers/usgs_nwis/catalogue/station_products.parquet")
-    assert legacy.height == modern.height == 157_548
+    assert legacy.height == 157_548
+    # Six supported products across the independently reconciled modern station scope.
+    assert modern.height == 6 * 29_642
     for column in ("published_record_start_date", "published_record_end_date"):
         assert legacy[column].count() == 57_450
         assert modern[column].count() == 0

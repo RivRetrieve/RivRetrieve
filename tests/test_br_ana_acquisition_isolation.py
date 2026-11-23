@@ -12,13 +12,19 @@ from rivretrieve._internal.transport import TransportFailure, TransportFailureRe
 from rivretrieve._internal.window_planning import plan_windows
 
 
-@pytest.mark.parametrize("product", ["discharge_daily_mean_bruto", "stage_instantaneous"])
+@pytest.mark.parametrize(
+    ("product", "start", "end"),
+    [
+        ("discharge_daily_mean_bruto", datetime(2022, 1, 3), datetime(2024, 3, 15)),
+        ("stage_instantaneous", datetime(2024, 1, 3), datetime(2024, 3, 15)),
+    ],
+)
 @pytest.mark.parametrize("failed", [(0,), (1,), (2,), (0, 1, 2)])
-def test_independent_chunks_keep_precise_bounds(product, failed):
+def test_independent_chunks_keep_precise_bounds(product, start, end, failed):
     product = ProductId(product)
     window = _make_fetch_window(
-        WindowEndpoint.from_datetime(datetime(2024, 1, 3)),
-        WindowEndpoint.from_datetime(datetime(2024, 3, 15)),
+        WindowEndpoint.from_datetime(start),
+        WindowEndpoint.from_datetime(end),
     )
     windows = plan_windows(window, window_declarations().products[product])
     assert len(windows) == 3
@@ -53,9 +59,9 @@ def test_independent_chunks_keep_precise_bounds(product, failed):
         assert failure.request is calls[index]
 
 
-@pytest.mark.parametrize("failed_month", ["2024-01", "2024-02"])
-@pytest.mark.recorded("tests/recordings/br_ana")
-def test_daily_driver_retains_healthy_month_and_failed_call(retained_evidence_root, failed_month):
+@pytest.mark.parametrize("failed_year", ["2024", "2025"])
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf")
+def test_daily_driver_retains_healthy_span_and_failed_call(retained_evidence_root, failed_year):
 
     from rivretrieve._internal.driver import drive
     from rivretrieve._internal.engine import ObservationRequest, RequestedWindow
@@ -73,17 +79,18 @@ def test_daily_driver_retains_healthy_month_and_failed_call(retained_evidence_ro
     class Transport(ReplayTransport):
         def __init__(self):
             super().__init__(
-                list(
-                    (retained_evidence_root / "tests/recordings/br_ana").glob(
-                        "HidroSerieVazao_15400000_2024-0[12]-01_*.recording.json"
-                    )
-                )
+                [
+                    (retained_evidence_root / "tests/recordings/br_ana_window_perf")
+                    / "HidroSerieVazao_15400000_2024-01-01_2024-12-31.recording.json",
+                    (retained_evidence_root / "tests/recordings/br_ana_window_perf")
+                    / "HidroSerieVazao_15400000_2025-01-01_2025-01-31.recording.json",
+                ]
             )
             self.calls = []
 
         def send(self, request):
             self.calls.append(request)
-            if str(request.params["Data Inicial (yyyy-MM-dd)"]).startswith(failed_month):
+            if str(request.params["Data Inicial (yyyy-MM-dd)"]).startswith(failed_year):
                 raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
             return super().send(request)
 
@@ -95,7 +102,7 @@ def test_daily_driver_retains_healthy_month_and_failed_call(retained_evidence_ro
             ("15400000",),
             (ProductId("discharge_daily_mean_bruto"),),
             RequestedWindow(
-                WindowEndpoint.from_datetime(datetime(2024, 1, 10)), WindowEndpoint.from_datetime(datetime(2024, 2, 20))
+                WindowEndpoint.from_datetime(datetime(2024, 1, 10)), WindowEndpoint.from_datetime(datetime(2025, 1, 20))
             ),
         ),
         Stages(),
@@ -104,13 +111,14 @@ def test_daily_driver_retains_healthy_month_and_failed_call(retained_evidence_ro
         receipts=ReceiptMode.INCLUDE,
     )
     assert len(transport.calls) == 2
-    healthy = {"2024-01", "2024-02"} - {failed_month}
-    assert set(result.canonical_rows["time"].dt.strftime("%Y-%m")) == healthy
+    healthy = {"2024", "2025"} - {failed_year}
+    assert set(result.canonical_rows["time"].dt.strftime("%Y")) == healthy
     assert len(result.receipts.entries) == 1
     failures = [outcome for outcome in result.outcomes if outcome.status.value == "failed"]
     assert len(failures) == 1
-    assert failures[0].window.start.strftime("%Y-%m") == failed_month
-    assert len(result.provenance.calls_made) == 2
+    assert failures[0].window.start.strftime("%Y") == failed_year
+    data_calls = [call for call in result.provenance.calls_made if call.get("response_disposition") is None]
+    assert len(data_calls) == 2
 
 
 def test_unbounded_rendering_is_a_fatal_contract_error():

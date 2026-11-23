@@ -39,6 +39,16 @@ ArchiveIdentifier = Annotated[str, StringConstraints(min_length=1, pattern=r"^[a
 
 
 def _canonical_relative_path(value: str) -> str:
+    if (
+        value
+        and value[0] != "/"
+        and "\\" not in value
+        and value.isascii()
+        and min(value) >= " "
+        and max(value) <= "~"
+        and not any(part in {"", ".", ".."} for part in value.split("/"))
+    ):
+        return value
     path = PurePosixPath(value)
     if (
         not value
@@ -277,13 +287,13 @@ class CatalogueBuildInputs(_ProvenanceModel):
             revisions.setdefault(declaration.repository, set()).add(declaration.revision)
         if any(len(values) != 1 for values in revisions.values()):
             raise ValueError("build declarations must name one explicit declaration revision per repository")
-        for item in self.support:
+        for verifier in dict.fromkeys(item.verifier for item in self.support):
             expected = (
                 {self.build.revision}
-                if item.verifier.repository == self.build.repository
-                else revisions.get(item.verifier.repository, set())
+                if verifier.repository == self.build.repository
+                else revisions.get(verifier.repository, set())
             )
-            if item.verifier.symbol is None or item.verifier.revision not in expected:
+            if verifier.symbol is None or verifier.revision not in expected:
                 raise ValueError("reviewed support requires an exact verifier symbol at its owner's reviewed revision")
         if not self.inputs:
             raise ValueError("catalogue builds require adopted retained inputs")
@@ -355,19 +365,25 @@ _HOST_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 _INVALID_PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
 _TEMPLATE_TOKEN = re.compile(r"(?:\{[A-Za-z0-9_-]+\}|<[A-Za-z0-9_-]+>)")
 _URI_PCHAR_ASCII = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$&'()*+,;=:@%")
+_URI_PATH_ASCII = _URI_PCHAR_ASCII | frozenset("/")
+_URI_QUERY_ASCII = _URI_PCHAR_ASCII | frozenset("/?")
 
 
 def _validate_http_hostname(hostname: str) -> None:
     """Reject malformed HTTP host names while accepting DNS and IP authorities."""
-    try:
-        ipaddress.ip_address(hostname)
-        return
-    except ValueError:
-        pass
-    try:
-        ascii_hostname = hostname.encode("idna").decode("ascii")
-    except UnicodeError as error:
-        raise ValueError("requested_from location has an invalid hostname") from error
+    if ":" in hostname or hostname.rsplit(".", 1)[-1].isdigit():
+        try:
+            ipaddress.ip_address(hostname)
+            return
+        except ValueError:
+            pass
+    if hostname.isascii() and "xn--" not in hostname.casefold():
+        ascii_hostname = hostname
+    else:
+        try:
+            ascii_hostname = hostname.encode("idna").decode("ascii")
+        except UnicodeError as error:
+            raise ValueError("requested_from location has an invalid hostname") from error
     unqualified_hostname = ascii_hostname.removesuffix(".")
     labels = unqualified_hostname.split(".")
     if len(unqualified_hostname) > 253 or not labels or any(not _HOST_LABEL.fullmatch(label) for label in labels):
@@ -376,20 +392,29 @@ def _validate_http_hostname(hostname: str) -> None:
 
 def _validate_uri_component(value: str, allowed_ascii: frozenset[str]) -> None:
     """Validate one path, query, or fragment while allowing complete template tokens."""
-    without_templates = _TEMPLATE_TOKEN.sub("template", value)
+    if not value:
+        return
+    without_templates = _TEMPLATE_TOKEN.sub("template", value) if ("{" in value or "<" in value) else value
+    if without_templates.isascii():
+        if not (set(without_templates) <= allowed_ascii):
+            raise ValueError("requested_from location contains malformed URI component characters")
+        return
     if any(ord(character) < 128 and character not in allowed_ascii for character in without_templates):
         raise ValueError("requested_from location contains malformed URI component characters")
 
 
 def _validate_requested_location(location: str) -> str:
     """Return one valid public URL or an explicitly allowed redacted-evidence URI."""
-    if not location or any(
-        character.isspace() or unicodedata.category(character).startswith("C") for character in location
-    ):
+    if not location:
+        raise ValueError("requested_from must contain only valid typed locations without whitespace or controls")
+    if location.isascii():
+        if min(location) < "!" or max(location) > "~":
+            raise ValueError("requested_from must contain only valid typed locations without whitespace or controls")
+    elif any(character.isspace() or unicodedata.category(character).startswith("C") for character in location):
         raise ValueError("requested_from must contain only valid typed locations without whitespace or controls")
     if location in _PRIVATE_REDACTED_EVIDENCE_LOCATIONS:
         return location
-    if _INVALID_PERCENT_ESCAPE.search(location):
+    if "%" in location and _INVALID_PERCENT_ESCAPE.search(location):
         raise ValueError("requested_from location contains malformed percent escapes")
     try:
         parsed = urlsplit(location)
@@ -407,9 +432,9 @@ def _validate_requested_location(location: str) -> str:
     if port is not None and not 1 <= port <= 65535:
         raise ValueError("requested_from location has a malformed authority or port")
     _validate_http_hostname(parsed.hostname)
-    _validate_uri_component(parsed.path, _URI_PCHAR_ASCII | frozenset("/"))
-    _validate_uri_component(parsed.query, _URI_PCHAR_ASCII | frozenset("/?"))
-    _validate_uri_component(parsed.fragment, _URI_PCHAR_ASCII | frozenset("/?"))
+    _validate_uri_component(parsed.path, _URI_PATH_ASCII)
+    _validate_uri_component(parsed.query, _URI_QUERY_ASCII)
+    _validate_uri_component(parsed.fragment, _URI_QUERY_ASCII)
     return location
 
 
@@ -447,8 +472,11 @@ class AcquisitionRecord(_ProvenanceModel):
     def _requested_from_names_locations(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if not value:
             raise ValueError("requested_from must contain at least one valid typed location")
+        seen: set[str] = set()
         for location in value:
-            _validate_requested_location(location)
+            if location not in seen:
+                _validate_requested_location(location)
+                seen.add(location)
         return value
 
     retrieved_at_start: datetime | None = None
@@ -641,10 +669,20 @@ class AbsenceMarkerValue(StrEnum):
     UNKNOWN = "unknown"
 
 
+_HAS_WHITESPACE_SEARCH = re.compile(r"\s").search
+
+
 def station_product_availability_key(fact: str) -> tuple[str, str] | None:
     """Exact row-scoped canonical availability name → station/product key, or no key."""
-    match = re.fullmatch(r"station_product:([^:\s]+):([^:\s]+)\.availability", fact)
-    return (match.group(1), match.group(2)) if match is not None else None
+    if not (fact.startswith("station_product:") and fact.endswith(".availability")):
+        return None
+    middle = fact[16:-13]
+    colon_idx = middle.find(":")
+    if colon_idx <= 0 or colon_idx >= len(middle) - 1:
+        return None
+    if ":" in middle[colon_idx + 1 :] or _HAS_WHITESPACE_SEARCH(middle) is not None:
+        return None
+    return middle[:colon_idx], middle[colon_idx + 1 :]
 
 
 def absence_marker_accepts_fact(marker: AbsenceMarkerValue | None, fact: str) -> bool:
@@ -713,12 +751,38 @@ class FactBinding(_ProvenanceModel):
         return self
 
 
+_CATALOGUE_SP_FACT_RE = re.compile(r"(?:source[.:])?station_product[.:]([^.:]+)[.:]([^.:]+)[.:].+")
+_CATALOGUE_STATION_FACT_RE = re.compile(r"(?:source[.:])?station[.:]([^.:]+)[.:].+")
+_ALLOWED_AUTHORED_FACTS = frozenset(
+    {
+        "provider.provider_id",
+        "provider.name",
+        "provider.live_stations",
+        "provider.live_products",
+        "provider.live_station_products",
+        "provider.bulk_observations",
+        "provider.catalogue_version",
+        "product.provider_id",
+        "product.product_id",
+        "product.observed_property",
+        "product.frequency",
+        "product.statistic",
+        "product.period_type",
+        "product.period_anchor",
+        "product.unit",
+        "product.native_id",
+    }
+)
+
+
 def _catalogue_fact_identity(fact: str) -> tuple[str, str, str | None] | None:
     """Extract a typed row identity from a row-scoped source fact name."""
-    station_product = re.fullmatch(r"(?:source[.:])?station_product[.:]([^.:]+)[.:]([^.:]+)[.:].+", fact)
+    if not fact.startswith(("station", "source.station", "source:station")):
+        return None
+    station_product = _CATALOGUE_SP_FACT_RE.fullmatch(fact)
     if station_product is not None:
         return ("station_product", station_product.group(1), station_product.group(2))
-    station = re.fullmatch(r"(?:source[.:])?station[.:]([^.:]+)[.:].+", fact)
+    station = _CATALOGUE_STATION_FACT_RE.fullmatch(fact)
     if station is not None:
         return ("station", station.group(1), None)
     return None
@@ -888,11 +952,13 @@ class AcquisitionProvenance(_ProvenanceModel):
             raise ValueError("each fact may be bound only once")
         bound_facts = set(bound_fact_list)
         validate_build_input_facts(self.build_inputs, bound_facts)
+        seen_code_refs: set[tuple[CodeReference | None, CodeReference | None]] = set()
         for binding in self.fact_bindings:
             if binding.transformation is not None:
-                validate_build_input_code_references(
-                    self.build_inputs, binding.transformation.executable, binding.transformation.declaration
-                )
+                code_pair = (binding.transformation.executable, binding.transformation.declaration)
+                if code_pair not in seen_code_refs:
+                    validate_build_input_code_references(self.build_inputs, code_pair[0], code_pair[1])
+                    seen_code_refs.add(code_pair)
         catalogue_prefixes = ("provider.", "product.", "station.", "station_product.")
         if self.native_table is None:
             non_authored_catalogue_facts = {
@@ -1011,79 +1077,75 @@ class AcquisitionProvenance(_ProvenanceModel):
             (fact, withheld_group.source_id) for withheld_group in self.withheld_facts for fact in withheld_group.facts
         }
         referenceable_facts = set(fact_producers) | withheld_fact_keys
-        lineage_edges: dict[int, set[int]] = {index: set() for index in range(len(self.fact_bindings))}
+        has_any_withheld = bool(withheld_fact_keys)
+        num_bindings = len(self.fact_bindings)
+        lineage_edges: list[set[int]] = [set() for _ in range(num_bindings)]
+        transform_check_cache: dict[int, tuple[bool, ExternalFactReference | None, frozenset[int]]] = {}
         for index, binding in enumerate(self.fact_bindings):
-            if binding.transformation is None:
+            transform = binding.transformation
+            if transform is None:
                 continue
-            if binding.transformation.kind == "authored_constant":
-                allowed_authored_facts = {
-                    "provider.provider_id",
-                    "provider.name",
-                    "provider.live_stations",
-                    "provider.live_products",
-                    "provider.live_station_products",
-                    "provider.bulk_observations",
-                    "provider.catalogue_version",
-                    "product.provider_id",
-                    "product.product_id",
-                    "product.observed_property",
-                    "product.frequency",
-                    "product.statistic",
-                    "product.period_type",
-                    "product.period_anchor",
-                    "product.unit",
-                    "product.native_id",
-                }
-                if not set(binding.facts) <= allowed_authored_facts:
-                    raise ValueError(
-                        "authored-constant transformations may produce only explicit canonical code-defined outputs"
-                    )
-            withheld_inputs = {
-                (reference.fact, reference.source_id)
-                for reference in binding.transformation.external_inputs
-                if (reference.fact, reference.source_id) in withheld_fact_keys
-            }
-            if withheld_inputs and (
-                binding.transformation.kind != "absence_marker"
-                or not all(
-                    any(absence_marker_accepts_fact(marker, fact) for marker in AbsenceMarkerValue)
-                    for fact in binding.facts
+            if transform.kind == "authored_constant" and not set(binding.facts) <= _ALLOWED_AUTHORED_FACTS:
+                raise ValueError(
+                    "authored-constant transformations may produce only explicit canonical code-defined outputs"
                 )
-            ):
-                raise ValueError("withheld external inputs may only produce absence markers")
-            if binding.transformation.kind == "absence_marker":
-                marker_value = binding.transformation.marker_value
+            cached_inputs = transform_check_cache.get(id(transform))
+            if cached_inputs is None:
+                has_withheld_inputs = False
+                first_dangling: ExternalFactReference | None = None
+                producers: set[int] = set()
+                for reference in transform.external_inputs:
+                    reference_key = (reference.fact, reference.source_id)
+                    if has_any_withheld and reference_key in withheld_fact_keys:
+                        has_withheld_inputs = True
+                    if reference_key not in referenceable_facts:
+                        if first_dangling is None:
+                            first_dangling = reference
+                    else:
+                        producer = fact_producers.get(reference_key)
+                        if producer is not None:
+                            producers.add(producer)
+                cached_inputs = (has_withheld_inputs, first_dangling, frozenset(producers))
+                transform_check_cache[id(transform)] = cached_inputs
+            has_withheld_inputs, first_dangling, producers_frozen = cached_inputs
+            if transform.kind == "absence_marker":
+                marker_value = transform.marker_value
                 if not all(absence_marker_accepts_fact(marker_value, fact) for fact in binding.facts):
+                    if has_withheld_inputs and not all(
+                        any(absence_marker_accepts_fact(marker, fact) for marker in AbsenceMarkerValue)
+                        for fact in binding.facts
+                    ):
+                        raise ValueError("withheld external inputs may only produce absence markers")
                     raise ValueError("absence-marker value is incompatible with its output facts")
-            for reference in binding.transformation.external_inputs:
-                reference_key = (reference.fact, reference.source_id)
-                if reference_key not in referenceable_facts:
-                    raise ValueError(
-                        f"transformation {binding.fact_group} references a dangling or misattributed fact: "
-                        f"{reference.source_id}.{reference.fact}"
-                    )
-                producer = fact_producers.get(reference_key)
-                if producer == index:
-                    raise ValueError(f"transformation {binding.fact_group} cannot reference its own output")
-                if producer is not None:
-                    lineage_edges[index].add(producer)
+            elif has_withheld_inputs:
+                raise ValueError("withheld external inputs may only produce absence markers")
+            if first_dangling is not None:
+                raise ValueError(
+                    f"transformation {binding.fact_group} references a dangling or misattributed fact: "
+                    f"{first_dangling.source_id}.{first_dangling.fact}"
+                )
+            if index in producers_frozen:
+                raise ValueError(f"transformation {binding.fact_group} cannot reference its own output")
+            if producers_frozen:
+                lineage_edges[index].update(producers_frozen)
 
-        visiting: set[int] = set()
-        visited: set[int] = set()
-
-        def visit(index: int) -> None:
-            if index in visiting:
-                raise ValueError("transformation lineage contains a cycle")
-            if index in visited:
-                return
-            visiting.add(index)
-            for dependency in lineage_edges[index]:
-                visit(dependency)
-            visiting.remove(index)
-            visited.add(index)
-
-        for index in lineage_edges:
-            visit(index)
+        state = [0] * num_bindings
+        for start in range(num_bindings):
+            if state[start] == 2:
+                continue
+            stack = [(start, False)]
+            while stack:
+                node, finishing = stack.pop()
+                if finishing:
+                    state[node] = 2
+                    continue
+                if state[node] == 2:
+                    continue
+                if state[node] == 1:
+                    raise ValueError("transformation lineage contains a cycle")
+                state[node] = 1
+                stack.append((node, True))
+                stack.extend((dependency, False) for dependency in lineage_edges[node])
 
         runtime_producers = {
             index
@@ -1096,19 +1158,20 @@ class AcquisitionProvenance(_ProvenanceModel):
                 or acquisitions_by_key[(binding.source_id, binding.acquisition_id)].method == "runtime_http_request"
             )
         }
-        runtime_lineage_cache: dict[int, bool] = {}
+        if runtime_producers:
+            runtime_lineage_cache: dict[int, bool] = {}
 
-        def has_runtime_ancestor(index: int) -> bool:
-            if index not in runtime_lineage_cache:
-                runtime_lineage_cache[index] = index in runtime_producers or any(
-                    has_runtime_ancestor(dependency) for dependency in lineage_edges[index]
-                )
-            return runtime_lineage_cache[index]
+            def has_runtime_ancestor(index: int) -> bool:
+                if index not in runtime_lineage_cache:
+                    runtime_lineage_cache[index] = index in runtime_producers or any(
+                        has_runtime_ancestor(dependency) for dependency in lineage_edges[index]
+                    )
+                return runtime_lineage_cache[index]
 
-        packaged_prefixes = ("provider.", "product.", "station.", "station_product.")
-        for index, binding in enumerate(self.fact_bindings):
-            if any(fact.startswith(packaged_prefixes) for fact in binding.facts) and has_runtime_ancestor(index):
-                raise ValueError(f"packaged fact binding {binding.fact_group} has a runtime acquisition ancestor")
+            packaged_prefixes = ("provider.", "product.", "station.", "station_product.")
+            for index, binding in enumerate(self.fact_bindings):
+                if any(fact.startswith(packaged_prefixes) for fact in binding.facts) and has_runtime_ancestor(index):
+                    raise ValueError(f"packaged fact binding {binding.fact_group} has a runtime acquisition ancestor")
         return self
 
 

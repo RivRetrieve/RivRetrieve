@@ -163,7 +163,19 @@ class WindowDeclaration:
     ``timestamp_precision`` is an optional positive timedelta defining a tested
     filter grid for exclusive ISO-instant windows. The engine rounds acquisition
     bounds outward to this grid; final observation clipping remains unchanged.
-    Other renderings leave it unset.
+    Other renderings leave it unset. ``year_start_month`` selects the first
+    calendar month of annual date windows; the default is January.
+
+    ``stop_extension`` is an optional positive timedelta for inclusive
+    ISO-instant sources that filter start-anchored observation intervals
+    ``[timestart, timeend)`` by upper-bound containment (``timeend <= stop``).
+    The rendered request stop extends past ``bounds.end`` by ``stop_extension``
+    while ``RenderedWindow.bounds`` preserves the unextended partition.
+
+    ``fetch_padding`` optionally overrides the engine's default ``±2`` day fetch
+    window padding (for example, ``timedelta(0)`` when source query parameters
+    are established to filter directly on the native calendar or wall-clock axis
+    without timezone drift). ``None`` retains the shared engine default.
     """
 
     granularity: WindowGranularity
@@ -172,14 +184,38 @@ class WindowDeclaration:
     size: int | None = None
     calendar_labels: CalendarLabelConvention = field(default=CalendarLabelConvention.CALENDAR_DATES, kw_only=True)
     timestamp_precision: timedelta | None = field(default=None, kw_only=True)
+    stop_extension: timedelta | None = field(default=None, kw_only=True)
+    year_start_month: int = field(default=1, kw_only=True)
+    fetch_padding: timedelta | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
+        if self.fetch_padding is not None:
+            if not isinstance(self.fetch_padding, timedelta):
+                raise TypeError("window fetch padding must be a timedelta or None")
+            if self.fetch_padding < timedelta(0):
+                raise ValueError("window fetch padding must be non-negative")
+        if type(self.year_start_month) is not int or not 1 <= self.year_start_month <= 12:
+            raise ValueError("year start month must be an integer from 1 to 12")
+        if self.year_start_month != 1 and (
+            self.granularity != "year" or self.rendering is not WindowRenderingVocabulary.DATE
+        ):
+            raise ValueError("non-January year start month requires annual date windows")
         if self.timestamp_precision is not None and (
             self.timestamp_precision <= timedelta(0)
             or self.granularity != "iso-instant"
             or self.stop_convention is not StopConvention.EXCLUSIVE
         ):
             raise ValueError("Timestamp precision requires positive exclusive ISO-instant bounds")
+        if self.stop_extension is not None:
+            if not isinstance(self.stop_extension, timedelta):
+                raise TypeError("window stop extension must be a timedelta or None")
+            if (
+                self.stop_extension <= timedelta(0)
+                or self.granularity not in ("iso-instant", "capped-span")
+                or self.rendering is not WindowRenderingVocabulary.ISO_INSTANT
+                or self.stop_convention is not StopConvention.INCLUSIVE
+            ):
+                raise ValueError("Stop extension requires positive inclusive ISO-instant bounds")
         if not isinstance(self.calendar_labels, CalendarLabelConvention):
             raise TypeError("calendar labels must be CalendarLabelConvention")
         if self.calendar_labels is CalendarLabelConvention.HOURS_1_TO_24 and (

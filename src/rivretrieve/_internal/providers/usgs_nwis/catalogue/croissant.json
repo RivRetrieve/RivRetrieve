@@ -36,6 +36,10 @@
     {
       "@type": "sc:Organization",
       "name": "U.S. Geological Survey"
+    },
+    {
+      "@type": "sc:Organization",
+      "name": "RivRetrieve"
     }
   ],
   "license": "USGS-authored or produced data and information are considered to be in the U.S. Public Domain.",
@@ -46,8 +50,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provider.json",
       "encodingFormat": "application/json",
-      "sha256": "4b495581fe7ac3918e5646242312e0e044cfadaceece245be4b385ec789bc0ad",
-      "contentSize": "355 B"
+      "sha256": "7277618030fca83602758b4d3cb5dd44a7a05e50b54d8b6c6348333758194d20",
+      "contentSize": "414 B"
     },
     {
       "@id": "products.parquet",
@@ -62,64 +66,64 @@
       "@type": "cr:FileObject",
       "contentUrl": "stations.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "8e3072ff162997acd261a32abdae02c3ecf2de51027963f60f02a6afd2e2533f",
-      "contentSize": "456109 B"
+      "sha256": "3904d37b9b7973f8ccc6a2511493799c63734af2988888a3cd1834f6ef5c193c",
+      "contentSize": "493343 B"
     },
     {
       "@id": "station_products.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "station_products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "f15af154a4721957e4b7f61f774ec5af6ec0a8349cd1244cb5ec13c7076add20",
-      "contentSize": "248502 B"
+      "sha256": "b6b7a943776c63d684f38bcc5bbc9ef055c0d377fe13018fd9994c42879e0b67",
+      "contentSize": "269099 B"
     },
     {
       "@id": "provenance.json",
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "cb089f20e2716afece214603839e63a2bac5d64643123561546945bfdc6dcdcc",
-      "contentSize": "193775 B"
+      "sha256": "30619e2c539b60aac1e4c127383038437f7536c19ca5a72cc25fdfb2d504be46",
+      "contentSize": "1431843 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "6f5e47bcdc1698ceee2cf42782a3b8f7ed9e60fb60413ec096cdc4d923f0f5c5",
-      "contentSize": "2944 B"
+      "sha256": "0bd0697cfb2ab7eb226d2251512321d2bee9810471a205ae58e6510668c8f94d",
+      "contentSize": "3038 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_acquisitions.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "66d86c6e73800f19e1b3521378fdf5ae150224442d50168298414efd315c4104",
-      "contentSize": "12861 B"
+      "sha256": "d4ec86e31e88df2e3b8c0129b0fc9c18b228d105ced38482707929308a09a9e7",
+      "contentSize": "212219 B"
     },
     {
       "@id": "provenance_bindings.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "388fe26c7bcc8ba13b7b77294cd7b703e74db04ad19ac14b0671083e8285815d",
-      "contentSize": "2500 B"
+      "sha256": "ab158fbe6623b9ff964de81124d3d4eb6458c55c1eca6ff49b41b1186de3d9e7",
+      "contentSize": "2690 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "493b3c2cf4678d25c1c6ad4e5d29cdd29c9309cb06fc12eb1011aae3574058d8",
-      "contentSize": "1411 B"
+      "sha256": "06fde03e536212119432e7cc559d22b2be82db5ba0674696501fa69b7684453c",
+      "contentSize": "1424 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "aa344de9fcebb5d1144bb767724cc31a0adf5da628ab071e57c8d1241d154089",
-      "contentSize": "1711 B"
+      "sha256": "1c0f24b07f7fef09601193f6b6fa65da5052cd6265d822f78927c1dd106ec342",
+      "contentSize": "1660 B"
     },
     {
       "@id": "format.json",
@@ -134,32 +138,32 @@
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "264798d0301ee9a5d8d728a0aeb7cd58184bbaf2f11cc56b42f064ef7bb2ab27",
-      "contentSize": "30085553 B"
+      "sha256": "cf6da5590e428308848d86dbee8789aa6750209f052621a3ebbef871146ec38f",
+      "contentSize": "31252949 B"
     },
     {
       "@id": "series_claims.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "series_claims.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "b448a5498c3a96d9c072ace55c3a7071e5860ca4d2cd4a8e12b4a528bb7d84d8",
-      "contentSize": "1220 B"
+      "sha256": "1fadc3f86a9dccd7cf3d71d782c942220146ed0785ac02905093a078d87b1038",
+      "contentSize": "478606 B"
     },
     {
       "@id": "station_metadata.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "station_metadata.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "30578186d1bff1b747b965b7ddb8e362771158c69569c881835698f4f21c4e6a",
-      "contentSize": "879870 B"
+      "sha256": "dc107c91e42724729a71843e263484361cde12f4fea5d0c1235387f3e7ab6d52",
+      "contentSize": "957859 B"
     },
     {
       "@id": "monitoring_locations.json",
       "@type": "cr:FileObject",
       "contentUrl": "monitoring_locations.json",
       "encodingFormat": "application/json",
-      "sha256": "f6b63acd87e7535e3bb8f4a221006e3cce2d356a2d4d7147163d5e5219a9ce60",
-      "contentSize": "771699 B"
+      "sha256": "9bb083adaffbe938b6b5af68b5b08fb33e484ab15fec00a966ea551e58ea2192",
+      "contentSize": "823837 B"
     }
   ],
   "recordSet": [
@@ -593,7 +597,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Native column site_no; conversion identity."
+          "description": "Native column station_id; conversion identity."
         },
         {
           "@id": "stations/latitude",
@@ -614,7 +618,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Native column dec_lat_va; conversion usgs_nwis.optional_coordinate."
+          "description": "Native column latitude; conversion identity."
         },
         {
           "@id": "stations/longitude",
@@ -635,7 +639,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Native column dec_long_va; conversion usgs_nwis.optional_coordinate."
+          "description": "Native column longitude; conversion identity."
         },
         {
           "@id": "stations/crs",
@@ -656,7 +660,7 @@
             "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3",
             "description": "Select the exact name key in provenance_facts."
           },
-          "description": "Native column dec_coord_datum_cd; conversion usgs_nwis.datum_to_crs."
+          "description": "Native column crs; conversion identity."
         }
       ],
       "subjectOf": {
@@ -1043,7 +1047,7 @@
           }
         }
       ],
-      "description": "Station metadata from the U.S. Geological Survey (USGS), National Water Information System. USGS-authored or produced data and information are in the U.S. public domain (https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits); this statement does not extend to third-party content. RivRetrieve selected the declared source fields and encoded their values and absence states; source names remain unchanged. Processing and publication of this projection: RivRetrieve."
+      "description": "Station metadata from the U.S. Geological Survey (USGS), National Water Information System. USGS-authored or produced data and information are in the U.S. public domain (https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits); this statement does not extend to third-party content. RivRetrieve selected the declared source fields and encoded their values and absence states; source names remain unchanged. Processing and publication of this projection: RivRetrieve. Fields with conflicting legacy values are omitted; provenance_facts.parquet records their reasons as usgs_sitefile_conflict.<station_id>.<source_field>."
     },
     {
       "@id": "provenance_facts",
@@ -1574,15 +1578,15 @@
     "description": "build_inputs records exact adopted archive members, their supported fact names, and build and declaration revisions. transformations records executable and authored declaration references. Historical acquisition identities remain separate.",
     "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
   },
-  "version": "2026-10-31",
-  "datePublished": "2026-10-31",
+  "version": "2026-11-03",
+  "datePublished": "2026-11-03",
   "isBasedOn": {
     "@id": "native-table",
     "@type": "sc:MediaObject",
-    "identifier": "usgs-native-2026-11-01",
+    "identifier": "member-c09cb16d789640a1b1a00bd2",
     "name": "Adopted retained input",
-    "sha256": "caaf72c18a6a499b04fe886d8b4b871c066bed0870a7049ff6d6c48c26e966f8",
-    "contentSize": "14520274 B",
+    "sha256": "677e418d89c603207429f5999585120bcc2290d48bfadfd5b68efa30f741048a",
+    "contentSize": "1046088 B",
     "additionalProperty": [
       {
         "@type": "sc:PropertyValue",
@@ -1592,17 +1596,17 @@
       {
         "@type": "sc:PropertyValue",
         "name": "collection_id",
-        "value": "usgs_nwis-native-2026-11-01-v1"
+        "value": "usgs_nwis-catalogue-native-2026-11-03-v1"
       },
       {
         "@type": "sc:PropertyValue",
         "name": "manifest_sha256",
-        "value": "85634c39565f88fbcb7b8160e79aad02edfd8313619dae36deffdbc307a11c3b"
+        "value": "fd87fc2d141df07b764260bd804349a76c9ee128318ed295b8435c020769188d"
       },
       {
         "@type": "sc:PropertyValue",
         "name": "artifact_id",
-        "value": "usgs-native-2026-11-01"
+        "value": "member-c09cb16d789640a1b1a00bd2"
       },
       {
         "@type": "sc:PropertyValue",
