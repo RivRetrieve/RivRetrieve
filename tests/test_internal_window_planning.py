@@ -210,7 +210,10 @@ def test_unknown_window_granularity_is_refused() -> None:
             _declaration("year-month", engine.WindowRenderingVocabulary.YEAR),
             "size None and year-month or date rendering",
         ),
-        (_declaration("n-year-chunk", engine.WindowRenderingVocabulary.DATE), "a positive size and date rendering"),
+        (
+            _declaration("n-year-chunk", engine.WindowRenderingVocabulary.DATE),
+            "a positive size and date or year rendering",
+        ),
         (
             _declaration("capped-span", engine.WindowRenderingVocabulary.YEAR, size=2),
             "a positive size and date, date-dmy, or iso-instant rendering",
@@ -654,3 +657,35 @@ def test_window_declaration_fetch_padding_validation() -> None:
             engine.StopConvention.INCLUSIVE,
             fetch_padding=timedelta(microseconds=-1),
         )
+
+
+def test_n_year_chunk_year_rendering_covers_whole_calendar_years_and_leap_years() -> None:
+    decl_25 = _declaration("n-year-chunk", engine.WindowRenderingVocabulary.YEAR, size=25)
+    windows = window_planning.plan_windows(_fetch(datetime(1867, 4, 1), datetime(2026, 11, 23, 23, 59, 59)), decl_25)
+    assert _pairs(windows) == (
+        ("1867", "1891"),
+        ("1892", "1916"),
+        ("1917", "1941"),
+        ("1942", "1966"),
+        ("1967", "1991"),
+        ("1992", "2016"),
+        ("2017", "2026"),
+    )
+    assert windows[0].bounds == _fetch(datetime(1867, 1, 1), datetime(1891, 12, 31, 23, 59, 59, 999999))
+    assert windows[-1].bounds == _fetch(datetime(2017, 1, 1), datetime(2026, 12, 31, 23, 59, 59, 999999))
+
+    single = window_planning.plan_windows(_fetch(datetime(2024, 2, 29), datetime(2024, 2, 29)), decl_25)
+    assert _pairs(single) == (("2024", "2024"),)
+    assert single[0].bounds == _fetch(datetime(2024, 1, 1), datetime(2024, 12, 31, 23, 59, 59, 999999))
+
+    exact_size = window_planning.plan_windows(
+        _fetch(datetime(2000, 1, 1), datetime(2024, 12, 31)),
+        decl_25,
+    )
+    assert _pairs(exact_size) == (("2000", "2024"),)
+
+    exclusive = _declaration(
+        "n-year-chunk", engine.WindowRenderingVocabulary.YEAR, engine.StopConvention.EXCLUSIVE, size=25
+    )
+    with pytest.raises(ValueError, match="inclusive stop for year rendering"):
+        window_planning.plan_windows(_fetch(datetime(2020, 1, 1), datetime(2024, 1, 1)), exclusive)
