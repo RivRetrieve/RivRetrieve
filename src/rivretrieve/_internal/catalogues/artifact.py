@@ -59,6 +59,7 @@ ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
         "fi_syke",
         "fr_hubeau",
         "fr_hydroportail",
+        "ie_opw",
         "lt_lhmt",
         "no_nve",
         "pl_imgw",

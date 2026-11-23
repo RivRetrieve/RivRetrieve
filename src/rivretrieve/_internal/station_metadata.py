@@ -63,6 +63,7 @@ _INLINE_QUANTITY_FIELDS: dict[tuple[str, str, str | None, str | None], tuple[str
     ("ba_fhmzbih", "drainage_area", None, "metadata_CATCHMENT_SIZE"): ("km²", "km²"),
     ("ch_foen", "drainage_area", "station_page", "Catchment size"): ("km2", "km2"),
     ("ch_foen", "elevation", "station_page", "Station altitude"): ("m", "m a.s.l."),
+    ("ie_opw", "drainage_area", "hydro_stations", "CATCHMENT_SIZE"): ("km²", "km²"),
 }
 _PADDED_QUANTITY_FIELDS = {("usgs_nwis", "elevation", None, "alt_va")}
 _NUMBER_TEXT = r"[ \t\u00a0]*[+-]?(?:(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?|\.[0-9]+)"
