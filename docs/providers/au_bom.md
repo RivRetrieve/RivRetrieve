@@ -244,6 +244,27 @@ annotated = result.to_polars(annotations=True).select("time", "value", "unit", "
 print(annotated.write_csv(float_precision=3), end="")
 ```
 
+Output:
+
+```text
+schema,name,dtype,row_count
+au_bom.quality,Quality_Code,Int64,5
+au_bom.quality,Quality_Code_Name,String,5
+time,value,unit,Quality_Code,Quality_Code_Name
+2026-10-28T00:00:00.000000,0.607,m,10,quality-A
+2026-10-29T00:00:00.000000,0.598,m,10,quality-A
+2026-10-30T00:00:00.000000,0.591,m,10,quality-A
+2026-10-31T00:00:00.000000,0.590,m,10,quality-A
+2026-11-01T00:00:00.000000,0.593,m,10,quality-A
+```
+
+This annotation output was checked on 2026-11-23: all five observations from
+the first example above now carry `quality-A`, where the 2026-11-04 snapshot
+at the top of this page recorded most of the same rows as provisional
+(`quality-E`) or still-settling values. BoM revises recent observations as
+they move from provisional to final status; a quality code recorded here is
+not a permanent property of that observation.
+
 Both fields are published together or not at all, and either can be null even
 when the other carries a value. These are BoM's own descriptions of the
 observation's processing status, not a RivRetrieve quality judgement:

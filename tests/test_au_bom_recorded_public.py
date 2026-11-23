@@ -119,12 +119,14 @@ def test_public_recorded_station_410730_discharge_quality_e_annotations(
     discharge_rows = result.data.filter(result.data["product_id"] == "discharge_daily_mean_24hr")
     assert discharge_rows.height == 8
     assert discharge_rows["unit"].unique().to_list() == ["m3/s"]
-    # The annotation table covers every source row from the engine's wider
-    # padded-window response (11 rows), not just the window the caller
-    # actually requested (8 rows); no row is silently dropped from annotation.
+    # The annotation table mirrors result.data's row scope exactly, the same
+    # settled convention ch_foen's releaseState/releaseStatus annotations use:
+    # the engine's wider padded-window response (11 source rows) is clipped to
+    # the caller's requested window before the annotation table is built, so no
+    # row describes an observation the caller cannot see in result.data.
     table = rr.annotations(result, schema="au_bom.quality")
-    assert table.height == 11
-    assert table["Quality_Code_Name"].to_list() == ["quality-E"] * 11
+    assert table.height == discharge_rows.height == 8
+    assert table["Quality_Code_Name"].to_list() == ["quality-E"] * 8
 
 
 @pytest.mark.recorded(_SCOPE)
