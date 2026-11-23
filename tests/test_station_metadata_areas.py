@@ -48,6 +48,7 @@ SOURCE_FIELDS = {
     "co_ideam": ("Codigo", {}),
     "cz_chmi": ("objID", {"PLO_STA": "km²"}),
     "dk_vanda": ("stationId", {"catchmentAreaKm2": "km2"}),
+    "ee_est": ("kkr_kood", {"area": "km2"}),
     "fr_hubeau": ("code_station", {"superficie_topo": None, "superficie_reelle": None}),
     "fr_hydroportail": ("bookmarkCode", {}),
     "lt_lhmt": ("code", {}),
@@ -156,6 +157,8 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
                 if provider == "co_ideam"
                 else "maintenance/catalogue/dk_vanda/official"
                 if provider == "dk_vanda"
+                else "maintenance/catalogue/ee_est/official"
+                if provider == "ee_est"
                 else f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"
             ),
         )
@@ -176,6 +179,8 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         if provider == "co_ideam"
         else retained_evidence_root / "maintenance/catalogue/dk_vanda/official/native.parquet"
         if provider == "dk_vanda"
+        else retained_evidence_root / "maintenance/catalogue/ee_est/official/native.parquet"
+        if provider == "ee_est"
         else retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     )
     native = pl.read_parquet(native_path)
