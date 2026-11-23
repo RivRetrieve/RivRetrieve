@@ -82,6 +82,8 @@ _CATALOGUE_SOURCE_FACTS = {
     "product": (
         "source.station_product.kiwis_tslist",
         "source.series.fields",
+        "source.series.temporal_semantics",
+        "source.series.stage_vertical_reference",
     ),
     "station_product": (
         "source.station.kiwis_station_list",
@@ -102,9 +104,10 @@ def build_acquisition_provenance(
     """Bind selected SPW Hydrométrie KiWIS evidence and native table to catalogue facts.
 
     Acquisitions and verbatim statements come from the verified archive selection.
-    Unestablished product temporal semantics, vertical references, and observation
-    record bounds remain unknown until Steps 3 and 4 establish and verify witnesses.
-    SPW's non-redistribution terms leave provider license unset (``None``).
+    Step 3 establishes temporal semantics, stage vertical references, and the
+    ``be_wal.quality`` observation annotation schema; published record bounds remain
+    unknown until Step 4 establishes retrieval window witnesses. SPW's non-redistribution
+    terms leave provider license unset (``None``).
     """
     if any(binding.source_id != "be_wal" or binding.transformation is not None for binding in source_bindings):
         raise ValueError("be_wal source bindings must directly identify selected acquisitions")
@@ -115,6 +118,7 @@ def build_acquisition_provenance(
             "source.station.catchment_size_unit",
             "source.provider.terms",
             "source.provider.attribution",
+            "source.series.annotations",
         )
     )
     if missing := required - set(facts):
@@ -188,6 +192,7 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/be_wal/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/be_wal/origins.py", "STATION_METADATA_NOTICE"),
     ("src/rivretrieve/_internal/providers/be_wal/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/be_wal/annotations.py", "BE_WAL_QUALITY_SCHEMA"),
     ("src/rivretrieve/_internal/providers/be_wal/generate_catalogue.py", "read_catalogue_sources"),
     ("src/rivretrieve/_internal/providers/be_wal/station_metadata.py", "project_station_metadata"),
     ("src/rivretrieve/_internal/providers/be_wal/series.py", "PRODUCT_SPECS"),
