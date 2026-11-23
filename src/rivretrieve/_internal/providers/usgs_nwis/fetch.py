@@ -230,6 +230,15 @@ def fetch(
                                     for failed_id in target_members or (None,)
                                 ),
                             )
+                        if interpreted.links_error is not None:
+                            return PageStep(
+                                parsed=parsed,
+                                stop_reason=interpreted.links_error,
+                                issues=tuple(
+                                    _issue(station, product, interpreted.links_error, failed_id)
+                                    for failed_id in target_members or (None,)
+                                ),
+                            )
                         if interpreted.next_href is None:
                             return PageStep(parsed=parsed)
                         try:

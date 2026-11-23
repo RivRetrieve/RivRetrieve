@@ -59,6 +59,7 @@ class UsgsPageInterpretation:
     observation_keys: frozenset[tuple[str, datetime]]
     next_href: str | None = None
     document_error: str | None = None
+    links_error: str | None = None
 
 
 @lru_cache(maxsize=64)
@@ -172,6 +173,7 @@ def interpret_page(
     observation_keys: set[tuple[str, datetime]] = set()
     next_href: str | None = None
     document_error: str | None = None
+    links_error: str | None = None
 
     features: list[Any]
     try:
@@ -199,7 +201,7 @@ def interpret_page(
                 try:
                     next_href = _next_href_from_document(document)
                 except ValueError as error:
-                    document_error = str(error)
+                    links_error = str(error)
 
     for feature in features:
         sid = None
@@ -410,6 +412,7 @@ def interpret_page(
         observation_keys=frozenset(observation_keys),
         next_href=next_href,
         document_error=document_error,
+        links_error=links_error,
     )
 
 

@@ -403,9 +403,6 @@ def test_receipt_omit_releases_prior_payload_bytes_and_reused_parsed_rows() -> N
     cfg = _provider_config()
     coordinates = cfg.products[ProductId("level")].coordinates
 
-    class _HeldObject:
-        pass
-
     retained_refs: list[weakref.ref[object]] = []
 
     class _TwoPageProvider:
@@ -515,3 +512,139 @@ def test_window_acquisition_forwards_interpretations_and_still_matches_when_prer
     for payload, interp in zip(acquired.value, acquired.interpretations, strict=True):
         assert payload.prerequisite_acquisition_ids == ("parent-overflow",)
         assert interp.context == InterpretationContext.from_payload(payload)
+
+
+def test_shared_acquisition_reuses_per_product_contexts_and_releases_after_final_consumer() -> None:
+    from rivretrieve._internal.engine import (
+        Daily,
+        DailyLabelTime,
+        DayDefinition,
+        ProductConfig,
+        ProductWindowDeclarations,
+        StopConvention,
+        Unit,
+        WindowDeclaration,
+        WindowGranularity,
+        WindowRenderingVocabulary,
+        ZoneValue,
+    )
+    from rivretrieve._internal.source_series import ClippingAxis
+
+    products = (ProductId("flow"), ProductId("level"))
+    coords = SourceCoordinates({"route": "shared"})
+    shared_cfg = ProviderConfig(
+        zone=ZoneValue("unknown"),
+        products={
+            ProductId("flow"): ProductConfig(
+                coords, Unit.M3_S, Daily(DayDefinition("unknown"), DailyLabelTime("00:00"))
+            ),
+            ProductId("level"): ProductConfig(coords, Unit.M, Daily(DayDefinition("unknown"), DailyLabelTime("00:00"))),
+        },
+    )
+    decl = WindowDeclaration(WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE)
+    shared_decls = ProductWindowDeclarations(dict.fromkeys(products, decl))
+    requested = engine_req_window = (
+        WindowEndpoint.from_datetime(datetime(2025, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2025, 1, 2)),
+    )
+    from rivretrieve._internal.engine import RequestedWindow
+
+    req = ObservationRequest(ProviderId("throwaway"), ("station-1",), products, RequestedWindow(*engine_req_window))
+    fw = _make_fetch_window(*requested)
+    retained_refs: list[weakref.ref[object]] = []
+    parse_calls = 0
+
+    class _SharedProvider:
+        shared_acquisition_products = (frozenset(products),)
+        config = shared_cfg
+        window_declarations = shared_decls
+
+        def fetch(self, stations, prod_arg, rendered_windows, window, cfg, transport, *, scope, known_series):
+            shared_payload = Payload(
+                source_coordinates=coords,
+                station_products=(("station-1", ProductId("flow")), ("station-1", ProductId("level"))),
+                fetch_window=fw,
+                content=b"shared-json-" + b"z" * 2048,
+                origin=SourceCallOrigin(
+                    "https://example.invalid/shared",
+                    {},
+                    200,
+                    datetime(2026, 1, 1, tzinfo=UTC),
+                    "application/json",
+                    UnknownOriginFact(),
+                    UnknownOriginFact(),
+                ),
+                prerequisite_calls=(),
+                acquisition_id="acq-shared-1",
+            )
+            interps: list[InterpretedPayload] = []
+            series_win = SeriesWindow(
+                start=datetime.fromisoformat(fw.start.isoformat()),
+                end=datetime.fromisoformat(fw.end.isoformat()),
+            )
+            for prod, unit_str, qty, val in (
+                (ProductId("flow"), "m3/s", "discharge", 15.0),
+                (ProductId("level"), "m", "stage", 2.5),
+            ):
+                pair_scope = (scope or SeriesScope(provider_ids=("throwaway",))).model_copy(
+                    update={"provider_ids": ("throwaway",), "station_ids": ("station-1",), "product_ids": (str(prod),)}
+                )
+                pair_payload = replace(shared_payload, station_products=(("station-1", prod),), scope=pair_scope)
+                facts = PhysicalFacts(
+                    facts_id=f"{prod}:facts",
+                    quantity=known(qty, "test"),
+                    source_unit=known(unit_str, "test"),
+                    normalized_unit=unit_str,
+                    frequency=known("daily", "test"),
+                    clipping_axis=ClippingAxis.CALENDAR_DATE,
+                    label_time="00:00",
+                )
+                sid = f"station-1:{prod}"
+                definition = SourceSeries(
+                    series_id=sid,
+                    provider_id="throwaway",
+                    station_id="station-1",
+                    product_id=str(prod),
+                    identity=SourceIdentity(namespace="test", published_id=sid, origin="response", evidence=("test",)),
+                    facts=(facts,),
+                )
+                rows = pl.DataFrame(
+                    {
+                        "station_id": ["station-1"],
+                        "product_id": [str(prod)],
+                        "time": [datetime(2025, 1, 1, 0, 0)],
+                        "value": [val],
+                        "time_zone": ["unknown"],
+                        "series_id": [sid],
+                        "facts_id": [facts.facts_id],
+                        "source_unit": [unit_str],
+                    },
+                    schema=RowsSchema.polars_schema,
+                )
+                outcome = RetrievalOutcome(
+                    outcome_id=f"{prod}:outcome",
+                    series_id=sid,
+                    station_id="station-1",
+                    product_id=str(prod),
+                    window=series_win,
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=(facts.facts_id,),
+                    calls=("acq-shared-1",),
+                )
+                parsed = ParsedSeries(rows, (definition,), (), (outcome,), ())
+                retained_refs.append(weakref.ref(parsed.rows))
+                retained_refs.append(weakref.ref(parsed.outcomes[0]))
+                interps.append(InterpretedPayload.from_payload(pair_payload, parsed))
+            return SourceAcquisition(value=(shared_payload,), interpretations=tuple(interps))
+
+        def parse(self, payload, cfg):
+            nonlocal parse_calls
+            parse_calls += 1
+            raise AssertionError("Shared contexts should both be reused")
+
+    result = driver_module.drive(req, _SharedProvider(), provenance=_provenance(req), receipts=ReceiptMode.OMIT)
+    gc.collect()
+    assert parse_calls == 0
+    assert result.canonical_rows.height == 2
+    assert set(result.canonical_rows["product_id"].to_list()) == {"flow", "level"}
+    assert all(ref() is None for ref in retained_refs)

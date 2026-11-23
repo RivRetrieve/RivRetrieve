@@ -153,19 +153,6 @@ def _parse_native_document(
     return WithIssues(frame)
 
 
-def _parse_native(
-    payload: Payload,
-    provider_config: ProviderConfig,
-    *,
-    annotations_out: list[dict[str, int | str | None]] | None = None,
-) -> WithIssues[Rows]:
-    try:
-        document = json.loads(payload.content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise UnsupportedSourceStructureError("fr_hubeau payload content is not valid JSON") from error
-    return _parse_native_document(payload, provider_config, document, annotations_out=annotations_out)
-
-
 def _naive(value: object) -> datetime:
     if not isinstance(value, str):
         raise UnsupportedSourceStructureError("fr_hubeau observation timestamp must be a string")

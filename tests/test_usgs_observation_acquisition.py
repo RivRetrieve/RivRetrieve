@@ -1234,3 +1234,18 @@ def test_usgs_changed_known_series_context_falls_back_to_parse():
     assert parse_calls == 1
     assert result.source_series[0].identity.origin == "catalogue"
     assert result.source_series[0].identity.description == "Discharge from catalogue"
+
+
+def test_cross_page_duplicate_precedence_over_malformed_links():
+    p1 = page(feature("alpha", "2000-01-01"), next_url=next_url())
+    p2_raw = {
+        "type": "FeatureCollection",
+        "features": [feature("alpha", "2000-01-01")],
+        "links": "malformed",
+    }
+    p2 = json.dumps(p2_raw).encode()
+    acquired = acquire(Transport(p1, p2))
+    assert any(
+        o.status is OutcomeStatus.UNSUPPORTED and "repeats a logical series/time observation" in (o.reason or "")
+        for o in acquired.outcomes
+    )
