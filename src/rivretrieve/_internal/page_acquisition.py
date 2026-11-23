@@ -25,15 +25,15 @@ from rivretrieve._internal.transport import Transport, TransportFailure, Transpo
 class PageStep:
     """One decoded observation page's parsed series and pagination continuation."""
 
-    parsed: ParsedSeries
+    parsed: ParsedSeries | None = None
     next_request: TransportRequest | None = None
     cursor_key: Hashable | None = None
     stop_reason: str | None = None
     issues: tuple[Issue, ...] = ()
 
     def __post_init__(self) -> None:
-        if not isinstance(self.parsed, ParsedSeries):
-            raise FatalContractError("Page step requires a ParsedSeries")
+        if self.parsed is not None and not isinstance(self.parsed, ParsedSeries):
+            raise FatalContractError("Page step requires a ParsedSeries or None")
         if self.stop_reason is not None and self.next_request is not None:
             raise FatalContractError("Page step cannot supply a next request after stopping")
 
@@ -128,7 +128,8 @@ def acquire_pages(
         step = interpret_page(payload)
         if not isinstance(step, PageStep):
             raise FatalContractError("Page acquisition interpret_page must return PageStep")
-        interpretations.append(InterpretedPayload.from_payload(payload, step.parsed))
+        if step.parsed is not None:
+            interpretations.append(InterpretedPayload.from_payload(payload, step.parsed))
         issues.extend(step.issues)
 
         if step.stop_reason is not None:

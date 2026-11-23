@@ -3,6 +3,7 @@
 Contributed by: Thiago von Däniken
 """
 
+import json
 from dataclasses import replace
 from datetime import datetime
 from io import BytesIO
@@ -13,11 +14,82 @@ import polars as pl
 
 from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, RowsSchema, WithIssues
 from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
-from rivretrieve._internal.providers.ba_fhmzbih.config import SERIES_MAPPINGS, BaFhmzbihSourceCoordinates
-from rivretrieve._internal.providers.ba_fhmzbih.fetch import BaFhmzbihMetadataCoordinates, metadata_groups
+from rivretrieve._internal.providers.ba_fhmzbih.config import (
+    SERIES_MAPPINGS,
+    BaFhmzbihMetadataCoordinates,
+    BaFhmzbihSourceCoordinates,
+)
 from rivretrieve._internal.source_series import OutcomeStatus, ParsedSeries, RetrievalOutcome, SeriesWindow, stable_id
+
+
+def metadata_groups(content: bytes, stations: tuple[str, ...]) -> dict[str, str]:
+    """Resolve publisher station routes without inventing missing group identifiers."""
+    try:
+        document = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise UnsupportedSourceStructureError("ba_fhmzbih metadata index is not valid JSON") from error
+    if not isinstance(document, list):
+        raise UnsupportedSourceStructureError("ba_fhmzbih metadata index must be a JSON array")
+    groups: dict[str, str] = {}
+    for station in stations:
+        matches = [row for row in document if isinstance(row, dict) and row.get("metadata_station_no") == station]
+        if (
+            len(matches) != 1
+            or not isinstance(matches[0].get("metadata_site_no"), str)
+            or not matches[0]["metadata_site_no"]
+        ):
+            raise UnsupportedSourceStructureError(
+                f"ba_fhmzbih metadata index does not resolve exactly one group for station {station}"
+            )
+        groups[station] = matches[0]["metadata_site_no"]
+    return groups
+
+
+def _metadata_failure(
+    payload: Payload, station: str, product: ProductId, reason: str
+) -> tuple[RetrievalOutcome, Issue]:
+    outcome = RetrievalOutcome(
+        outcome_id=stable_id(station, product, reason, str(payload.origin.retrieved_at)),
+        series_id=None,
+        station_id=station,
+        product_id=product,
+        window=SeriesWindow(
+            start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+            end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+        ),
+        status=OutcomeStatus.UNSUPPORTED,
+        reason=reason,
+        retrieved_at=payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None,
+    )
+    issue = Issue(
+        severity="error",
+        code="unsupported_source_structure",
+        message=reason,
+        provider_id=ProviderId("ba_fhmzbih"),
+        details={"station_id": station, "product_id": product},
+    )
+    return outcome, issue
+
+
+def interpret_metadata_payload(
+    payload: Payload,
+    provider_config: ProviderConfig,
+    *,
+    error: UnsupportedSourceStructureError | None = None,
+) -> ParsedSeries:
+    """Build the metadata payload interpretation without re-decoding source JSON."""
+    outcomes: list[RetrievalOutcome] = []
+    issues: list[Issue] = []
+    for station, product in payload.station_products:
+        if product not in provider_config.products:
+            raise FatalContractError("ba_fhmzbih metadata payload has an undeclared product")
+        if error is not None:
+            outcome, issue = _metadata_failure(payload, station, product, str(error))
+            outcomes.append(outcome)
+            issues.append(issue)
+    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), tuple(outcomes), tuple(issues))
 
 
 def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
@@ -120,33 +192,9 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             try:
                 metadata_groups(payload.content, (station,))
             except UnsupportedSourceStructureError as error:
-                reason = str(error)
-                outcomes.append(
-                    RetrievalOutcome(
-                        outcome_id=stable_id(station, product, reason, str(payload.origin.retrieved_at)),
-                        series_id=None,
-                        station_id=station,
-                        product_id=product,
-                        window=SeriesWindow(
-                            start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
-                            end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
-                        ),
-                        status=OutcomeStatus.UNSUPPORTED,
-                        reason=reason,
-                        retrieved_at=payload.origin.retrieved_at
-                        if isinstance(payload.origin.retrieved_at, datetime)
-                        else None,
-                    )
-                )
-                issues.append(
-                    Issue(
-                        severity="error",
-                        code="unsupported_source_structure",
-                        message=reason,
-                        provider_id=ProviderId("ba_fhmzbih"),
-                        details={"station_id": station, "product_id": product},
-                    )
-                )
+                outcome, issue = _metadata_failure(payload, station, product, str(error))
+                outcomes.append(outcome)
+                issues.append(issue)
         return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), tuple(outcomes), tuple(issues))
     parsed = parse_mapped_series(
         payload, provider_config, provider="ba_fhmzbih", mappings=SERIES_MAPPINGS, native_parse=_parse_native

@@ -242,3 +242,29 @@ def test_acquire_pages_preserves_provider_stop_reason_and_rejects_invalid_steps(
 
     with pytest.raises(FatalContractError, match="next request after stopping"):
         PageStep(parsed=_empty_parsed(), next_request=req1, stop_reason="stopped")
+
+
+def test_acquire_pages_allows_uninterpreted_page_steps_while_continuing_pagination() -> None:
+    req1 = TransportRequest(HttpMethod.GET, "https://example.invalid/page1")
+    req2 = TransportRequest(HttpMethod.GET, "https://example.invalid/page2")
+    t = _ScriptedTransport([_response(req1, b"bad-rows"), _response(req2, b"good")])
+
+    def interpret(payload: Payload) -> PageStep:
+        if payload.content == b"bad-rows":
+            return PageStep(parsed=None, next_request=req2, cursor_key=("c2",))
+        return PageStep(parsed=_empty_parsed())
+
+    acq = acquire_pages(
+        req1,
+        transport=t,
+        window=_window(),
+        build_payload=_build_payload,
+        interpret_page=interpret,
+        failure_targets=lambda: (SourceRequestTarget("s1", "p1"),),
+    )
+
+    assert acq.completed is True
+    assert [p.content for p in acq.payloads] == [b"bad-rows", b"good"]
+    assert acq.calls == tuple(p.acquisition_id for p in acq.payloads)
+    assert len(acq.interpretations) == 1
+    assert acq.interpretations[0].context.acquisition_id == acq.payloads[1].acquisition_id
