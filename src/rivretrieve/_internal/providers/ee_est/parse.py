@@ -120,7 +120,11 @@ def _parse_estmodel(
     raw_rows = _parse_json_list(payload.content, context="EstModel")
     expected_unit = _EM_EXPECTED_UNITS[coords.parameter]
     seen_dates: set[datetime] = set()
-    parsed_entries: list[tuple[datetime, float | None, str | None]] = []
+    times: list[datetime] = []
+    values: list[float | None] = []
+    qflags: list[str | None] = []
+    prev_dt: datetime | None = None
+    monotonic = True
 
     for index, entry in enumerate(raw_rows):
         if not isinstance(entry, dict):
@@ -146,7 +150,7 @@ def _parse_estmodel(
                 f"EstModel row {index} requires matching YYYY-MM-DD startDate/endDate: {start_str!r}, {end_str!r}"
             )
         try:
-            obs_dt = datetime.strptime(start_str, "%Y-%m-%d")
+            obs_dt = datetime.fromisoformat(start_str)
         except ValueError as error:
             raise UnsupportedSourceStructureError(
                 f"EstModel row {index} invalid calendar date {start_str!r}"
@@ -163,21 +167,30 @@ def _parse_estmodel(
             raise UnsupportedSourceStructureError(
                 f"EstModel row {index} qualityFlag must be string or null, got {type(qflag).__name__}"
             )
-        parsed_entries.append((obs_dt, value, qflag))
+        if prev_dt is not None and obs_dt < prev_dt:
+            monotonic = False
+        prev_dt = obs_dt
+        times.append(obs_dt)
+        values.append(value)
+        qflags.append(qflag)
 
-    parsed_entries.sort(key=lambda item: item[0])
+    n = len(times)
+    if not monotonic:
+        order = sorted(range(n), key=lambda i: times[i])
+        times = [times[i] for i in order]
+        values = [values[i] for i in order]
+        qflags = [qflags[i] for i in order]
     definition = reused_series(source_series(station, str(product), origin="response"), payload.known_series)
     fact = definition.facts[0]
     evidence = f"source-call:{payload.acquisition_id}"
 
-    n = len(parsed_entries)
     rows_df = (
         pl.DataFrame(
             {
                 "station_id": pl.repeat(station, n, dtype=pl.String, eager=True),
                 "product_id": pl.repeat(str(product), n, dtype=pl.String, eager=True),
-                "time": pl.Series("time", [item[0] for item in parsed_entries], dtype=pl.Datetime("us")),
-                "value": pl.Series("value", [item[1] for item in parsed_entries], dtype=pl.Float64),
+                "time": pl.Series("time", times, dtype=pl.Datetime("us")),
+                "value": pl.Series("value", values, dtype=pl.Float64),
                 "time_zone": pl.repeat("unknown", n, dtype=pl.String, eager=True),
                 "series_id": pl.repeat(definition.series_id, n, dtype=pl.String, eager=True),
                 "facts_id": pl.repeat(fact.facts_id, n, dtype=pl.String, eager=True),
@@ -194,7 +207,7 @@ def _parse_estmodel(
             "series_id", "facts_id", "station_id", "product_id", "time", "time_zone"
         ).with_columns(
             pl.lit(True).cast(pl.Boolean()).alias("measured"),
-            pl.Series("qualityFlag", [item[2] for item in parsed_entries], dtype=pl.String),
+            pl.Series("qualityFlag", qflags, dtype=pl.String),
         )
         ann_table = ObservationAnnotationTable.from_rows(
             schema=EE_EST_ESTMODEL_SCHEMA,
@@ -250,7 +263,10 @@ def _parse_f_hydroseire(
         )
 
     seen_times: set[datetime] = set()
-    parsed_entries: list[tuple[datetime, float | None]] = []
+    times: list[datetime] = []
+    values: list[float | None] = []
+    prev_dt: datetime | None = None
+    monotonic = True
 
     for index, entry in enumerate(raw_rows):
         if not isinstance(entry, dict):
@@ -280,9 +296,17 @@ def _parse_f_hydroseire(
             )
         seen_times.add(obs_dt)
         value = _finite_float_or_none(row.get("vaartus"), context=f"f_hydroseire row {index}", field_name="vaartus")
-        parsed_entries.append((obs_dt, value))
+        if prev_dt is not None and obs_dt < prev_dt:
+            monotonic = False
+        prev_dt = obs_dt
+        times.append(obs_dt)
+        values.append(value)
 
-    parsed_entries.sort(key=lambda item: item[0])
+    n = len(times)
+    if not monotonic:
+        order = sorted(range(n), key=lambda i: times[i])
+        times = [times[i] for i in order]
+        values = [values[i] for i in order]
     definition = reused_series(
         source_series(station, str(product), jaam_kood=jaam_kood, origin="response"),
         payload.known_series,
@@ -290,14 +314,13 @@ def _parse_f_hydroseire(
     fact = definition.facts[0]
     evidence = f"source-call:{payload.acquisition_id}"
 
-    n = len(parsed_entries)
     rows_df = (
         pl.DataFrame(
             {
                 "station_id": pl.repeat(station, n, dtype=pl.String, eager=True),
                 "product_id": pl.repeat(str(product), n, dtype=pl.String, eager=True),
-                "time": pl.Series("time", [item[0] for item in parsed_entries], dtype=pl.Datetime("us")),
-                "value": pl.Series("value", [item[1] for item in parsed_entries], dtype=pl.Float64),
+                "time": pl.Series("time", times, dtype=pl.Datetime("us")),
+                "value": pl.Series("value", values, dtype=pl.Float64),
                 "time_zone": pl.repeat("+00:00", n, dtype=pl.String, eager=True),
                 "series_id": pl.repeat(definition.series_id, n, dtype=pl.String, eager=True),
                 "facts_id": pl.repeat(fact.facts_id, n, dtype=pl.String, eager=True),

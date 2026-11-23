@@ -397,3 +397,229 @@ def test_fetch_isolates_404_failure_alongside_sibling_success(tmp_path: Path) ->
     statuses = {o.station_id: o.status for o in res.outcomes}
     assert statuses == {"SJA8821000": OutcomeStatus.SUCCESS, "MISSING": OutcomeStatus.FAILED}
     assert any(issue.code == "source.http_not_found" for issue in res.issues)
+
+
+@pytest.mark.parametrize("mode", ["empty", "malformed", "transport_503", "valid"])
+def test_fetch_deduplicates_f_seirejaamad_lookup_across_three_hourly_products(mode: str) -> None:
+    from rivretrieve._internal.engine import RenderedWindow
+
+    hourly_products = (
+        ProductId("stage_hourly_mean"),
+        ProductId("discharge_hourly_mean"),
+        ProductId("water_temperature_hourly_mean"),
+    )
+    fw = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2024, 3, 30, 0, 0)),
+        WindowEndpoint.from_datetime(datetime(2024, 3, 30, 2, 59, 59, 999999)),
+    )
+    win = RenderedWindow("2024-03-30T00:00:00Z", "2024-03-30T02:59:59.999999Z", fw)
+    rendered = dict.fromkeys(hourly_products, (win,))
+    cfg = config()
+
+    class _CountingTransport:
+        def __init__(self) -> None:
+            self.seirejaamad_requests: list[TransportRequest] = []
+            self.hydroseire_requests: list[TransportRequest] = []
+
+        def send(self, request: TransportRequest) -> TransportResponse:
+            if request.url.endswith("/f_seirejaamad"):
+                self.seirejaamad_requests.append(request)
+                if mode == "transport_503":
+                    raise TransportFailure(
+                        request,
+                        TransportFailureReason.HTTP_STATUS,
+                        1,
+                        status_code=503,
+                        category=TransportFailureCategory.HTTP_STATUS,
+                    )
+                if mode == "malformed":
+                    raw = b"{not-json"
+                elif mode == "empty":
+                    raw = b"[]"
+                else:
+                    raw = json.dumps([{"kkr_kood": "SJA8821000", "kood": "41061"}]).encode("utf-8")
+                return TransportResponse(
+                    content=raw,
+                    status_code=200,
+                    retrieved_at=_RETRIEVED_AT,
+                    content_type="application/json",
+                    url=request.url,
+                    request_parameters=MappingProxyType(dict(request.params or {})),
+                )
+            assert request.url.endswith("/f_hydroseire")
+            self.hydroseire_requests.append(request)
+            aegrida = dict(request.params or {})["aegrida_nimi"].removeprefix("eq.")
+            return TransportResponse(
+                content=json.dumps(
+                    [
+                        {
+                            "jaam_kood": 41061,
+                            "aegrida_nimi": aegrida,
+                            "timeline_ts_utc": "2024-03-30T00:00:00",
+                            "vaartus": 1.5,
+                        }
+                    ]
+                ).encode("utf-8"),
+                status_code=200,
+                retrieved_at=_RETRIEVED_AT,
+                content_type="application/json",
+                url=request.url,
+                request_parameters=MappingProxyType(dict(request.params or {})),
+            )
+
+    transport = _CountingTransport()
+    acq = fetch(
+        ("SJA8821000",),
+        hourly_products,
+        rendered,
+        fw,
+        cfg,
+        transport,
+        known_series=(),
+    )
+
+    assert len(transport.seirejaamad_requests) == 1
+    if mode == "transport_503":
+        assert transport.hydroseire_requests == []
+        assert len(acq.failed_requests) == 3
+        assert {item.series.product_id for item in acq.failed_requests} == {str(p) for p in hourly_products}
+        assert acq.outcomes == ()
+    elif mode in {"empty", "malformed"}:
+        assert transport.hydroseire_requests == []
+        assert len(acq.calls) == 1
+        lookup_id = acq.calls[0].acquisition_id
+        expected_status = OutcomeStatus.NO_MATCH if mode == "empty" else OutcomeStatus.FAILED
+        expected_code = "source.no_match" if mode == "empty" else "source.unsupported_structure"
+        assert len(acq.outcomes) == 3
+        assert len(acq.inventories) == 3
+        assert len(acq.issues) == 3
+        assert {o.product_id for o in acq.outcomes} == {str(p) for p in hourly_products}
+        assert all(o.status is expected_status and o.calls == (lookup_id,) for o in acq.outcomes)
+        assert all(inv.evidence == (f"source-call:{lookup_id}",) for inv in acq.inventories)
+        assert all(iss.code == expected_code for iss in acq.issues)
+    else:
+        assert len(transport.hydroseire_requests) == 3
+        assert len(acq.value) == 3
+        assert acq.issues == ()
+        assert acq.failed_requests == ()
+
+
+def test_parse_sorts_out_of_order_rows_and_rejects_invalid_calendar_dates() -> None:
+    cfg = config()
+    fw_em = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2023, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2024, 12, 31)),
+    )
+    unsorted_em = parse(
+        Payload(
+            source_coordinates=cfg.products[ProductId("discharge_daily_mean")].coordinates,
+            station_products=(("SJA8821000", ProductId("discharge_daily_mean")),),
+            fetch_window=fw_em,
+            content=json.dumps(
+                [
+                    {
+                        "parameter": "Q",
+                        "startDate": "2024-01-03",
+                        "endDate": "2024-01-03",
+                        "value": 3.0,
+                        "unit": "m³/s",
+                        "qualityFlag": "UNCHECKED",
+                    },
+                    {
+                        "parameter": "Q",
+                        "startDate": "2024-01-01",
+                        "endDate": "2024-01-01",
+                        "value": 1.0,
+                        "unit": "m³/s",
+                        "qualityFlag": None,
+                    },
+                    {
+                        "parameter": "Q",
+                        "startDate": "2024-01-02",
+                        "endDate": "2024-01-02",
+                        "value": 2.0,
+                        "unit": "m³/s",
+                        "qualityFlag": "BELOW_LOQ",
+                    },
+                ]
+            ).encode("utf-8"),
+            origin=_origin("https://estmodel.envir.ee/stations/SJA8821000/measurements"),
+            prerequisite_calls=(),
+        ),
+        cfg,
+    )
+    assert unsorted_em.rows["time"].to_list() == [
+        datetime(2024, 1, 1),
+        datetime(2024, 1, 2),
+        datetime(2024, 1, 3),
+    ]
+    assert unsorted_em.rows["value"].to_list() == pytest.approx([1.0, 2.0, 3.0])
+    assert unsorted_em.annotations.observation_tables[EE_EST_ESTMODEL_SCHEMA.schema_id].rows[
+        "qualityFlag"
+    ].to_list() == [
+        None,
+        "BELOW_LOQ",
+        "UNCHECKED",
+    ]
+
+    bad_date = parse(
+        Payload(
+            source_coordinates=cfg.products[ProductId("discharge_daily_mean")].coordinates,
+            station_products=(("SJA8821000", ProductId("discharge_daily_mean")),),
+            fetch_window=fw_em,
+            content=json.dumps(
+                [{"parameter": "Q", "startDate": "2023-02-29", "endDate": "2023-02-29", "value": 1.0, "unit": "m³/s"}]
+            ).encode("utf-8"),
+            origin=_origin("https://estmodel.envir.ee/stations/SJA8821000/measurements"),
+            prerequisite_calls=(),
+        ),
+        cfg,
+    )
+    assert bad_date.rows.is_empty()
+    assert bad_date.outcomes[0].status is OutcomeStatus.FAILED
+    assert bad_date.issues[0].code == "source.unsupported_structure"
+
+    fw_fh = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2024, 1, 1, 0, 0)),
+        WindowEndpoint.from_datetime(datetime(2024, 1, 1, 23, 59, 59, 999999)),
+    )
+    unsorted_fh = parse(
+        Payload(
+            source_coordinates=SourceCoordinates(
+                FHydroseireCoordinates("WL avg", "stage_hourly_mean", jaam_kood=41061)
+            ),
+            station_products=(("SJA8821000", ProductId("stage_hourly_mean")),),
+            fetch_window=fw_fh,
+            content=json.dumps(
+                [
+                    {
+                        "jaam_kood": 41061,
+                        "aegrida_nimi": "WL avg",
+                        "timeline_ts_utc": "2024-01-01T02:00:00",
+                        "vaartus": 20.0,
+                    },
+                    {
+                        "jaam_kood": 41061,
+                        "aegrida_nimi": "WL avg",
+                        "timeline_ts_utc": "2024-01-01T00:00:00",
+                        "vaartus": 10.0,
+                    },
+                    {
+                        "jaam_kood": 41061,
+                        "aegrida_nimi": "WL avg",
+                        "timeline_ts_utc": "2024-01-01T01:00:00",
+                        "vaartus": 15.0,
+                    },
+                ]
+            ).encode("utf-8"),
+            origin=_origin("https://keskkonnaandmed.envir.ee/f_hydroseire"),
+            prerequisite_calls=(),
+        ),
+        cfg,
+    )
+    assert unsorted_fh.rows["time"].to_list() == [
+        datetime(2024, 1, 1, 0, 0),
+        datetime(2024, 1, 1, 1, 0),
+        datetime(2024, 1, 1, 2, 0),
+    ]
+    assert unsorted_fh.rows["value"].to_list() == pytest.approx([10.0, 15.0, 20.0])

@@ -11,6 +11,7 @@ EstModel daily series (`ClippingAxis.CALENDAR_DATE`).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
 from typing import Literal
 
 import polars as pl
@@ -19,7 +20,7 @@ from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import SeriesMapping
-from rivretrieve._internal.source_series import SourceIdentity, SourceSeries, stable_id
+from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, SourceSeries, stable_id
 
 ESTMODEL_NAMESPACE = "EE_EST.estmodel.series"
 FH_NAMESPACE = "EE_EST.f_hydroseire.series"
@@ -302,6 +303,19 @@ def parse_jaam_kood(kood_str: object) -> tuple[int, ...]:
     return tuple(codes)
 
 
+@cache
+def _series_mapping(product_id: str) -> SeriesMapping:
+    spec = PRODUCT_BY_ID.get(product_id)
+    if spec is None:
+        raise FatalContractError(f"Unsupported ee_est product {product_id!r}")
+    return spec.series_mapping()
+
+
+@cache
+def _physical_facts(product_id: str) -> PhysicalFacts:
+    return _series_mapping(product_id).physical_facts()
+
+
 def source_series_identity(
     station_id: str,
     spec: ProductSpec,
@@ -310,7 +324,7 @@ def source_series_identity(
     origin: Literal["catalogue", "mapping", "response"] = "mapping",
 ) -> SourceIdentity:
     """Build the concrete publisher SourceIdentity shared by catalogue and runtime parse."""
-    mapping = spec.series_mapping()
+    mapping = _series_mapping(spec.product_id)
     if spec.source_api == "estmodel":
         published_id = f"{station_id}:{spec.native_id}"
         id_evidence: tuple[str, ...] = (_EM_FIELD_EVIDENCE,)
@@ -340,7 +354,6 @@ def source_series(
     spec = PRODUCT_BY_ID.get(product_id)
     if spec is None:
         raise FatalContractError(f"Unsupported ee_est product {product_id!r}")
-    mapping = spec.series_mapping()
     identity = source_series_identity(station_id, spec, jaam_kood=jaam_kood, origin=origin)
     return SourceSeries(
         series_id=stable_id("ee_est", station_id, identity.namespace, identity.published_id),
@@ -348,7 +361,7 @@ def source_series(
         station_id=station_id,
         product_id=product_id,
         identity=identity,
-        facts=(mapping.physical_facts(),),
+        facts=(_physical_facts(product_id),),
     )
 
 
@@ -359,7 +372,7 @@ def catalogue_product_rows() -> list[dict[str, object]]:
             provider_id="ee_est",
             product_id=spec.product_id,
             native_id=spec.native_id,
-            facts=spec.series_mapping().physical_facts(),
+            facts=_physical_facts(spec.product_id),
         )
         for spec in sorted(PRODUCT_SPECS, key=lambda item: item.product_id)
     ]
@@ -375,7 +388,6 @@ def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
         spec = PRODUCT_BY_ID.get(product_id)
         if spec is None:
             raise FatalContractError(f"Unsupported ee_est product {product_id!r}")
-        mapping = spec.series_mapping()
         identity = source_series_identity(station_id, spec, jaam_kood=jaam_kood, origin="mapping")
         descriptions.append(
             SourceDescription(
@@ -383,7 +395,7 @@ def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
                 station_id=station_id,
                 native_coordinate=native_id,
                 identity=identity,
-                facts=(mapping.physical_facts(),),
+                facts=(_physical_facts(spec.product_id),),
             )
         )
     return SourceDescriptions(provider_id="ee_est", descriptions=tuple(descriptions))
