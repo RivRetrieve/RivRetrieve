@@ -47,6 +47,7 @@ from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, Sta
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.dk_vanda.origins import Utm32EtrsToWgs84Conversion
+from rivretrieve._internal.providers.ee_est.origins import EstonianLest97ToWgs84Conversion
 from rivretrieve._internal.providers.fi_syke.origins import ConstantCrsConversion
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
@@ -130,7 +131,7 @@ def _adapter(
             return generated
     else:
         build = generator.build_catalogue
-    if provider in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
+    if provider in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "pe_senamhi"}:
         sources = generator.read_catalogue_sources(
             retained_evidence_root,
             selection_path=f"maintenance/catalogue/{provider}/official/selection.json",
@@ -255,7 +256,7 @@ def _adapter(
     )
 
 
-@pytest.mark.parametrize("provider", ["ar_ina", "at_ehyd", "ch_foen", "co_ideam", "pe_senamhi"])
+@pytest.mark.parametrize("provider", ["ar_ina", "at_ehyd", "ch_foen", "co_ideam", "ee_est", "pe_senamhi"])
 def test_selected_source_adapter_passes_explicit_source_selection(monkeypatch, tmp_path, provider):
     from types import SimpleNamespace
 
@@ -375,6 +376,7 @@ DECLARATIONS = {
         "co_ideam",
         "cz_chmi",
         "dk_vanda",
+        "ee_est",
         "fi_syke",
         "fr_hydroportail",
         "lt_lhmt",
@@ -406,7 +408,8 @@ CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case i
 def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDecorator:
     paths = (
         [f"maintenance/catalogue/{provider}/official"]
-        if provider in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi"}
+        if provider
+        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "fi_syke", "pe_senamhi"}
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
     if provider in {"au_bom", "fi_syke"}:
@@ -440,7 +443,18 @@ def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> Pro
     receipt = (
         request.getfixturevalue("catalogue_input_receipt")
         if request.param
-        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi", "usgs_nwis"}
+        in {
+            "ar_ina",
+            "at_ehyd",
+            "au_bom",
+            "ch_foen",
+            "co_ideam",
+            "dk_vanda",
+            "ee_est",
+            "fi_syke",
+            "pe_senamhi",
+            "usgs_nwis",
+        }
         else None
     )
     return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param], input_receipt=receipt)
@@ -606,6 +620,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "latitude": field("y", Utm32EtrsToWgs84Conversion()),
             "longitude": field("x", Utm32EtrsToWgs84Conversion()),
             "crs": documented("https://vandah.miljoeportal.dk/api/stations"),
+        },
+        (ProviderId("ee_est"), "stations"): {
+            "provider_id": authored("ee_est"),
+            "station_id": field("kkr_kood"),
+            "latitude": field("kesk_y", EstonianLest97ToWgs84Conversion()),
+            "longitude": field("kesk_x", EstonianLest97ToWgs84Conversion()),
+            "crs": documented("https://keskkonnaandmed.envir.ee/f_seirejaamad"),
         },
         (ProviderId("pl_imgw"), "stations"): {
             "provider_id": authored("pl_imgw"),
@@ -849,6 +870,7 @@ EXPECTED_CRS_COUNTS = {
     (ProviderId("ca_eccc"), "stations"): (8_057, "EPSG:4326"),
     (ProviderId("cz_chmi"), "stations"): (831, "unknown"),
     (ProviderId("dk_vanda"), "stations"): (1_565, "EPSG:4326"),
+    (ProviderId("ee_est"), "stations"): (60, "EPSG:4326"),
     # Native publication inventories acquired 2026-09-21.
     (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): (6_475, "EPSG:4326"),
     (ProviderId("fr_hubeau"), "temperature/station"): (872, "EPSG:4326"),
@@ -1073,6 +1095,13 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             ),
         ),
         pytest.param(
+            "ee_est",
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/ee_est/official",
+                "maintenance/catalogue/ee_est/official/selection.json",
+            ),
+        ),
+        pytest.param(
             "ch_foen",
             marks=pytest.mark.governing(
                 "maintenance/catalogue/ch_foen/official",
@@ -1238,6 +1267,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ch_foen",
         "co_ideam",
         "dk_vanda",
+        "ee_est",
         "fi_syke",
         "pe_senamhi",
     }:
@@ -1246,7 +1276,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
 
         *_, provenance, generated = read_catalogue_inputs(retained_evidence_root)
-    elif adapter.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
+    elif adapter.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "pe_senamhi"}:
         generated = _build(adapter)
         provenance = generated.acquisition_provenance
         source_inputs_before = {
@@ -1304,6 +1334,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ch_foen",
         "co_ideam",
         "dk_vanda",
+        "ee_est",
         "fi_syke",
         "pe_senamhi",
     }:
@@ -1329,6 +1360,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ch_foen",
         "co_ideam",
         "dk_vanda",
+        "ee_est",
         "fi_syke",
         "fr_hubeau",
         "pe_senamhi",
@@ -1336,7 +1368,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         selected_receipt = product_root / f"{adapter.provider_id}.input-receipt.json"
         selected_receipt.write_text(catalogue_input_receipt.model_dump_json())
         arguments.extend(("--input-receipt", str(selected_receipt)))
-    if adapter.provider_id in {"at_ehyd", "co_ideam", "pe_senamhi"}:
+    if adapter.provider_id in {"at_ehyd", "co_ideam", "ee_est", "pe_senamhi"}:
         arguments.extend(
             (
                 "--evidence-root",

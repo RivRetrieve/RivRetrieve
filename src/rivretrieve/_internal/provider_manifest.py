@@ -11,6 +11,7 @@ BUILTIN_PROVIDER_IDS = (
     "co_ideam",
     "cz_chmi",
     "dk_vanda",
+    "ee_est",
     "fi_syke",
     "fr_hubeau",
     "fr_hydroportail",

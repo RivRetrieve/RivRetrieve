@@ -169,6 +169,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `co_ideam` | live | none | 1372 | 19690 | 0 | 7750 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
 | `dk_vanda` | live | none | 1565 | 1733 | 2962 | 0 |
+| `ee_est` | catalogue-only | none | 60 | 1032 | 0 | 48 |
 | `fi_syke` | live | none | 2543 | 2543 | 5086 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
@@ -302,6 +303,24 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `dk_vanda` | `discharge` | `l/s` |
 | `dk_vanda` | `stage` | `cm` |
 | `dk_vanda` | `temperature` | `degC` |
+| `ee_est` | `discharge_daily_max` | `m3/s` |
+| `ee_est` | `discharge_daily_mean` | `m3/s` |
+| `ee_est` | `discharge_daily_min` | `m3/s` |
+| `ee_est` | `discharge_hourly_max` | `m3/s` |
+| `ee_est` | `discharge_hourly_mean` | `m3/s` |
+| `ee_est` | `discharge_hourly_min` | `m3/s` |
+| `ee_est` | `stage_daily_max` | `m` |
+| `ee_est` | `stage_daily_mean` | `m` |
+| `ee_est` | `stage_daily_min` | `m` |
+| `ee_est` | `stage_hourly_max` | `m` |
+| `ee_est` | `stage_hourly_mean` | `m` |
+| `ee_est` | `stage_hourly_min` | `m` |
+| `ee_est` | `water_temperature_daily_max` | `degC` |
+| `ee_est` | `water_temperature_daily_mean` | `degC` |
+| `ee_est` | `water_temperature_daily_min` | `degC` |
+| `ee_est` | `water_temperature_hourly_max` | `degC` |
+| `ee_est` | `water_temperature_hourly_mean` | `degC` |
+| `ee_est` | `water_temperature_hourly_min` | `degC` |
 | `fi_syke` | `discharge_reported` | `m3/s` |
 | `fi_syke` | `stage_reported` | `m` |
 | `fi_syke` | `water_temperature_reported` | `degC` |
