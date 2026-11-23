@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from uuid import uuid4
 
@@ -149,24 +149,22 @@ def _request_target(
     return SourceRequestTarget(station, str(product))
 
 
-def _resolve_station_codes(
+@dataclass(frozen=True, slots=True)
+class _StationCodeLookup:
+    codes: tuple[int, ...] = ()
+    lookup_id: str | None = None
+    retrieved_at: datetime | None = None
+    transport_request: TransportRequest | None = None
+    transport_failure: TransportFailure | CredentialExchangeError | None = None
+    malformed_reason: str | None = None
+
+
+def _lookup_station_codes(
     station: str,
-    product: ProductId,
     transport: Transport,
-    *,
-    known_series: tuple[SourceSeries, ...],
-    requested_window: SeriesWindow,
-    pair_scope: SeriesScope,
     calls: list[SourceCallOrigin],
-) -> tuple[
-    tuple[int, ...] | None,
-    str | None,
-    FailedSourceRequest | None,
-    InventorySnapshot | None,
-    RetrievalOutcome | None,
-    Issue | None,
-]:
-    """Look up `f_seirejaamad` `kood` integers when `known_series` did not supply `jaam_kood`."""
+) -> _StationCodeLookup:
+    """Look up `f_seirejaamad` `kood` integers once per station across hourly products."""
     request = TransportRequest(
         method=HttpMethod.GET,
         url=_SEIREJAAMAD_URL,
@@ -175,18 +173,10 @@ def _resolve_station_codes(
     )
     response = attempt_request(transport, request)
     if isinstance(response, (TransportFailure, CredentialExchangeError)):
-        failure = FailedSourceRequest(
-            uuid4().hex,
-            _request_target(station, product, known_series),
-            requested_window,
-            request,
-            response,
-        )
-        return None, None, failure, None, None, None
+        return _StationCodeLookup(transport_request=request, transport_failure=response)
 
     lookup_id = uuid4().hex
     calls.append(_origin(response, acquisition_id=lookup_id))
-    evidence = (f"source-call:{lookup_id}",)
     try:
         document = json.loads(response.content)
         if not isinstance(document, list):
@@ -201,7 +191,44 @@ def _resolve_station_codes(
                 raise ValueError(f"f_seirejaamad lookup row contradicts station {station!r}")
             codes = parse_jaam_kood(entry.get("kood"))
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError, FatalContractError) as error:
-        reason = f"Malformed Keskkonnaandmed f_seirejaamad lookup response: {error}"
+        return _StationCodeLookup(
+            lookup_id=lookup_id,
+            retrieved_at=response.retrieved_at,
+            malformed_reason=f"Malformed Keskkonnaandmed f_seirejaamad lookup response: {error}",
+        )
+    return _StationCodeLookup(codes=codes, lookup_id=lookup_id, retrieved_at=response.retrieved_at)
+
+
+def _materialize_station_code_outcome(
+    station: str,
+    product: ProductId,
+    lookup: _StationCodeLookup,
+    *,
+    known_series: tuple[SourceSeries, ...],
+    requested_window: SeriesWindow,
+    pair_scope: SeriesScope,
+) -> tuple[
+    FailedSourceRequest | None,
+    InventorySnapshot | None,
+    RetrievalOutcome | None,
+    Issue | None,
+]:
+    if lookup.transport_failure is not None:
+        assert lookup.transport_request is not None
+        failure = FailedSourceRequest(
+            uuid4().hex,
+            _request_target(station, product, known_series),
+            requested_window,
+            lookup.transport_request,
+            lookup.transport_failure,
+        )
+        return failure, None, None, None
+
+    assert lookup.lookup_id is not None
+    lookup_id = lookup.lookup_id
+    evidence = (f"source-call:{lookup_id}",)
+    if lookup.malformed_reason is not None:
+        reason = lookup.malformed_reason
         outcome = RetrievalOutcome(
             outcome_id=stable_id(lookup_id, station, str(product), "failed"),
             series_id=None,
@@ -210,7 +237,7 @@ def _resolve_station_codes(
             window=requested_window,
             status=OutcomeStatus.FAILED,
             reason=reason,
-            retrieved_at=response.retrieved_at,
+            retrieved_at=lookup.retrieved_at,
             calls=(lookup_id,),
         )
         inventory = InventorySnapshot(
@@ -220,7 +247,7 @@ def _resolve_station_codes(
             completeness=InventoryCompleteness.INCOMPLETE,
             access="Keskkonnaandmed /f_seirejaamad",
             origin="response",
-            acquired_at=response.retrieved_at,
+            acquired_at=lookup.retrieved_at,
             window=requested_window,
             evidence=evidence,
             reason=reason,
@@ -232,9 +259,9 @@ def _resolve_station_codes(
             details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
             provider_id=_PROVIDER_ID,
         )
-        return None, lookup_id, None, inventory, outcome, issue
+        return None, inventory, outcome, issue
 
-    if not codes:
+    if not lookup.codes:
         reason = f"Station {station} has no active Keskkonnaandmed f_hydroseire jaam_kood"
         outcome = RetrievalOutcome(
             outcome_id=stable_id(lookup_id, station, str(product), "no-match"),
@@ -244,7 +271,7 @@ def _resolve_station_codes(
             window=requested_window,
             status=OutcomeStatus.NO_MATCH,
             reason=reason,
-            retrieved_at=response.retrieved_at,
+            retrieved_at=lookup.retrieved_at,
             calls=(lookup_id,),
         )
         inventory = InventorySnapshot(
@@ -254,7 +281,7 @@ def _resolve_station_codes(
             completeness=InventoryCompleteness.COMPLETE,
             access="Keskkonnaandmed /f_seirejaamad",
             origin="response",
-            acquired_at=response.retrieved_at,
+            acquired_at=lookup.retrieved_at,
             window=requested_window,
             evidence=evidence,
         )
@@ -265,8 +292,9 @@ def _resolve_station_codes(
             details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
             provider_id=_PROVIDER_ID,
         )
-        return None, lookup_id, None, inventory, outcome, issue
-    return codes, lookup_id, None, None, None, None
+        return None, inventory, outcome, issue
+
+    return None, None, None, None
 
 
 def _select_active_jaam_kood(
@@ -449,7 +477,7 @@ def fetch(
     outcomes: list[RetrievalOutcome] = []
     issues: list[Issue] = []
     calls: list[SourceCallOrigin] = []
-    station_codes_cache: dict[str, tuple[tuple[int, ...], str]] = {}
+    station_codes_cache: dict[str, _StationCodeLookup] = {}
 
     for station in stations:
         for product, coords, windows in validated_products:
@@ -531,35 +559,36 @@ def fetch(
             jaam_kood = _jaam_kood_from_known(station, product, coords.aegrida_nimi, known_series)
             prereq_ids: tuple[str, ...] = ()
             if jaam_kood is None:
-                if station not in station_codes_cache:
-                    codes, lookup_id, fail, inv, out, iss = _resolve_station_codes(
-                        station,
-                        product,
-                        transport,
-                        known_series=known_series,
-                        requested_window=requested_window,
-                        pair_scope=pair_scope,
-                        calls=calls,
-                    )
-                    if fail is not None:
-                        failures.append(fail)
-                        continue
-                    if codes is None or lookup_id is None:
-                        if inv is not None:
-                            inventories.append(inv)
-                        if out is not None:
-                            outcomes.append(out)
-                        if iss is not None:
-                            issues.append(iss)
-                        continue
-                    station_codes_cache[station] = (codes, lookup_id)
-                codes, lookup_id = station_codes_cache[station]
+                lookup = station_codes_cache.get(station)
+                if lookup is None:
+                    lookup = _lookup_station_codes(station, transport, calls)
+                    station_codes_cache[station] = lookup
+                fail, inv, out, iss = _materialize_station_code_outcome(
+                    station,
+                    product,
+                    lookup,
+                    known_series=known_series,
+                    requested_window=requested_window,
+                    pair_scope=pair_scope,
+                )
+                if fail is not None:
+                    failures.append(fail)
+                    continue
+                if inv is not None or out is not None or iss is not None:
+                    if inv is not None:
+                        inventories.append(inv)
+                    if out is not None:
+                        outcomes.append(out)
+                    if iss is not None:
+                        issues.append(iss)
+                    continue
+                assert lookup.codes and lookup.lookup_id is not None
                 jaam_kood, prereq_ids, fail, inv, out, iss = _select_active_jaam_kood(
                     station,
                     product,
                     coords,
-                    codes,
-                    lookup_id,
+                    lookup.codes,
+                    lookup.lookup_id,
                     transport,
                     known_series=known_series,
                     requested_window=requested_window,

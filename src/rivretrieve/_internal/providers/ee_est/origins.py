@@ -10,6 +10,11 @@ numerically (`research/ee-est-source-access.md`, 2026-11-23).
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import cache
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyproj import Transformer
 
 from rivretrieve._internal.acquisition_provenance import (
     AcquisitionProvenance,
@@ -39,6 +44,13 @@ from rivretrieve._internal.catalogues.artifact import CATALOGUE_FACT_UNIVERSE
 from rivretrieve._internal.catalogues.station_metadata import MetadataField
 
 
+@cache
+def _lest97_to_wgs84_transformer() -> Transformer:
+    from pyproj import Transformer
+
+    return Transformer.from_crs("EPSG:3301", "EPSG:4326", always_xy=True)
+
+
 class EstonianLest97ToWgs84Conversion(FieldConversion):
     """Re-project native L-EST97 (EPSG:3301) station coordinates to EPSG:4326.
 
@@ -59,10 +71,7 @@ class EstonianLest97ToWgs84Conversion(FieldConversion):
         x, y = native_row["kesk_x"], native_row["kesk_y"]
         if x is None or y is None:
             return None
-        from pyproj import Transformer
-
-        transformer = Transformer.from_crs("EPSG:3301", "EPSG:4326", always_xy=True)
-        lon, lat = transformer.transform(x, y)
+        lon, lat = _lest97_to_wgs84_transformer().transform(x, y)
         return lon if canonical_column == "longitude" else lat
 
 
