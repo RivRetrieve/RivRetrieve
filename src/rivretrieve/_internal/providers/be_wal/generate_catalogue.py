@@ -602,6 +602,7 @@ class GeneratedBeWalCatalogue:
     products: pl.DataFrame
     stations: pl.DataFrame
     station_products: pl.DataFrame
+    station_metadata: pl.DataFrame
     acquisition_provenance: AcquisitionProvenance
     source_descriptions: SourceDescriptions
 
@@ -617,6 +618,7 @@ def build_catalogue(
     """Assemble the official Belgium - Wallonia (`be_wal`) offline station and product catalogue."""
     from rivretrieve._internal.catalogue_origins import enforce_catalogue_origins
     from rivretrieve._internal.primitives import ProviderId
+    from rivretrieve._internal.providers.be_wal.station_metadata import project_station_metadata
 
     if native_table.data.drop("retrieved_at").schema != STATION_SOURCE_SCHEMA:
         raise FatalContractError("be_wal native table does not match STATION_SOURCE_SCHEMA")
@@ -627,6 +629,7 @@ def build_catalogue(
     enforce_catalogue_origins(ProviderId("be_wal"), origins, native_table, stations)
     if provenance is None or provenance.provider_id != "be_wal":
         raise FatalContractError("Official be_wal catalogue requires its selected acquisition provenance")
+    station_metadata = project_station_metadata(native_table, stations)
 
     provider_info: dict[str, object] = {
         "provider_id": "be_wal",
@@ -644,6 +647,7 @@ def build_catalogue(
         products=products,
         stations=stations,
         station_products=pairs,
+        station_metadata=station_metadata,
         acquisition_provenance=provenance,
         source_descriptions=describe_associations(associations),
     )
@@ -690,6 +694,11 @@ def write_catalogue(
         build_inputs=build_inputs,
         native_table=native_table,
         metadata_fields=metadata_fields or STATION_METADATA_FIELDS,
+        station_metadata=catalogue.station_metadata,
+        metadata_implementation=(
+            "src/rivretrieve/_internal/providers/be_wal/station_metadata.py",
+            "project_station_metadata",
+        ),
         station_metadata_notice=STATION_METADATA_NOTICE,
         source_descriptions=catalogue.source_descriptions,
     )

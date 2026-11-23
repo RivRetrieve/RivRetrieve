@@ -287,3 +287,77 @@ def test_catalogue_projects_62_products_wgs84_origins_and_metadata() -> None:
     )
     assert cat.provider_info["license"] is None
     assert cat.provider_info["citation"] == "Service public de Wallonie (SPW) — Hydrométrie"
+
+
+@pytest.mark.governing(
+    "maintenance/catalogue/be_wal/official",
+    "maintenance/catalogue/be_wal/official/selection.json",
+)
+def test_selected_inputs_publish_deterministic_catalogue(
+    retained_evidence_root, catalogue_input_receipt, catalogue_build_inputs, tmp_path
+) -> None:
+    """Build the real be_wal packaged catalogue deterministically from verified originals."""
+    import os
+    from pathlib import Path
+
+    import polars.testing as pl_testing
+
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.be_wal.generate_catalogue import main, read_catalogue_sources
+    from rivretrieve._internal.providers.be_wal.origins import STATION_METADATA_NOTICE
+
+    configured = os.environ.get("RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT")
+    if not configured:
+        pytest.fail("Reviewed catalogue generation requires restricted product output.", pytrace=False)
+    product_root = Path(configured).resolve()
+    selection = "maintenance/catalogue/be_wal/official/selection.json"
+    sources = read_catalogue_sources(
+        retained_evidence_root, selection_path=selection, input_receipt=catalogue_input_receipt
+    )
+    build_inputs = catalogue_build_inputs(sources.provenance)
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(catalogue_input_receipt.model_dump_json())
+    build_path = tmp_path / "build-inputs.json"
+    build_path.write_text(build_inputs.model_dump_json())
+    outputs = [product_root / "be_wal", product_root / "be_wal-repeat"]
+    for output in outputs:
+        assert (
+            main(
+                [
+                    "--evidence-root",
+                    str(retained_evidence_root),
+                    "--selection",
+                    selection,
+                    "--input-receipt",
+                    str(receipt_path),
+                    "--build-inputs",
+                    str(build_path),
+                    "--out",
+                    str(output),
+                ]
+            )
+            == 0
+        )
+        load_packaged_catalogue_artifact(output, on_issue="raise")
+        stations = pl.read_parquet(output / "stations.parquet")
+        assert stations.height == 338
+        assert stations["crs"].unique().to_list() == ["EPSG:4326"]
+        products = pl.read_parquet(output / "products.parquet")
+        assert products.height == 62
+        pairs = pl.read_parquet(output / "station_products.parquet")
+        assert pairs.height == 20_956
+        assert pairs.filter(pl.col("availability") == "available").height == 8_198
+        assert pairs.filter(pl.col("availability") == "unavailable").height == 12_758
+        assert pairs.filter(pl.col("availability") == "unknown").height == 0
+        provider = json.loads((output / "provider.json").read_bytes())
+        assert provider["license"] is None
+        assert provider["citation"] == "Service public de Wallonie (SPW) — Hydrométrie"
+        assert STATION_METADATA_NOTICE in json.dumps(
+            json.loads((output / "croissant.json").read_bytes()), ensure_ascii=False
+        )
+        assert not (output / "native.parquet").exists()
+    assert {p.name for p in outputs[0].iterdir()} == {p.name for p in outputs[1].iterdir()}
+    for path in outputs[0].iterdir():
+        repeated = outputs[1] / path.name
+        if path.suffix == ".parquet":
+            pl_testing.assert_frame_equal(pl.read_parquet(path), pl.read_parquet(repeated))

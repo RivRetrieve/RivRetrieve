@@ -361,6 +361,8 @@ def test_metadata_declarations_cover_providers_without_unreviewed_names():
             if provider == "pe_senamhi"
             else "maintenance/catalogue/at_ehyd/official/selection.json"
             if provider == "at_ehyd"
+            else "maintenance/catalogue/be_wal/official/selection.json"
+            if provider == "be_wal"
             else "maintenance/catalogue/co_ideam/official/selection.json"
             if provider == "co_ideam"
             else "maintenance/catalogue/dk_vanda/official/selection.json"
