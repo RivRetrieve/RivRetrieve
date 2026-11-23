@@ -19,7 +19,7 @@ from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import SeriesMapping
-from rivretrieve._internal.source_series import SourceIdentity
+from rivretrieve._internal.source_series import SourceIdentity, SourceSeries, stable_id
 
 ESTMODEL_NAMESPACE = "EE_EST.estmodel.series"
 FH_NAMESPACE = "EE_EST.f_hydroseire.series"
@@ -283,6 +283,75 @@ FH_AEGRIDA_TO_PRODUCT: dict[str, ProductSpec] = {
 }
 
 
+def parse_jaam_kood(kood_str: object) -> tuple[int, ...]:
+    """Parse integer `jaam_kood` candidates from semicolon-delimited `f_seirejaamad.kood`."""
+    if kood_str is None:
+        return ()
+    if not isinstance(kood_str, str):
+        raise FatalContractError(f"Expected string or null kood in f_seirejaamad, got {type(kood_str).__name__}")
+    codes: list[int] = []
+    for part in kood_str.split(";"):
+        token = part.strip()
+        if not token:
+            continue
+        if not token.isdigit():
+            raise FatalContractError(f"Unexpected non-numeric kood token {token!r} in f_seirejaamad")
+        code = int(token)
+        if code not in codes:
+            codes.append(code)
+    return tuple(codes)
+
+
+def source_series_identity(
+    station_id: str,
+    spec: ProductSpec,
+    *,
+    jaam_kood: int | None = None,
+    origin: Literal["catalogue", "mapping", "response"] = "mapping",
+) -> SourceIdentity:
+    """Build the concrete publisher SourceIdentity shared by catalogue and runtime parse."""
+    mapping = spec.series_mapping()
+    if spec.source_api == "estmodel":
+        published_id = f"{station_id}:{spec.native_id}"
+        id_evidence: tuple[str, ...] = (_EM_FIELD_EVIDENCE,)
+    else:
+        if jaam_kood is None:
+            raise FatalContractError(
+                f"Missing jaam_kood on available f_hydroseire series {station_id}/{spec.product_id}"
+            )
+        published_id = f"{jaam_kood}:{spec.native_id}"
+        id_evidence = (_EM_FIELD_EVIDENCE, _FH_FIELD_EVIDENCE)
+    return SourceIdentity(
+        namespace=mapping.namespace,
+        published_id=published_id,
+        origin=origin,
+        evidence=id_evidence,
+    )
+
+
+def source_series(
+    station_id: str,
+    product_id: str,
+    *,
+    jaam_kood: int | None = None,
+    origin: Literal["catalogue", "mapping", "response"] = "response",
+) -> SourceSeries:
+    """Build one concrete SourceSeries whose series_id and facts_id match the packaged catalogue."""
+    spec = PRODUCT_BY_ID.get(product_id)
+    if spec is None:
+        raise FatalContractError(f"Unsupported ee_est product {product_id!r}")
+    mapping = spec.series_mapping()
+    identity = source_series_identity(station_id, spec, jaam_kood=jaam_kood, origin=origin)
+    return SourceSeries(
+        series_id=stable_id("ee_est", station_id, identity.namespace, identity.published_id),
+        provider_id="ee_est",
+        station_id=station_id,
+        product_id=product_id,
+        identity=identity,
+        facts=(mapping.physical_facts(),),
+    )
+
+
 def catalogue_product_rows() -> list[dict[str, object]]:
     """Build deterministic product catalogue rows matching `PRODUCT_CATALOG_SCHEMA`."""
     return [
@@ -307,27 +376,13 @@ def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
         if spec is None:
             raise FatalContractError(f"Unsupported ee_est product {product_id!r}")
         mapping = spec.series_mapping()
-        if spec.source_api == "estmodel":
-            published_id = f"{station_id}:{spec.native_id}"
-            id_evidence = (_EM_FIELD_EVIDENCE,)
-        else:
-            if jaam_kood is None:
-                raise FatalContractError(
-                    f"Missing jaam_kood on available f_hydroseire series {station_id}/{product_id}"
-                )
-            published_id = f"{jaam_kood}:{spec.native_id}"
-            id_evidence = (_EM_FIELD_EVIDENCE, _FH_FIELD_EVIDENCE)
+        identity = source_series_identity(station_id, spec, jaam_kood=jaam_kood, origin="mapping")
         descriptions.append(
             SourceDescription(
                 product_id=product_id,
                 station_id=station_id,
                 native_coordinate=native_id,
-                identity=SourceIdentity(
-                    namespace=mapping.namespace,
-                    published_id=published_id,
-                    origin="mapping",
-                    evidence=id_evidence,
-                ),
+                identity=identity,
                 facts=(mapping.physical_facts(),),
             )
         )
