@@ -706,7 +706,8 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
 
 
 @pytest.mark.parametrize(
-    "provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"})
+    "provider",
+    tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}),
 )
 def test_historical_projection_preserves_sources_and_validates_metadata(provider):
     if provider == "usgs_nwis":
@@ -720,7 +721,8 @@ def test_historical_projection_preserves_sources_and_validates_metadata(provider
 
 
 @pytest.mark.parametrize(
-    "provider", tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"})
+    "provider",
+    tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}),
 )
 def test_historical_projection_rejects_changed_current_producer(provider):
     if provider == "usgs_nwis":

@@ -41,6 +41,7 @@ def _areas(selection) -> pl.DataFrame:
 SOURCE_FIELDS = {
     "ar_ina": ("id", {}),
     "at_ehyd": ("hzbnr", {"orogr.Einzugsgebiet [km²]": "km²"}),
+    "au_bom": ("station_no", {}),
     "ba_fhmzbih": ("metadata_station_no", {"metadata_CATCHMENT_SIZE": None}),
     "br_ana": ("codigoestacao", {"Area_Drenagem": None}),
     "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": "km2", "DRAINAGE_AREA_EFFECT": "km2"}),
