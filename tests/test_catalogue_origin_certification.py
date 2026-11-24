@@ -409,6 +409,8 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
         if provider in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
+    if provider == "au_bom":
+        paths.append("maintenance/catalogue/au_bom/official/catalogue.json")
     if provider == "usgs_nwis":
         paths = ["maintenance/catalogue/usgs_nwis"]
     if provider == "br_ana":
@@ -997,7 +999,11 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
     [
         pytest.param(
             "au_bom",
-            marks=pytest.mark.governing("maintenance/catalogue/au_bom/official"),
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/au_bom/official",
+                "maintenance/catalogue/au_bom/official/catalogue.json",
+                "maintenance/catalogue/station_metadata/review.json",
+            ),
         ),
         pytest.param(
             "ba_fhmzbih",
