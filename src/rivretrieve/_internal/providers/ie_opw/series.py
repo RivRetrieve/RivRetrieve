@@ -61,7 +61,7 @@ class ProductSpec:
     quantity: Literal["discharge", "stage", "temperature"]
     source_unit: Literal["cumec", "m", "°C"]
     normalized_unit: Literal["m3/s", "m", "degC"]
-    frequency: Literal["daily"] | None
+    frequency: Literal["P1D"] | None
     statistic: Literal["mean", "min", "max", "instantaneous"]
     temporal_support: Literal["calendar_day", "instantaneous"]
     day_definition: Literal["+00:00"] | None
@@ -117,7 +117,7 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "discharge",
         "cumec",
         "m3/s",
-        "daily",
+        "P1D",
         "mean",
         "calendar_day",
         "+00:00",
@@ -133,7 +133,7 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "discharge",
         "cumec",
         "m3/s",
-        "daily",
+        "P1D",
         "min",
         "calendar_day",
         "+00:00",
@@ -149,7 +149,7 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "discharge",
         "cumec",
         "m3/s",
-        "daily",
+        "P1D",
         "max",
         "calendar_day",
         "+00:00",
@@ -182,7 +182,7 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "stage",
         "m",
         "m",
-        "daily",
+        "P1D",
         "mean",
         "calendar_day",
         "+00:00",
@@ -198,7 +198,7 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "stage",
         "m",
         "m",
-        "daily",
+        "P1D",
         "min",
         "calendar_day",
         "+00:00",
@@ -214,7 +214,7 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "stage",
         "m",
         "m",
-        "daily",
+        "P1D",
         "max",
         "calendar_day",
         "+00:00",
@@ -247,7 +247,7 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "temperature",
         "°C",
         "degC",
-        "daily",
+        "P1D",
         "mean",
         "calendar_day",
         "+00:00",
@@ -263,7 +263,7 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "temperature",
         "°C",
         "degC",
-        "daily",
+        "P1D",
         "min",
         "calendar_day",
         "+00:00",
@@ -279,7 +279,7 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
         "temperature",
         "°C",
         "degC",
-        "daily",
+        "P1D",
         "max",
         "calendar_day",
         "+00:00",

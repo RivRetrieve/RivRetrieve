@@ -367,7 +367,7 @@ def test_public_failure_isolation_refresh_retention_and_closed_failures(
 ) -> None:
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     two_stations = rr.pick(
-        rr.find(provider="ie_opw", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="ie_opw", quantity="discharge", frequency="P1D", statistic="mean"),
         station=["01041", "01042"],
     )
     assert isinstance(two_stations, _Selection)

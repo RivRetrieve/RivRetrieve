@@ -267,7 +267,7 @@ def test_ie_opw_packaged_series_meaning_preserves_utc_daily_instantaneous_and_mi
     by_product = {item.product_id: item.facts[0] for item in series}
     assert len(by_product) == 12
 
-    assert by_product["discharge_daily_mean"].frequency.value == "daily"
+    assert by_product["discharge_daily_mean"].frequency.value == "P1D"
     assert by_product["discharge_daily_mean"].statistic.value == "mean"
     assert by_product["discharge_daily_mean"].temporal_support.value == "calendar_day"
     assert by_product["discharge_daily_mean"].day_definition.value == "+00:00"

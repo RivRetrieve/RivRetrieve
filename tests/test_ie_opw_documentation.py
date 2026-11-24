@@ -24,7 +24,7 @@ VISION_PATH = ROOT / "planning/visions/2026-11-24-ie-opw-user-documentation.md"
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 _FREQUENCY_LABELS = {
-    "daily": "Daily",
+    "P1D": "Daily",
     None: "Unknown",
 }
 _STATISTIC_LABELS = {

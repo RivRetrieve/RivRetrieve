@@ -25,7 +25,7 @@ selection = rr.find(
     provider="ie_opw",
     station="01041",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 
@@ -162,7 +162,7 @@ mean, `15` min, `15` max, and `5` instantaneous discharge series marked
 `unavailable` and omitted from default `rr.find`) while leaving unprobed
 per-station availability as `"unknown"` until requested. Daily triplets from
 `{param}/year.json` share a single HTTP file per parameter and station, so
-selecting `daily` mean, min, and max with `cache="reuse"` performs one download
+selecting `P1D` mean, min, and max with `cache="reuse"` performs one download
 per parameter.
 
 Note on archive freshness: OPW rebuilds `*_complete.zip` archives overnight, so

@@ -41,7 +41,7 @@ def test_ie_opw_series_physical_facts_distinguish_daily_utc_instantaneous_and_mi
         assert facts.time_zone.value == "+00:00"
 
         if spec.route == "year.json":
-            assert facts.frequency.value == "daily"
+            assert facts.frequency.value == "P1D"
             assert facts.temporal_support.value == "calendar_day"
             assert facts.day_definition.value == "+00:00"
             assert facts.timestamp_anchor.value == "start"
@@ -91,7 +91,9 @@ def test_ie_opw_physical_predicates_filter_utc_day_and_reject_single_vertical_da
     assert not SeriesScope(predicates=(PhysicalPredicate(field="vertical_datum", value="Malin Head OSGM15"),)).matches(
         s_daily
     )
-    assert not SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="15min"),)).matches(s_inst)
+    assert SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="P1D"),)).matches(q_daily)
+    assert not SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="PT24H"),)).matches(q_daily)
+    assert not SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="PT15M"),)).matches(s_inst)
 
 
 def test_ie_opw_annotation_schemas_enforce_observation_dtypes_and_reserved_names() -> None:

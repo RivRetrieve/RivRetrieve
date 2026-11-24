@@ -61,7 +61,7 @@ def test_ie_opw_offline_discovery_stations_products_metadata_and_predicates(
     assert row_01041["elevation_value"] is None
 
     # Physical predicate filtering, unit normalization, UTC time_zone, and Ordnance Datum stage reference.
-    daily_stage = rr.find(provider="ie_opw", quantity="stage", frequency="daily", statistic="mean")
+    daily_stage = rr.find(provider="ie_opw", quantity="stage", frequency="P1D", statistic="mean")
     assert len(daily_stage.series) == 385
     daily_stage_df = rr.series(daily_stage)
     assert daily_stage_df["time_zone"].unique().to_list() == ["+00:00"]
@@ -71,14 +71,19 @@ def test_ie_opw_offline_discovery_stations_products_metadata_and_predicates(
     assert daily_stage_df["source_unit"].unique().to_list() == ["m"]
     assert daily_stage_df["unit"].unique().to_list() == ["m"]
 
-    daily_q = rr.find(provider="ie_opw", quantity="discharge", frequency="daily", statistic="mean")
+    daily_q = rr.find(provider="ie_opw", quantity="discharge", frequency="P1D", statistic="mean")
     assert len(daily_q.series) == 372
     daily_q_df = rr.series(daily_q)
     assert daily_q_df["source_unit"].unique().to_list() == ["cumec"]
     assert daily_q_df["unit"].unique().to_list() == ["m3/s"]
 
+    # Calendar P1D and elapsed PT24H belong to disjoint duration families; legacy aliases fail closed.
+    assert rr.find(provider="ie_opw", station="01041", frequency="PT24H", on_issue="ignore").series == ()
+    with pytest.raises(ValueError, match="Unsupported frequency"):
+        rr.find(provider="ie_opw", station="01041", frequency="daily")
+
     # Lossless bundle roundtrip preserves catalogue source identity.
-    s01041 = rr.find(provider="ie_opw", station="01041", quantity="stage", frequency="daily", statistic="mean")
+    s01041 = rr.find(provider="ie_opw", station="01041", quantity="stage", frequency="P1D", statistic="mean")
     s01041_restored = rr.from_bundle(rr.to_bundle(s01041))
     assert isinstance(s01041_restored, _Selection)
     assert s01041_restored.known_series == s01041.known_series
