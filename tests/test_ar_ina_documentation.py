@@ -90,7 +90,7 @@ def test_ar_ina_page_selection_discovery_and_catalogue_claims_are_offline(
         "source_unit",
         "unit",
         "time_zone",
-    ).rows() == [("8", "discharge_daily_mean", "26605", "discharge", "daily", "mean", "m^3/s", "m3/s", "UTC")]
+    ).rows() == [("8", "discharge_daily_mean", "26605", "discharge", "P1D", "mean", "m^3/s", "m3/s", "UTC")]
 
     station_52 = namespace["station_52"]
     candidates = namespace["candidates"]
@@ -103,9 +103,9 @@ def test_ar_ina_page_selection_discovery_and_catalogue_claims_are_offline(
         "stage_monthly_min",
     ]
     hourly_stage = rr.series(namespace["hourly_stage"])  # type: ignore[arg-type]
-    hourly_by_freq = rr.series(rr.pick(station_52, frequency="hourly"))  # type: ignore[arg-type]
+    hourly_by_freq = rr.series(rr.pick(station_52, frequency="PT1H"))  # type: ignore[arg-type]
     assert hourly_stage.select("product_id", "variant", "frequency", "statistic").rows() == [
-        ("stage_hourly", "31605", "hourly", None)
+        ("stage_hourly", "31605", "PT1H", None)
     ]
     assert hourly_by_freq["series_id"].to_list() == hourly_stage["series_id"].to_list()
 
@@ -152,7 +152,14 @@ def test_ar_ina_page_selection_discovery_and_catalogue_claims_are_offline(
     assert len(table_rows) == 13
 
     product_by_var_code = {spec.var_code: spec.product_id for spec in IN_SCOPE_SERIES_SPECS}
-    freq_map = {"Daily": "daily", "Hourly": "hourly", "Monthly": "monthly", "Unknown": None}
+    freq_map = {
+        "`P1D`": "P1D",
+        "`PT1H`": "PT1H",
+        "`PT4H`": "PT4H",
+        "`P1W`": "P1W",
+        "`P1M`": "P1M",
+        "Unknown": None,
+    }
     stat_map = {
         "Mean": "mean",
         "Instantaneous": "instantaneous",

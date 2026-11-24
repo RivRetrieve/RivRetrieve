@@ -17,8 +17,8 @@ def test_czech_catalogue_identifies_hourly_values_as_interval_means() -> None:
     products = catalogue_reader("cz_chmi").read_products().data
     hourly = products.filter(pl.col("native_id").is_in(["HH", "QH"])).sort("native_id")
     assert hourly.select("product_id", "frequency", "statistic", "period_type", "period_anchor").rows() == [
-        ("stage_hourly_mean", "hourly", "mean", "interval", "unknown"),
-        ("discharge_hourly_mean", "hourly", "mean", "interval", "unknown"),
+        ("stage_hourly_mean", "PT1H", "mean", "interval", "unknown"),
+        ("discharge_hourly_mean", "PT1H", "mean", "interval", "unknown"),
     ]
     assert not products["product_id"].str.contains("instantaneous").any()
     station_products = catalogue_reader("cz_chmi").read_station_products().data

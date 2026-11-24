@@ -163,12 +163,16 @@ def find(
         strings so leading zeros survive. Without ``provider``, the station is
         searched in every provider that lists it.
     quantity, frequency, statistic, temporal_support, day_definition, timestamp_anchor, time_zone, vertical_reference, vertical_datum : str or None, default None
-        Exact, case-sensitive filters on established physical facts. Quantity,
-        frequency and statistic must use the supported query values listed in
-        the API reference's "Supported physical query values" table. Unsupported
-        values raise ValueError; aliases and spelling corrections are not applied.
-        A fact that is unknown never matches an explicit filter. Supported values
-        with no known matches return an empty selection.
+        Exact, case-sensitive filters on established physical facts. Quantity
+        and statistic must use the supported query values listed in the API
+        reference's "Supported physical query values" table. Frequency accepts
+        canonical ISO 8601 duration strings in the three supported families
+        (elapsed ``PT...H/M/S``, calendar ``P...W/D``, and calendar ``P...Y/M``),
+        canonicalizing equivalent spellings within a family such as ``PT60M``
+        to ``PT1H`` or ``P7D`` to ``P1W``. Unsupported values raise ValueError;
+        legacy aliases such as ``"daily"`` and cross-family conversions are
+        rejected. A fact that is unknown never matches an explicit filter.
+        Supported values with no known matches return an empty selection.
     variant, series_id : str or None, default None
         Explicit source restriction. ``variant`` matches the source's variant
         name or its published identifier. ``series_id`` matches RivRetrieve's
@@ -270,8 +274,9 @@ def pick(
         as in ``find``.
     quantity, frequency, statistic, temporal_support, day_definition, timestamp_anchor, time_zone, vertical_reference, vertical_datum : str or None, default None
         Exact, case-sensitive filters on established physical facts, as in ``find``.
-        Quantity, frequency and statistic use the same library-wide supported
-        values, including when filtering a fetched result.
+        Quantity, frequency and statistic follow the same library-wide rules
+        and ISO 8601 duration canonicalization, including when filtering a
+        fetched result.
     on_issue : {"warn", "raise", "ignore"}, default "warn"
         Handling of warning and error issues relevant to the narrowed selection
         or view. See ``fetch`` for the meaning of each policy.
@@ -1063,7 +1068,7 @@ def fetch(
     >>> import rivretrieve as rr
     >>> gauge = rr.find(
     ...     provider="usgs_nwis", station="07374000",
-    ...     quantity="discharge", frequency="daily", statistic="mean",
+    ...     quantity="discharge", frequency="P1D", statistic="mean",
     ... )
     >>> result = rr.fetch(gauge, start="2023-01-01", end="2023-01-01")  # doctest: +SKIP
     >>> result.data.select("time", "time_zone", "source_unit", "unit", "value").rows()  # doctest: +SKIP

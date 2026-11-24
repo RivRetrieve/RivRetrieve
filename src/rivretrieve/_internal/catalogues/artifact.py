@@ -32,6 +32,7 @@ from rivretrieve._internal.catalogues.schemas import (
     validate_catalogue,
 )
 from rivretrieve._internal.catalogues.source_series import SourceDescriptions, decode_source_descriptions
+from rivretrieve._internal.frequency import Frequency
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import OnIssue
 from rivretrieve._internal.publication_identity import publication_identity_fields
@@ -172,6 +173,7 @@ def packaged_catalogue_artifact_from_components(
 
         validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue=on_issue)
         validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue=on_issue)
+        _validate_product_frequencies(products)
         validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue=on_issue)
         validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue=on_issue)
         _validate_artifact_provider_ids(provider_info_df, products, stations, station_products)
@@ -244,6 +246,18 @@ def _validate_catalogue_fact_universe(provenance: AcquisitionProvenance | Catalo
         raise FatalContractError(
             f"{_provenance_header(provenance).provider_id} acquisition provenance declares unknown catalogue facts: {sorted(unsupported)!r}"
         )
+
+
+def _validate_product_frequencies(products: pl.DataFrame) -> None:
+    for raw in products["frequency"].to_list():
+        if raw == "unknown":
+            continue
+        try:
+            canonical = Frequency.parse(raw).canonical
+        except ValueError as exc:
+            raise FatalContractError(f"Product catalogue has invalid frequency {raw!r}") from exc
+        if canonical != raw:
+            raise FatalContractError(f"Product catalogue has non-canonical frequency {raw!r}; expected {canonical!r}")
 
 
 def _validate_absence_marker_values(

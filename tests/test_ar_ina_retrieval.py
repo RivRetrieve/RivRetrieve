@@ -287,7 +287,7 @@ def test_config_and_window_declarations_cover_all_13_products_and_validate_coord
                 365,
                 timedelta(hours=4),
             )
-        elif spec.frequency == "daily":
+        elif spec.frequency == "P1D":
             assert (wdecl.granularity, wdecl.size, wdecl.stop_extension) == (
                 WindowGranularity("capped-span"),
                 3650,

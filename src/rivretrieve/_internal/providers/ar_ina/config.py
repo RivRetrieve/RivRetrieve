@@ -120,7 +120,7 @@ def _window_declaration(spec: SeriesProductSpec) -> WindowDeclaration:
             size=365,
             stop_extension=timedelta(hours=4),
         )
-    if spec.frequency == "daily":
+    if spec.frequency == "P1D":
         return WindowDeclaration(
             granularity=WindowGranularity("capped-span"),
             rendering=WindowRenderingVocabulary.ISO_INSTANT,

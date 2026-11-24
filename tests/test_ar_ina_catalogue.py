@@ -253,7 +253,7 @@ def test_build_and_write_catalogue_packages_stage_gauge_zero_and_metadata_projec
     assert q_desc.variant == "1001"
     assert q_desc.facts[0].source_unit.value == "m^3/s"
     assert q_desc.facts[0].normalized_unit == "m3/s"
-    assert q_desc.facts[0].frequency.value == "daily"
+    assert q_desc.facts[0].frequency.value == "P1D"
     assert q_desc.facts[0].statistic.value == "mean"
     assert q_desc.facts[0].temporal_support.value == "calendar_day"
     assert q_desc.facts[0].time_zone.value == "UTC"
@@ -763,8 +763,12 @@ def test_selected_inputs_publish_deterministic_catalogue(
         assert stations.filter(pl.col("station_id") == "96")["latitude"].to_list() == [None]
         products = pl.read_parquet(output / "products.parquet")
         assert products.height == 13
+        assert products.filter(pl.col("product_id") == "discharge_daily_mean").row(0, named=True)["frequency"] == "P1D"
         assert products.filter(pl.col("product_id") == "discharge_daily_mean").row(0, named=True)["statistic"] == "mean"
+        assert products.filter(pl.col("product_id") == "stage_4hourly").row(0, named=True)["frequency"] == "PT4H"
         assert products.filter(pl.col("product_id") == "stage_4hourly").row(0, named=True)["statistic"] == "unknown"
+        assert products.filter(pl.col("product_id") == "stage_weekly_mean").row(0, named=True)["frequency"] == "P1W"
+        assert products.filter(pl.col("product_id") == "stage_weekly_mean").row(0, named=True)["statistic"] == "mean"
         source_series_doc = json.loads((output / "source_series.json").read_bytes())
         assert source_series_doc["schema_version"] == 2
         assert len(source_series_doc["physical_facts"]) == 13
