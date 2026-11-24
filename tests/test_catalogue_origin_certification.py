@@ -145,9 +145,9 @@ def _adapter(
             provenance=sources.provenance,
             **extra,
         )
-    if provider == "au_bom":
+    if provider in {"au_bom", "fi_syke"}:
         sources = generator.read_catalogue_sources(retained_evidence_root, input_receipt=input_receipt)
-        native_path = retained_evidence_root / "maintenance/catalogue/au_bom/official/native.parquet"
+        native_path = retained_evidence_root / f"maintenance/catalogue/{provider}/official/native.parquet"
         build = partial(
             build, associations=sources.associations, checked_on=sources.checked_on, provenance=sources.provenance
         )
@@ -406,11 +406,11 @@ CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case i
 def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDecorator:
     paths = (
         [f"maintenance/catalogue/{provider}/official"]
-        if provider in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}
+        if provider in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi"}
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
-    if provider == "au_bom":
-        paths.append("maintenance/catalogue/au_bom/official/catalogue.json")
+    if provider in {"au_bom", "fi_syke"}:
+        paths.append(f"maintenance/catalogue/{provider}/official/catalogue.json")
     if provider == "usgs_nwis":
         paths = ["maintenance/catalogue/usgs_nwis"]
     if provider == "br_ana":
@@ -1006,6 +1006,14 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             ),
         ),
         pytest.param(
+            "fi_syke",
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/fi_syke/official",
+                "maintenance/catalogue/fi_syke/official/catalogue.json",
+                "maintenance/catalogue/station_metadata/review.json",
+            ),
+        ),
+        pytest.param(
             "ba_fhmzbih",
             marks=pytest.mark.governing(
                 "maintenance/catalogue/ba_fhmzbih/inventory/baseline_workbook_access.json",
@@ -1219,7 +1227,16 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     if product_root.is_relative_to(ROOT.resolve()) or product_root.is_relative_to(retained_evidence_root.resolve()):
         pytest.fail("Catalogue products must stay outside the checkout and retained inputs.", pytrace=False)
     output = product_root / str(adapter.provider_id)
-    if adapter.provider_id not in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
+    if adapter.provider_id not in {
+        "ar_ina",
+        "at_ehyd",
+        "au_bom",
+        "ch_foen",
+        "co_ideam",
+        "dk_vanda",
+        "fi_syke",
+        "pe_senamhi",
+    }:
         output.mkdir(mode=0o700)
     if adapter.provider_id == "br_ana":
         from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
@@ -1276,7 +1293,16 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     with input_selection.open("x", encoding="utf-8") as stream:
         stream.write(adopted.model_dump_json())
     arguments = ["--out", str(output), "--build-inputs", str(input_selection)]
-    if adapter.provider_id not in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
+    if adapter.provider_id not in {
+        "ar_ina",
+        "at_ehyd",
+        "au_bom",
+        "ch_foen",
+        "co_ideam",
+        "dk_vanda",
+        "fi_syke",
+        "pe_senamhi",
+    }:
         arguments.extend(("--native", str(adapter.native_path)))
     if adapter.provider_id in {
         "ar_ina",
@@ -1285,6 +1311,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ca_eccc",
         "ch_foen",
         "cz_chmi",
+        "fi_syke",
         "lt_lhmt",
         "no_nve",
         "th_thaiwater",
@@ -1298,6 +1325,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ch_foen",
         "co_ideam",
         "dk_vanda",
+        "fi_syke",
         "fr_hubeau",
         "pe_senamhi",
     }:
