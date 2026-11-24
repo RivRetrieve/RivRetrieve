@@ -157,7 +157,7 @@ station_info = rr.metadata(river_deele)
 The packaged catalogue holds `4,572` selectable series across the `385` river
 stations. To avoid bulk-polling hundreds of per-station `year.json` files during
 catalogue builds, RivRetrieve records only the known `48` unavailable discharge
-entries observed from OPW's published static `layers/30_*.json` index (`13`
+entries observed from OPW's published static `layers/30/index.json` index (`13`
 mean, `15` min, `15` max, and `5` instantaneous discharge series marked
 `unavailable` and omitted from default `rr.find`) while leaving unprobed
 per-station availability as `"unknown"` until requested. Daily triplets from
@@ -251,7 +251,7 @@ second and caches full per-station responses when `cache="reuse"` is used.
 Publisher documents and endpoints verified on 2026-11-23 and live example tested
 on 2026-11-24:
 
-- [OPW Hydro-Data portal (`waterlevel.ie/hydro-data/`)](https://waterlevel.ie/hydro-data/): station registry (`stations.json`), parameter layers (`layers/{10,20,30}_*.json`), daily `year.json`, and instantaneous `*_complete.zip` archives.
+- [OPW Hydro-Data portal (`waterlevel.ie/hydro-data/`)](https://waterlevel.ie/hydro-data/): station registry (`stations.json`), parameter layers (`layers/{10,20,30}/index.json`), daily `year.json`, and instantaneous `*_complete.zip` archives.
 - [OPW GeoJSON station feed (`waterlevel.ie/geojson/`)](https://waterlevel.ie/geojson/): `EPSG:4326` gauge coordinates.
 - [OPW Hydro-Data licence page](https://waterlevel.ie/hydro-data/html/licence.html) and [OPW API page](https://waterlevel.ie/page/api/): CC BY 4.0 terms, `00001..41000` republication scope, and automated-access courtesy notice.
 - [OPW quality codes](https://waterlevel.ie/hydro-data/html/qualitycodes.html) and [data types](https://waterlevel.ie/hydro-data/html/datatypes.html): integer quality code definitions, ISO 9001:2015 verification caveats, and summary statistics.

@@ -158,6 +158,7 @@ def fetch(
             )
             response = attempt_request(transport, request)
             if isinstance(response, (TransportFailure, CredentialExchangeError)):
+                call_id = uuid4().hex
                 for product in group_products:
                     failures.append(
                         FailedSourceRequest(
@@ -166,6 +167,7 @@ def fetch(
                             requested_window,
                             request,
                             response,
+                            call_id=call_id,
                         )
                     )
                 continue
