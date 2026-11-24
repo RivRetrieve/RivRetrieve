@@ -43,18 +43,27 @@ no documented rate limit; keep the shared transport's default pacing.
 
 ## Scope — all 787 stations, no exclusions
 
-PEGELONLINE mixes several station groups into one flat catalogue; none are
-excluded here:
+PEGELONLINE mixes three provenance-relevant station groups into one flat
+catalogue (step 1's own framing: "all three groups PEGELONLINE mixes into
+one catalogue, each carrying its own provenance rather than one combined
+WSV attribution"); none are excluded here:
 
-- 718 WSV-operated stations.
+- 748 WSV-operated stations (`787 − 13 − 26`), carrying plain, single WSV
+  attribution. This group itself contains two physically different kinds
+  of gauge, both WSV-attributed and treated identically for catalogue
+  purposes: 63 open-sea/lagoon tide gauges (North Sea, Baltic Sea, Jade
+  Bay, Kleines Haff), which measure sea/lagoon level rather than river
+  stage, and the remaining 685 inland river/canal/estuarine gauges. Both
+  map `W` to the same `stage` product — RivRetrieve's `quantity`
+  vocabulary (`discharge`/`stage`/`temperature` in
+  `src/rivretrieve/_internal/selection.py`) has no separate category for
+  sea level, so there is nothing else to map it to.
 - 13 domestic non-WSV stations across 7 institutions (Hamburg Port
   Authority, Regierungspräsidium Freiburg, Wasserwirtschaftsamt Ingolstadt,
   Wasserwirtschaftsamt Landshut, Ruhrverband, Deichinformationszentrum
   Neuwied, BfG Koblenz) — identifiable by the station's `agency` field.
 - 26 foreign cross-border mirror stations (Rijkswaterstaat, Via Donau,
   Povodí Labe, Bundesamt für Umwelt).
-- 63 open-sea/lagoon tide gauges (North Sea, Baltic Sea, Jade Bay, Kleines
-  Haff), alongside the inland river/canal/estuarine gauges.
 
 None of these groups gets different catalogue treatment from the others —
 same station schema, same licence (below), same product mapping where the
@@ -88,7 +97,10 @@ using the schema's secondary datum sub-value mechanism
 ## Products (`ProductCatalog`) and station-product associations
 
 Five distinct `product_id`s, matching step 1's settled mapping — never
-collapse any of these into another:
+collapse any of these into another. The per-timeseries station counts below
+are from the private `verification-evidence` research record's 2026-11-24
+live re-check, not from step 1's public vision text; re-derive them from a
+fresh catalogue fetch rather than trusting these as pinned:
 
 | Native shortname | `observed_property` | Stations | Notes |
 |---|---|---|---|
