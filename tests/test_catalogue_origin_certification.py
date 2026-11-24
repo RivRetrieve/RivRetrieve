@@ -53,6 +53,7 @@ from rivretrieve._internal.providers.fi_syke.origins import ConstantCrsConversio
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
 from rivretrieve._internal.providers.pe_senamhi.origins import CoordinateConversion
+from rivretrieve._internal.providers.si_arso.origins import D48GkCrsConversion, D48GkToWgs84Conversion
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
 
@@ -132,7 +133,7 @@ def _adapter(
             return generated
     else:
         build = generator.build_catalogue
-    if provider in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "pe_senamhi"}:
+    if provider in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "pe_senamhi", "si_arso"}:
         sources = generator.read_catalogue_sources(
             retained_evidence_root,
             selection_path=f"maintenance/catalogue/{provider}/official/selection.json",
@@ -270,7 +271,7 @@ def _adapter(
     )
 
 
-@pytest.mark.parametrize("provider", ["ar_ina", "at_ehyd", "ch_foen", "co_ideam", "ee_est", "pe_senamhi"])
+@pytest.mark.parametrize("provider", ["ar_ina", "at_ehyd", "ch_foen", "co_ideam", "ee_est", "pe_senamhi", "si_arso"])
 def test_selected_source_adapter_passes_explicit_source_selection(monkeypatch, tmp_path, provider):
     from types import SimpleNamespace
 
@@ -398,6 +399,7 @@ DECLARATIONS = {
         "no_nve",
         "pe_senamhi",
         "pl_imgw",
+        "si_arso",
         "th_thaiwater",
         "usgs_nwis",
         "za_dws",
@@ -435,6 +437,7 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
             "ee_est",
             "fi_syke",
             "pe_senamhi",
+            "si_arso",
         }
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
@@ -480,6 +483,7 @@ def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> Pro
             "ee_est",
             "fi_syke",
             "pe_senamhi",
+            "si_arso",
             "usgs_nwis",
         }
         else None
@@ -668,6 +672,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "latitude": field("latitude", FloatConversion()),
             "longitude": field("longitude", FloatConversion()),
             "crs": withheld(),
+        },
+        (ProviderId("si_arso"), "stations"): {
+            "provider_id": authored("si_arso"),
+            "station_id": field("sifra"),
+            "latitude": field("gkx", D48GkToWgs84Conversion()),
+            "longitude": field("gky", D48GkToWgs84Conversion()),
+            "crs": field("gky", D48GkCrsConversion()),
         },
         (ProviderId("th_thaiwater"), "stations"): {
             "provider_id": authored("th_thaiwater"),
@@ -978,6 +989,16 @@ def _assert_reviewed_crs(
         assert isinstance(origin, Field)
         assert str(origin.native_column) == "KoordErTmIta"
         assert stations["crs"].unique().to_list() == ["EPSG:4258"]
+    elif adapter.provider_id == ProviderId("si_arso"):
+        assert isinstance(origin, Field)
+        assert str(origin.native_column) == "gky"
+        assert stations.height == 619
+        assert stations.filter(pl.col("crs") == "EPSG:4326").height == 612
+        assert stations.filter(pl.col("crs") == "unknown").height == 7
+        expected_crs = [
+            "EPSG:4326" if val is not None else "unknown" for val in case_native.data.sort("sifra")["gky"].to_list()
+        ]
+        assert stations.sort("station_id")["crs"].to_list() == expected_crs
     else:
         assert adapter.provider_id == ProviderId("usgs_nwis")
         assert isinstance(origin, Field)
@@ -1260,6 +1281,13 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
                 "maintenance/catalogue/station_metadata/review.json",
             ),
         ),
+        pytest.param(
+            "si_arso",
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/si_arso/official",
+                "maintenance/catalogue/si_arso/official/selection.json",
+            ),
+        ),
     ],
     indirect=True,
 )
@@ -1313,6 +1341,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ee_est",
         "fi_syke",
         "pe_senamhi",
+        "si_arso",
     }:
         output.mkdir(mode=0o700)
     if adapter.provider_id == "br_ana":
@@ -1328,6 +1357,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "dk_vanda",
         "ee_est",
         "pe_senamhi",
+        "si_arso",
     }:
         generated = _build(adapter)
         provenance = generated.acquisition_provenance
@@ -1390,6 +1420,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ee_est",
         "fi_syke",
         "pe_senamhi",
+        "si_arso",
     }:
         arguments.extend(("--native", str(adapter.native_path)))
     if adapter.provider_id in {
@@ -1419,11 +1450,12 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "fi_syke",
         "fr_hubeau",
         "pe_senamhi",
+        "si_arso",
     }:
         selected_receipt = product_root / f"{adapter.provider_id}.input-receipt.json"
         selected_receipt.write_text(catalogue_input_receipt.model_dump_json())
         arguments.extend(("--input-receipt", str(selected_receipt)))
-    if adapter.provider_id in {"at_ehyd", "co_ideam", "ee_est", "pe_senamhi"}:
+    if adapter.provider_id in {"at_ehyd", "co_ideam", "ee_est", "pe_senamhi", "si_arso"}:
         arguments.extend(
             (
                 "--evidence-root",

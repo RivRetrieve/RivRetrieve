@@ -241,6 +241,26 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "stage_daily",
         "water_temperature_daily",
     ],
+    "si_arso": [
+        "archive_discharge_daily",
+        "archive_discharge_monthly_max",
+        "archive_discharge_monthly_min",
+        "archive_stage_daily",
+        "archive_stage_monthly_max",
+        "archive_stage_monthly_min",
+        "archive_temperature_daily",
+        "archive_temperature_monthly_max",
+        "archive_temperature_monthly_min",
+        "operational_discharge_10min",
+        "operational_discharge_30min",
+        "operational_discharge_hourly",
+        "operational_stage_10min",
+        "operational_stage_30min",
+        "operational_stage_hourly",
+        "operational_temperature_10min",
+        "operational_temperature_30min",
+        "operational_temperature_hourly",
+    ],
     "th_thaiwater": [
         "discharge_reported",
         "stage_reported",
@@ -266,6 +286,7 @@ EXPECTED_PRODUCT_IDS = sorted(
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["dk_vanda"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["ee_est"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["fi_syke"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["si_arso"])
 )
 
 
@@ -314,6 +335,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "no_nve",
         "pe_senamhi",
         "pl_imgw",
+        "si_arso",
         "th_thaiwater",
         "usgs_nwis",
     ]

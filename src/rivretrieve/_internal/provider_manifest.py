@@ -20,6 +20,7 @@ BUILTIN_PROVIDER_IDS = (
     "no_nve",
     "pe_senamhi",
     "pl_imgw",
+    "si_arso",
     "th_thaiwater",
     "usgs_nwis",
 )

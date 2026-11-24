@@ -85,6 +85,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "lt_lhmt": (194, 0, 0),
         "no_nve": (44_118, 0, 0),
         "pl_imgw": (3_903, 0, 0),
+        "si_arso": (11_142, 4_038, 4_038),
         "th_thaiwater": (1_650, 0, 0),
         # Modern metadata UTC ranges do not establish calendar observation support.
         "usgs_nwis": (177_852, 0, 0),
@@ -116,6 +117,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "lt_lhmt",
         "no_nve",
         "pl_imgw",
+        "si_arso",
         "th_thaiwater",
         "usgs_nwis",
         "za_dws",
@@ -131,6 +133,10 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     expected_provider_terms["ee_est"] = (
         "CC BY 4.0",
         "Estonian Environment Agency (Keskkonnaagentuur)",
+    )
+    expected_provider_terms["si_arso"] = (
+        "Podatki so dostopni pod Creative Commons - Attribution 4.0 International (CC BY 4.0) licenco. (https://creativecommons.org/licenses/by/4.0)",
+        "Pri objavi, distribuciji ali uporabi podatkov v kakršnekoli namene je potrebno citirati vir podatkov: Agencije Republike Slovenije za okolje (ali skrajšano: ARSO).",
     )
     expected_provider_terms["no_nve"] = (
         "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) "
