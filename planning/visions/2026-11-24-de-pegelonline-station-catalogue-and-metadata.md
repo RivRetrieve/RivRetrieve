@@ -37,9 +37,19 @@ is the closest existing illustration of provider/product/station/station-product
 tables built together; inspect current code before copying its pattern, since
 `de_pegelonline`'s source shape differs in several of the ways below.
 
-Source: `GET https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?includeTimeseries=true&includeCharacteristicValues=true`
+Source: `GET https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?includeTimeseries=true&includeCharacteristicValues=true&includeTrmTimeseries=true`
 — the only request needed to build the whole catalogue. No authentication,
 no documented rate limit; keep the shared transport's default pacing.
+
+**`includeTrmTimeseries=true` is required, not optional, despite its
+name.** Without it, `TRM` and `TRM_WT` are silently absent from every
+station's `timeseries` list — the response still returns `HTTP 200` with all 787 stations' `W`/`Q`/`WT`
+data intact and no error, so this is easy to miss. Confirmed by a live re-check on 2026-11-24: the same request without
+this flag returns zero `TRM`/`TRM_WT` entries anywhere in the catalogue;
+adding it restores the expected `TRM = 120`, `TRM_WT = 2`. (`WV` and `F`/`T`
+have their own equivalent flags, `includeForecastTimeseries=true` and
+`includeFTTimeseries=true` — do not add those; both products stay out of
+scope regardless of what the flag would surface.)
 
 ## Scope — all 787 stations, no exclusions
 
