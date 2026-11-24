@@ -68,6 +68,7 @@ of the source view.
 | [`fi_syke`](providers/fi_syke.md) | `Nimi` | `PaaVesalNimi`, `VesalNimi` | — | — |
 | [`fr_hubeau`](providers/fr_hubeau.md) | `libelle_station` | `libelle_cours_eau`, `libelle_masse_eau` | `superficie_reelle`, `superficie_topo`; `surface_bv` (km²) | `altitude`, `altitude_site`; `altitude_ref_alti_station` (m) |
 | [`fr_hydroportail`](providers/fr_hydroportail.md) | — | — | — | — |
+| [`ie_opw`](providers/ie_opw.md) | `station_name` | `WTO_OBJECT` | `CATCHMENT_SIZE` (km²) | — |
 | [`lt_lhmt`](providers/lt_lhmt.md) | `name` | `waterBody` | — | — |
 | [`no_nve`](providers/no_nve.md) | `stationName` | `lakeName`, `reservoirName`, `riverName` | `drainageBasinArea`, `drainageBasinAreaNorway`, `transferAreaIn`, `transferAreaOut` (km2) | `masl` (m) |
 | [`pe_senamhi`](providers/pe_senamhi.md) | `name` | `waterBody` | — | `altitude` (m) |
@@ -381,6 +382,8 @@ packaged catalogue descriptor offline; metadata notices appear in its
 
 - [IDEAM's terms](providers/co_ideam.md#terms-and-citation) require source attribution
   to IDEAM and apply CC BY-SA 4.0. Adaptations must follow the licence's share-alike conditions.
+- [OPW's terms](providers/ie_opw.md#terms-and-citation) apply CC BY 4.0 and require
+  attribution to the Office of Public Works (`source http://waterlevel.ie/hydro-data/ - provided by the Office of Public Works.`).
 - [LHMT's terms](providers/lt_lhmt.md#terms-and-citation) require source attribution
   and apply CC BY-SA 4.0 unless stated otherwise. Adaptations must follow the licence's share-alike conditions.
 
