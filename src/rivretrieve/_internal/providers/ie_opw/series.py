@@ -15,12 +15,21 @@ above Ordnance Datum (``vertical_reference="above_sea_level"``), keeping ``verti
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
 from typing import Literal
 
 from rivretrieve._internal.catalogues.products import product_row
 from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.provider_series import SeriesMapping
-from rivretrieve._internal.source_series import SourceIdentity, SourceUnitCodeDefinition
+from rivretrieve._internal.source_series import (
+    PhysicalFacts,
+    SourceIdentity,
+    SourceSeries,
+    SourceUnitCodeDefinition,
+    stable_id,
+)
 
 Q_NAMESPACE = "ie_opw.hydro_data.Q"
 S_NAMESPACE = "ie_opw.hydro_data.S"
@@ -303,6 +312,97 @@ YEAR_JSON_BY_PARAM_SHORTNAME: dict[tuple[str, str], ProductSpec] = {
 COMPLETE_ZIP_BY_PARAM: dict[str, ProductSpec] = {
     spec.parameter: spec for spec in PRODUCT_SPECS if spec.route.endswith("_complete.zip")
 }
+SHARED_DAILY_PRODUCTS: tuple[frozenset[ProductId], ...] = (
+    frozenset(
+        ProductId(spec.product_id) for spec in PRODUCT_SPECS if spec.route == "year.json" and spec.parameter == "Q"
+    ),
+    frozenset(
+        ProductId(spec.product_id) for spec in PRODUCT_SPECS if spec.route == "year.json" and spec.parameter == "S"
+    ),
+    frozenset(
+        ProductId(spec.product_id) for spec in PRODUCT_SPECS if spec.route == "year.json" and spec.parameter == "TWater"
+    ),
+)
+
+
+@cache
+def _series_mapping(product_id: str) -> SeriesMapping:
+    spec = PRODUCT_BY_ID.get(product_id)
+    if spec is None:
+        raise FatalContractError(f"Unsupported ie_opw product {product_id!r}")
+    return spec.series_mapping()
+
+
+@cache
+def _physical_facts(product_id: str) -> PhysicalFacts:
+    return _series_mapping(product_id).physical_facts()
+
+
+def source_series_identity(
+    spec: ProductSpec,
+    *,
+    origin: Literal["catalogue", "mapping", "response"] = "response",
+) -> SourceIdentity:
+    """Build the published ``SourceIdentity`` shared by catalogue and runtime retrieval."""
+    return SourceIdentity(
+        namespace=spec.namespace,
+        published_id=spec.ts_shortname,
+        origin=origin,
+        evidence=_FIELD_EVIDENCE,
+    )
+
+
+def source_series(
+    station_id: str,
+    product_id: str,
+    *,
+    origin: Literal["catalogue", "mapping", "response"] = "response",
+) -> SourceSeries:
+    """Construct the deterministic ``SourceSeries`` matching packaged catalogue entries."""
+    spec = PRODUCT_BY_ID.get(product_id)
+    if spec is None:
+        raise FatalContractError(f"Unsupported ie_opw product {product_id!r}")
+    identity = source_series_identity(spec, origin=origin)
+    return SourceSeries(
+        series_id=stable_id("ie_opw", station_id, identity.namespace, identity.published_id),
+        provider_id="ie_opw",
+        station_id=station_id,
+        product_id=product_id,
+        identity=identity,
+        facts=(_physical_facts(product_id),),
+    )
+
+
+def reused_series(definition: SourceSeries, known_series: tuple[SourceSeries, ...]) -> SourceSeries:
+    """Adopt matching cached/catalogue identity and facts signatures when available."""
+    candidate = next((item for item in known_series if item.series_id == definition.series_id), None)
+    if candidate is None:
+        return definition
+    retained = {_fact_signature(fact): fact for fact in candidate.facts}
+    return definition.model_copy(
+        update={
+            "identity": candidate.identity,
+            "facts": tuple(retained.get(_fact_signature(fact), fact) for fact in definition.facts),
+        }
+    )
+
+
+def _fact_signature(fact: PhysicalFacts) -> tuple[object, ...]:
+    return (
+        fact.quantity.value,
+        fact.source_unit.value,
+        fact.normalized_unit,
+        fact.frequency.value,
+        fact.statistic.value,
+        fact.temporal_support.value,
+        fact.day_definition.value,
+        fact.timestamp_anchor.value,
+        fact.time_zone.value,
+        fact.vertical_reference.value,
+        fact.vertical_datum.value,
+        fact.clipping_axis,
+        fact.label_time,
+    )
 
 
 def catalogue_product_rows() -> list[dict[str, object]]:
@@ -312,7 +412,7 @@ def catalogue_product_rows() -> list[dict[str, object]]:
             provider_id="ie_opw",
             product_id=spec.product_id,
             native_id=spec.native_coordinate,
-            facts=spec.series_mapping().physical_facts(),
+            facts=_physical_facts(spec.product_id),
         )
         for spec in sorted(PRODUCT_SPECS, key=lambda item: item.product_id)
     ]
@@ -322,19 +422,13 @@ def describe_associations() -> SourceDescriptions:
     """Emit product-scoped source descriptions applied to all available and unknown pairs."""
     descriptions: list[SourceDescription] = []
     for spec in sorted(PRODUCT_SPECS, key=lambda item: item.product_id):
-        mapping = spec.series_mapping()
-        identity = SourceIdentity(
-            namespace=mapping.namespace,
-            published_id=spec.ts_shortname,
-            origin="mapping",
-            evidence=_FIELD_EVIDENCE,
-        )
+        identity = source_series_identity(spec, origin="mapping")
         descriptions.append(
             SourceDescription(
                 product_id=spec.product_id,
                 native_coordinate=spec.native_coordinate,
                 identity=identity,
-                facts=(mapping.physical_facts(),),
+                facts=(_physical_facts(spec.product_id),),
             )
         )
     return SourceDescriptions(provider_id="ie_opw", descriptions=tuple(descriptions))
