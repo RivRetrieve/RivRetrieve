@@ -31,7 +31,7 @@ from rivretrieve._internal.providers.at_ehyd.config import (
     window_declarations,
 )
 from rivretrieve._internal.providers.at_ehyd.fetch import fetch, resolve_messstellen_info_files
-from rivretrieve._internal.providers.at_ehyd.parse import parse
+from rivretrieve._internal.providers.at_ehyd.parse import parse, parse_group
 from rivretrieve._internal.source_series import InventoryCompleteness, OutcomeStatus, admission
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
@@ -47,6 +47,7 @@ class _AtEhydStages:
     shared_acquisition_products: tuple[frozenset[ProductId], ...] = SHARED_ACQUISITION_PRODUCTS
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
+    parse_group = staticmethod(parse_group)
 
 
 def _capture(root: Path, group: str, name: str) -> tuple[bytes, dict[str, object]]:

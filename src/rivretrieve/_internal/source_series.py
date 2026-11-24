@@ -598,6 +598,7 @@ def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -
     if len(definitions) != len(series):
         raise FatalContractError("Duplicate concrete series definitions")
     facts_by_identity: dict[str, PhysicalFacts] = {}
+    series_facts: dict[str, dict[str, PhysicalFacts]] = {}
     for definition in series:
         # Stage output may contain unchecked internal model_copy values. Rebuild
         # domain validation from data even when no numeric rows were returned.
@@ -607,20 +608,42 @@ def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -
             raise FatalContractError(
                 f"Native series requires valid admitted physical facts and context: {error}"
             ) from error
+        fact_map: dict[str, PhysicalFacts] = {}
         for facts in definition.facts:
             existing = facts_by_identity.get(facts.facts_id)
             if existing is not None and existing != facts:
                 raise FatalContractError("Conflicting physical facts under one fact identity")
             facts_by_identity[facts.facts_id] = facts
-    for row in rows.iter_rows(named=True):
-        definition = definitions.get(row["series_id"])
+            fact_map[facts.facts_id] = facts
+        series_facts[definition.series_id] = fact_map
+    if rows.is_empty():
+        return
+    columns = set(rows.columns)
+    if "series_id" not in columns:
+        raise FatalContractError("Native row references an unknown source series")
+    if "facts_id" not in columns:
+        raise FatalContractError("Native row references unknown physical facts")
+    if "station_id" not in columns or "product_id" not in columns:
+        raise FatalContractError("Native row contradicts its source-series coordinates")
+    if "source_unit" not in columns:
+        raise FatalContractError("Native numeric rows require admitted, matching source-unit facts")
+    admissions: dict[str, Admission] = {}
+    for series_id, facts_id, station_id, product_id, source_unit in (
+        rows.select("series_id", "facts_id", "station_id", "product_id", "source_unit")
+        .unique(maintain_order=True)
+        .iter_rows()
+    ):
+        definition = definitions.get(series_id)
         if definition is None:
             raise FatalContractError("Native row references an unknown source series")
-        facts = next((item for item in definition.facts if item.facts_id == row.get("facts_id")), None)
+        facts = series_facts[series_id].get(facts_id)
         if facts is None:
             raise FatalContractError("Native row references unknown physical facts")
-        if row["station_id"] != definition.station_id or row["product_id"] != definition.product_id:
+        if station_id != definition.station_id or product_id != definition.product_id:
             raise FatalContractError("Native row contradicts its source-series coordinates")
-        decision = admission(facts)
-        if decision.status != "supported" or row.get("source_unit") != facts.source_unit.value:
+        decision = admissions.get(facts_id)
+        if decision is None:
+            decision = admission(facts)
+            admissions[facts_id] = decision
+        if decision.status != "supported" or source_unit != facts.source_unit.value:
             raise FatalContractError("Native numeric rows require admitted, matching source-unit facts")
