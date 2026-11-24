@@ -106,6 +106,7 @@ nav:
       - Argentina (INA): providers/ar_ina.md
       - Australia (BoM): providers/au_bom.md
       - Austria (eHYD): providers/at_ehyd.md
+      - Belgium (Wallonia): providers/be_wal.md
       - Bosnia and Herzegovina (AVP Sava): providers/ba_fhmzbih.md
       - Brazil (ANA): providers/br_ana.md
       - Canada (ECCC): providers/ca_eccc.md

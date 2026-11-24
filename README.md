@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from nineteen different providers in eighteen countries.
+from twenty different providers in nineteen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -40,6 +40,7 @@ for how to supply them.
 | Argentina | Instituto Nacional del Agua (INA), Alerta5 | `ar_ina` | 829 | Open |
 | Australia | Bureau of Meteorology (BoM) | `au_bom` | 8,120 | Open |
 | Austria | Federal Ministry of Agriculture and Forestry, Climate and Environmental Protection, Regions and Water Management / Bundesministerium für Land- und Forstwirtschaft, Klima- und Umweltschutz, Regionen und Wasserwirtschaft (BMLUK), eHYD | `at_ehyd` | 744 | Open |
+| Belgium (Wallonia) | Service public de Wallonie (SPW), Hydrométrie | `be_wal` | 338 | Open |
 | Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | Open |
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
 | Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Bulk download |
@@ -69,7 +70,7 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Armenia, Belgium, Benin, Bulgaria, Burkina Faso, Cameroon, Chad, Chile,
+Afghanistan, Armenia, Benin, Bulgaria, Burkina Faso, Cameroon, Chad, Chile,
 Estonia, Germany, Greece, Guinea, Indonesia, Ireland, Israel, Italy, Ivory Coast, Malaysia,
 Mali, Mexico, Netherlands, New Zealand, Niger, Nigeria, Portugal, Rwanda, Slovenia, South Africa,
 South Korea, Spain, Sri Lanka, Sweden, Taiwan and the United Kingdom.

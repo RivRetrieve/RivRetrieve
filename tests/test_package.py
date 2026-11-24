@@ -72,6 +72,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "ar_ina": (10_777, 0, 0),
         "at_ehyd": (8_206, 0, 0),
         "ba_fhmzbih": (180, 0, 0),
+        "be_wal": (20_956, 0, 0),
         "br_ana": (107_484, 0, 0),
         "ca_eccc": (16_114, 0, 0),
         "ch_foen": (48_276, 0, 0),
@@ -102,6 +103,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "ar_ina",
         "at_ehyd",
         "ba_fhmzbih",
+        "be_wal",
         "br_ana",
         "ca_eccc",
         "ch_foen",
@@ -119,6 +121,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     expected_provider_terms: dict[str, tuple[str | None, str | None]] = dict.fromkeys(provider_ids, (None, None))
     expected_provider_terms["ar_ina"] = ("Creative Commons Atribución 4.0 Internacional", None)
     expected_provider_terms["at_ehyd"] = ("CC BY 4.0", "Datenquelle: ehyd.gv.at")
+    expected_provider_terms["be_wal"] = (None, "Service public de Wallonie (SPW) — Hydrométrie")
     expected_provider_terms["ch_foen"] = ("Freie Nutzung. Quellenangabe ist Pflicht.", None)
     expected_provider_terms["co_ideam"] = (
         "Creative Commons Attribution | Share Alike 4.0 International",

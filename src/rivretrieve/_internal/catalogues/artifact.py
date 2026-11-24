@@ -50,6 +50,7 @@ ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
         "at_ehyd",
         "au_bom",
         "ba_fhmzbih",
+        "be_wal",
         "br_ana",
         "ca_eccc",
         "ch_foen",

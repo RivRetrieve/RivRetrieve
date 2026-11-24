@@ -32,6 +32,7 @@ PROVIDER_COUNTRY = {
     "at_ehyd": "AUT",
     "au_bom": "AUS",
     "ba_fhmzbih": "BIH",
+    "be_wal": "BEL",
     "br_ana": "BRA",
     "ca_eccc": "CAN",
     "ch_foen": "CHE",
@@ -49,7 +50,6 @@ PROVIDER_COUNTRY = {
     "usgs_nwis": "USA",
 }
 PLANNED_COUNTRY = {
-    "BEL": "Belgium (Flanders, Wallonia)",
     "CHL": "Chile",
     "DEU": "Germany (federal waterways, Bavaria, Baden-Württemberg, Berlin, NRW)",
     "ESP": "Spain",

@@ -130,7 +130,7 @@ def _adapter(
             return generated
     else:
         build = generator.build_catalogue
-    if provider in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
+    if provider in {"ar_ina", "at_ehyd", "be_wal", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
         sources = generator.read_catalogue_sources(
             retained_evidence_root,
             selection_path=f"maintenance/catalogue/{provider}/official/selection.json",
@@ -255,7 +255,7 @@ def _adapter(
     )
 
 
-@pytest.mark.parametrize("provider", ["ar_ina", "at_ehyd", "ch_foen", "co_ideam", "pe_senamhi"])
+@pytest.mark.parametrize("provider", ["ar_ina", "at_ehyd", "be_wal", "ch_foen", "co_ideam", "pe_senamhi"])
 def test_selected_source_adapter_passes_explicit_source_selection(monkeypatch, tmp_path, provider):
     from types import SimpleNamespace
 
@@ -369,6 +369,7 @@ DECLARATIONS = {
         "at_ehyd",
         "au_bom",
         "ba_fhmzbih",
+        "be_wal",
         "br_ana",
         "ca_eccc",
         "ch_foen",
@@ -406,7 +407,8 @@ CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case i
 def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDecorator:
     paths = (
         [f"maintenance/catalogue/{provider}/official"]
-        if provider in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi"}
+        if provider
+        in {"ar_ina", "at_ehyd", "au_bom", "be_wal", "ch_foen", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi"}
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
     if provider in {"au_bom", "fi_syke"}:
@@ -440,7 +442,18 @@ def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> Pro
     receipt = (
         request.getfixturevalue("catalogue_input_receipt")
         if request.param
-        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi", "usgs_nwis"}
+        in {
+            "ar_ina",
+            "at_ehyd",
+            "au_bom",
+            "be_wal",
+            "ch_foen",
+            "co_ideam",
+            "dk_vanda",
+            "fi_syke",
+            "pe_senamhi",
+            "usgs_nwis",
+        }
         else None
     )
     return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param], input_receipt=receipt)
@@ -520,6 +533,17 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "latitude": field("metadata_station_latitude", FloatConversion()),
             "longitude": field("metadata_station_longitude", FloatConversion()),
             "crs": unpublished("https://vodostaji.voda.ba/data/internet/stations/stations.json"),
+        },
+        (ProviderId("be_wal"), "stations"): {
+            "provider_id": authored("be_wal"),
+            "station_id": field("station_no"),
+            "latitude": field("station_latitude", FloatConversion()),
+            "longitude": field("station_longitude", FloatConversion()),
+            "crs": documented(
+                "https://hydrometrie.wallonie.be/services/KiWIS/KiWIS"
+                "?service=kisters&type=queryServices&datasource=0&format=json"
+                "&request=getStationList&returnfields=all&ca_sta=all"
+            ),
         },
         (ProviderId("ca_eccc"), "stations"): {
             "provider_id": authored("ca_eccc"),
@@ -846,6 +870,7 @@ EXPECTED_CRS_COUNTS = {
     (ProviderId("ar_ina"), "stations"): (829, "EPSG:4326"),
     (ProviderId("at_ehyd"), "stations"): (746, "EPSG:4326"),
     (ProviderId("ba_fhmzbih"), "stations"): (60, "unknown"),
+    (ProviderId("be_wal"), "stations"): (338, "EPSG:4326"),
     (ProviderId("ca_eccc"), "stations"): (8_057, "EPSG:4326"),
     (ProviderId("cz_chmi"), "stations"): (831, "unknown"),
     (ProviderId("dk_vanda"), "stations"): (1_565, "EPSG:4326"),
@@ -1066,6 +1091,13 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             ),
         ),
         pytest.param(
+            "be_wal",
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/be_wal/official",
+                "maintenance/catalogue/be_wal/official/selection.json",
+            ),
+        ),
+        pytest.param(
             "dk_vanda",
             marks=pytest.mark.governing(
                 "maintenance/catalogue/dk_vanda/official",
@@ -1235,6 +1267,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ar_ina",
         "at_ehyd",
         "au_bom",
+        "be_wal",
         "ch_foen",
         "co_ideam",
         "dk_vanda",
@@ -1246,7 +1279,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
 
         *_, provenance, generated = read_catalogue_inputs(retained_evidence_root)
-    elif adapter.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
+    elif adapter.provider_id in {"ar_ina", "at_ehyd", "be_wal", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
         generated = _build(adapter)
         provenance = generated.acquisition_provenance
         source_inputs_before = {
@@ -1301,6 +1334,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ar_ina",
         "at_ehyd",
         "au_bom",
+        "be_wal",
         "ch_foen",
         "co_ideam",
         "dk_vanda",
@@ -1326,6 +1360,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ar_ina",
         "at_ehyd",
         "au_bom",
+        "be_wal",
         "ch_foen",
         "co_ideam",
         "dk_vanda",
@@ -1336,7 +1371,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         selected_receipt = product_root / f"{adapter.provider_id}.input-receipt.json"
         selected_receipt.write_text(catalogue_input_receipt.model_dump_json())
         arguments.extend(("--input-receipt", str(selected_receipt)))
-    if adapter.provider_id in {"at_ehyd", "co_ideam", "pe_senamhi"}:
+    if adapter.provider_id in {"at_ehyd", "be_wal", "co_ideam", "pe_senamhi"}:
         arguments.extend(
             (
                 "--evidence-root",

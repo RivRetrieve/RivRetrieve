@@ -43,6 +43,7 @@ SOURCE_FIELDS = {
     "at_ehyd": ("hzbnr", {"orogr.Einzugsgebiet [km²]": "km²"}),
     "au_bom": ("station_no", {}),
     "ba_fhmzbih": ("metadata_station_no", {"metadata_CATCHMENT_SIZE": None}),
+    "be_wal": ("station_no", {"CATCHMENT_SIZE": "km2"}),
     "br_ana": ("codigoestacao", {"Area_Drenagem": None}),
     "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": "km2", "DRAINAGE_AREA_EFFECT": "km2"}),
     "ch_foen": ("name", {}),
@@ -151,6 +152,8 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
                 if provider == "ar_ina"
                 else "maintenance/catalogue/at_ehyd/official"
                 if provider == "at_ehyd"
+                else "maintenance/catalogue/be_wal/official"
+                if provider == "be_wal"
                 else "maintenance/catalogue/usgs_nwis"
                 if provider == "usgs_nwis"
                 else "maintenance/catalogue/co_ideam/official/native.parquet"
@@ -169,6 +172,8 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
     native_path = (
         retained_evidence_root / "maintenance/catalogue/at_ehyd/official/native.parquet"
         if provider == "at_ehyd"
+        else retained_evidence_root / "maintenance/catalogue/be_wal/official/native.parquet"
+        if provider == "be_wal"
         else retained_evidence_root / "maintenance/catalogue/usgs_nwis/legacy-native.parquet"
         if provider == "usgs_nwis"
         else retained_evidence_root / "maintenance/catalogue/ar_ina/official/native.parquet"

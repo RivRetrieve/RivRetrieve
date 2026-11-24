@@ -523,3 +523,72 @@ def test_ch_foen_official_numeric_guards_reject_unrepresentable_cells(
         assert changed.rows.height == baseline.rows.height
         assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
         assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
+
+
+@pytest.mark.parametrize(
+    ("slug", "station_id", "prod_id"),
+    [
+        ("prod-1046-discharge-daily-mean", "1046", "discharge_daily_mean"),
+        ("prod-7102-water-temperature-daily-mean", "7102", "water_temperature_daily_mean"),
+    ],
+)
+@pytest.mark.parametrize("mutation", [*BAD, "boolean", "zero", "finite", "null"])
+@pytest.mark.recorded("maintenance/observations/be_wal/retrieval")
+def test_be_wal_numeric_guards_reject_unrepresentable_cells(
+    retained_evidence_root: Path, slug: str, station_id: str, prod_id: str, mutation: str
+) -> None:
+    from rivretrieve._internal.catalogues.source_series import catalogue_series
+    from rivretrieve._internal.providers.be_wal.config import config as be_wal_config
+    from rivretrieve._internal.providers.be_wal.parse import parse as be_wal_parse
+    from rivretrieve._internal.source_series import OutcomeStatus
+    from tests._catalogue import catalogue_reader
+
+    root = retained_evidence_root / "maintenance/observations/be_wal/retrieval/web"
+    body = (root / f"{slug}.body").read_bytes()
+    receipt = json.loads((root / f"{slug}.receipt.json").read_text())
+    cfg = be_wal_config()
+    prod = ProductId(prod_id)
+    pkg_series, _ = catalogue_series(catalogue_reader("be_wal").artifact)
+    known = next(s for s in pkg_series if s.station_id == station_id and s.product_id == prod_id)
+    win = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2025, 1, 1)),
+    )
+    origin = SourceCallOrigin(
+        str(receipt["url"]),
+        {},
+        int(receipt["http_status"]),
+        datetime.fromisoformat(str(receipt["retrieved_at"])),
+        "application/json",
+        UnknownOriginFact(),
+        UnknownOriginFact(),
+    )
+    source = Payload(
+        cfg.products[prod].coordinates,
+        ((station_id, prod),),
+        win,
+        body,
+        origin,
+        (),
+        known_series=(known,),
+    )
+    baseline = be_wal_parse(source, cfg)
+    assert baseline.rows.height > 0
+
+    doc = json.loads(body)
+    marker = "__BE_WAL_NUMERIC_CELL__"
+    doc[0]["data"][0][1] = marker
+    raw_token = "true" if mutation == "boolean" else TOKENS[mutation]
+    mutated_bytes = json.dumps(doc).encode().replace(json.dumps(marker).encode(), raw_token.encode())
+
+    changed = be_wal_parse(replace(source, content=mutated_bytes), cfg)
+    if mutation in (*BAD, "boolean"):
+        assert [item.status for item in changed.outcomes] == [OutcomeStatus.FAILED], (slug, mutation)
+        assert changed.outcomes[0].reason
+        assert changed.rows.is_empty()
+    else:
+        assert [item.status for item in changed.outcomes] == [item.status for item in baseline.outcomes]
+        assert all(item.status is OutcomeStatus.SUCCESS for item in changed.outcomes)
+        assert changed.rows.height == baseline.rows.height
+        assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
+        assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))

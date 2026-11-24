@@ -170,7 +170,7 @@ def test_complete_ordered_provenance_roundtrip(provider):
     assert reconstruct_provenance(parsed).model_dump(mode="json") == old.model_dump(mode="json")
 
 
-@pytest.mark.parametrize("provider", ["at_ehyd", "co_ideam", "pe_senamhi"])
+@pytest.mark.parametrize("provider", ["at_ehyd", "be_wal", "co_ideam", "pe_senamhi"])
 def test_selected_metadata_publication_has_declared_source_lineage(provider: str):
     from importlib import import_module
 
@@ -707,7 +707,11 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
 
 @pytest.mark.parametrize(
     "provider",
-    tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}),
+    tuple(
+        p
+        for p in BUILTIN_PROVIDER_IDS
+        if p not in {"at_ehyd", "be_wal", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}
+    ),
 )
 def test_historical_projection_preserves_sources_and_validates_metadata(provider):
     if provider == "usgs_nwis":
@@ -722,7 +726,11 @@ def test_historical_projection_preserves_sources_and_validates_metadata(provider
 
 @pytest.mark.parametrize(
     "provider",
-    tuple(p for p in BUILTIN_PROVIDER_IDS if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}),
+    tuple(
+        p
+        for p in BUILTIN_PROVIDER_IDS
+        if p not in {"at_ehyd", "be_wal", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}
+    ),
 )
 def test_historical_projection_rejects_changed_current_producer(provider):
     if provider == "usgs_nwis":

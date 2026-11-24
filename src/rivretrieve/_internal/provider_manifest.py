@@ -5,6 +5,7 @@ BUILTIN_PROVIDER_IDS = (
     "at_ehyd",
     "au_bom",
     "ba_fhmzbih",
+    "be_wal",
     "br_ana",
     "ca_eccc",
     "ch_foen",
