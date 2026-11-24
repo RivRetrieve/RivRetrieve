@@ -15,6 +15,7 @@ Provider pages explain their agencies and source-specific conditions:
 
 - [Argentina: INA](providers/ar_ina.md)
 - [Austria: eHYD](providers/at_ehyd.md)
+- [Belgium (Wallonia): SPW Hydrométrie](providers/be_wal.md)
 - [Bosnia and Herzegovina: AVP Sava](providers/ba_fhmzbih.md)
 - [Brazil: ANA](providers/br_ana.md)
 - [Canada: Environment and Climate Change Canada](providers/ca_eccc.md)
