@@ -170,6 +170,7 @@ def interpret_timeseries_list(
     )
     retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
     evidence = f"source-call:{payload.acquisition_id}"
+    series_definitions: list[SourceSeries] = []
     outcomes: list[RetrievalOutcome] = []
     inventories: list[InventorySnapshot] = []
     issues: list[Issue] = []
@@ -184,8 +185,47 @@ def interpret_timeseries_list(
         # where a reported-but-wrong-unit series must be told apart from a genuinely absent
         # one and given its own clear reason instead of a generic unresolved-scope fallback.
         expected_unit = NATIVE_UNIT_SYMBOLS[_QUANTITY_BY_PRODUCT_ID[str(product)]]
-        if any(unit == expected_unit for _, unit in pairs):
-            # The matching values Payload (or its FailedSourceRequest) owns this product's outcome.
+        valid_pairs = tuple(pair for pair in pairs if pair[1] == expected_unit)
+        wrong_pairs = tuple(pair for pair in pairs if pair[1] != expected_unit)
+        if valid_pairs:
+            for bad_ts_id, bad_unit in wrong_pairs:
+                bad_series = describe_series(station, bad_ts_id, str(product), bad_unit)
+                bad_fact = bad_series.facts[0]
+                series_definitions.append(bad_series)
+                reason = (
+                    f"BoM getTimeseriesList reports station {station} series {coords.native_id!r} "
+                    f"({coords.parametertype_name}) ts_id {bad_ts_id!r} in {bad_unit!r}, "
+                    f"not the expected {expected_unit!r}"
+                )
+                outcome = RetrievalOutcome(
+                    outcome_id=stable_id(
+                        payload.acquisition_id, bad_series.series_id, bad_fact.facts_id, "list-unsupported-unit"
+                    ),
+                    series_id=bad_series.series_id,
+                    station_id=station,
+                    product_id=str(product),
+                    window=window,
+                    status=OutcomeStatus.UNSUPPORTED,
+                    facts_ids=(bad_fact.facts_id,),
+                    reason=reason,
+                    retrieved_at=retrieved,
+                )
+                outcomes.append(outcome)
+                issues.append(
+                    Issue(
+                        severity="warning",
+                        code="source.unsupported_unit",
+                        message=reason,
+                        details={
+                            "station_id": station,
+                            "product_id": str(product),
+                            "series_id": bad_series.series_id,
+                            "outcome_id": outcome.outcome_id,
+                        },
+                        provider_id=_PROVIDER_ID,
+                    )
+                )
+            # The matching values Payload (or its FailedSourceRequest) owns the valid series' inventory and outcome.
             continue
         if pairs:
             reported_units = sorted({unit for _, unit in pairs})
@@ -237,7 +277,11 @@ def interpret_timeseries_list(
         )
 
     return ParsedSeries(
-        pl.DataFrame(schema=RowsSchema.polars_schema), (), tuple(inventories), tuple(outcomes), tuple(issues)
+        pl.DataFrame(schema=RowsSchema.polars_schema),
+        tuple(series_definitions),
+        tuple(inventories),
+        tuple(outcomes),
+        tuple(issues),
     )
 
 

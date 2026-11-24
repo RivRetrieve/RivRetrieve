@@ -193,7 +193,7 @@ def build_acquisition_provenance(
         provenance,
         tuple(fact for fact in CATALOGUE_FACT_UNIVERSE if fact.startswith("provider.")),
         transformation=Transformation(
-            name="RivRetrieve Australia BoM identity and catalogue-only capabilities",
+            name="RivRetrieve Australia BoM identity and capabilities",
             kind="authored_constant",
             external_inputs=(),
         ),

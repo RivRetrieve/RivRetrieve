@@ -17,6 +17,7 @@ from rivretrieve._internal.engine import (
     SourceCallOrigin,
     SourceCoordinates,
     UnknownOriginFact,
+    narrow_payload_for_pair,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
@@ -128,18 +129,24 @@ def fetch(
         try:
             ts_id_map = resolve_timeseries_list(list_response.content, station)
         except UnsupportedSourceStructureError as error:
-            # Hand off this acquisition-time interpretation so the driver does not decode
-            # the same (invalid) response again when it would otherwise re-parse list_payload.
-            failed_interpretation = interpret_timeseries_list_failure(list_payload, str(error))
-            interpretations.append(InterpretedPayload.from_payload(list_payload, failed_interpretation))
+            # Hand off one narrowed interpretation per (station, product) pair so the
+            # driver reuses it across shared multi-product groups without re-decoding.
+            for product in products:
+                pair_payload = narrow_payload_for_pair(list_payload, station, product)
+                failed_interpretation = interpret_timeseries_list_failure(pair_payload, str(error))
+                interpretations.append(InterpretedPayload.from_payload(pair_payload, failed_interpretation))
             continue
 
-        # Hand off this acquisition-time interpretation (built from the one
-        # resolve_timeseries_list call above) so the driver reuses it instead of decoding
-        # and re-resolving the same getTimeseriesList response again during parsing.
-        interpretations.append(
-            InterpretedPayload.from_payload(list_payload, interpret_timeseries_list(list_payload, config, ts_id_map))
-        )
+        # Hand off one narrowed interpretation per (station, product) pair (built from the
+        # single resolve_timeseries_list call above) so the driver reuses every pair across
+        # shared multi-product groups instead of re-decoding getTimeseriesList per product.
+        for product in products:
+            pair_payload = narrow_payload_for_pair(list_payload, station, product)
+            interpretations.append(
+                InterpretedPayload.from_payload(
+                    pair_payload, interpret_timeseries_list(pair_payload, config, ts_id_map)
+                )
+            )
 
         for product in products:
             coords = config.products[product].coordinates.value

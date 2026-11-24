@@ -197,6 +197,49 @@ def test_public_fetch_reports_a_clear_unsupported_unit_outcome_not_a_generic_one
     assert any(i.code == "source.unsupported_unit" and "cm" in i.message for i in result.issues)
 
 
+def test_public_fetch_reports_mixed_unit_duplicate_ts_id_without_dropping_valid_sibling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When one duplicate ts_id matches the expected unit and another does not, keep the valid sibling and warn."""
+    station = "138020A"
+    list_bytes = _list_json(
+        station,
+        [
+            ("470345010", "DMQaQc.Merged.DailyMean.24HR", "Water Course Level", "m"),
+            ("381776010", "DMQaQc.Merged.DailyMean.24HR", "Water Course Level", "cm"),
+        ],
+    )
+    values_bytes = _values_json([("470345010", [("2026-09-01T00:00:00.000+10:00", 1.887, 10, "quality-A")])])
+    requested_ts_ids: list[str] = []
+
+    class _Transport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = dict(request.params or {})
+            if params.get("request") == "getTimeseriesList":
+                return TransportResponse(list_bytes, 200, _RETRIEVED_AT, "application/json", request.url, params)
+            requested_ts_ids.append(str(params.get("ts_id", "")))
+            return TransportResponse(values_bytes, 200, _RETRIEVED_AT, "application/json", request.url, params)
+
+    monkeypatch.setattr(discovery, "HttpClient", _Transport)
+    selection = _select_stage_daily_mean(station)
+    result = rr.fetch(selection, start="2026-09-01", end="2026-09-01", cache="bypass", on_issue="ignore")
+
+    from rivretrieve._internal.source_series import OutcomeStatus
+
+    assert requested_ts_ids == ["470345010"]
+    assert result.data["value"].to_list() == [pytest.approx(1.887)]
+    assert any(o.status is OutcomeStatus.SUCCESS for o in result.outcomes)
+    assert any(
+        o.status is OutcomeStatus.UNSUPPORTED
+        and o.series_id is not None
+        and "cm" in (o.reason or "")
+        and "381776010" in (o.reason or "")
+        for o in result.outcomes
+    )
+    assert any(i.code == "source.unsupported_unit" and "cm" in i.message for i in result.issues)
+    assert {item.identity.published_id for item in result.source_series} == {"470345010", "381776010"}
+
+
 def test_public_fetch_surfaces_no_match_for_an_unresolved_product(monkeypatch: pytest.MonkeyPatch) -> None:
     station = "410730"
     # The list response only carries discharge for this ts_name, leaving the requested
