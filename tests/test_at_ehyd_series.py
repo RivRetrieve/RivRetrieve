@@ -251,7 +251,7 @@ def test_207340_daily_anomaly_withholds_monthly_frequency_and_route_wide_period(
         assert facts.temporal_support.state is EvidenceState.NOT_ESTABLISHED
 
     normal = source_series("209486", "owf", "owf_wasserst_monatsminima", units=("cm",), origin="catalogue")
-    assert normal.facts[0].frequency.value == "monthly"
+    assert normal.facts[0].frequency.value == "P1M"
     assert normal.facts[0].temporal_support.value == "calendar_month"
     assert normal.facts[0].facts_id != from_cat.facts[0].facts_id
 
@@ -267,7 +267,7 @@ def test_temporal_facts_and_predicate_rejection_prevent_silent_misinterpretation
     bgis_q = source_series("209486", "pegel_bgis", "Abfluss", units=("m³/s",))
     lt_q = source_series("209486", "pegel_longterm", "Abfluss", units=("m³/s",))
 
-    assert owf_q.facts[0].frequency.value == "daily"
+    assert owf_q.facts[0].frequency.value == "P1D"
     assert owf_q.facts[0].statistic.value == "mean"
     assert owf_q.facts[0].timestamp_anchor.value == "start"
     assert owf_q.facts[0].temporal_support.value is None
@@ -275,7 +275,7 @@ def test_temporal_facts_and_predicate_rejection_prevent_silent_misinterpretation
     assert owf_q.facts[0].day_definition.value is None
     assert owf_q.facts[0].clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
 
-    assert owf_qmax.facts[0].frequency.value == "monthly"
+    assert owf_qmax.facts[0].frequency.value == "P1M"
     assert owf_qmax.facts[0].statistic.value == "max"
     assert owf_qmax.facts[0].temporal_support.value == "calendar_month"
     assert owf_qmax.facts[0].timestamp_anchor.value is None
@@ -285,7 +285,7 @@ def test_temporal_facts_and_predicate_rejection_prevent_silent_misinterpretation
     assert bgis_q.facts[0].statistic.value is None
     assert bgis_q.facts[0].clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
 
-    assert lt_q.facts[0].frequency.value == "daily"
+    assert lt_q.facts[0].frequency.value == "P1D"
     assert lt_q.facts[0].statistic.value is None
     assert lt_q.facts[0].time_zone.value is None
     assert lt_q.facts[0].clipping_axis is ClippingAxis.CALENDAR_DATE

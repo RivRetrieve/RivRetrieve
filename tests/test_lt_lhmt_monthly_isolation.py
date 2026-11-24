@@ -91,7 +91,7 @@ def month_bounds(month):
 
 
 def selection(quantity="discharge"):
-    return rr.find(provider="lt_lhmt", station="anyksciu-vms", quantity=quantity, frequency="daily", statistic="mean")
+    return rr.find(provider="lt_lhmt", station="anyksciu-vms", quantity=quantity, frequency="P1D", statistic="mean")
 
 
 def fetch(chosen=None, **kwargs):

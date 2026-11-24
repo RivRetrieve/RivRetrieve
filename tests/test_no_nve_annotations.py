@@ -235,7 +235,7 @@ def test_no_nve_public_projection_pick_to_utc_refresh_and_bundles(
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
     selection = rr.pick(
-        rr.find(provider="no_nve", station=_STATION, quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="no_nve", station=_STATION, quantity="discharge", frequency="P1D", statistic="mean"),
         variant=["1", "2"],
     )
     assert rr.annotations(selection).is_empty()

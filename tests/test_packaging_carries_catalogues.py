@@ -138,7 +138,7 @@ assert len(unknown_bosnia.series) == 1
 assert bosnia_pairs.filter((pl.col("station_id") == "2101-B") & (pl.col("product_id") == "water_temperature_reported"))["availability"].to_list() == ["unknown"]
 assert not provider_root.joinpath("ba_fhmzbih", "catalogue", "baseline_workbook_access.json").is_file()
 norway = rivretrieve.find(
-    provider="no_nve", station="1.200.0", quantity="stage", frequency="daily", statistic="mean"
+    provider="no_nve", station="1.200.0", quantity="stage", frequency="P1D", statistic="mean"
 )
 assert len(norway.series) == 1
 assert artifact("no_nve").station_products.filter((pl.col("station_id") == "1.200.0") & (pl.col("product_id") == "stage_daily_mean"))["availability"].to_list() == ["available"]

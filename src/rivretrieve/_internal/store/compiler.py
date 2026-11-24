@@ -402,7 +402,7 @@ def _write_manifest(
         dispositions.append(record)
     built_at = request.built_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     manifest: dict[str, object] = {
-        "format_version": 10,
+        "format_version": 12,
         "provider_id": str(request.provider_id),
         "compiler_version": request.compiler_version,
         "built_at": built_at,

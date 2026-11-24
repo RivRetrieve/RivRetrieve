@@ -595,7 +595,7 @@ def test_shared_acquisition_reuses_per_product_contexts_and_releases_after_final
                     quantity=known(qty, "test"),
                     source_unit=known(unit_str, "test"),
                     normalized_unit=unit_str,
-                    frequency=known("daily", "test"),
+                    frequency=known("P1D", "test"),
                     clipping_axis=ClippingAxis.CALENDAR_DATE,
                     label_time="00:00",
                 )

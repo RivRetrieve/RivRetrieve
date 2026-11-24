@@ -111,7 +111,7 @@ def _series_def(station: str, product: ProductId) -> SourceSeries:
         quantity=known(qty, "test"),
         source_unit=known(unit, "test"),
         normalized_unit=norm,
-        frequency=known("daily", "test"),
+        frequency=known("P1D", "test"),
         clipping_axis=ClippingAxis.CALENDAR_DATE,
         label_time="00:00",
     )

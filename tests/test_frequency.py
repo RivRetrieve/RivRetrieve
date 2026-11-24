@@ -646,3 +646,314 @@ def test_part1_ar_ina_and_cz_chmi_end_to_end_discovery_and_round_trip(monkeypatc
             )
             assert station_find.series == station_pick.series
             assert row["series_id"] in {s.series_id for s in station_find.series}
+
+
+def test_observation_result_pick_canonicalizes_and_validates_frequency() -> None:
+    from rivretrieve import pick
+    from rivretrieve._internal.observations import ObservationProvenance, ObservationResult, Receipts
+    from rivretrieve._internal.source_series import SourceIdentity, SourceSeries
+
+    f_4h = _facts_with_frequency(known("PT4H", "ev"))
+    f_1w = _facts_with_frequency(known("P1W", "ev"))
+    s_4h = SourceSeries(
+        series_id="s-4h",
+        provider_id="ar_ina",
+        station_id="st",
+        product_id="stage_4hourly",
+        identity=SourceIdentity(namespace="test", published_id="1", origin="mapping", evidence=("ev",)),
+        facts=(f_4h,),
+    )
+    s_1w = SourceSeries(
+        series_id="s-1w",
+        provider_id="ar_ina",
+        station_id="st",
+        product_id="stage_weekly_mean",
+        identity=SourceIdentity(namespace="test", published_id="2", origin="mapping", evidence=("ev",)),
+        facts=(f_1w,),
+    )
+    rows = pl.DataFrame(
+        [
+            {
+                "station_id": "st",
+                "product_id": "stage_4hourly",
+                "series_id": "s-4h",
+                "facts_id": f_4h.facts_id,
+                "time": dt.datetime(2024, 1, 1, 0, 0),
+                "time_zone": "+00:00",
+                "quantity": "stage",
+                "value": 1.5,
+                "unit": "m",
+                "source_unit": "m",
+            },
+            {
+                "station_id": "st",
+                "product_id": "stage_weekly_mean",
+                "series_id": "s-1w",
+                "facts_id": f_1w.facts_id,
+                "time": dt.datetime(2024, 1, 1, 0, 0),
+                "time_zone": "+00:00",
+                "quantity": "stage",
+                "value": 2.5,
+                "unit": "m",
+                "source_unit": "m",
+            },
+        ]
+    )
+    result = ObservationResult(
+        data=rows,
+        provenance=ObservationProvenance(source="test", provider_id="ar_ina"),
+        receipts=Receipts(provider_id="ar_ina"),
+        source_series=(s_4h, s_1w),
+        inventories=(),
+        scope=_selection_scope(provider="ar_ina", station="st"),
+    )
+
+    assert pick(result, frequency="PT240M").data["series_id"].to_list() == ["s-4h"]
+    assert pick(result, frequency="P7D").data["series_id"].to_list() == ["s-1w"]
+    assert pick(result, frequency="PT168H").data.is_empty()
+    with pytest.raises(ValueError):
+        pick(result, frequency="daily")
+
+
+def test_store_and_bundle_v11_v12_v5_join_canonical_facts_and_refuse_retired_versions(tmp_path) -> None:
+    import hashlib
+    import json
+    from datetime import UTC, date, datetime
+    from io import BytesIO
+    from pathlib import Path
+    from uuid import uuid4
+    from zipfile import ZIP_DEFLATED, ZipFile
+
+    import rivretrieve as rr
+    from rivretrieve._internal.coverage import CoverageInterval, RequestedInterval
+    from rivretrieve._internal.engine import RowsSchema
+    from rivretrieve._internal.observations import ObservationProvenance, ObservationResult, Receipts
+    from rivretrieve._internal.source_series import (
+        OutcomeStatus,
+        RetrievalOutcome,
+        SeriesWindow,
+        SourceIdentity,
+        SourceSeries,
+    )
+    from rivretrieve._internal.store import (
+        ArtifactChecksum,
+        Disposition,
+        NativeStoreMaterialization,
+        ObservationStoreRefusedError,
+        PublisherArtifact,
+        SourceColumn,
+        SourceColumnDisposition,
+        SourceUnitCount,
+        StoreCompileRequest,
+        StoreQuery,
+        StoreReader,
+        StoreRoot,
+        certify_store,
+        validate_store,
+    )
+    from rivretrieve._internal.store.accumulation import StoreUpdate, SuccessfulReplacement, accumulate
+    from rivretrieve._internal.store.integrity import seal_store
+
+    f_4h = _facts_with_frequency(known("PT240M", "ev"))
+    f_1w = _facts_with_frequency(known("P7D", "ev"))
+    assert f_4h.frequency.value == "PT4H"
+    assert f_1w.frequency.value == "P1W"
+    assert f_4h.facts_id == _facts_with_frequency(known("PT4H", "ev")).facts_id
+    assert f_1w.facts_id == _facts_with_frequency(known("P1W", "ev")).facts_id
+
+    sid_4h = stable_id("fixture_live", "a", "level_4h")
+    sid_1w = stable_id("fixture_live", "a", "level_1w")
+    s_4h = SourceSeries(
+        series_id=sid_4h,
+        provider_id="fixture_live",
+        station_id="a",
+        product_id="level_4h",
+        identity=SourceIdentity(namespace="test", published_id="1", origin="mapping", evidence=("ev",)),
+        facts=(f_4h,),
+    )
+    s_1w = SourceSeries(
+        series_id=sid_1w,
+        provider_id="fixture_live",
+        station_id="a",
+        product_id="level_1w",
+        identity=SourceIdentity(namespace="test", published_id="2", origin="mapping", evidence=("ev",)),
+        facts=(f_1w,),
+    )
+    retrieved_at = datetime(2026, 9, 1, tzinfo=UTC)
+    acc_store = StoreRoot(tmp_path / "accumulated")
+    acc_rows = pl.DataFrame(
+        {
+            "station_id": ["a"],
+            "product_id": ["level_4h"],
+            "time": [datetime(2024, 1, 1, 0, 0)],
+            "value": [1.5],
+            "time_zone": ["+00:00"],
+            "series_id": [sid_4h],
+            "facts_id": [f_4h.facts_id],
+            "source_unit": ["m"],
+        },
+        schema=RowsSchema.polars_schema,
+    )
+    interval = RequestedInterval(datetime(2024, 1, 1), datetime(2024, 1, 2))
+    outcome = RetrievalOutcome(
+        outcome_id=uuid4().hex,
+        series_id=sid_4h,
+        station_id="a",
+        product_id="level_4h",
+        window=SeriesWindow(start=interval.start, end=interval.end),
+        status=OutcomeStatus.SUCCESS,
+        facts_ids=(f_4h.facts_id,),
+        retrieved_at=retrieved_at,
+    )
+    coverage = CoverageInterval(sid_4h, interval, retrieved_at, outcome.outcome_id)
+    accumulate(
+        acc_store,
+        ProviderId("fixture_live"),
+        StoreUpdate((s_4h,), (), (outcome,), (SuccessfulReplacement(coverage, acc_rows),)),
+    )
+    seal_store(acc_store, ProviderId("fixture_live"))
+    validated_acc = validate_store(acc_store, ProviderId("fixture_live"))
+    assert validated_acc.manifest.format_version == 11
+    acc_read = StoreReader().query(
+        StoreQuery(acc_store, ProviderId("fixture_live"), ("a",), ("level_4h",), interval.start, interval.end)
+    )
+    assert acc_read.rows["facts_id"].to_list() == [f_4h.facts_id]
+
+    retired_acc_manifest = json.loads((Path(acc_store) / "manifest.json").read_text())
+    retired_acc_manifest["format_version"] = 9
+    (Path(acc_store) / "manifest.json").write_text(json.dumps(retired_acc_manifest))
+    with pytest.raises(ObservationStoreRefusedError, match="unsupported format revision 9"):
+        validate_store(acc_store, ProviderId("fixture_live"))
+
+    # Compiled store v12 join + v10 refusal
+    artifact = Path(tmp_path / "publisher.zip")
+    artifact.write_bytes(b"fixture")
+    digest = ArtifactChecksum(f"sha256:{hashlib.sha256(artifact.read_bytes()).hexdigest()}")
+    bulk_sid = stable_id("fixture_bulk", "station-1", "stage")
+    bulk_series = SourceSeries(
+        series_id=bulk_sid,
+        provider_id="fixture_bulk",
+        station_id="station-1",
+        product_id="stage",
+        identity=SourceIdentity(namespace="test", published_id="b", origin="mapping", evidence=("ev",)),
+        facts=(f_4h,),
+    )
+    columns = (SourceColumn("raw_value", "text"),)
+    dispositions = (
+        SourceColumnDisposition("raw_value", Disposition.RETAINED, reconstruction_rule=None, rationale=None),
+    )
+    comp_store = StoreRoot(tmp_path / "compiled")
+    request = StoreCompileRequest(
+        destination=comp_store,
+        provider_id=ProviderId("fixture_bulk"),
+        compiler_version="0.1.0",
+        built_at=datetime(2026, 8, 11, tzinfo=UTC),
+        source_vintage=date(2024, 12, 31),
+        publisher_artifact=PublisherArtifact("https://example.test/publisher.zip", digest),
+        source_columns=columns,
+        source_column_dispositions=dispositions,
+        series=(bulk_series,),
+    )
+    decoded = pl.DataFrame(
+        {
+            "product": ["stage"],
+            "station_id": ["station-1"],
+            "time": [datetime(2024, 1, 2)],
+            "time_zone": ["UTC"],
+            "value": [2.0],
+            "value_state": ["published_value"],
+            "series_id": [bulk_sid],
+            "facts_id": [f_4h.facts_id],
+            "source_unit": ["m"],
+            "raw_value": ["2.0"],
+        },
+        schema={
+            "product": pl.String,
+            "station_id": pl.String,
+            "time": pl.Datetime("us"),
+            "time_zone": pl.String,
+            "value": pl.Float64,
+            "value_state": pl.String,
+            "series_id": pl.String,
+            "facts_id": pl.String,
+            "source_unit": pl.String,
+            "raw_value": pl.String,
+        },
+    )
+    certified = certify_store(
+        request, artifact, lambda _p: NativeStoreMaterialization(decoded, columns, (SourceUnitCount("2024.csv", 1, 1),))
+    )
+    assert certified.manifest.format_version == 12
+    comp_read = StoreReader().query(
+        StoreQuery(
+            comp_store,
+            ProviderId("fixture_bulk"),
+            ("station-1",),
+            ("stage",),
+            datetime(2024, 1, 1),
+            datetime(2024, 1, 3),
+        )
+    )
+    assert comp_read.rows["facts_id"].to_list() == [f_4h.facts_id]
+
+    retired_comp_manifest = json.loads((Path(comp_store) / "manifest.json").read_text())
+    retired_comp_manifest["format_version"] = 10
+    (Path(comp_store) / "manifest.json").write_text(json.dumps(retired_comp_manifest))
+    with pytest.raises(ObservationStoreRefusedError, match="unsupported format revision 10"):
+        validate_store(comp_store, ProviderId("fixture_bulk"))
+
+    # Export bundle v5 round-trip + v4 refusal
+    obs = ObservationResult(
+        data=pl.DataFrame(
+            [
+                {
+                    "station_id": "a",
+                    "product_id": "level_4h",
+                    "series_id": sid_4h,
+                    "facts_id": f_4h.facts_id,
+                    "time": dt.datetime(2024, 1, 1, 0, 0),
+                    "time_zone": "+00:00",
+                    "quantity": "stage",
+                    "value": 1.5,
+                    "unit": "m",
+                    "source_unit": "m",
+                },
+                {
+                    "station_id": "a",
+                    "product_id": "level_1w",
+                    "series_id": sid_1w,
+                    "facts_id": f_1w.facts_id,
+                    "time": dt.datetime(2024, 1, 1, 0, 0),
+                    "time_zone": "+00:00",
+                    "quantity": "stage",
+                    "value": 2.5,
+                    "unit": "m",
+                    "source_unit": "m",
+                },
+            ]
+        ),
+        provenance=ObservationProvenance(source="test", provider_id="fixture_live"),
+        receipts=Receipts(provider_id="fixture_live"),
+        source_series=(s_4h, s_1w),
+        inventories=(),
+        scope=_selection_scope(provider="fixture_live", station="a"),
+    )
+    bundle_bytes = rr.to_bundle(obs)
+    with ZipFile(BytesIO(bundle_bytes)) as archive:
+        assert json.loads(archive.read("manifest.json"))["version"] == 5
+    restored = rr.from_bundle(bundle_bytes)
+    assert rr.pick(restored, frequency="PT240M").data["facts_id"].to_list() == [f_4h.facts_id]
+    assert rr.pick(restored, frequency="P7D").data["facts_id"].to_list() == [f_1w.facts_id]
+    assert rr.pick(restored, frequency="PT168H").data.is_empty()
+
+    retired_bundle = BytesIO()
+    with ZipFile(BytesIO(bundle_bytes)) as src_zip, ZipFile(retired_bundle, "w", compression=ZIP_DEFLATED) as dst_zip:
+        for info in src_zip.infolist():
+            data = src_zip.read(info.filename)
+            if info.filename == "manifest.json":
+                doc = json.loads(data)
+                doc["version"] = 4
+                data = json.dumps(doc).encode("utf-8")
+            dst_zip.writestr(info.filename, data)
+    with pytest.raises(ValueError, match="Unsupported source-series bundle format version"):
+        rr.from_bundle(retired_bundle.getvalue())

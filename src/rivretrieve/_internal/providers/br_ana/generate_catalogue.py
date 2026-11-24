@@ -103,7 +103,7 @@ def build_products(daily: ConventionalDailyEvidence | None = None) -> ProductCat
                 "provider_id": PROVIDER_ID,
                 "product_id": product,
                 "observed_property": "stage" if stage else "discharge",
-                "frequency": "daily" if daily_product else "unknown",
+                "frequency": "P1D" if daily_product else "unknown",
                 "statistic": "mean" if daily_product else "unknown",
                 "period_type": "daily" if daily_product else "unknown",
                 "period_anchor": "unknown",

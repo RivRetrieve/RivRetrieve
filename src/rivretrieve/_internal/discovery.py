@@ -166,7 +166,7 @@ def find(
         Exact, case-sensitive filters on established physical facts. Quantity
         and statistic must use the supported query values listed in the API
         reference's "Supported physical query values" table. Frequency accepts
-        canonical ISO 8601 duration strings in the three supported families
+        ISO 8601 duration strings in the three supported families
         (elapsed ``PT...H/M/S``, calendar ``P...W/D``, and calendar ``P...Y/M``),
         canonicalizing equivalent spellings within a family such as ``PT60M``
         to ``PT1H`` or ``P7D`` to ``P1W``. Unsupported values raise ValueError;

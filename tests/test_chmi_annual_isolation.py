@@ -47,7 +47,7 @@ class AnnualTransport:
 
 
 def selection():
-    found = rr.find(provider="cz_chmi", station=_STATION, quantity="discharge", frequency="daily")
+    found = rr.find(provider="cz_chmi", station=_STATION, quantity="discharge", frequency="P1D")
     return rr.pick(found, series_id=[series.series_id for series in found.series])
 
 
@@ -182,7 +182,7 @@ def test_hourly_shared_annual_file_preserves_siblings_around_failed_year(
     transport = AnnualTransport(recording, {2022: 503})
     transport.document = json.loads(read_recording(retained_evidence_root / _HQ).content)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
-    selected = rr.find(provider="cz_chmi", station=_STATION, frequency="hourly")
+    selected = rr.find(provider="cz_chmi", station=_STATION, frequency="PT1H")
     result = rr.fetch(selected, start="2021-03-01", end="2023-09-01", cache="bypass", receipts=True, on_issue="ignore")
     assert set(result.data["product_id"]) == {"stage_hourly_mean", "discharge_hourly_mean"}
     assert result.data.height == 4

@@ -39,7 +39,7 @@ def describe_product(product: str) -> SourceDescription:
         quantity=known(quantity, FORMAT_DEFINITION),
         source_unit=known(unit, FORMAT_DEFINITION),
         normalized_unit=unit,
-        frequency=known("daily", FORMAT_DEFINITION),
+        frequency=known("P1D", FORMAT_DEFINITION),
         statistic=EvidenceFact(evidence=(METHOD_DEFINITION,)),
         clipping_axis=ClippingAxis.CALENDAR_DATE,
         label_time="00:00",

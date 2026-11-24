@@ -30,7 +30,7 @@ def test_daily_nonmidnight_label_preserves_valid_daily_max(retained_evidence_roo
             "fr_hubeau_1011000101_QIXnJ_padded.recording.json",
         )
     )
-    selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily")
+    selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="P1D")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(recordings))
     expected = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="bypass", on_issue="ignore")
     assert set(expected.data["product_id"]) == {"discharge_daily_mean", "discharge_daily_max"}

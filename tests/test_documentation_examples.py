@@ -229,7 +229,7 @@ def assert_usage_state(scope, tmp_path, retained_evidence_root: Path):
     assert len(scope["_transport"].calls) == before
     assert_frame_equal(cached.data, result.data)
     assert cached.receipts.entries[0].authorship.value == "store_excerpt"
-    assert cached.receipts.entries[0].format_version == 9
+    assert cached.receipts.entries[0].format_version == 11
     excerpt = pl.read_parquet(io.BytesIO(cached.receipts.entries[0].content))
     assert excerpt.height >= cached.data.height
     original_acquired_at = datetime.fromisoformat(manifest(retained_evidence_root)[DAILY_RECORDING]["acquired_utc"])

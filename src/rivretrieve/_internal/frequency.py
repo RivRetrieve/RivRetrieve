@@ -106,7 +106,7 @@ class Frequency:
             raise ValueError(f"Unsupported frequency family: {self.family!r}")
         if not isinstance(self.unit, FrequencyUnit):
             raise ValueError(f"Unsupported frequency unit: {self.unit!r}")
-        if isinstance(self.value, bool) or not isinstance(self.value, int) or self.value <= 0:
+        if type(self.value) is not int or self.value <= 0:
             raise ValueError(f"Frequency value must be a positive integer, got {self.value!r}")
         if not isinstance(self.canonical, str):
             raise ValueError(f"Canonical spelling must be a string, got {self.canonical!r}")
@@ -144,7 +144,7 @@ class Frequency:
         """
         if not isinstance(raw, str):
             raise ValueError(
-                "Unsupported frequency value: expected a canonical ISO 8601 duration string such as "
+                "Unsupported frequency value: expected an ISO 8601 duration string such as "
                 f"'PT15M', 'PT1H', 'P1D', 'P1W', 'P1M', or 'P1Y'; got {type(raw).__name__}"
             )
 

@@ -21,7 +21,7 @@ def test_fi_syke_products_cover_the_three_admitted_quantities() -> None:
         "stage_reported",
         "water_temperature_reported",
     ]
-    assert result.data["frequency"].to_list() == ["daily"] * 3
+    assert result.data["frequency"].to_list() == ["P1D"] * 3
 
 
 def test_fi_syke_each_station_is_witnessed_for_exactly_one_product() -> None:

@@ -79,7 +79,7 @@ def _parsed(rows: Rows, payload: Payload, config: ProviderConfig, issues: tuple[
             quantity=known("stage", "test source definition"),
             source_unit=known(product.unit.value, "test source definition"),
             normalized_unit=product.unit.value,
-            frequency=known("daily" if daily else "instantaneous", "test source definition"),
+            frequency=known("P1D" if daily else "PT15M", "test source definition"),
             clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
             label_time=product.semantics.label_time.value if daily else None,
         )

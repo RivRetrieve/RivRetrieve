@@ -69,7 +69,7 @@ def _synthetic_empty_values(request: TransportRequest) -> TransportResponse:
 
 
 def _select_stage_daily_mean(station: str) -> rr.Selection:
-    return rr.find(provider="au_bom", station=station, quantity="stage", frequency="daily", statistic="mean")
+    return rr.find(provider="au_bom", station=station, quantity="stage", frequency="P1D", statistic="mean")
 
 
 @pytest.mark.recorded(_SCOPE)
@@ -125,7 +125,7 @@ def test_public_recorded_station_410730_discharge_quality_e_annotations(
             return _synthetic_empty_values(request)  # the 09HR sibling, not under test here
 
     monkeypatch.setattr(discovery, "HttpClient", _Replay)
-    selection = rr.find(provider="au_bom", station="410730", quantity="discharge", frequency="daily", statistic="mean")
+    selection = rr.find(provider="au_bom", station="410730", quantity="discharge", frequency="P1D", statistic="mean")
     result = rr.fetch(selection, start="2026-10-20", end="2026-10-27", cache="bypass", on_issue="ignore")
 
     discharge_rows = result.data.filter(result.data["product_id"] == "discharge_daily_mean_24hr")
@@ -157,7 +157,7 @@ def test_public_recorded_station_138020a_duplicate_ts_id_split_with_published_nu
             return _synthetic_empty_values(request)  # the 09HR sibling pair, not under test here
 
     monkeypatch.setattr(discovery, "HttpClient", _Replay)
-    selection = rr.find(provider="au_bom", station="138020A", quantity="discharge", frequency="daily", statistic="mean")
+    selection = rr.find(provider="au_bom", station="138020A", quantity="discharge", frequency="P1D", statistic="mean")
     result = rr.fetch(selection, start="2026-09-01", end="2026-09-10", cache="bypass", on_issue="ignore")
 
     statuses = {outcome.status for outcome in result.outcomes}
@@ -202,7 +202,7 @@ def test_public_recorded_future_window_is_empty_not_an_error(
             return _synthetic_empty_values(request)  # the 09HR sibling, not under test here
 
     monkeypatch.setattr(discovery, "HttpClient", _Replay)
-    selection = rr.find(provider="au_bom", station="410730", quantity="discharge", frequency="daily", statistic="mean")
+    selection = rr.find(provider="au_bom", station="410730", quantity="discharge", frequency="P1D", statistic="mean")
     result = rr.fetch(selection, start="2027-01-01", end="2027-01-05", cache="bypass", on_issue="ignore")
 
     outcomes_24hr = [o for o in result.outcomes if o.product_id == "discharge_daily_mean_24hr"]
@@ -258,7 +258,7 @@ def test_public_recorded_values_call_transport_failure_reports_an_error_issue(
             )
 
     monkeypatch.setattr(discovery, "HttpClient", _Replay)
-    selection = rr.find(provider="au_bom", station="410730", quantity="discharge", frequency="daily", statistic="mean")
+    selection = rr.find(provider="au_bom", station="410730", quantity="discharge", frequency="P1D", statistic="mean")
     result = rr.fetch(selection, start="2026-09-01", end="2026-09-10", cache="bypass", on_issue="ignore")
 
     assert result.data.is_empty()
@@ -295,7 +295,7 @@ def test_public_recorded_camels_aus_v2_cross_check_09hr_matches_24hr_does_not(
             return _dispatch(request)
 
     monkeypatch.setattr(discovery, "HttpClient", _Replay)
-    selection = rr.find(provider="au_bom", station="401203", quantity="discharge", frequency="daily", statistic="mean")
+    selection = rr.find(provider="au_bom", station="401203", quantity="discharge", frequency="P1D", statistic="mean")
     result = rr.fetch(selection, start="2018-06-13", end="2018-06-17", cache="bypass", on_issue="ignore")
 
     camels_m3_per_s = 1177.2 * 1000 / 86400

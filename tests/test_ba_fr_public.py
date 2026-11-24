@@ -13,8 +13,8 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 PHYSICAL_FILTERS = {
     "stage_reported": {"quantity": "stage"},
     "water_temperature_reported": {"quantity": "temperature"},
-    "discharge_daily_mean": {"quantity": "discharge", "frequency": "daily", "statistic": "mean"},
-    "discharge_daily_max": {"quantity": "discharge", "frequency": "daily", "statistic": "max"},
+    "discharge_daily_mean": {"quantity": "discharge", "frequency": "P1D", "statistic": "mean"},
+    "discharge_daily_max": {"quantity": "discharge", "frequency": "P1D", "statistic": "max"},
     "stage_instantaneous": {"quantity": "stage", "statistic": "instantaneous"},
     "discharge_instantaneous": {"quantity": "discharge", "statistic": "instantaneous"},
 }

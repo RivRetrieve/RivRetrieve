@@ -104,7 +104,7 @@ def test_public_malformed_daily_source_keeps_siblings_and_no_failed_coverage(
     retained_evidence_root, monkeypatch, tmp_path, policy, defect
 ):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    selection = rr.find(provider="cz_chmi", station=_STATION, frequency="daily")
+    selection = rr.find(provider="cz_chmi", station=_STATION, frequency="P1D")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport([retained_evidence_root / _DQ]))
     expected = rr.fetch(selection, start="2023-06-01", end="2023-06-02", cache="bypass", on_issue="ignore")
     mutated = []

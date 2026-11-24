@@ -81,7 +81,7 @@ def _register_no_nve(
         credential_headers=no_nve_declaration.credential_headers,
     )
     return rr.pick(
-        rr.find(provider="no_nve", station=_STATION, quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="no_nve", station=_STATION, quantity="discharge", frequency="P1D", statistic="mean"),
         variant="2",
     )
 

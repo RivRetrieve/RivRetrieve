@@ -61,7 +61,7 @@ def series_mappings(subsystem: str, resolution: str | None, variable: str, unit:
             published_id=field,
             quantity="discharge" if variable == "FLOW" else "stage",
             source_unit=unit,
-            frequency=resolution.lower() if resolution is not None else None,
+            frequency={"DAILY": "P1D", "HOURLY": "PT1H"}[resolution] if resolution is not None else None,
             normalized_unit="m3/s" if variable == "FLOW" else "m",
             vertical_reference="above_sea_level" if unit == "m.s.n.m" else None,
             evidence=evidence,

@@ -85,7 +85,7 @@ def test_map_empty_selection_has_no_markers(monkeypatch: pytest.MonkeyPatch) -> 
         provider="usgs_nwis",
         station="01646500",
         quantity="stage",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
 
@@ -126,7 +126,7 @@ def test_map_established_crs_uses_distinct_marker_colour_and_exact_popup(
         provider="usgs_nwis",
         station="01646500",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
 

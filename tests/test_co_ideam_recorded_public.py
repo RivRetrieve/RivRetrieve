@@ -286,7 +286,7 @@ def test_public_recorded_special_witnesses_hora_gaviria_regeneration_and_404_iso
     dst_replay = _Dst0024057080()
     monkeypatch.setattr(discovery, "HttpClient", lambda: dst_replay)
     sel_dst = rr.find(
-        provider="co_ideam", station="0024057080", quantity="discharge", frequency="daily", statistic="mean"
+        provider="co_ideam", station="0024057080", quantity="discharge", frequency="P1D", statistic="mean"
     )
     first_dst = rr.fetch(sel_dst, start="1992-08-01", end="1992-08-03", cache="reuse", on_issue="raise")
     assert dst_replay.calls == 1
@@ -316,9 +316,7 @@ def test_public_recorded_special_witnesses_hora_gaviria_regeneration_and_404_iso
 
     regen = _Regen0026177030()
     monkeypatch.setattr(discovery, "HttpClient", lambda: regen)
-    sel_regen = rr.find(
-        provider="co_ideam", station="0026177030", quantity="stage", frequency="daily", statistic="mean"
-    )
+    sel_regen = rr.find(provider="co_ideam", station="0026177030", quantity="stage", frequency="P1D", statistic="mean")
     nov06_bytes, _ = _load_capture(retained_evidence_root, "access", "s3-0026177030-nv-media-d")
     nov08_bytes, _ = _load_capture(retained_evidence_root, "retrieval", "s3-0026177030-nv-media-d-20261108")
     exp_nov06 = _decode_s3_csv_slice(

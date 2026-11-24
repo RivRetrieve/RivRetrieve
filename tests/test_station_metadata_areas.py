@@ -69,7 +69,7 @@ SOURCE_FIELDS = {
 
 
 def test_canadian_example_and_product_deduplication() -> None:
-    gauges = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean")
+    gauges = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="P1D", statistic="mean")
     gauge = rr.pick(gauges, station="02GA010")
     expected = pl.DataFrame(
         [
@@ -365,7 +365,7 @@ def test_station_metadata_does_not_require_numeric_source_unit_admission(registe
 def test_station_metadata_is_independent_of_retained_map_coordinates() -> None:
     from dataclasses import replace
 
-    selected = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean")
+    selected = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="P1D", statistic="mean")
     expected = _areas(selected)
     assert expected.height == 2
     summary = rr.metadata(selected)

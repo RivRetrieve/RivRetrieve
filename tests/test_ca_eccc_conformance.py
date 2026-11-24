@@ -19,7 +19,7 @@ def test_catalogue_and_compiler_share_station_independent_publisher_facts():
         assert description.identity.published_id is None
         facts = description.facts[0]
         assert facts.source_unit.value == unit
-        assert facts.frequency.value == "daily"
+        assert facts.frequency.value == "P1D"
         assert facts.statistic.value == "mean"
         assert "HYDAT_Definition_EN.pdf" in facts.quantity.evidence[0]
         for fact in (facts.day_definition, facts.time_zone, facts.vertical_reference, facts.vertical_datum):
@@ -47,7 +47,7 @@ def test_generated_products_use_authoritative_hydat_table_coordinates():
 def test_public_daily_mean_filter_preserves_established_interval_support():
     import rivretrieve as rr
 
-    broad = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean")
+    broad = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="P1D", statistic="mean")
     interval = rr.pick(broad, temporal_support="interval", on_issue="ignore")
     assert interval.series == broad.series
     assert broad.series
