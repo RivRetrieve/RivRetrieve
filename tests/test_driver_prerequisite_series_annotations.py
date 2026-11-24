@@ -77,7 +77,7 @@ def _fact() -> PhysicalFacts:
         quantity=known("stage", "test"),
         source_unit=known("m", "test"),
         normalized_unit="m",
-        frequency=known("instantaneous", "test"),
+        frequency=known("PT15M", "test"),
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
         label_time=None,
     )

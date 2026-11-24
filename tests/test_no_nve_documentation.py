@@ -36,7 +36,7 @@ def test_norway_page_examples_match_recorded_responses(retained_evidence_root, m
         assert output.getvalue() == expected, index
     candidates = rr.series(namespace["other_station"])
     assert candidates.select("station_id", "quantity", "variant", "frequency", "statistic").sort("variant").rows() == [
-        ("109.42.0", "discharge", variant, "daily", "mean") for variant in ("1", "2", "3")
+        ("109.42.0", "discharge", variant, "P1D", "mean") for variant in ("1", "2", "3")
     ]
     result = namespace["result"]
     assert result.data["value"].null_count() == 0
@@ -51,6 +51,6 @@ def test_norway_page_catalogue_counts_and_index():
     assert len(selection.locations) == 4902
     assert rr.series(selection)["station_id"].n_unique() == 3804
     for quantity, expected in (("discharge", 1620), ("stage", 2790), ("temperature", 1153)):
-        daily = rr.find(provider="no_nve", quantity=quantity, frequency="daily", statistic="mean")
+        daily = rr.find(provider="no_nve", quantity=quantity, frequency="P1D", statistic="mean")
         assert rr.series(daily)["station_id"].n_unique() == expected
     assert "providers/no_nve.md" in (ROOT / "docs/README.md").read_text()

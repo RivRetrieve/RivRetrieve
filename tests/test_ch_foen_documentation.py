@@ -53,7 +53,7 @@ def test_swiss_page_selection_and_discovery_are_offline(monkeypatch, tmp_path):
     exec(compile(blocks[1], "ch_foen.md:discovery", "exec"), namespace)
     series = namespace["rr"].series(namespace["daily"])
     assert series.select("station_id", "variant", "quantity", "frequency", "statistic").rows() == [
-        ("2018", "TagMittel", "discharge", "daily", "mean")
+        ("2018", "TagMittel", "discharge", "P1D", "mean")
     ]
     assert not namespace["candidates"].is_empty()
     assert not namespace["metadata"].is_empty()

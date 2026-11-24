@@ -24,7 +24,7 @@ selection = rr.find(
     provider="br_ana",
     station="15400000",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 consistido = rr.pick(selection, variant="consistido")
@@ -129,7 +129,7 @@ ANA's API manual documents the telemetry fields' names, units and measurement
 timestamps, but not how often they are sampled or whether each value is a spot
 reading or an average. RivRetrieve therefore leaves `frequency` and `statistic`
 unknown for these fields. Filters match only known values, so adding
-`frequency="daily"` or `statistic="instantaneous"` to `rr.find()` excludes the telemetry series.
+`frequency="P1D"` or `statistic="instantaneous"` to `rr.find()` excludes the telemetry series.
 Select them by `variant` instead:
 
 ```python

@@ -17,7 +17,7 @@ def test_daily_discharge_discovery_includes_both_ana_consistency_series(monkeypa
         raise AssertionError("offline discovery must not acquire observations")
 
     monkeypatch.setattr(discovery, "HttpClient", forbidden_transport)
-    selected = rr.find(provider="br_ana", station="15400000", quantity="discharge", frequency="daily", statistic="mean")
+    selected = rr.find(provider="br_ana", station="15400000", quantity="discharge", frequency="P1D", statistic="mean")
     inspected = rr.series(selected)
     assert set(inspected["variant"].to_list()) == {"bruto", "consistido"}
     assert inspected["series_id"].n_unique() == 2
@@ -28,15 +28,13 @@ def test_daily_discharge_discovery_includes_both_ana_consistency_series(monkeypa
 
 def test_physical_find_and_pick_have_identical_matching_series() -> None:
     broad = rr.find(provider="br_ana", station="15400000", quantity="discharge")
-    narrowed = rr.pick(broad, frequency="daily", statistic="mean")
-    direct = rr.find(provider="br_ana", station="15400000", quantity="discharge", frequency="daily", statistic="mean")
+    narrowed = rr.pick(broad, frequency="P1D", statistic="mean")
+    direct = rr.find(provider="br_ana", station="15400000", quantity="discharge", frequency="P1D", statistic="mean")
     pl_testing.assert_frame_equal(rr.series(narrowed), rr.series(direct))
 
 
 def test_selection_bundle_preserves_scope_and_explicit_restriction() -> None:
-    selection = rr.find(
-        provider="br_ana", station="15400000", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="br_ana", station="15400000", quantity="discharge", frequency="P1D", statistic="mean")
     narrowed = rr.pick(selection, variant="consistido")
     restored = rr.from_bundle(rr.to_bundle(narrowed))
     assert restored.scope == narrowed.scope
@@ -49,9 +47,7 @@ def test_selection_bundle_preserves_scope_and_explicit_restriction() -> None:
 def test_disjoint_pick_is_named_empty_not_widened_scope() -> None:
     from rivretrieve._internal.source_series import ScopeState
 
-    selection = rr.find(
-        provider="br_ana", station="15400000", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="br_ana", station="15400000", quantity="discharge", frequency="P1D", statistic="mean")
     narrowed = rr.pick(rr.pick(selection, variant="bruto"), variant="consistido", on_issue="ignore")
     assert narrowed.scope.state is ScopeState.EMPTY
     assert rr.series(narrowed).is_empty()
@@ -63,7 +59,7 @@ def test_disjoint_pick_is_named_empty_not_widened_scope() -> None:
 
 def test_explicit_unresolved_identity_survives_round_trip_without_sibling_fallback() -> None:
     selection = rr.find(
-        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     unresolved = rr.pick(selection, variant="response-owned-unseen-method", on_issue="ignore")
     assert unresolved.series == ()
@@ -83,9 +79,7 @@ def test_established_no_match_uses_issue_policy_without_fallback(policy: str) ->
     from rivretrieve._internal.source_series import InventoryCompleteness, InventorySnapshot
 
     # This authored scope-completeness assertion tests policy mechanics, not ANA inventory evidence.
-    selection = rr.find(
-        provider="br_ana", station="15400000", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="br_ana", station="15400000", quantity="discharge", frequency="P1D", statistic="mean")
     complete = InventorySnapshot(
         snapshot_id="test-complete-scope",
         scope=selection.scope,
@@ -127,7 +121,7 @@ def test_complete_inventory_remains_complete_for_more_precise_physical_restricti
         evidence=("authored-contract",),
     )
     complete = replace(broad, inventories=(inventory,))
-    selected = rr.pick(complete, frequency="daily", statistic="mean", variant="not-published", on_issue="ignore")
+    selected = rr.pick(complete, frequency="P1D", statistic="mean", variant="not-published", on_issue="ignore")
     assert selected.series == ()
     assert selected.issues[-1].code == "selection.no_match"
 
@@ -135,9 +129,7 @@ def test_complete_inventory_remains_complete_for_more_precise_physical_restricti
 def test_imported_selection_narrows_its_own_evidence_without_reloading_packaged_catalogues(monkeypatch) -> None:
     from rivretrieve._internal.registry import _registry
 
-    selection = rr.find(
-        provider="br_ana", station="15400000", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="br_ana", station="15400000", quantity="discharge", frequency="P1D", statistic="mean")
     restored = rr.from_bundle(rr.to_bundle(selection))
     _registry.clear()
     calls = []
@@ -198,7 +190,7 @@ def test_explicit_catalogue_identity_routes_only_its_source_access(
     monkeypatch.chdir(tmp_path)
     transport = _authenticated_replay(retained_evidence_root, monkeypatch, "stage_daily_mean_consistido")
     selected = rr.pick(
-        rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean"),
+        rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="P1D", statistic="mean"),
         variant="consistido",
     )
     result = rr.fetch(selected, start="2020-01-10", end="2020-01-20", on_issue="ignore")
@@ -208,12 +200,12 @@ def test_explicit_catalogue_identity_routes_only_its_source_access(
 
 def test_nve_daily_resolution_does_not_make_instantaneous_version_a_mean() -> None:
     # Real packaged source inventory: parameter1000 at station1.46.0 has daily Mean v1 and Instantaneous v2.
-    daily = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="daily")
+    daily = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="P1D")
     inspected = rr.series(daily)
     assert set(inspected.select("published_id", "statistic").iter_rows()) == {("1", "mean"), ("2", "instantaneous")}
     mean = rr.pick(daily, statistic="mean")
     assert rr.series(mean)["published_id"].to_list() == ["1"]
-    direct = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="daily", statistic="mean")
+    direct = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="P1D", statistic="mean")
     pl_testing.assert_frame_equal(rr.series(mean), rr.series(direct))
 
 
@@ -300,10 +292,10 @@ def test_inspection_orders_descriptors_without_sorting_a_wide_materialized_frame
     ("field", "value", "choices"),
     [
         ("quantity", "water temperature", ("discharge", "stage", "temperature")),
-        ("frequency", "dayly", ("10min", "hourly", "daily", "monthly", "yearly")),
+        ("frequency", "dayly", ("PT15M", "PT1H", "P1D", "P1W", "P1M", "P1Y")),
         ("statistic", "average", ("mean", "min", "max", "instantaneous")),
         ("quantity", "Discharge", ("discharge", "stage", "temperature")),
-        ("frequency", "annual", ("10min", "hourly", "daily", "monthly", "yearly")),
+        ("frequency", "annual", ("PT15M", "PT1H", "P1D", "P1W", "P1M", "P1Y")),
         ("statistic", "unknown", ("mean", "min", "max", "instantaneous")),
     ],
 )
@@ -343,7 +335,7 @@ def test_valid_empty_fetch_reports_combined_physical_request(kind, monkeypatch, 
                 ),
             ),
         )
-    selected = rr.pick(selected, frequency="daily", statistic="mean")
+    selected = rr.pick(selected, frequency="P1D", statistic="mean")
     if kind == "contradictory":
         selected = rr.pick(selected, quantity="discharge")
     expected = "unresolved_inventory" if kind == "unresolved" else "no_match"
@@ -361,11 +353,11 @@ def test_result_pick_rejects_unsupported_physical_filters(monkeypatch, tmp_path)
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     _official_replay(monkeypatch)
-    selected = rr.find(provider="ch_foen", station="2018", quantity="discharge", frequency="10min")
+    selected = rr.find(provider="ch_foen", station="2018", quantity="discharge", frequency="PT10M")
     result = rr.fetch(selected, start="2025-01-01", end="2025-01-01", on_issue="ignore")
     for field, value, supported in (
         ("quantity", "water temperature", "temperature"),
-        ("frequency", "dayly", "daily"),
+        ("frequency", "dayly", "P1D"),
         ("statistic", "average", "mean"),
     ):
         with pytest.raises(ValueError) as error:
@@ -373,14 +365,14 @@ def test_result_pick_rejects_unsupported_physical_filters(monkeypatch, tmp_path)
         assert field in str(error.value)
         assert repr(value) in str(error.value)
         assert repr(supported) in str(error.value)
-    assert not rr.pick(result, frequency="10min", statistic="mean").data.is_empty()
+    assert not rr.pick(result, frequency="PT10M", statistic="mean").data.is_empty()
 
 
 @pytest.mark.parametrize(
     "field, values",
     [
         ("quantity", ("discharge", "stage", "temperature")),
-        ("frequency", ("10min", "hourly", "daily", "monthly", "yearly")),
+        ("frequency", ("PT10M", "PT1H", "PT4H", "P1D", "P1W", "P1M", "P1Y")),
         ("statistic", ("mean", "min", "max", "instantaneous")),
     ],
 )
@@ -396,22 +388,24 @@ def test_supported_queries_are_library_wide(field, values) -> None:
 def test_query_validation_does_not_narrow_preserved_source_facts() -> None:
     from dataclasses import replace
 
-    from rivretrieve._internal.source_series import ClippingAxis, EvidenceFact, known
+    from rivretrieve._internal.source_series import ClippingAxis, known
 
     selected = rr.find(provider="br_ana", station="15400000", quantity="discharge")
     definition = selected.known_series[0]
     facts = definition.facts[0].model_copy(
         update={
-            "frequency": known("publisher-specific-cadence", "authored evidence"),
+            "frequency": known("P2D", "authored evidence"),
             "clipping_axis": ClippingAxis.SOURCE_TIMESTAMP,
             "label_time": None,
-            "statistic": EvidenceFact(),
+            "statistic": known("publisher-specific-statistic", "authored evidence"),
         }
     )
     definition = definition.model_copy(update={"facts": (facts,)})
     selected = replace(selected, known_series=(definition,), inventories=())
     restored = rr.from_bundle(rr.to_bundle(selected))
-    assert restored.known_series[0].facts[0].frequency.value == "publisher-specific-cadence"
-    assert rr.pick(restored, frequency="daily").series == ()
+    assert restored.known_series[0].facts[0].frequency.value == "P2D"
+    assert restored.known_series[0].facts[0].statistic.value == "publisher-specific-statistic"
+    assert rr.pick(restored, frequency="P1D").series == ()
+    assert rr.pick(restored, frequency="P2D").series == (definition,)
     assert rr.pick(restored, statistic="mean").series == ()
     assert rr.pick(restored, quantity="discharge").series == (definition,)

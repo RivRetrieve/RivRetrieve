@@ -332,7 +332,7 @@ def issue_scope(monkeypatch, tmp_path, outcome, retained_evidence_root: Path):
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.chdir(tmp_path)
-    daily_gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean")
+    daily_gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="P1D", statistic="mean")
     return {"rr": rr, "chosen_gauges": rr.pick(daily_gauges, station=["07374000"])}, replay
 
 

@@ -230,7 +230,7 @@ def test_current_bundle_refuses_retired_publication_service_before_values(
     with ZipFile(BytesIO(content)) as archive:
         members = {name: archive.read(name) for name in archive.namelist()}
     manifest = json.loads(members["manifest.json"])
-    assert manifest["version"] == 4
+    assert manifest["version"] == 5
     assert manifest["publication_service"] == "hubeau"
     if service is None:
         del manifest["publication_service"]

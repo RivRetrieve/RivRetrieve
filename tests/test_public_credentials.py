@@ -333,7 +333,7 @@ def test_import_and_open_provider_discovery_need_no_credentials(tmp_path: Path) 
             "-c",
             (
                 "import rivretrieve as rr; "
-                "selection = rr.find(provider='usgs_nwis', quantity='discharge', frequency='daily', statistic='mean'); "
+                "selection = rr.find(provider='usgs_nwis', quantity='discharge', frequency='P1D', statistic='mean'); "
                 "assert selection.series"
             ),
         ],

@@ -193,7 +193,7 @@ def test_context_change_falls_back_to_provider_parse(mutation: str) -> None:
                 quantity=known("stage", "catalogue"),
                 source_unit=known("cm", "catalogue"),
                 normalized_unit="cm",
-                frequency=known("instantaneous", "catalogue"),
+                frequency=known("PT15M", "catalogue"),
             ),
         ),
     )

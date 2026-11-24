@@ -23,7 +23,7 @@ selection = rr.find(
     provider="fr_hubeau",
     station="Y251002001",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 

@@ -15,13 +15,13 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 @pytest.mark.parametrize("provider,station", [("no_nve", "1.200.0"), ("br_ana", "15400000")])
 def test_raw_measurement_access_does_not_match_irregular_frequency(provider, station):
-    from rivretrieve._internal.source_series import PhysicalPredicate, SeriesScope
+    from rivretrieve._internal.source_series import PhysicalPredicate
 
     selected = rr.find(provider=provider, station=station, quantity="discharge")
-    # Inspect source facts independently of the supported public query vocabulary.
-    irregular = SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="irregular"),))
     assert selected.series
-    assert not any(irregular.matches(item) for item in selected.series)
+    assert not any(fact.frequency.value == "irregular" for item in selected.series for fact in item.facts)
+    with pytest.raises(ValueError, match="Unsupported frequency 'irregular'"):
+        PhysicalPredicate(field="frequency", value="irregular")
     with pytest.raises(ValueError, match="Unsupported frequency filter 'irregular'"):
         rr.pick(selected, frequency="irregular")
 
@@ -53,7 +53,7 @@ def test_nve_access_products_do_not_override_version_specific_methods():
     assert products["statistic"].unique().to_list() == ["unknown"]
     assert products["period_type"].unique().to_list() == ["unknown"]
     assert products["period_anchor"].unique().to_list() == ["unknown"]
-    broad = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="daily")
+    broad = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="P1D")
     assert {item.facts[0].statistic.value for item in broad.series} == {"mean", "instantaneous"}
 
 

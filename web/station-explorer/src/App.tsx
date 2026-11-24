@@ -3,6 +3,7 @@ import { expandCatalogue } from "./catalogue";
 import {
   addStations,
   dateErrors,
+  frequencyError,
   type BrowseFilters,
   type RequestSettings,
   filterStations,
@@ -81,6 +82,7 @@ export function App() {
   const [inspected, setInspected] = useState<Station | null>(null);
   const [dates, setDates] = useState({ start: "", end: "" });
   const dateFeedback = dateErrors(dates);
+  const freqFeedback = frequencyError(settings.frequency);
   const [copyStatus, setCopyStatus] = useState("");
   const [selectionPage, setSelectionPage] = useState(0);
   const [tab, setTab] = useState<"filtering" | "selection" | "python">(
@@ -180,29 +182,42 @@ export function App() {
       );
     }
   }
-  const control = (field: FilterField) => (
-    <label key={field}>
-      {label(field)}
-      <input
-        aria-label={label(field)}
-        value={filters[field] ?? ""}
-        list={
-          physicalControls.includes(field as (typeof physicalControls)[number])
-            ? `values-${field}`
-            : undefined
-        }
-        placeholder="Any (exact match)"
-        onChange={(event) => updateFilter(field, event.target.value)}
-      />
-      {options[field] && (
-        <datalist id={`values-${field}`}>
-          {options[field].map((value) => (
-            <option key={value} value={value!} />
-          ))}
-        </datalist>
-      )}
-    </label>
-  );
+  const control = (field: FilterField) => {
+    const fieldError = field === "frequency" ? freqFeedback : null;
+    const errorId = fieldError ? `${field}-error` : undefined;
+    return (
+      <label key={field}>
+        {label(field)}
+        <input
+          aria-label={label(field)}
+          aria-invalid={field === "frequency" ? !!fieldError : undefined}
+          aria-describedby={errorId}
+          value={filters[field] ?? ""}
+          list={
+            physicalControls.includes(field as (typeof physicalControls)[number])
+              ? `values-${field}`
+              : undefined
+          }
+          placeholder={
+            field === "frequency" ? "e.g. PT15M, PT1H, P1D" : "Any (exact match)"
+          }
+          onChange={(event) => updateFilter(field, event.target.value)}
+        />
+        {options[field] && (
+          <datalist id={`values-${field}`}>
+            {options[field].map((value) => (
+              <option key={value} value={value!} />
+            ))}
+          </datalist>
+        )}
+        {fieldError && (
+          <span id={errorId} className="warning">
+            {fieldError}
+          </span>
+        )}
+      </label>
+    );
+  };
   if (error)
     return (
       <main>

@@ -957,3 +957,53 @@ def test_store_and_bundle_v11_v12_v5_join_canonical_facts_and_refuse_retired_ver
             dst_zip.writestr(info.filename, data)
     with pytest.raises(ValueError, match="Unsupported source-series bundle format version"):
         rr.from_bundle(retired_bundle.getvalue())
+
+
+@pytest.mark.usefixtures("reuse_packaged_catalogues")
+def test_cross_provider_packaged_catalogues_canonical_and_round_trip() -> None:
+    import rivretrieve as rr
+    from rivretrieve._internal.frequency import Frequency
+    from tests._catalogue import catalogue_reader
+
+    providers = rr.providers()["provider_id"].to_list()
+    assert len(providers) == 19
+    aliases = {
+        "PT10M": "PT600S",
+        "PT1H": "PT60M",
+        "PT4H": "PT240M",
+        "P1W": "P7D",
+        "P1Y": "P12M",
+    }
+    disjoint = {
+        "P1D": "PT24H",
+        "P1W": "PT168H",
+        "P1Y": "P365D",
+    }
+    seen_frequencies: set[str] = set()
+    for provider_id in providers:
+        selection = rr.find(provider=provider_id)
+        series_df = rr.series(selection)
+        assert not series_df.is_empty()
+        frequencies = {value for value in series_df["frequency"].to_list() if value is not None}
+        for freq in frequencies:
+            assert str(Frequency.parse(freq)) == freq
+            found = rr.find(provider=provider_id, frequency=freq)
+            picked = rr.pick(selection, frequency=freq)
+            assert not rr.series(found).is_empty()
+            assert set(rr.series(found)["frequency"].to_list()) == {freq}
+            assert rr.series(found)["series_id"].to_list() == rr.series(picked)["series_id"].to_list()
+            if alias := aliases.get(freq):
+                assert rr.find(provider=provider_id, frequency=alias).series == found.series
+                assert rr.pick(selection, frequency=alias).series == picked.series
+            if cross := disjoint.get(freq):
+                assert freq not in set(rr.series(rr.pick(selection, frequency=cross))["frequency"].to_list())
+            seen_frequencies.add(freq)
+
+    za_reader = catalogue_reader("za_dws")
+    za_freqs = {val for val in za_reader.read_products().data["frequency"].to_list() if val != "unknown"}
+    for freq in za_freqs:
+        assert str(Frequency.parse(freq)) == freq
+    assert not za_reader.read_products(frequency="P1D").data.is_empty()
+    assert za_reader.read_products(frequency="PT24H").data.is_empty()
+    seen_frequencies |= za_freqs
+    assert {"PT10M", "PT1H", "PT4H", "P1D", "P1W", "P1M", "P1Y"} <= seen_frequencies
