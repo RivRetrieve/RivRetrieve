@@ -104,6 +104,7 @@ nav:
   - Station Map: map.md
   - Providers:
       - Argentina (INA): providers/ar_ina.md
+      - Australia (BoM): providers/au_bom.md
       - Austria (eHYD): providers/at_ehyd.md
       - Bosnia and Herzegovina (AVP Sava): providers/ba_fhmzbih.md
       - Brazil (ANA): providers/br_ana.md
@@ -115,7 +116,6 @@ nav:
       - Finland (Syke): providers/fi_syke.md
       - France (Hub'Eau): providers/fr_hubeau.md
       - France (HydroPortail): providers/fr_hydroportail.md
-      - Japan (MLIT): providers/jp_mlit.md
       - Lithuania (LHMT): providers/lt_lhmt.md
       - Norway (NVE): providers/no_nve.md
       - Peru (SENAMHI): providers/pe_senamhi.md

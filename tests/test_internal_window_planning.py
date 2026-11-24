@@ -69,14 +69,14 @@ def _pairs(windows: tuple[engine.RenderedWindow, ...]) -> tuple[tuple[str, str |
             (("01/01/2021", "31/12/2021"), ("01/01/2022", "01/01/2022")),
         ),
         (
-            "jp_mlit_hourly",
+            "year_month_date",
             datetime(2019, 12, 20),
             datetime(2020, 1, 10),
             _declaration("year-month", engine.WindowRenderingVocabulary.DATE),
             (("2019-12-01", "2019-12-31"), ("2020-01-01", "2020-01-31")),
         ),
         (
-            "jp_mlit_daily",
+            "year_date",
             datetime(2019, 12, 20),
             datetime(2020, 1, 10),
             _declaration("year", engine.WindowRenderingVocabulary.DATE),
@@ -547,3 +547,110 @@ def test_noncalendar_year_requires_annual_date_rendering():
                 engine.StopConvention.INCLUSIVE,
                 year_start_month=9,
             )
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "size", "expected"),
+    [
+        (datetime(2024, 1, 10), datetime(2024, 1, 20), 12, (("2024-01-01", "2024-01-31"),)),
+        (datetime(2024, 1, 30), datetime(2024, 2, 2), 12, (("2024-01-01", "2024-02-29"),)),
+        (datetime(2020, 1, 1), datetime(2020, 12, 31), 12, (("2020-01-01", "2020-12-31"),)),
+        (
+            datetime(2025, 11, 20),
+            datetime(2026, 11, 20),
+            12,
+            (("2025-11-01", "2026-10-31"), ("2026-11-01", "2026-11-30")),
+        ),
+        (
+            datetime(2022, 1, 3),
+            datetime(2024, 3, 15),
+            12,
+            (
+                ("2022-01-01", "2022-12-31"),
+                ("2023-01-01", "2023-12-31"),
+                ("2024-01-01", "2024-03-31"),
+            ),
+        ),
+        (
+            datetime(2024, 1, 15),
+            datetime(2024, 6, 1),
+            2,
+            (
+                ("2024-01-01", "2024-02-29"),
+                ("2024-03-01", "2024-04-30"),
+                ("2024-05-01", "2024-06-30"),
+            ),
+        ),
+        (datetime(9999, 11, 15), datetime(9999, 12, 31), 12, (("9999-11-01", "9999-12-31"),)),
+    ],
+)
+def test_capped_month_span_aligns_whole_months_within_cap(
+    start: datetime,
+    end: datetime,
+    size: int,
+    expected: tuple[tuple[str, str], ...],
+) -> None:
+    declaration = _declaration("capped-month-span", engine.WindowRenderingVocabulary.DATE, size=size)
+    windows = window_planning.plan_windows(_fetch(start, end), declaration)
+    assert _pairs(windows) == expected
+    assert windows[0].bounds is not None and windows[-1].bounds is not None
+    assert datetime.fromisoformat(windows[0].bounds.start.isoformat()) <= start
+    assert datetime.fromisoformat(windows[-1].bounds.end.isoformat()) >= end
+    for window in windows:
+        assert window.stop is not None and window.bounds is not None
+        left = datetime.fromisoformat(window.start)
+        right = datetime.fromisoformat(window.stop)
+        assert left.day == 1
+        assert window.bounds == _fetch(left, datetime(right.year, right.month, right.day, 23, 59, 59, 999999))
+        if size == 12:
+            assert (right - left).days + 1 <= 366
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        _declaration("capped-month-span", engine.WindowRenderingVocabulary.DATE),
+        _declaration("capped-month-span", engine.WindowRenderingVocabulary.YEAR_MONTH, size=12),
+        _declaration("capped-month-span", engine.WindowRenderingVocabulary.ISO_INSTANT, size=12),
+        _declaration("capped-month-span", engine.WindowRenderingVocabulary.DATE, engine.StopConvention.EXCLUSIVE, 12),
+    ],
+)
+def test_capped_month_span_refuses_unsupported_declarations(declaration: engine.WindowDeclaration) -> None:
+    with pytest.raises(ValueError, match="requires"):
+        window_planning.plan_windows(_fetch(datetime(2024, 1, 1), datetime(2024, 1, 2)), declaration)
+
+
+def test_window_declaration_fetch_padding_validation() -> None:
+    from datetime import timedelta
+
+    default = _declaration("date", engine.WindowRenderingVocabulary.DATE)
+    assert default.fetch_padding is None
+    zero = engine.WindowDeclaration(
+        engine.WindowGranularity("date"),
+        engine.WindowRenderingVocabulary.DATE,
+        engine.StopConvention.INCLUSIVE,
+        fetch_padding=timedelta(0),
+    )
+    assert zero.fetch_padding == timedelta(0)
+    positive = engine.WindowDeclaration(
+        engine.WindowGranularity("date"),
+        engine.WindowRenderingVocabulary.DATE,
+        engine.StopConvention.INCLUSIVE,
+        fetch_padding=timedelta(days=1),
+    )
+    assert positive.fetch_padding == timedelta(days=1)
+    for bad in (0, 1, True, "0"):
+        with pytest.raises(TypeError, match="^window fetch padding must be a timedelta or None$"):
+            engine.WindowDeclaration(
+                engine.WindowGranularity("date"),
+                engine.WindowRenderingVocabulary.DATE,
+                engine.StopConvention.INCLUSIVE,
+                fetch_padding=bad,  # type: ignore[arg-type]
+            )
+    with pytest.raises(ValueError, match="^window fetch padding must be non-negative$"):
+        engine.WindowDeclaration(
+            engine.WindowGranularity("date"),
+            engine.WindowRenderingVocabulary.DATE,
+            engine.StopConvention.INCLUSIVE,
+            fetch_padding=timedelta(microseconds=-1),
+        )

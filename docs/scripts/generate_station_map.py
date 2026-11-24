@@ -20,7 +20,6 @@ PROVIDER_METADATA = {
     "fr_hydroportail": {"name": "HydroPortail", "country": "France", "color": "#8c564b"},
     "no_nve": {"name": "NVE", "country": "Norway", "color": "#e377c2"},
     "pl_imgw": {"name": "IMGW", "country": "Poland", "color": "#7f7f7f"},
-    "jp_mlit": {"name": "MLIT", "country": "Japan", "color": "#bcbd22"},
     "cz_chmi": {"name": "CHMI", "country": "Czechia", "color": "#17becf"},
     "th_thaiwater": {"name": "ThaiWater", "country": "Thailand", "color": "#ff7f0e"},
     "ch_foen": {"name": "FOEN", "country": "Switzerland", "color": "#3366cc"},

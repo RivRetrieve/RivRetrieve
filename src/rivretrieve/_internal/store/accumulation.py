@@ -192,12 +192,18 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
         inventories = _merge_records(
             previous.inventories if previous else (), update.inventories, "snapshot_id", move_reobserved=True
         )
-        accepted_keys = {
-            item.coverage.outcome_id: tuple(
-                dict.fromkeys(item.rows.select("facts_id", "time", "time_zone").iter_rows())
-            )
-            for item in update.replacements
-        }
+        observation_outcome_ids = {item.outcome_id for item in update.outcomes if item.coverage == "observations"}
+        accepted_keys = (
+            {
+                item.coverage.outcome_id: tuple(
+                    dict.fromkeys(item.rows.select("facts_id", "time", "time_zone").iter_rows())
+                )
+                for item in update.replacements
+                if item.coverage.outcome_id in observation_outcome_ids
+            }
+            if observation_outcome_ids
+            else {}
+        )
         durable_outcomes = tuple(
             item.model_copy(
                 update={

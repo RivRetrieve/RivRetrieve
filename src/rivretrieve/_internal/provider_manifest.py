@@ -3,6 +3,7 @@
 BUILTIN_PROVIDER_IDS = (
     "ar_ina",
     "at_ehyd",
+    "au_bom",
     "ba_fhmzbih",
     "br_ana",
     "ca_eccc",
@@ -14,7 +15,6 @@ BUILTIN_PROVIDER_IDS = (
     "fi_syke",
     "fr_hubeau",
     "fr_hydroportail",
-    "jp_mlit",
     "lt_lhmt",
     "no_nve",
     "pe_senamhi",

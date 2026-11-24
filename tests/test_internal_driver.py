@@ -1961,3 +1961,562 @@ def test_issue_context_marker_cannot_overwrite_publisher_context():
     with pytest.raises(FatalContractError, match="conflicts with storage-only context"):
         driver_module._issue_with_acquisition_references(original, ("authored-acquisition",))
     assert driver_module._public_issues((original,)) == (original,)
+
+
+@pytest.mark.parametrize(
+    ("fetch_padding", "expected_start", "expected_end", "expected_pairs"),
+    [
+        (
+            None,
+            datetime(2026, 10, 20),
+            datetime(2026, 11, 22),
+            (("2026-09-24", "2026-10-23"), ("2026-10-24", "2026-11-22")),
+        ),
+        (timedelta(0), datetime(2026, 10, 22), datetime(2026, 11, 20), (("2026-10-22", "2026-11-20"),)),
+    ],
+)
+def test_driver_honors_declaration_fetch_padding_override(
+    fetch_padding: timedelta | None,
+    expected_start: datetime,
+    expected_end: datetime,
+    expected_pairs: tuple[tuple[str, str], ...],
+) -> None:
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2026, 10, 22)),
+        WindowEndpoint.from_datetime(datetime(2026, 11, 20)),
+    )
+    request = _request(requested, ("station-1",))
+    seen_windows: list[tuple[FetchWindow, tuple[tuple[str, str | None], ...]]] = []
+    product = ProductId("level")
+    provider_config = ProviderConfig(
+        zone=ZoneValue("+00:00"),
+        products={
+            product: ProductConfig(
+                coordinates=SourceCoordinates({"parameter": "height"}),
+                unit=Unit.CM,
+                semantics=Instant(),
+            )
+        },
+    )
+    declarations = ProductWindowDeclarations(
+        {
+            product: WindowDeclaration(
+                WindowGranularity("fixed-backward-span"),
+                WindowRenderingVocabulary.DATE,
+                StopConvention.INCLUSIVE,
+                size=30,
+                fetch_padding=fetch_padding,
+            )
+        }
+    )
+
+    class _Provider:
+        config = provider_config
+        window_declarations = declarations
+
+        def fetch(self, stations, products, windows, window, config, transport, **_kwargs):
+            seen_windows.append((window, tuple((item.start, item.stop) for item in windows[product])))
+            return WithIssues(())
+
+        def parse(self, payload, config):
+            raise AssertionError("parse should not run without payloads")
+
+    driver_module.drive(
+        request,
+        _Provider(),
+        provenance=_provenance(request),
+        receipts=ReceiptMode.OMIT,
+    )
+    assert len(seen_windows) == 1
+    actual_window, actual_pairs = seen_windows[0]
+    assert actual_window.start == WindowEndpoint.from_datetime(expected_start)
+    assert actual_window.end == WindowEndpoint.from_datetime(expected_end)
+    assert actual_pairs == expected_pairs
+
+
+def test_require_canonical_rows_within_requested_is_independent_and_deduped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import rivretrieve._internal.conversion as conv_mod
+    import rivretrieve._internal.source_series as ss_mod
+
+    facts_cfs = PhysicalFacts(
+        facts_id="facts-cfs",
+        quantity=known("discharge", "test"),
+        source_unit=known("ft3/s", "test"),
+        normalized_unit="ft3/s",
+        frequency=known("instantaneous", "test"),
+        clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
+    )
+    facts_cms = PhysicalFacts(
+        facts_id="facts-cms",
+        quantity=known("discharge", "test"),
+        source_unit=known("m3/s", "test"),
+        normalized_unit="m3/s",
+        frequency=known("daily", "test"),
+        clipping_axis=ClippingAxis.CALENDAR_DATE,
+        label_time="00:00",
+    )
+    series = SourceSeries(
+        series_id="s-multi",
+        provider_id="throwaway",
+        station_id="station-1",
+        product_id="level",
+        identity=SourceIdentity(namespace="test", published_id="s-multi", origin="response", evidence=("test",)),
+        facts=(facts_cfs, facts_cms),
+    )
+    window = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2026, 1, 1, 8, 0)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 1, 16, 0)),
+    )
+
+    n_each = 50
+    rows = pl.DataFrame(
+        {
+            "time": [*([datetime(2026, 1, 1, 12, 0)] * n_each), *([datetime(2026, 1, 1, 0, 0)] * n_each)],
+            "time_zone": ["+00:00"] * (2 * n_each),
+            "station_id": ["station-1"] * (2 * n_each),
+            "product_id": ["level"] * (2 * n_each),
+            "series_id": ["s-multi"] * (2 * n_each),
+            "facts_id": [*["facts-cfs"] * n_each, *["facts-cms"] * n_each],
+            "quantity": ["discharge"] * (2 * n_each),
+            "source_unit": [*["ft3/s"] * n_each, *["m3/s"] * n_each],
+            "unit": ["m3/s"] * (2 * n_each),
+            "value": [float(i) for i in range(2 * n_each)],
+        },
+        schema=CanonicalRowsSchema.polars_schema,
+    )
+
+    counts = {"native_window": 0, "admission": 0}
+    orig_nw = conv_mod.native_window
+    orig_adm_conv = conv_mod.admission
+    orig_adm_ss = ss_mod.admission
+
+    def spy_nw(s, e, fact):
+        counts["native_window"] += 1
+        return orig_nw(s, e, fact)
+
+    def spy_adm_conv(fact):
+        counts["admission"] += 1
+        return orig_adm_conv(fact)
+
+    def spy_adm_ss(fact):
+        counts["admission"] += 1
+        return orig_adm_ss(fact)
+
+    with monkeypatch.context() as mp:
+        mp.setattr(conv_mod, "native_window", spy_nw)
+        mp.setattr(conv_mod, "admission", spy_adm_conv)
+        mp.setattr(ss_mod, "admission", spy_adm_ss)
+        driver_module._require_canonical_rows_within_requested(rows, (series,), window)
+
+    assert counts["native_window"] <= 2
+    assert counts["admission"] <= 4
+
+    # Independent boundary failures still raise even with zero rows or bad converted output
+    empty = pl.DataFrame(schema=CanonicalRowsSchema.polars_schema)
+    with pytest.raises(FatalContractError, match="Native series requires valid admitted physical facts"):
+        driver_module._require_canonical_rows_within_requested(
+            empty, (series.model_copy(update={"facts": ()}),), window
+        )
+    with pytest.raises(FatalContractError, match="outside the RequestedWindow physical axis"):
+        driver_module._require_canonical_rows_within_requested(
+            rows.with_columns(pl.lit(datetime(2026, 1, 2, 12, 0)).alias("time")),
+            (series,),
+            window,
+        )
+    with pytest.raises(FatalContractError, match="contradicts its admitted physical facts"):
+        driver_module._require_canonical_rows_within_requested(
+            rows.with_columns(pl.lit("ft3/s").alias("unit")),
+            (series,),
+            window,
+        )
+
+    # Even if drive's convert stage returns out-of-window rows, _require_canonical_rows_within_requested catches it
+    coords = SourceCoordinates({"parameter": "height"})
+    config = _config(coords)
+    request = _request(window, ("station-1",))
+    fetch_window = _make_fetch_window(window.start, window.end)
+    from datetime import UTC
+
+    payload = Payload(
+        source_coordinates=coords,
+        station_products=(("station-1", ProductId("level")),),
+        fetch_window=fetch_window,
+        content=b"[]",
+        origin=SourceCallOrigin(
+            url="https://example.invalid/obs",
+            request_parameters={},
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 2, 0, 0, tzinfo=UTC),
+            content_type="application/json",
+            source_path=UnknownOriginFact(),
+            query=UnknownOriginFact(),
+        ),
+        prerequisite_calls=(),
+    )
+
+    class _Provider:
+        def __init__(self) -> None:
+            self.config = config
+            self.window_declarations = _LEVEL_WINDOW_DECLARATIONS
+
+        def fetch(self, stations, products, rendered_windows, window_arg, config_arg, transport, **_kw):
+            return WithIssues((payload,))
+
+        def parse(self, received, config_arg):
+            native = pl.DataFrame(
+                {
+                    "station_id": ["station-1"],
+                    "product_id": ["level"],
+                    "time": [datetime(2026, 1, 1, 12, 0)],
+                    "value": [1.0],
+                    "time_zone": ["+00:00"],
+                    "series_id": ["s-multi"],
+                    "facts_id": ["facts-cms"],
+                    "source_unit": ["m3/s"],
+                },
+                schema=RowsSchema.polars_schema,
+            )
+            bad_series = SourceSeries(
+                series_id="s-multi",
+                provider_id="throwaway",
+                station_id="station-1",
+                product_id="level",
+                identity=series.identity,
+                facts=(facts_cms,),
+            )
+            return ParsedSeries(
+                rows=native.with_columns(pl.lit(datetime(2026, 1, 1, 0, 0)).alias("time")),
+                series=(bad_series,),
+                inventories=(),
+                outcomes=(
+                    RetrievalOutcome(
+                        outcome_id="o1",
+                        series_id="s-multi",
+                        station_id="station-1",
+                        product_id="level",
+                        window=SeriesWindow(start=datetime(2026, 1, 1), end=datetime(2026, 1, 2)),
+                        status=OutcomeStatus.SUCCESS,
+                        facts_ids=("facts-cms",),
+                    ),
+                ),
+            )
+
+    monkeypatch.setattr(
+        driver_module,
+        "convert",
+        lambda *a, **kw: WithIssues(rows.tail(1).with_columns(pl.lit(datetime(2026, 1, 2, 12, 0)).alias("time"))),
+    )
+    with pytest.raises(FatalContractError, match="outside the RequestedWindow physical axis"):
+        driver_module.drive(request, _Provider(), provenance=_provenance(request), receipts=ReceiptMode.OMIT)
+
+
+def test_drive_releases_payload_bodies_after_consumers_and_preserves_provenance_and_receipts() -> None:
+    import gc
+    import sys
+    from datetime import UTC
+
+    from rivretrieve._internal.transport import HttpMethod, RequestBodyShape, SecretCallTrace, TransportAttempt
+
+    requested = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2026, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 2, 23, 59, 59, 999999)),
+    )
+    products = (ProductId("flow"), ProductId("level"))
+    coords = SourceCoordinates({"parameter": "shared"})
+    config = ProviderConfig(
+        zone=ZoneValue("+00:00"),
+        products={
+            ProductId("flow"): ProductConfig(coordinates=coords, unit=Unit.M3_S, semantics=Instant()),
+            ProductId("level"): ProductConfig(coordinates=coords, unit=Unit.M, semantics=Instant()),
+        },
+    )
+    declarations = ProductWindowDeclarations(
+        {
+            p: WindowDeclaration(WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE)
+            for p in products
+        }
+    )
+    fetch_window = _make_fetch_window(requested.start, requested.end)
+    prereq = SecretCallTrace(
+        method=HttpMethod.POST,
+        url="https://example.invalid/token",
+        ordinary_headers={},
+        request_parameters=None,
+        request_body_shape=RequestBodyShape.NONE,
+        credential_header_names=("Authorization",),
+        status_code=200,
+        retrieved_at=datetime(2026, 1, 3, 9, 0, tzinfo=UTC),
+        content_type="application/json",
+    )
+    attempt = TransportAttempt(
+        attempt_id="attempt-1",
+        url="https://example.invalid/page1",
+        request_parameters={"page": "1"},
+        retrieved_at=datetime(2026, 1, 3, 9, 1, tzinfo=UTC),
+        status_code=200,
+        content_type="application/json",
+    )
+
+    def _origin(page: str, retrieved: datetime) -> SourceCallOrigin:
+        return SourceCallOrigin(
+            url=f"https://example.invalid/{page}",
+            request_parameters={"page": page},
+            status_code=200,
+            retrieved_at=retrieved,
+            content_type="application/json",
+            source_path=UnknownOriginFact(),
+            query=UnknownOriginFact(),
+        )
+
+    # Fresh heap-allocated bytes (distinct id, not interned)
+    body1 = b"shared-page1-" + b"a" * 65536
+    body2 = b"flow-only-page2-" + b"b" * 65536
+    base1 = sys.getrefcount(body1)
+    base2 = sys.getrefcount(body2)
+    observed: list[tuple[str, bool, int]] = []
+
+    class _SharedProvider:
+        shared_acquisition_products = (frozenset(products),)
+
+        def __init__(self) -> None:
+            self.config = config
+            self.window_declarations = declarations
+
+        def fetch(self, stations, prod_arg, rendered_windows, window_arg, config_arg, transport, **_kw):
+            p1 = Payload(
+                source_coordinates=coords,
+                station_products=(("station-1", ProductId("flow")), ("station-1", ProductId("level"))),
+                fetch_window=fetch_window,
+                content=body1,
+                origin=_origin("1", datetime(2026, 1, 3, 9, 1, tzinfo=UTC)),
+                prerequisite_calls=(prereq,),
+                attempt_traces=(attempt,),
+                acquisition_id="acq-page-1",
+            )
+            p2 = Payload(
+                source_coordinates=coords,
+                station_products=(("station-1", ProductId("flow")),),
+                fetch_window=fetch_window,
+                content=body2,
+                origin=_origin("2", datetime(2026, 1, 3, 9, 2, tzinfo=UTC)),
+                prerequisite_calls=(),
+                acquisition_id="acq-page-2",
+                prerequisite_acquisition_ids=("acq-page-1",),
+            )
+            return WithIssues((p1, p2))
+
+        def parse(self, payload: Payload, config_arg: ProviderConfig) -> ParsedSeries:
+            gc.collect()
+            body1_held = any(isinstance(r, (Payload, ReceiptEntry)) for r in gc.get_referrers(body1))
+            observed.append(
+                (f"{payload.acquisition_id}:{payload.station_products[0][1]}", body1_held, sys.getrefcount(body1))
+            )
+            station, product = payload.station_products[0]
+            ts = datetime(2026, 1, 1, 12, 0) if payload.acquisition_id == "acq-page-1" else datetime(2026, 1, 2, 12, 0)
+            unit_str = config_arg.products[product].unit.value
+            qty = "discharge" if product == ProductId("flow") else "stage"
+            fact = PhysicalFacts(
+                facts_id=f"{station}:{product}:facts",
+                quantity=known(qty, "test"),
+                source_unit=known(unit_str, "test"),
+                normalized_unit=unit_str,
+                frequency=known("instantaneous", "test"),
+            )
+            s_def = SourceSeries(
+                series_id=f"{station}:{product}",
+                provider_id="lt_lhmt",
+                station_id=station,
+                product_id=str(product),
+                identity=SourceIdentity(
+                    namespace="test", published_id=f"{station}:{product}", origin="response", evidence=("test",)
+                ),
+                facts=(fact,),
+            )
+            row_df = pl.DataFrame(
+                {
+                    "station_id": [station],
+                    "product_id": [str(product)],
+                    "time": [ts],
+                    "value": [1.5],
+                    "time_zone": ["+00:00"],
+                    "series_id": [s_def.series_id],
+                    "facts_id": [fact.facts_id],
+                    "source_unit": [unit_str],
+                },
+                schema=RowsSchema.polars_schema,
+            )
+            return ParsedSeries(
+                rows=row_df,
+                series=(s_def,),
+                inventories=(),
+                outcomes=(
+                    RetrievalOutcome(
+                        outcome_id=f"{payload.acquisition_id}:{product}",
+                        series_id=s_def.series_id,
+                        station_id=station,
+                        product_id=str(product),
+                        window=SeriesWindow(
+                            start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+                            end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+                        ),
+                        status=OutcomeStatus.SUCCESS,
+                        facts_ids=(fact.facts_id,),
+                    ),
+                ),
+            )
+
+    request = ObservationRequest(ProviderId("lt_lhmt"), ("station-1",), products, requested)
+    omitted = driver_module.drive(
+        request,
+        _SharedProvider(),
+        provenance=ObservationProvenance(source="test", provider_id=ProviderId("lt_lhmt")),
+        receipts=ReceiptMode.OMIT,
+        cache="bypass",
+    )
+    gc.collect()
+    # consumer 1 (flow on page1) sees page1 alive; page2 starts BEFORE level consumer finishes?
+    # Note loop order is flow (page1, page2) -> level (page1), so consumer 2 runs for level!
+    # Therefore body1 must remain alive through flow(page2) until level(page1) finishes,
+    # and once drive returns (and zero consumers remain), body1 & body2 must have NO Payload/ReceiptEntry refs!
+    assert sys.getrefcount(body1) == base1
+    assert sys.getrefcount(body2) == base2
+    assert not any(isinstance(r, (Payload, ReceiptEntry)) for r in gc.get_referrers(body1))
+    assert not any(isinstance(r, (Payload, ReceiptEntry)) for r in gc.get_referrers(body2))
+    assert omitted.receipts.entries == ()
+    assert len(observed) == 3
+    assert observed[0][:2] == ("acq-page-1:flow", True)
+    assert observed[1][:2] == ("acq-page-2:flow", True)  # still alive for level consumer!
+    assert observed[2][:2] == ("acq-page-1:level", True)
+
+    # Now single-product multi-page check: consumer count == 1 for page1, so BEFORE page2 starts parse(), page1 MUST be released!
+    single_req = ObservationRequest(ProviderId("throwaway"), ("station-1",), (ProductId("flow"),), requested)
+    single_observed: list[tuple[str, bool, int]] = []
+
+    class _SingleProvider:
+        def __init__(self) -> None:
+            self.config = ProviderConfig(
+                zone=ZoneValue("+00:00"),
+                products={ProductId("flow"): config.products[ProductId("flow")]},
+            )
+            self.window_declarations = ProductWindowDeclarations(
+                {ProductId("flow"): declarations.products[ProductId("flow")]}
+            )
+
+        def fetch(self, stations, prod_arg, rendered_windows, window_arg, config_arg, transport, **_kw):
+            return WithIssues(
+                (
+                    Payload(
+                        source_coordinates=coords,
+                        station_products=(("station-1", ProductId("flow")),),
+                        fetch_window=fetch_window,
+                        content=body1,
+                        origin=_origin("1", datetime(2026, 1, 3, 9, 1, tzinfo=UTC)),
+                        prerequisite_calls=(prereq,),
+                        attempt_traces=(attempt,),
+                        acquisition_id="acq-page-1",
+                    ),
+                    Payload(
+                        source_coordinates=coords,
+                        station_products=(("station-1", ProductId("flow")),),
+                        fetch_window=fetch_window,
+                        content=body2,
+                        origin=_origin("2", datetime(2026, 1, 3, 9, 2, tzinfo=UTC)),
+                        prerequisite_calls=(),
+                        acquisition_id="acq-page-2",
+                        prerequisite_acquisition_ids=("acq-page-1",),
+                    ),
+                )
+            )
+
+        def parse(self, payload: Payload, config_arg: ProviderConfig) -> ParsedSeries:
+            gc.collect()
+            body1_held = any(isinstance(r, (Payload, ReceiptEntry)) for r in gc.get_referrers(body1))
+            single_observed.append((payload.acquisition_id, body1_held, sys.getrefcount(body1)))
+            ts = datetime(2026, 1, 1, 12, 0) if payload.acquisition_id == "acq-page-1" else datetime(2026, 1, 2, 12, 0)
+            fact = PhysicalFacts(
+                facts_id="station-1:flow:facts",
+                quantity=known("discharge", "test"),
+                source_unit=known("m3/s", "test"),
+                normalized_unit="m3/s",
+                frequency=known("instantaneous", "test"),
+            )
+            s_def = SourceSeries(
+                series_id="station-1:flow",
+                provider_id="throwaway",
+                station_id="station-1",
+                product_id="flow",
+                identity=SourceIdentity(
+                    namespace="test", published_id="station-1:flow", origin="response", evidence=("test",)
+                ),
+                facts=(fact,),
+            )
+            row_df = pl.DataFrame(
+                {
+                    "station_id": ["station-1"],
+                    "product_id": ["flow"],
+                    "time": [ts],
+                    "value": [2.5],
+                    "time_zone": ["+00:00"],
+                    "series_id": [s_def.series_id],
+                    "facts_id": [fact.facts_id],
+                    "source_unit": ["m3/s"],
+                },
+                schema=RowsSchema.polars_schema,
+            )
+            return ParsedSeries(
+                rows=row_df,
+                series=(s_def,),
+                inventories=(),
+                outcomes=(
+                    RetrievalOutcome(
+                        outcome_id=f"{payload.acquisition_id}:flow",
+                        series_id=s_def.series_id,
+                        station_id="station-1",
+                        product_id="flow",
+                        window=SeriesWindow(
+                            start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+                            end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+                        ),
+                        status=OutcomeStatus.SUCCESS,
+                        facts_ids=(fact.facts_id,),
+                    ),
+                ),
+            )
+
+    single_omitted = driver_module.drive(
+        single_req,
+        _SingleProvider(),
+        provenance=ObservationProvenance(source="test", provider_id=ProviderId("throwaway")),
+        receipts=ReceiptMode.OMIT,
+        cache="bypass",
+    )
+    single_included = driver_module.drive(
+        single_req,
+        _SingleProvider(),
+        provenance=ObservationProvenance(source="test", provider_id=ProviderId("throwaway")),
+        receipts=ReceiptMode.INCLUDE,
+        cache="bypass",
+    )
+    # In OMIT mode, page-1 bytes were released BEFORE page-2 parse began; INCLUDE retains exact bytes!
+    assert single_observed[0][:2] == ("acq-page-1", True)
+    assert single_observed[1][:2] == ("acq-page-2", False)
+    assert single_observed[1][2] == base1
+    assert single_observed[3][:2] == ("acq-page-2", True)
+    # Provenance is identical across OMIT and INCLUDE, while INCLUDE keeps exact bytes
+    assert single_omitted.provenance == single_included.provenance
+    assert single_omitted.provenance.retrieved_at == datetime(2026, 1, 3, 9, 2, tzinfo=UTC)
+    assert any(
+        c.get("acquisition_id") == "acq-page-1" and c.get("call_id") == "attempt-1"
+        for c in single_omitted.provenance.calls_made
+    )
+    assert any(
+        c.get("url") == "https://example.invalid/token" and c.get("acquisition_id") == "acq-page-1"
+        for c in single_omitted.provenance.calls_made
+    )
+    assert any(
+        c.get("prerequisite_acquisition_ids") == ("acq-page-1",) and c.get("call_id") == "acq-page-2"
+        for c in single_omitted.provenance.calls_made
+    )
+    assert [e.content for e in single_included.receipts.entries] == [body1, body2]

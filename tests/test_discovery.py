@@ -17,13 +17,16 @@ EXPECTED_PRODUCT_IDS = [
     "discharge_daily",
     "discharge_daily_max",
     "discharge_daily_mean",
+    "discharge_daily_mean_09hr",
+    "discharge_daily_mean_24hr",
     "discharge_daily_mean_bruto",
     "discharge_daily_mean_consistido",
-    "discharge_hourly",
+    "discharge_daily_min",
     "discharge_hourly_mean",
     "discharge_instantaneous",
     "discharge_monthly_mean",
     "discharge_reported",
+    "discharge_yearly_mean",
     "stage_daily",
     "stage_daily_max",
     "stage_daily_mean",
@@ -33,12 +36,18 @@ EXPECTED_PRODUCT_IDS = [
     "stage_hourly",
     "stage_hourly_mean",
     "stage_instantaneous",
+    "stage_monthly_mean",
     "stage_reported",
+    "stage_yearly_mean",
     "water_temperature_daily",
+    "water_temperature_daily_max",
     "water_temperature_daily_mean",
+    "water_temperature_daily_min",
     "water_temperature_hourly_mean",
     "water_temperature_instantaneous",
+    "water_temperature_monthly_mean",
     "water_temperature_reported",
+    "water_temperature_yearly_mean",
 ]
 
 EXPECTED_PRODUCTS_BY_PROVIDER = {
@@ -69,6 +78,26 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "pegel_bgis_wasserstand",
         "pegel_longterm_abfluss",
         "pegel_longterm_wasserstand",
+    ],
+    "au_bom": [
+        "discharge_daily_max",
+        "discharge_daily_mean_09hr",
+        "discharge_daily_mean_24hr",
+        "discharge_daily_min",
+        "discharge_hourly_mean",
+        "discharge_monthly_mean",
+        "discharge_yearly_mean",
+        "stage_daily_max",
+        "stage_daily_mean",
+        "stage_daily_min",
+        "stage_hourly_mean",
+        "stage_monthly_mean",
+        "stage_yearly_mean",
+        "water_temperature_daily_max",
+        "water_temperature_daily_mean",
+        "water_temperature_daily_min",
+        "water_temperature_monthly_mean",
+        "water_temperature_yearly_mean",
     ],
     "ba_fhmzbih": [
         "discharge_reported",
@@ -155,12 +184,6 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "water_temperature_reported",
     ],
     "fr_hydroportail": ["discharge_instantaneous", "stage_instantaneous"],
-    "jp_mlit": [
-        "discharge_daily",
-        "discharge_hourly",
-        "stage_daily",
-        "stage_hourly",
-    ],
     "lt_lhmt": [
         "discharge_daily_mean",
         "stage_daily_mean",
@@ -253,6 +276,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
     assert result.get_column("provider_id").to_list() == [
         "ar_ina",
         "at_ehyd",
+        "au_bom",
         "ba_fhmzbih",
         "br_ana",
         "ca_eccc",
@@ -264,7 +288,6 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "fi_syke",
         "fr_hubeau",
         "fr_hydroportail",
-        "jp_mlit",
         "lt_lhmt",
         "no_nve",
         "pe_senamhi",
@@ -280,6 +303,11 @@ def test_providers_empty_registry_returns_default_providers() -> None:
 def test_south_african_station_discovery_is_not_offered() -> None:
     with pytest.raises(UnknownProviderError):
         rr.find(provider="za_dws", station="X3H001")
+
+
+def test_japan_mlit_station_discovery_is_temporarily_disabled() -> None:
+    with pytest.raises(UnknownProviderError):
+        rr.find(provider="jp_mlit", station="305071285512040")
 
 
 def test_providers_sorted_independent_of_registration_order(

@@ -290,12 +290,11 @@ def test_every_public_statement_is_bound_to_its_recording_acquisition() -> None:
 
 
 def test_public_statement_rejects_recording_claimed_by_an_unrelated_acquisition() -> None:
-    document = _document("jp_mlit")
+    document = _document("cz_chmi")
     statement = document["source_records"][0]["statements"][0]
-    statement["fact"] = "source.provider.license_terms"
     acquisitions = {item["acquisition_id"]: item for item in document["source_records"][0]["acquisitions"]}
-    license_acquisition = acquisitions["license_terms_capture_2026_08_21"]
-    unrelated = acquisitions["citation_terms_capture_2026_08_21"]
+    license_acquisition = acquisitions["terms_capture_2026_08_20"]
+    unrelated = acquisitions["product_semantics_capture_2026_09_02"]
     unrelated["recording_ids"].append(statement["recording_id"])
     license_acquisition["recording_ids"].remove(statement["recording_id"])
     with pytest.raises(ValidationError, match="statement recording must be claimed by its fact acquisition"):
@@ -303,21 +302,20 @@ def test_public_statement_rejects_recording_claimed_by_an_unrelated_acquisition(
 
 
 def test_public_statement_rejects_fact_bound_to_an_unrelated_acquisition() -> None:
-    document = _document("jp_mlit")
+    document = _document("cz_chmi")
     statement = document["source_records"][0]["statements"][0]
-    statement["fact"] = "source.provider.license_terms"
     binding = next(item for item in document["fact_bindings"] if statement["fact"] in item["facts"])
-    binding["acquisition_id"] = "citation_terms_capture_2026_08_21"
+    binding["acquisition_id"] = "product_semantics_capture_2026_09_02"
     with pytest.raises(ValidationError, match="statement recording must be claimed by its fact acquisition"):
         AcquisitionProvenance.model_validate(document)
 
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    (("requested_from", ["https://example.test/unrelated"]), ("retrieved_at_start", "2026-08-20T00:00:00Z")),
+    (("requested_from", ["https://example.test/unrelated"]), ("retrieved_at_start", "2026-08-19T00:00:00Z")),
 )
 def test_public_statement_rejects_acquisition_that_mismatches_recording(field: str, value: object) -> None:
-    document = _document("jp_mlit")
+    document = _document("cz_chmi")
     statement = document["source_records"][0]["statements"][0]
     acquisition = next(
         item

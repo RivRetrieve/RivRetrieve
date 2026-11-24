@@ -42,7 +42,6 @@ from rivretrieve._internal.providers.fr_hubeau.origins import (
     TEMPERATURE_STATION_CATALOGUE_ORIGINS,
     HydrometryCoordinateConversion,
 )
-from rivretrieve._internal.providers.jp_mlit.origins import WorldGeodeticDmsConversion
 from rivretrieve._internal.providers.lt_lhmt.generate_catalogue import build_stations
 from rivretrieve._internal.providers.lt_lhmt.origins import STATION_CATALOGUE_ORIGINS as LT_STATION_ORIGINS
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import build_stations as build_thai_stations
@@ -58,7 +57,6 @@ from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/lt_lhmt/catalogue/native.parquet")
 CANADA_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/ca_eccc/catalogue/native.parquet")
 THAI_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/th_thaiwater/catalogue/native.parquet")
-JAPAN_NATIVE_PATH = Path("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
 THAI_COORDINATE_EVIDENCE_PATH = Path("tests/test_data/th_thaiwater_coordinate_standard.html")
 REPOSITORY_ROOT = Path(__file__).parents[1]
 CATALOGUE_ORIGINS_MODULE_PATH = REPOSITORY_ROOT / "src/rivretrieve/_internal/catalogue_origins.py"
@@ -123,7 +121,6 @@ def test_field_conversion_is_named_immutable_and_structurally_hashable() -> None
 @pytest.mark.parametrize(
     ("conversion", "equivalent"),
     [
-        (WorldGeodeticDmsConversion(), WorldGeodeticDmsConversion()),
         (HydrometryCoordinateConversion(), HydrometryCoordinateConversion()),
         (DatumToCrsConversion(), DatumToCrsConversion()),
         (UnsignedDmsConversion(), UnsignedDmsConversion()),
@@ -139,7 +136,6 @@ def test_provider_owned_conversions_have_structural_equality_and_hash(
 @pytest.mark.parametrize(
     ("conversion", "canonical_column", "wrong_native_column"),
     [
-        (WorldGeodeticDmsConversion(), "latitude", NativeColumn("日本測地系")),
         (HydrometryCoordinateConversion(), "latitude", NativeColumn("longitude_station")),
         (DatumToCrsConversion(), "crs", NativeColumn("coord_datum_cd")),
         (UnsignedDmsConversion(), "latitude", NativeColumn("Longitude (dd:mm:ss)")),
@@ -279,6 +275,7 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
         {
             ProviderId("ar_ina"),
             ProviderId("at_ehyd"),
+            ProviderId("au_bom"),
             ProviderId("ba_fhmzbih"),
             ProviderId("br_ana"),
             ProviderId("ca_eccc"),
@@ -290,7 +287,6 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
             ProviderId("fi_syke"),
             ProviderId("fr_hubeau"),
             ProviderId("fr_hydroportail"),
-            ProviderId("jp_mlit"),
             ProviderId("lt_lhmt"),
             ProviderId("no_nve"),
             ProviderId("pe_senamhi"),
@@ -330,20 +326,6 @@ def test_committed_poland_origins_pass_validation_and_enforcement(retained_evide
     assert native.data.schema["gauge_id"] == stations.schema["station_id"]
     assert validate_catalogue_origins(ProviderId("pl_imgw"), STATION_CATALOGUE_ORIGINS, native, stations) == []
     enforce_catalogue_origins(ProviderId("pl_imgw"), STATION_CATALOGUE_ORIGINS, native, stations)
-
-
-@pytest.mark.derived("src/rivretrieve/_internal/providers/jp_mlit/catalogue/native.parquet")
-def test_committed_japan_origins_and_build_pass_gate(retained_evidence_root: Path) -> None:
-    from rivretrieve._internal.providers.jp_mlit.generate_catalogue import build_catalogue
-    from rivretrieve._internal.providers.jp_mlit.origins import STATION_CATALOGUE_ORIGINS
-
-    native_table = read_native_table(retained_evidence_root / JAPAN_NATIVE_PATH)
-    catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
-    assert (
-        validate_catalogue_origins(ProviderId("jp_mlit"), STATION_CATALOGUE_ORIGINS, native_table, catalogue.stations)
-        == []
-    )
-    enforce_catalogue_origins(ProviderId("jp_mlit"), STATION_CATALOGUE_ORIGINS, native_table, catalogue.stations)
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/fr_hubeau/catalogue/native.parquet")

@@ -38,6 +38,7 @@ for how to supply them.
 | Country | Agency | Provider | Stations | Access |
 |---|---|---|---:|---|
 | Argentina | Instituto Nacional del Agua (INA), Alerta5 | `ar_ina` | 829 | Open |
+| Australia | Bureau of Meteorology (BoM) | `au_bom` | 8,120 | Open |
 | Austria | Federal Ministry of Agriculture and Forestry, Climate and Environmental Protection, Regions and Water Management / Bundesministerium für Land- und Forstwirtschaft, Klima- und Umweltschutz, Regionen und Wasserwirtschaft (BMLUK), eHYD | `at_ehyd` | 744 | Open |
 | Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | Open |
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
@@ -49,7 +50,6 @@ for how to supply them.
 | Finland | Finnish Environment Institute (Syke), Hydrologiarajapinta | `fi_syke` | 2,543 | Open |
 | France | Hub'Eau | `fr_hubeau` | 7,347 | Open |
 | France | HydroPortail | `fr_hydroportail` | 6,409 | Open |
-| Japan | Ministry of Land, Infrastructure, Transport and Tourism (MLIT) | `jp_mlit` | 1,023 | Open |
 | Lithuania | Lithuanian Hydrometeorological Service (LHMT) | `lt_lhmt` | 97 | Open |
 | Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | Credentials required |
 | Peru | Servicio Nacional de Meteorología e Hidrología del Perú (SENAMHI) | `pe_senamhi` | 270 | Open |
@@ -70,10 +70,9 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Armenia, Australia, Belgium, Benin, Bulgaria, Burkina Faso, Cameroon, Chad,
-Croatia, Estonia, Germany, Greece, Guinea, Indonesia, Ireland, Israel, Italy, Ivory Coast,
-Malaysia, Mali, Mexico, Netherlands, New Zealand, Niger, Nigeria, Portugal, Rwanda, Slovenia,
-South Africa, South Korea, Spain, Sri Lanka, Sweden, Taiwan and the United Kingdom.
+Afghanistan, Armenia, Belgium, Benin, Bulgaria, Burkina Faso, Cameroon, Chad, Estonia, Germany, Greece, Guinea, Indonesia, Ireland, Israel, Italy, Ivory Coast, Malaysia,
+Mali, Mexico, Netherlands, New Zealand, Niger, Nigeria, Portugal, Rwanda, Slovenia, South Africa,
+South Korea, Spain, Sri Lanka, Sweden, Taiwan and the United Kingdom.
 
 Some of these have a fetcher in the legacy
 [RivRetrieve-Python](https://github.com/kratzert/RivRetrieve-Python) that awaits porting; others

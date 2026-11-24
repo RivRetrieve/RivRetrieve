@@ -32,6 +32,7 @@ _CANONICAL_CATALOGUE_FILES = {
 _PROVENANCE_PROVIDER_IDS = {
     "ar_ina",
     "at_ehyd",
+    "au_bom",
     "ba_fhmzbih",
     "br_ana",
     "ca_eccc",
@@ -42,7 +43,6 @@ _PROVENANCE_PROVIDER_IDS = {
     "dk_vanda",
     "fr_hubeau",
     "fr_hydroportail",
-    "jp_mlit",
     "lt_lhmt",
     "no_nve",
     "pe_senamhi",
@@ -98,6 +98,12 @@ except UnknownProviderError:
     pass
 else:
     raise AssertionError("South African stations must not be offered")
+try:
+    rivretrieve.find(provider="jp_mlit", station="305071285512040")
+except UnknownProviderError:
+    pass
+else:
+    raise AssertionError("Temporarily disabled jp_mlit stations must not be offered")
 stations = rivretrieve.as_frame(rivretrieve.find())
 assert set(stations["provider_id"]) == set(provider_ids)
 provider_root = files("rivretrieve._internal.providers")

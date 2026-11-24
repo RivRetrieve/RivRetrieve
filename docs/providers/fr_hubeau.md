@@ -184,4 +184,4 @@ in RivRetrieve.
 | [HydroPortail — Le site hydrométrique](https://hydro.eaufrance.fr/aide/le-site-hydrometrique) | 2026-09-21 |
 
 The station count describes the packaged catalogue. The example observations were
-retrieved on 2026-09-21.
+retrieved on 2026-11-20.

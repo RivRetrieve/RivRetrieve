@@ -47,8 +47,8 @@ table with one row per source attribute, described in
 
 ## Fields by provider
 
-Each agency names its metadata fields in its own way: `station_nm` at USGS, `Estacao_Nome` at
-ANA, `観測所名` at MLIT. The table shows the native field names behind each role, in the source's
+Each agency names its metadata fields in its own way: `monitoring_location_name` at USGS,
+`Estacao_Nome` at ANA, `libelle_station` at Hub'Eau. The table shows the native field names behind each role, in the source's
 own spelling, with the unit the source publishes. A field without a unit has none established.
 A dash means the provider exposes no field for that role. These are the names you see in the `*_field` columns and in the `source_field` column
 of the source view.
@@ -58,6 +58,7 @@ of the source view.
 |---|---|---|---|---|
 | [`ar_ina`](providers/ar_ina.md) | `nombre` | `rio` | — | — |
 | [`at_ehyd`](providers/at_ehyd.md) | `messstelle`, `name` | `gewaesser`, `gewasser` | `orogr.Einzugsgebiet [km²]` (km²) | — |
+| [`au_bom`](providers/au_bom.md) | `station_name` | — | — | — |
 | [`ba_fhmzbih`](providers/ba_fhmzbih.md) | — | — | `metadata_CATCHMENT_SIZE` (km²) | — |
 | [`br_ana`](providers/br_ana.md) | `Estacao_Nome` | `Rio_Nome` | `Area_Drenagem` | `Altitude` |
 | [`ca_eccc`](providers/ca_eccc.md) | `STATION_NAME` | — | `DRAINAGE_AREA_EFFECT`, `DRAINAGE_AREA_GROSS` (km2) | — |
@@ -69,7 +70,6 @@ of the source view.
 | [`fi_syke`](providers/fi_syke.md) | `Nimi` | `PaaVesalNimi`, `VesalNimi` | — | — |
 | [`fr_hubeau`](providers/fr_hubeau.md) | `libelle_station` | `libelle_cours_eau`, `libelle_masse_eau` | `superficie_reelle`, `superficie_topo`; `surface_bv` (km²) | `altitude`, `altitude_site`; `altitude_ref_alti_station` (m) |
 | [`fr_hydroportail`](providers/fr_hydroportail.md) | — | — | — | — |
-| [`jp_mlit`](providers/jp_mlit.md) | `観測所名` | `河川名` | `流域面積` (km2) | `零点高` (m) |
 | [`lt_lhmt`](providers/lt_lhmt.md) | `name` | `waterBody` | — | — |
 | [`no_nve`](providers/no_nve.md) | `stationName` | `lakeName`, `reservoirName`, `riverName` | `drainageBasinArea`, `drainageBasinAreaNorway`, `transferAreaIn`, `transferAreaOut` (km2) | `masl` (m) |
 | [`pe_senamhi`](providers/pe_senamhi.md) | `name` | `waterBody` | — | `altitude` (m) |
@@ -171,30 +171,29 @@ looks numeric remain distinguishable. `json.loads` restores that source scalar
 type. It does not turn numeric text into a number or interpret a placeholder as
 missing data.
 
-For Japan's `流域面積` and `零点高`, Bosnia's `metadata_CATCHMENT_SIZE`, and
-Switzerland's `Catchment size` and `Station altitude`, the summary separates a
-recognised numeric string from its explicit unit. It preserves numeric spelling,
-including signs, trailing zeros and thousands separators. The unit remains in
-its source spelling, such as `km2` or `km²`.
+For Bosnia's `metadata_CATCHMENT_SIZE` and Switzerland's `Catchment size` and
+`Station altitude`, the summary separates a recognised numeric string from its
+explicit unit. It preserves numeric spelling, including signs, trailing zeros
+and thousands separators. The unit remains in its source spelling, such as
+`km2` or `km²`.
 
 ```python
-japan = rr.find(provider="jp_mlit", station="301011281104010")
-area = rr.metadata(japan).row(0, named=True)
+bosnia = rr.find(provider="ba_fhmzbih", station="2010")
+area = rr.metadata(bosnia).row(0, named=True)
 
 print(area["drainage_area_value"], area["drainage_area_unit"])
-# ['"142.00"'] ['km2']
+# ['"1088.00"'] ['km²']
 
 numeric_text = json.loads(area["drainage_area_value"][0])
 print(repr(numeric_text))
-# '142.00'
+# '1088.00'
 ```
 
-Numeric text still needs user parsing for arithmetic. For example, a Japanese
-value `1,719.00km2` becomes the JSON string `"1,719.00"`, not the number `1719.0`.
-Blanks, nulls, placeholders and qualified text such as `T.P. +1.230 m` stay
-unchanged. Japan and Bosnia receive a unit only when the individual value can be
-separated unambiguously. Existing independently supported units remain attached
-even when a value cannot be separated.
+Numeric text still needs user parsing for arithmetic. Blanks, nulls,
+placeholders and qualified text stay unchanged. Bosnia receives a unit only
+when the individual value can be separated unambiguously. Existing
+independently supported units remain attached even when a value cannot be
+separated.
 
 ### Water-body names
 
@@ -337,8 +336,8 @@ print(json.loads(site_name["source_value"].item()))
 
 Unlike summary water-body names, source-view strings retain JSON encoding.
 Source quantity values also retain their complete original text, including any
-inline units and leading padding. For example, Japan's area above decodes to
-`142.00km2` in the source view. Source and summary units agree entry by entry.
+inline units and leading padding. For example, Bosnia's area above decodes to
+`1088.00 km²` in the source view. Source and summary units agree entry by entry.
 
 | Column | Meaning |
 | --- | --- |
@@ -390,8 +389,5 @@ packaged catalogue descriptor offline; metadata notices appear in its
   to IDEAM and apply CC BY-SA 4.0. Adaptations must follow the licence's share-alike conditions.
 - [LHMT's terms](providers/lt_lhmt.md#terms-and-citation) require source attribution
   and apply CC BY-SA 4.0 unless stated otherwise. Adaptations must follow the licence's share-alike conditions.
-- [MLIT's terms](providers/jp_mlit.md#terms-and-citation) explain PDL1.0 and its
-  exceptions, citation with the consultation date, and notices for processing
-  and the responsible party.
 
 See the [API reference](reference.md#metadata) for the function contract.

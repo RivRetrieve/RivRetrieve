@@ -24,7 +24,6 @@ test("built explorer offers only supported providers", async ({ page }) => {
       "cz_chmi",
       "fr_hubeau",
       "fr_hydroportail",
-      "jp_mlit",
       "lt_lhmt",
       "no_nve",
       "pl_imgw",

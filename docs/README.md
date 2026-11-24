@@ -14,6 +14,7 @@
 Provider pages explain their agencies and source-specific conditions:
 
 - [Argentina: INA](providers/ar_ina.md)
+- [Australia: Bureau of Meteorology (BoM)](providers/au_bom.md)
 - [Austria: eHYD](providers/at_ehyd.md)
 - [Bosnia and Herzegovina: AVP Sava](providers/ba_fhmzbih.md)
 - [Brazil: ANA](providers/br_ana.md)
@@ -25,7 +26,6 @@ Provider pages explain their agencies and source-specific conditions:
 - [Finland: Syke](providers/fi_syke.md)
 - [France: Hub'Eau (`fr_hubeau`)](providers/fr_hubeau.md)
 - [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
-- [Japan: MLIT](providers/jp_mlit.md)
 - [Lithuania: LHMT](providers/lt_lhmt.md)
 - [Norway: NVE](providers/no_nve.md)
 - [Peru: SENAMHI](providers/pe_senamhi.md)

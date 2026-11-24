@@ -100,7 +100,7 @@ def test_fixture_bytes_match_baseline_attestation(artifacts):
         assert hashlib.sha256(content).hexdigest() == attestation["files"]["cache/fr_hubeau/store/" + name]["sha256"]
 
 
-@pytest.mark.recorded("tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json")
+@pytest.mark.recorded("tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json")
 def test_service_specific_daily_store_and_bundles_round_trip(retained_evidence_root, tmp_path, monkeypatch):
     from io import BytesIO
     from zipfile import ZipFile
@@ -110,7 +110,9 @@ def test_service_specific_daily_store_and_bundles_round_trip(retained_evidence_r
     from rivretrieve._internal.recordings import ReplayTransport
 
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    recording = retained_evidence_root / "tests/test_data/fr_hubeau_1011000101_QmnJ_padded.recording.json"
+    recording = (
+        retained_evidence_root / "tests/test_data/fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json"
+    )
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selection = rr.find(
         provider="fr_hubeau",

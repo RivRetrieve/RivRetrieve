@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
 from math import isfinite
@@ -23,9 +23,16 @@ from rivretrieve._internal.catalogues.schemas import CatalogueColumn, CatalogueS
 from rivretrieve._internal.issues import Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.source_acquisition import FailedSourceRequest
-from rivretrieve._internal.source_series import InventorySnapshot, RetrievalOutcome, SeriesScope, SourceSeries
+from rivretrieve._internal.source_series import (
+    InventorySnapshot,
+    ParsedSeries,
+    RetrievalOutcome,
+    ScopeState,
+    SeriesScope,
+    SourceSeries,
+)
 from rivretrieve._internal.time_axis import TimeAxis
-from rivretrieve._internal.transport import SecretCallTrace, TransportAttempt
+from rivretrieve._internal.transport import SecretCallTrace, TransportAttempt, TransportResponse
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -171,6 +178,11 @@ class WindowDeclaration:
     ``[timestart, timeend)`` by upper-bound containment (``timeend <= stop``).
     The rendered request stop extends past ``bounds.end`` by ``stop_extension``
     while ``RenderedWindow.bounds`` preserves the unextended partition.
+
+    ``fetch_padding`` optionally overrides the engine's default ``±2`` day fetch
+    window padding (for example, ``timedelta(0)`` when source query parameters
+    are established to filter directly on the native calendar or wall-clock axis
+    without timezone drift). ``None`` retains the shared engine default.
     """
 
     granularity: WindowGranularity
@@ -181,8 +193,14 @@ class WindowDeclaration:
     timestamp_precision: timedelta | None = field(default=None, kw_only=True)
     stop_extension: timedelta | None = field(default=None, kw_only=True)
     year_start_month: int = field(default=1, kw_only=True)
+    fetch_padding: timedelta | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
+        if self.fetch_padding is not None:
+            if not isinstance(self.fetch_padding, timedelta):
+                raise TypeError("window fetch padding must be a timedelta or None")
+            if self.fetch_padding < timedelta(0):
+                raise ValueError("window fetch padding must be non-negative")
         if type(self.year_start_month) is not int or not 1 <= self.year_start_month <= 12:
             raise ValueError("year start month must be an integer from 1 to 12")
         if self.year_start_month != 1 and (
@@ -399,6 +417,20 @@ class SourceCallOrigin:
         if not isinstance(self.query, SourceQuery | UnknownOriginFact):
             raise TypeError("source-call query must be SourceQuery or UnknownOriginFact")
 
+    @classmethod
+    def from_response(cls, response: TransportResponse) -> Self:
+        """Build a source-call origin from a completed ``TransportResponse``."""
+        return cls(
+            url=response.url,
+            request_parameters=response.request_parameters,
+            status_code=response.status_code,
+            retrieved_at=response.retrieved_at,
+            content_type=response.content_type if response.content_type else UnknownOriginFact(),
+            source_path=UnknownOriginFact(),
+            query=UnknownOriginFact(),
+            attempts=response.attempts,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class Payload:
@@ -433,6 +465,90 @@ class Payload:
 
 
 @dataclass(frozen=True, slots=True)
+class InterpretationContext:
+    """Effective response and request inputs determining how one payload is interpreted.
+
+    Compare values by equality rather than hashing because source coordinates
+    and origin request parameters may wrap non-hashable mappings.
+    """
+
+    acquisition_id: str
+    source_coordinates: SourceCoordinates
+    station_products: tuple[tuple[str, ProductId], ...]
+    fetch_window: FetchWindow
+    acquisition_axis: TimeAxis
+    scope: SeriesScope | None
+    known_series: tuple[SourceSeries, ...]
+    origin: SourceCallOrigin
+    attempt_traces: tuple[TransportAttempt, ...]
+
+    @classmethod
+    def from_payload(cls, payload: Payload) -> Self:
+        """Capture the effective interpretation context of ``payload``."""
+        return cls(
+            acquisition_id=payload.acquisition_id,
+            source_coordinates=payload.source_coordinates,
+            station_products=payload.station_products,
+            fetch_window=payload.fetch_window,
+            acquisition_axis=payload.acquisition_axis,
+            scope=payload.scope,
+            known_series=payload.known_series,
+            origin=payload.origin,
+            attempt_traces=payload.attempt_traces,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class InterpretedPayload:
+    """A ``ParsedSeries`` produced during acquisition bound to its exact ``InterpretationContext``."""
+
+    context: InterpretationContext
+    parsed: ParsedSeries
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.context, InterpretationContext):
+            raise TypeError("interpreted payload context must be InterpretationContext")
+        if not isinstance(self.parsed, ParsedSeries):
+            raise TypeError("interpreted payload parsed value must be ParsedSeries")
+
+    @classmethod
+    def from_payload(cls, payload: Payload, parsed: ParsedSeries) -> Self:
+        """Bind ``parsed`` to the effective interpretation context of ``payload``."""
+        return cls(context=InterpretationContext.from_payload(payload), parsed=parsed)
+
+
+def narrow_payload_for_pair(payload: Payload, station: str, product: ProductId) -> Payload:
+    """Return a single station-product view of ``payload`` matching the driver's parse boundary."""
+    pair_known = tuple(
+        item for item in payload.known_series if item.station_id == station and item.product_id == str(product)
+    )
+    pair_scope = payload.scope
+    if pair_scope is not None:
+        updates: dict[str, object] = {
+            "station_ids": (station,),
+            "product_ids": (str(product),),
+        }
+        if pair_scope.series_ids:
+            known_identities = {item.series_id: item for item in payload.known_series}
+            local_ids = tuple(
+                key
+                for key in pair_scope.series_ids
+                if key not in known_identities
+                or (known_identities[key].station_id == station and known_identities[key].product_id == str(product))
+            )
+            updates["series_ids"] = local_ids
+            if not local_ids and not pair_scope.variants:
+                updates["state"] = ScopeState.EMPTY
+        pair_scope = pair_scope.model_copy(update=updates)
+    return replace(
+        payload,
+        station_products=((station, product),),
+        scope=pair_scope,
+        known_series=pair_known,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class WithIssues[A]:
     value: A
     issues: tuple[Issue, ...] = ()
@@ -447,6 +563,7 @@ class SourceAcquisition(WithIssues[tuple[Payload, ...]]):
     outcomes: tuple[RetrievalOutcome, ...] = ()
     calls: tuple[SourceCallOrigin, ...] = ()
     failed_requests: tuple[FailedSourceRequest, ...] = ()
+    interpretations: tuple[InterpretedPayload, ...] = ()
 
 
 type Rows = pl.DataFrame

@@ -3,7 +3,7 @@
 import calendar
 import json
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -71,7 +71,14 @@ def _recording(retained_evidence_root, product: str, month: str) -> Path:
     ) / f"{endpoint}_15400000_{month}-01_{month}-{last}.recording.json"
 
 
-def _run(retained_evidence_root, product: str, start: str, end: str, months: tuple[str, ...], **kwargs):
+def _window_perf_recording(retained_evidence_root, product: str, start_date: str, end_date: str) -> Path:
+    endpoint = "HidroSerieCotas" if product.startswith("stage") else "HidroSerieVazao"
+    return (
+        retained_evidence_root / "tests/recordings/br_ana_window_perf"
+    ) / f"{endpoint}_15400000_{start_date}_{end_date}.recording.json"
+
+
+def _run_recordings(product: str, start: str, end: str, recordings: tuple[Path, ...], **kwargs):
     request = ObservationRequest(
         _PROVIDER,
         ("15400000",),
@@ -85,20 +92,32 @@ def _run(retained_evidence_root, product: str, start: str, end: str, months: tup
         request,
         _Stages(),
         provenance=ObservationProvenance(source="recording", provider_id=_PROVIDER),
-        transport=ReplayTransport([_recording(retained_evidence_root, product, month) for month in months]),
+        transport=ReplayTransport(list(recordings)),
+        **kwargs,
+    )
+
+
+def _run(retained_evidence_root, product: str, start: str, end: str, months: tuple[str, ...], **kwargs):
+    return _run_recordings(
+        product,
+        start,
+        end,
+        tuple(_recording(retained_evidence_root, product, month) for month in months),
         **kwargs,
     )
 
 
 def _payload(retained_evidence_root, product: str, month: str = "2024-01"):
     product_id = ProductId(product)
+    declaration = window_declarations().products[product_id]
     window = _padded_interval(
-        RequestedInterval(datetime.fromisoformat(month + "-10"), datetime.fromisoformat(month + "-20"))
+        RequestedInterval(datetime.fromisoformat(month + "-10"), datetime.fromisoformat(month + "-20")),
+        padding=declaration.fetch_padding,
     )
     return fetch(
         ("15400000",),
         (product_id,),
-        {product_id: plan_windows(window, window_declarations().products[product_id])},
+        {product_id: plan_windows(window, declaration)},
         window,
         config(),
         ReplayTransport([_recording(retained_evidence_root, product, month)]),
@@ -113,9 +132,11 @@ def test_daily_semantics_and_engine_month_declaration(product: str) -> None:
     assert definition.semantics.label_time.components == (0, 0, 0, 0)
     assert config().zone.value == "unknown"
     window = window_declarations().products[ProductId(product)]
-    assert window.granularity == "year-month"
+    assert window.granularity == "capped-month-span"
+    assert window.size == 12
     assert window.rendering == WindowRenderingVocabulary.DATE
     assert window.stop_convention == StopConvention.INCLUSIVE
+    assert window.fetch_padding == timedelta(0)
 
 
 @pytest.mark.recorded("tests/recordings/br_ana")
@@ -161,20 +182,19 @@ def test_absent_variant_is_not_replaced_by_bruto(retained_evidence_root, product
     assert any(issue.code == "source.unresolved_inventory" for issue in result.issues)
 
 
-@pytest.mark.recorded("tests/recordings/br_ana")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf")
 @pytest.mark.parametrize("product", ("stage_daily_mean_bruto", "discharge_daily_mean_bruto"))
-def test_month_transition_uses_both_exact_recordings(retained_evidence_root, product: str) -> None:
-    result = _run(
-        retained_evidence_root,
+def test_month_transition_uses_single_capped_month_span_recording(retained_evidence_root, product: str) -> None:
+    recording_path = _window_perf_recording(retained_evidence_root, product, "2024-01-01", "2024-02-29")
+    result = _run_recordings(
         product,
         "2024-01-30",
         "2024-02-02",
-        ("2024-01", "2024-02"),
+        (recording_path,),
         receipts=ReceiptMode.INCLUDE,
     )
-    assert [entry.content for entry in result.receipts.entries] == [
-        read_recording(_recording(retained_evidence_root, product, month)).content for month in ("2024-01", "2024-02")
-    ]
+    assert [entry.content for entry in result.receipts.entries] == [read_recording(recording_path).content]
+    assert result.canonical_rows.height == 4
     assert not result.canonical_rows.is_duplicated().any()
 
 
@@ -353,25 +373,30 @@ def test_real_leap_day_slots_are_native_labels_not_march_rollover(
     pl_testing.assert_frame_equal(actual, expected)
 
 
-@pytest.mark.recorded("tests/recordings/br_ana")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf")
 @pytest.mark.parametrize("product", _PRODUCTS)
 def test_real_year_transition_preserves_each_variant_without_fallback(retained_evidence_root, product: str) -> None:
-    result = _run(
-        retained_evidence_root,
+    recording_path = _window_perf_recording(retained_evidence_root, product, "2023-12-01", "2024-01-31")
+    result = _run_recordings(
         product,
         "2023-12-30",
         "2024-01-02",
-        ("2023-12", "2024-01"),
+        (recording_path,),
         receipts=ReceiptMode.INCLUDE,
     )
     prefix = "Cota" if product.startswith("stage") else "Vazao"
     level_field = "nivelconsistencia" if prefix == "Cota" else "Nivel_Consistencia"
     level = "1" if product.endswith("bruto") else "2"
+    recording = read_recording(recording_path)
+    items = json.loads(recording.content)["items"]
     rows = []
     for month, days in (("2023-12", (30, 31)), ("2024-01", (1, 2))):
-        recording = read_recording(_recording(retained_evidence_root, product, month))
-        for row in json.loads(recording.content)["items"]:
-            if row["Mediadiaria"] != "1" or row[level_field] != level:
+        for row in items:
+            if (
+                row["Mediadiaria"] != "1"
+                or row[level_field] != level
+                or not row["Data_Hora_Dado"].startswith(f"{month}-01")
+            ):
                 continue
             for day in days:
                 raw = row[f"{prefix}_{day:02}"]
@@ -388,7 +413,7 @@ def test_real_year_transition_preserves_each_variant_without_fallback(retained_e
         orient="row",
     )
     pl_testing.assert_frame_equal(result.canonical_rows.select(expected.columns), expected)
-    assert len(result.receipts.entries) == 2
+    assert len(result.receipts.entries) == 1
 
 
 @pytest.mark.recorded("tests/recordings/br_ana")
@@ -416,7 +441,7 @@ def test_real_nonleap_february_has_no_march_rollover(retained_evidence_root, pro
     pl_testing.assert_frame_equal(rows, expected)
 
 
-@pytest.mark.recorded("tests/recordings/br_ana")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf")
 @pytest.mark.parametrize(
     ("product", "count", "first", "last"),
     [
@@ -430,15 +455,19 @@ def test_independent_year_boundary_no_variant_fallback(
     retained_evidence_root, product: str, count: int, first: str, last: str
 ) -> None:
     # Literals from the independent source-only extension, not this port's output.
-    result = _run(retained_evidence_root, product, "2023-12-31T00:00:00", "2024-01-01T00:00:00", ("2023-12", "2024-01"))
+    recording_path = _window_perf_recording(retained_evidence_root, product, "2023-12-01", "2024-01-31")
+    result = _run_recordings(product, "2023-12-31T00:00:00", "2024-01-01T00:00:00", (recording_path,))
     assert result.canonical_rows.height == count
     assert result.canonical_rows.item(0, "time") == datetime.fromisoformat(first)
     assert result.canonical_rows.item(-1, "time") == datetime.fromisoformat(last)
 
 
-@pytest.mark.recorded("tests/recordings/br_ana")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf")
 def test_real_null_daily_status_does_not_discard_published_value(retained_evidence_root) -> None:
-    result = _run(retained_evidence_root, "stage_daily_mean_bruto", "2023-12-31", "2024-01-01", ("2023-12", "2024-01"))
+    recording_path = _window_perf_recording(
+        retained_evidence_root, "stage_daily_mean_bruto", "2023-12-01", "2024-01-31"
+    )
+    result = _run_recordings("stage_daily_mean_bruto", "2023-12-31", "2024-01-01", (recording_path,))
     assert result.canonical_rows.filter(pl.col("time") == datetime(2023, 12, 31)).item(0, "value") == 7.595
     assert not result.issues
     ann = result.annotations.observation_tables["br_ana.daily_cotas"].rows
@@ -454,3 +483,56 @@ def test_daily_label_is_not_an_established_interval_anchor(retained_evidence_roo
         assert facts.label_time == "00:00"
         assert facts.timestamp_anchor.value is None
         assert facts.timestamp_anchor.evidence == ()
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "expected_ranges"),
+    [
+        ("2020-01-01", "2020-12-31", [("2020-01-01", "2020-12-31")]),
+        ("2025-11-20", "2026-11-20", [("2025-11-01", "2026-10-31"), ("2026-11-01", "2026-11-30")]),
+    ],
+)
+def test_daily_driver_uses_whole_month_capped_spans_without_padding_amplification(
+    start: str, end: str, expected_ranges: list[tuple[str, str]]
+) -> None:
+    from datetime import UTC
+
+    from rivretrieve._internal.transport import TransportResponse
+
+    calls: list[tuple[str, str]] = []
+
+    class _EmptyTransport:
+        def send(self, request):
+            left = str(request.params["Data Inicial (yyyy-MM-dd)"])
+            right = str(request.params["Data Final (yyyy-MM-dd)"])
+            calls.append((left, right))
+            return TransportResponse(
+                content=b'{"items":[]}',
+                status_code=200,
+                retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+                content_type="application/json",
+                url=request.url,
+                request_parameters=request.params,
+            )
+
+    request = ObservationRequest(
+        _PROVIDER,
+        ("15400000",),
+        (ProductId("discharge_daily_mean_bruto"),),
+        RequestedWindow(
+            WindowEndpoint.from_datetime(datetime.fromisoformat(start)),
+            WindowEndpoint.from_datetime(datetime.fromisoformat(end)),
+        ),
+    )
+    drive(
+        request,
+        _Stages(),
+        provenance=ObservationProvenance(source="test-window-plan", provider_id=_PROVIDER),
+        transport=_EmptyTransport(),
+    )
+    assert calls == expected_ranges
+    for left, right in calls:
+        start_date = datetime.fromisoformat(left)
+        end_date = datetime.fromisoformat(right)
+        assert start_date.day == 1
+        assert (end_date - start_date).days + 1 <= 366

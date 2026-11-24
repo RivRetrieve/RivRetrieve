@@ -255,6 +255,44 @@ def _plan_fixed_backward_span(fetch_window: FetchWindow, declaration: WindowDecl
     return tuple(reversed(windows))
 
 
+def _month_from_index(month_index: int) -> datetime:
+    year, zero_month = divmod(month_index, 12)
+    return datetime(year, zero_month + 1, 1)
+
+
+def _plan_capped_month_span(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
+    """Cover fetch dates by disjoint whole-month spans of at most ``size`` calendar months."""
+    _require(
+        declaration,
+        declaration.size is not None
+        and declaration.rendering is WindowRenderingVocabulary.DATE
+        and declaration.stop_convention is StopConvention.INCLUSIVE,
+        "a positive size, date rendering and an inclusive stop",
+    )
+    size = declaration.size
+    assert size is not None
+    start_dt = _datetime_from_endpoint(fetch_window, "start")
+    end_dt = _datetime_from_endpoint(fetch_window, "end")
+    cursor_index = start_dt.year * 12 + (start_dt.month - 1)
+    final_index = end_dt.year * 12 + (end_dt.month - 1)
+    windows = []
+    while cursor_index <= final_index:
+        span_end_index = min(cursor_index + size - 1, final_index)
+        cursor = _month_from_index(cursor_index)
+        span_end_month = _month_from_index(span_end_index)
+        stop = span_end_month.replace(day=monthrange(span_end_month.year, span_end_month.month)[1])
+        bounds = _closed_bounds(cursor, datetime.combine(stop.date(), time.max))
+        windows.append(
+            RenderedWindow(
+                cursor.date().isoformat(),
+                _render_date_stop(stop, declaration.stop_convention),
+                bounds,
+            )
+        )
+        cursor_index = span_end_index + 1
+    return tuple(windows)
+
+
 def _plan_none(fetch_window: FetchWindow, declaration: WindowDeclaration) -> tuple[RenderedWindow, ...]:
     _require(
         declaration,
@@ -271,6 +309,7 @@ _GRANULARITY_PLANNERS: dict[str, _Planner] = {
     "year-month": _plan_year_month,
     "n-year-chunk": _plan_n_year_chunk,
     "capped-span": _plan_capped_span,
+    "capped-month-span": _plan_capped_month_span,
     "fixed-backward-span": _plan_fixed_backward_span,
     "none": _plan_none,
 }

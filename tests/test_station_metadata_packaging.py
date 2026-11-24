@@ -87,7 +87,6 @@ for provider_id in provider_ids:
         "co_ideam",
         "cz_chmi",
         "fr_hubeau",
-        "jp_mlit",
         "lt_lhmt",
         "no_nve",
         "usgs_nwis",
@@ -175,8 +174,6 @@ assert effective["source_value"] is None
 assert effective["state"] == "source_null"
 for provider, station, role, field, raw, numeric, unit, datum in [
     ("usgs_nwis", "07374000", "elevation", "alt_va", " 0.00", "0.00", "feet", "NAVD88"),
-    ("jp_mlit", "301011281104010", "drainage_area", "流域面積", "142.00km2", "142.00", "km2", None),
-    ("jp_mlit", "301011281104010", "elevation", "零点高", "0.000m", "0.000", "m", None),
     ("ba_fhmzbih", "4024", "drainage_area", "metadata_CATCHMENT_SIZE", "1600.00 km²", "1600.00", "km²", None),
     ("ch_foen", "2004", "drainage_area", "Catchment size", "713 km2", "713", "km2", None),
     ("ch_foen", "2004", "elevation", "Station altitude", "432 m a.s.l.", "432", "m", "LN02"),

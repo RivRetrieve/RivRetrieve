@@ -17,19 +17,24 @@ from rivretrieve._internal.providers.ar_ina.config import (
     ArInaSeriesLookupCoordinates,
     ArInaSourceCoordinates,
 )
-from rivretrieve._internal.providers.ar_ina.fetch import resolve_series_lookup, reused_series
 from rivretrieve._internal.providers.ar_ina.series import (
     SPECS_BY_PRODUCT_ID,
     SeriesProductSpec,
     source_series,
     validate_observation_row,
+    validate_series_record_metadata,
 )
-from rivretrieve._internal.source_annotations import AnnotationBundle
+from rivretrieve._internal.source_annotations import (
+    SERIES_STRUCTURAL_SCHEMA,
+    AnnotationBundle,
+    SeriesAnnotationTable,
+)
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
     OutcomeStatus,
     ParsedSeries,
+    PhysicalFacts,
     RestrictionKind,
     RetrievalOutcome,
     SeriesScope,
@@ -41,6 +46,159 @@ from rivretrieve._internal.source_series import (
 
 _PROVIDER_ID = ProviderId("ar_ina")
 _SOURCE_ZONE = "+00:00"
+
+
+def reused_series(definition: SourceSeries, known_series: tuple[SourceSeries, ...]) -> SourceSeries:
+    """Preserve prior established identity and matching fact IDs when available."""
+    candidate = next((item for item in known_series if item.series_id == definition.series_id), None)
+    if candidate is None:
+        return definition
+    retained = {_fact_signature(fact): fact for fact in candidate.facts}
+    return definition.model_copy(
+        update={
+            "identity": candidate.identity,
+            "facts": tuple(retained.get(_fact_signature(fact), fact) for fact in definition.facts),
+        }
+    )
+
+
+def _fact_signature(fact: PhysicalFacts) -> tuple[object, ...]:
+    return (
+        fact.quantity.value,
+        fact.source_unit.value,
+        fact.normalized_unit,
+        fact.frequency.value,
+        fact.statistic.value,
+        fact.temporal_support.value,
+        fact.day_definition.value,
+        fact.timestamp_anchor.value,
+        fact.time_zone.value,
+        fact.vertical_reference.value,
+        fact.vertical_datum.value,
+        fact.clipping_axis,
+        fact.label_time,
+    )
+
+
+def resolve_series_lookup(
+    content: bytes,
+    station: str,
+    product: ProductId,
+    *,
+    evidence: str,
+    known_series: tuple[SourceSeries, ...] = (),
+) -> tuple[tuple[SourceSeries, ...], SeriesAnnotationTable]:
+    """Validate an INA ``/obs/puntual/series`` JSON response for one station and product."""
+    spec = SPECS_BY_PRODUCT_ID.get(str(product))
+    if spec is None:
+        raise FatalContractError(f"Unsupported INA Alerta5 product_id: {product!r}")
+
+    try:
+        document = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        raise UnsupportedSourceStructureError("INA /obs/puntual/series response is not valid JSON") from error
+
+    if not isinstance(document, dict) or not isinstance(document.get("rows"), list):
+        raise UnsupportedSourceStructureError("INA /obs/puntual/series response must contain a JSON rows array")
+
+    if "is_last_page" in document and document["is_last_page"] is not True:
+        raise UnsupportedSourceStructureError(
+            "INA /obs/puntual/series response is paginated (is_last_page != true); complete inventory is not established"
+        )
+
+    raw_rows = cast("list[object]", document["rows"])
+    if "total" in document:
+        raw_total = document["total"]
+        if isinstance(raw_total, bool) or not isinstance(raw_total, int | str):
+            raise UnsupportedSourceStructureError(f"INA /obs/puntual/series total field is malformed: {raw_total!r}")
+        if isinstance(raw_total, str):
+            stripped = raw_total.strip()
+            if not stripped.isascii() or not stripped.isdigit():
+                raise UnsupportedSourceStructureError(
+                    f"INA /obs/puntual/series total field is not an integer: {raw_total!r}"
+                )
+            total_count = int(stripped)
+        else:
+            total_count = raw_total
+        if total_count != len(raw_rows):
+            raise UnsupportedSourceStructureError(
+                f"INA /obs/puntual/series total {total_count} contradicts {len(raw_rows)} returned rows"
+            )
+
+    resolved: list[SourceSeries] = []
+    availability_rows: list[dict[str, object]] = []
+    seen_ids: set[int] = set()
+    for index, entry in enumerate(raw_rows):
+        if not isinstance(entry, dict):
+            raise UnsupportedSourceStructureError(f"INA /obs/puntual/series row {index} must be a JSON object")
+        row_map = cast("dict[str, object]", entry)
+        if "tipo" in row_map and row_map["tipo"] != "puntual":
+            raise UnsupportedSourceStructureError(
+                f"INA /obs/puntual/series row {index} has non-puntual tipo {row_map['tipo']!r}"
+            )
+        raw_id = row_map.get("id")
+        if type(raw_id) is not int or raw_id <= 0:
+            raise UnsupportedSourceStructureError(
+                f"INA /obs/puntual/series row {index} lacks a positive integer series id: {raw_id!r}"
+            )
+        if raw_id in seen_ids:
+            raise UnsupportedSourceStructureError(f"INA /obs/puntual/series repeats published series_id {raw_id}")
+        seen_ids.add(raw_id)
+
+        estacion = row_map.get("estacion")
+        if not isinstance(estacion, dict):
+            raise UnsupportedSourceStructureError(
+                f"INA /obs/puntual/series series {raw_id} lacks embedded estacion metadata"
+            )
+        est_id = cast("dict[str, object]", estacion).get("id")
+        if type(est_id) is not int or str(est_id) != station:
+            raise UnsupportedSourceStructureError(
+                f"INA /obs/puntual/series series {raw_id} estacion.id {est_id!r} contradicts requested station {station!r}"
+            )
+
+        proc_obj = row_map.get("procedimiento")
+        if not isinstance(proc_obj, dict):
+            raise UnsupportedSourceStructureError(
+                f"INA /obs/puntual/series series {raw_id} lacks embedded procedimiento metadata"
+            )
+        proc_id = cast("dict[str, object]", proc_obj).get("id")
+        if type(proc_id) is not int:
+            raise UnsupportedSourceStructureError(
+                f"INA /obs/puntual/series series {raw_id} procedimiento.id {proc_id!r} must be an integer"
+            )
+
+        try:
+            unit_abrev, data_availability = validate_series_record_metadata(
+                row_map,
+                spec,
+                series_id=raw_id,
+                proc_id=proc_id,
+            )
+            definition = source_series(
+                station,
+                str(product),
+                published_series_id=raw_id,
+                source_unit=unit_abrev,
+                origin="response",
+                identity_evidence=evidence,
+            )
+        except FatalContractError as error:
+            raise UnsupportedSourceStructureError(str(error)) from error
+
+        resolved.append(reused_series(definition, known_series))
+        if data_availability is not None:
+            availability_rows.append({"series_id": definition.series_id, "data_availability": data_availability})
+
+    ordered = tuple(sorted(resolved, key=lambda item: int(item.identity.published_id or "0")))
+    if availability_rows:
+        availability_frame = pl.DataFrame(
+            availability_rows,
+            schema={**SERIES_STRUCTURAL_SCHEMA, **AR_INA_SERIES_SCHEMA.polars_schema()},
+        )
+        annotations = SeriesAnnotationTable.from_rows(schema=AR_INA_SERIES_SCHEMA, rows=availability_frame)
+    else:
+        annotations = SeriesAnnotationTable.empty(AR_INA_SERIES_SCHEMA)
+    return ordered, annotations
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:

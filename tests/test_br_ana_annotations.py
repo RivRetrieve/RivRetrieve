@@ -583,7 +583,7 @@ def test_br_ana_recorded_daily_replay_emits_annotations(
     assert output.getvalue() == expected_output
 
 
-@pytest.mark.recorded("tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json")
+@pytest.mark.recorded("tests/recordings/br_ana_window_perf/telemetry_15400000_2024-01-02_DIAS_30.recording.json")
 def test_br_ana_recorded_telemetry_replay_emits_annotations(
     retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -592,7 +592,8 @@ def test_br_ana_recorded_telemetry_replay_emits_annotations(
     replay = ReplayTransport(
         (
             read_recording(
-                retained_evidence_root / "tests/recordings/br_ana/telemetry_15400000_2024-01-04_DIAS_30.recording.json"
+                retained_evidence_root
+                / "tests/recordings/br_ana_window_perf/telemetry_15400000_2024-01-02_DIAS_30.recording.json"
             ),
         )
     )

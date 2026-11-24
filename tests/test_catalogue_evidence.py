@@ -683,42 +683,7 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
         del model["fact_universe"][48:51]
         del model["fact_bindings"][3:5]
         return AcquisitionProvenance.model_validate(model)
-    if provenance.provider_id == "jp_mlit":
-        expected_binding = {
-            "acquisition_id": "station_zero_point_definition_capture_2026_08_02",
-            "fact_group": "mlit_station_zero_point_elevation_definition",
-            "facts": ["source.station.mlit_zero_point_elevation_definition"],
-            "source_id": "jp_mlit",
-        }
-        expected_acquisition = {
-            "acquisition_id": "station_zero_point_definition_capture_2026_08_02",
-            "description": "Original MLIT station-detail recording exposing the zero-point elevation field",
-            "instant_type": "retrieval",
-            "material": None,
-            "method": "http_request",
-            "recording_ids": ["jp_mlit_site_info_detail_301011281104010"],
-            "requested_from": ["http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010"],
-            "retrieved_at_end": None,
-            "retrieved_at_start": "2026-08-02T19:35:42Z",
-        }
-        expected_evidence = {
-            "description": "Original station-detail field context for 零点高; no separate global unit or datum",
-            "evidence_id": "jp_mlit_station_zero_point_definition",
-            "recording": {
-                "media_type": "text/html; charset=EUC-JP",
-                "recording_id": "jp_mlit_site_info_detail_301011281104010",
-                "repository_path": "tests/test_data/jp_mlit_site_info_detail_301011281104010.html",
-                "retrieved_at": "2026-08-02T19:35:42Z",
-                "sha256": "81e7269886397975867bf556c8d5b6659bd5f8d7318c4cf062cd0f47419418f9",
-                "source_url": "http://www1.river.go.jp/cgi-bin/SiteInfoDetail.exe?ID=301011281104010",
-            },
-        }
-        (source,) = model["source_records"]
-        assert source["source_id"] == "jp_mlit"
-        assert source["acquisitions"].pop(0) == expected_acquisition
-        assert source["evidence"].pop(0) == expected_evidence
-        offset = 8
-    elif provenance.provider_id == "no_nve":
+    if provenance.provider_id == "no_nve":
         expected_binding = {
             "acquisition_id": "station_schema_capture_2026_09_04",
             "fact_group": "station_metadata_definitions",
@@ -806,18 +771,17 @@ def test_historical_projection_rejects_changed_metadata_lineage(mutation):
         historical_source_provenance(AcquisitionProvenance.model_validate(payload), metadata)
 
 
-@pytest.mark.parametrize("mutation", ["binding", "acquisition", "recording"])
+@pytest.mark.parametrize("mutation", ["binding", "fact"])
 def test_historical_restoration_rejects_changed_metadata_source_extension(mutation):
-    original = _legacy("jp_mlit")
-    metadata = pl.read_parquet(ROOT / "jp_mlit/catalogue/station_metadata.parquet")
+    original = _legacy("no_nve")
+    metadata = pl.read_parquet(ROOT / "no_nve/catalogue/station_metadata.parquet")
     projected = historical_source_provenance(original, metadata)
     payload = projected.model_dump(mode="json")
     if mutation == "binding":
         payload["fact_bindings"][0]["fact_group"] = "other_definition"
-    elif mutation == "acquisition":
-        payload["source_records"][0]["acquisitions"][0]["description"] = "changed witness"
     else:
-        payload["source_records"][0]["evidence"][0]["recording"]["sha256"] = "a" * 64
+        payload["fact_universe"][6] = "source.station_catalogue.other_definition"
+        payload["fact_bindings"][0]["facts"][0] = "source.station_catalogue.other_definition"
     with pytest.raises(AssertionError):
         _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
 
@@ -860,7 +824,7 @@ def test_polish_historical_restoration_preserves_unexpected_source_facts():
     assert fact in restored.fact_universe
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["ca_eccc", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_removes_only_declared_metadata_source_closure(provider):
     original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
@@ -871,7 +835,6 @@ def test_historical_restoration_removes_only_declared_metadata_source_closure(pr
     fact_start, fact_count, binding_start, binding_count = {
         "ca_eccc": (5, 3, 0, 3),
         "ch_foen": (47, 5, 11, 4),
-        "jp_mlit": (8, 1, 0, 1),
         "no_nve": (6, 4, 0, 1),
         "pl_imgw": (48, 3, 3, 2),
         "usgs_nwis": (0, 3, 0, 1),
@@ -894,7 +857,7 @@ def test_historical_restoration_removes_only_declared_metadata_source_closure(pr
     assert projected.model_dump(mode="json") == before
 
 
-@pytest.mark.parametrize("provider", ["ca_eccc", "jp_mlit", "no_nve", "pl_imgw", "usgs_nwis"])
+@pytest.mark.parametrize("provider", ["ca_eccc", "no_nve", "pl_imgw", "usgs_nwis"])
 def test_historical_restoration_preserves_changes_outside_the_extension(provider):
     original = _historical_metadata_extension_input(provider)
     metadata = pl.read_parquet(ROOT / provider / "catalogue/station_metadata.parquet")
@@ -905,8 +868,8 @@ def test_historical_restoration_preserves_changes_outside_the_extension(provider
     restored = _assert_metadata_source_extensions_and_restore_original(AcquisitionProvenance.model_validate(payload))
     expected["source_records"][0]["issuer"] = "changed historical issuer"
     assert restored.model_dump(mode="json") == expected
-    if provider == "jp_mlit":
-        # JP needs no retained intermediate restoration, so exercise the actual
+    if provider == "no_nve":
+        # NVE needs no retained intermediate restoration, so exercise the actual
         # immutable old oracle here, not a digest derived from today's product.
         oracle = json.loads((Path(__file__).parent / "test_data/catalogue_provenance_ordered_v2.json").read_text())
         ordered = json.dumps(restored.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
@@ -1525,7 +1488,6 @@ def _assert_bulk_source_history_preserved(retained_evidence_root: Path, provider
                 "tests/test_data/french_combined_catalogue",
             ),
         ),
-        "jp_mlit",
         "lt_lhmt",
         "no_nve",
         pytest.param(

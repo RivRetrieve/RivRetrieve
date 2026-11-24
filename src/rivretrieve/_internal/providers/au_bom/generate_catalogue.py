@@ -1,0 +1,468 @@
+"""BoM catalogue maintenance : build(NativeTable × OriginDeclarations) -> GeneratedAuBomCatalogue."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
+from pathlib import Path
+
+import polars as pl
+
+from rivretrieve._internal.acquisition_provenance import (
+    AcquisitionProvenance,
+    CatalogueBuildInputs,
+    RetainedInputReceipt,
+)
+from rivretrieve._internal.catalogue_origins import OriginDeclarations, enforce_catalogue_origins
+from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, stamp_native_table
+from rivretrieve._internal.catalogues.schemas import (
+    PRODUCT_CATALOG_SCHEMA,
+    STATION_CATALOG_SCHEMA,
+    STATION_PRODUCT_CATALOG_SCHEMA,
+    AvailabilityDtype,
+    ProductCatalog,
+    StationCatalog,
+    StationProductCatalog,
+    validate_catalogue,
+)
+from rivretrieve._internal.catalogues.source_series import SourceDescriptions
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.au_bom.series import PRODUCT_DEFINITIONS
+
+PROVIDER_ID = ProviderId("au_bom")
+PROVIDER_NAME = "Bureau of Meteorology (BoM) Water Data Online"
+
+NATIVE_SOURCE_SCHEMA = pl.Schema(
+    {
+        "station_no": pl.String,
+        "station_name": pl.String,
+        "station_longname": pl.String,
+        "station_latitude": pl.Float64,
+        "station_longitude": pl.Float64,
+        "station_georefsystem": pl.String,
+    }
+)
+NATIVE_SCHEMA = pl.Schema({**NATIVE_SOURCE_SCHEMA, "retrieved_at": pl.Datetime(time_unit="us", time_zone="UTC")})
+
+ASSOCIATION_SCHEMA = pl.Schema({"station_no": pl.String, "product_id": pl.String})
+
+
+STATION_LIST_KINDS = ("station_list_discharge", "station_list_stage", "station_list_temperature")
+
+
+@dataclass(frozen=True)
+class GeneratedAuBomCatalogue:
+    provider_info: dict[str, object]
+    products: ProductCatalog
+    stations: StationCatalog
+    station_products: StationProductCatalog
+    acquisition_provenance: AcquisitionProvenance
+    source_descriptions: SourceDescriptions
+
+
+def station_native_table(
+    station_list_docs: dict[str, list], *, retrieved_at: RetrievedAt
+) -> tuple[NativeTable, tuple[str, ...]]:
+    """Merge BoM's discharge/stage/temperature-filtered station lists into one native table.
+
+    Confirmed live on 2026-11-02/03: about 1.2% of station_no values (102 of
+    8,765) carry more than one distinct name/coordinate/georefsystem record,
+    either duplicated within a single getStationList response or disagreeing
+    between the discharge-, stage- and temperature-filtered lists -- an
+    uncorrected source duplicate, not evidence of distinct stations sharing
+    an identifier. This keeps the first record encountered in a fixed
+    traversal order (discharge list, then stage, then temperature; file
+    order within each), the same "take the first" rule both legacy reference
+    clients already apply to duplicate series (#334), and returns the
+    affected station_no values rather than silently dropping the finding.
+    """
+    rows_by_station: dict[str, dict[str, object]] = {}
+    ambiguous: set[str] = set()
+    for kind in ("station_list_discharge", "station_list_stage", "station_list_temperature"):
+        doc = station_list_docs[kind]
+        header = doc[0]
+        for raw_row in doc[1:]:
+            record = dict(zip(header, raw_row, strict=True))
+            station_no = record["station_no"]
+            row = {
+                "station_no": station_no,
+                "station_name": record["station_name"] or None,
+                "station_longname": record.get("station_longname") or None,
+                "station_latitude": float(record["station_latitude"]) if record.get("station_latitude") else None,
+                "station_longitude": float(record["station_longitude"]) if record.get("station_longitude") else None,
+                "station_georefsystem": record.get("station_georefsystem") or None,
+            }
+            existing = rows_by_station.get(station_no)
+            if existing is None:
+                rows_by_station[station_no] = row
+            elif existing != row:
+                ambiguous.add(station_no)
+    if not rows_by_station:
+        raise FatalContractError("au_bom station lists produced no stations")
+    source = pl.DataFrame(
+        sorted(rows_by_station.values(), key=lambda row: row["station_no"]),
+        schema=NATIVE_SOURCE_SCHEMA,
+    )
+    return stamp_native_table(source, retrieved_at), tuple(sorted(ambiguous))
+
+
+def river_gauge_native_table(all_stations: NativeTable, witnessed_station_ids: set[str]) -> NativeTable:
+    """Scope the retained station-list rows to the river-gauge subset.
+
+    BoM's getStationList filtered by parameter type proves parameter
+    *association*, not that an admitted series actually exists there (#334,
+    confirmed again on 2026-11-02: 8,765 parameter-associated stations vs.
+    8,120 actually witnessed in a network-wide getTimeseriesList response).
+    The catalogue's native table is this witnessed subset, analogous to
+    at_ehyd's lake exclusion: a provider's native table is its established
+    scope, not every raw row a broader request happened to return.
+    """
+    filtered = all_stations.data.filter(pl.col("station_no").is_in(witnessed_station_ids))
+    if filtered.height != len(witnessed_station_ids):
+        raise FatalContractError("au_bom: a witnessed station_no is absent from the retained station lists")
+    return NativeTable(filtered)
+
+
+def timeseries_list_associations(doc: list, *, product_id: str, station_ids: set[str]) -> pl.DataFrame:
+    """One association row per station witnessed in a network-wide getTimeseriesList response."""
+    header = doc[0]
+    station_index = header.index("station_no")
+    witnessed = {row[station_index] for row in doc[1:]}
+    unexpected = witnessed - station_ids
+    if unexpected:
+        raise FatalContractError(
+            f"au_bom timeseries list for {product_id} witnesses stations outside the native table: "
+            f"{sorted(unexpected)[:5]!r}"
+        )
+    return pl.DataFrame(
+        {"station_no": sorted(witnessed), "product_id": [product_id] * len(witnessed)},
+        schema=ASSOCIATION_SCHEMA,
+    )
+
+
+def build_products() -> ProductCatalog:
+    rows = [
+        {
+            "provider_id": PROVIDER_ID,
+            "product_id": d.product_id,
+            "observed_property": d.observed_property,
+            "frequency": d.frequency,
+            "statistic": d.statistic,
+            "period_type": "interval",
+            "period_anchor": "unknown",
+            "unit": d.canonical_unit,
+            "native_id": d.native_id,
+        }
+        for d in PRODUCT_DEFINITIONS
+    ]
+    return pl.DataFrame(rows, schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
+
+
+def build_stations(native_table: NativeTable) -> StationCatalog:
+    from rivretrieve._internal.providers.au_bom.origins import _epsg_for_georefsystem
+
+    rows = [
+        {
+            "provider_id": PROVIDER_ID,
+            "station_id": row["station_no"],
+            "latitude": row["station_latitude"],
+            "longitude": row["station_longitude"],
+            "crs": _epsg_for_georefsystem(row["station_georefsystem"]) if row["station_georefsystem"] else "unknown",
+        }
+        for row in native_table.data.iter_rows(named=True)
+    ]
+    return pl.DataFrame(rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
+
+
+def build_station_products(
+    *,
+    station_ids: list[str],
+    associations: pl.DataFrame,
+    catalogue_date: date,
+) -> StationProductCatalog:
+    witnessed = {(row["station_no"], row["product_id"]) for row in associations.iter_rows(named=True)}
+    rows = [
+        {
+            "provider_id": PROVIDER_ID,
+            "station_id": station_id,
+            "product_id": d.product_id,
+            "availability": "available" if (station_id, d.product_id) in witnessed else "unknown",
+            "availability_reason": None
+            if (station_id, d.product_id) in witnessed
+            else "Not witnessed in BoM's network-wide getTimeseriesList response for this series",
+            "published_record_start_date": None,
+            "published_record_end_date": None,
+            "last_catalogue_check": catalogue_date,
+        }
+        for station_id in station_ids
+        for d in PRODUCT_DEFINITIONS
+    ]
+    return pl.DataFrame(rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).with_columns(
+        pl.col("availability").cast(AvailabilityDtype)
+    )
+
+
+def build_provider_info(
+    catalogue_date: date, *, license_text: str | None, citation_text: str | None
+) -> dict[str, object]:
+    return {
+        "provider_id": PROVIDER_ID,
+        "name": PROVIDER_NAME,
+        "live_stations": False,
+        "live_products": False,
+        "live_station_products": False,
+        "bulk_observations": (
+            "true: a station's getTimeseriesList lookup is shared across every requested product; "
+            "a station's duplicate ts_id for one product are combined into one getTimeseriesValues call; "
+            "HTTP 500 retried by the shared transport before being reported as a recoverable issue"
+        ),
+        "catalogue_version": catalogue_date.isoformat(),
+        "license": license_text,
+        "citation": citation_text,
+    }
+
+
+def catalogue_tables(
+    native_table: NativeTable, associations: pl.DataFrame, *, checked_on: date
+) -> tuple[ProductCatalog, StationCatalog, StationProductCatalog]:
+    products = build_products()
+    stations = build_stations(native_table)
+    station_products = build_station_products(
+        station_ids=stations["station_id"].to_list(), associations=associations, catalogue_date=checked_on
+    )
+    for frame, schema in (
+        (products, PRODUCT_CATALOG_SCHEMA),
+        (stations, STATION_CATALOG_SCHEMA),
+        (station_products, STATION_PRODUCT_CATALOG_SCHEMA),
+    ):
+        validate_catalogue(frame, schema, on_issue="raise")
+    return products, stations, station_products
+
+
+def build_catalogue(
+    native_table: NativeTable,
+    origins: OriginDeclarations,
+    *,
+    associations: pl.DataFrame,
+    checked_on: date,
+    provenance: AcquisitionProvenance,
+) -> GeneratedAuBomCatalogue:
+    """Assemble the official Australia BoM offline station and product catalogue."""
+    from rivretrieve._internal.providers.au_bom.catalogue_series import describe_catalogue
+
+    if native_table.data.schema != NATIVE_SCHEMA:
+        raise FatalContractError("au_bom native table does not have the exact required schema")
+    if native_table.data.is_empty():
+        raise FatalContractError("au_bom native table must not be empty")
+    products, stations, station_products = catalogue_tables(native_table, associations, checked_on=checked_on)
+    enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
+    if provenance is None or provenance.provider_id != "au_bom":
+        raise FatalContractError("Official au_bom catalogue requires its selected acquisition provenance")
+    statements = {
+        statement.kind: statement.exact_text for source in provenance.source_records for statement in source.statements
+    }
+    provider_info = build_provider_info(
+        checked_on, license_text=statements.get("license"), citation_text=statements.get("citation")
+    )
+    from rivretrieve._internal.catalogues.artifact import packaged_catalogue_artifact_from_components
+
+    artifact = packaged_catalogue_artifact_from_components(
+        provider_info, products, stations, station_products, acquisition_provenance=provenance, on_issue="raise"
+    )
+    return GeneratedAuBomCatalogue(
+        provider_info, products, stations, station_products, provenance, describe_catalogue(artifact)
+    )
+
+
+def write_catalogue(
+    catalogue: GeneratedAuBomCatalogue,
+    out_dir: Path | str,
+    *,
+    build_inputs: CatalogueBuildInputs,
+    native_table: NativeTable,
+) -> None:
+    """Publish candidate runtime tables through the shared evidence-aware publication path."""
+    from io import BytesIO
+
+    from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
+    from rivretrieve._internal.providers.au_bom.origins import (
+        STATION_CATALOGUE_ORIGINS,
+        STATION_METADATA_FIELDS,
+        STATION_METADATA_NOTICE,
+    )
+
+    files = {
+        "provider.json": (json.dumps(catalogue.provider_info, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    }
+    for name, frame in (
+        ("products", catalogue.products),
+        ("stations", catalogue.stations),
+        ("station_products", catalogue.station_products),
+    ):
+        buffer = BytesIO()
+        frame.write_parquet(buffer)
+        files[f"{name}.parquet"] = buffer.getvalue()
+    metadata = build_catalogue_metadata(
+        catalogue.acquisition_provenance,
+        (STATION_CATALOGUE_ORIGINS,),
+        files,
+        build_inputs=build_inputs,
+        native_table=native_table,
+        metadata_fields=STATION_METADATA_FIELDS,
+        station_metadata_notice=STATION_METADATA_NOTICE,
+        source_descriptions=catalogue.source_descriptions,
+    )
+    output = Path(out_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    for name, content in {**files, **metadata}.items():
+        (output / name).write_bytes(content)
+
+
+@dataclass(frozen=True)
+class CatalogueSources:
+    native_table: NativeTable
+    associations: pl.DataFrame
+    checked_on: date
+    provenance: AcquisitionProvenance
+
+
+def read_catalogue_sources(
+    evidence_root: Path,
+    *,
+    selection_path: str = "maintenance/catalogue/au_bom/official/catalogue.json",
+    input_receipt: RetainedInputReceipt,
+) -> CatalogueSources:
+    """Read an explicitly selected offline build after exact member verification.
+
+    The reviewed declaration (``selection_path``, read from ``evidence_root``)
+    names 25 retained BoM captures and one separately retained derived
+    ``native_table``, each checked against ``input_receipt`` before use --
+    matching ``ch_foen``'s own ``read_catalogue_sources`` shape. The native
+    table is independently recomputed from the 3 station-list captures and
+    the 18 timeseries-list captures (``station_native_table`` /
+    ``river_gauge_native_table``, unchanged) and checked byte-for-byte
+    against the separately retained ``native_table`` member: two routes to
+    the same evidence must agree, not one asserted over the other.
+    """
+    from rivretrieve._internal.acquisition_provenance import (
+        AcquisitionRecord,
+        FactBinding,
+        NativeTableIdentity,
+        RecordingReference,
+        SourceStatement,
+    )
+    from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+    from rivretrieve._internal.catalogues.native import read_native_table
+    from rivretrieve._internal.providers.au_bom import origins
+
+    if selection_path not in {item.consumer_path for item in input_receipt.declaration_inputs}:
+        raise FatalContractError("au_bom selection requires a selected authored declaration")
+    verify_retained_input_files(input_receipt, evidence_root)
+    selection = json.loads((evidence_root / selection_path).read_bytes())
+    selected = {item.consumer_path: item for item in input_receipt.inputs}
+    captures = {capture["kind"]: capture for capture in selection["captures"]}
+
+    def body(kind: str) -> bytes:
+        capture = captures[kind]
+        reference = RecordingReference.model_validate(capture["recording"])
+        if reference.repository_path != capture["body"]:
+            raise FatalContractError("au_bom selected body disagrees with recording identity")
+        member = selected.get(capture["body"])
+        if member is None or member.sha256 != reference.sha256:
+            raise FatalContractError("au_bom original is absent from selected retained inputs")
+        return (evidence_root / capture["body"]).read_bytes()
+
+    station_docs = {
+        kind: json.loads(body(kind))
+        for kind in ("station_list_discharge", "station_list_stage", "station_list_temperature")
+    }
+    checked_on_date = date.fromisoformat(selection["checked_on"])
+    all_stations, _ambiguous = station_native_table(
+        station_docs,
+        retrieved_at=RetrievedAt(
+            datetime(checked_on_date.year, checked_on_date.month, checked_on_date.day, tzinfo=UTC)
+        ),
+    )
+    provisional_ids = set(all_stations.data["station_no"].to_list())
+    assoc_frames = [
+        timeseries_list_associations(
+            json.loads(body(d.timeseries_list_kind)),
+            product_id=d.product_id,
+            station_ids=provisional_ids,
+        )
+        for d in PRODUCT_DEFINITIONS
+    ]
+    associations = pl.concat(assoc_frames)
+    witnessed = set(associations["station_no"].to_list())
+    native = river_gauge_native_table(all_stations, witnessed)
+
+    native_path = selection["native_table"]
+    native_member = selected.get(native_path)
+    if native_member is None:
+        raise FatalContractError("au_bom native table is absent from selected inputs")
+    retained_native = read_native_table(
+        evidence_root / native_path,
+        expected_sha256=native_member.sha256,
+        expected_byte_size=native_member.byte_size,
+    )
+    if not native.data.equals(retained_native.data):
+        raise FatalContractError("au_bom recomputed native table differs from its separately retained identity")
+
+    provenance = origins.build_acquisition_provenance(
+        NativeTableIdentity(
+            location_kind="retained",
+            repository_path=native_path,
+            revision=native_member.archive_revision,
+            sha256=native_member.sha256,
+            byte_size=native_member.byte_size,
+        ),
+        tuple(RecordingReference.model_validate(capture["recording"]) for capture in selection["captures"]),
+        acquisitions=tuple(AcquisitionRecord.model_validate(item) for item in selection["publication_acquisitions"]),
+        source_bindings=tuple(FactBinding.model_validate(item) for item in selection["source_bindings"]),
+        statements=tuple(SourceStatement.model_validate(item) for item in selection["statements"]),
+    )
+    return CatalogueSources(native, associations, checked_on_date, provenance)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Compose a selected, offline official au_bom catalogue candidate outside source checkouts."""
+    import argparse
+
+    from rivretrieve._internal.acquisition_provenance import RetainedInputReceipt
+    from rivretrieve._internal.providers.au_bom.origins import STATION_CATALOGUE_ORIGINS
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument("--selection", default="maintenance/catalogue/au_bom/official/catalogue.json")
+    parser.add_argument("--input-receipt", type=Path, required=True)
+    parser.add_argument("--build-inputs", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args(argv)
+    output = args.out.resolve()
+    evidence_root = args.evidence_root.resolve(strict=True)
+    if output.exists() or output.is_relative_to(evidence_root) or evidence_root.is_relative_to(output):
+        raise FatalContractError("au_bom catalogue output must be a new path separate from retained inputs")
+    if any((parent / ".git").exists() for parent in (output, *output.parents)):
+        raise FatalContractError("au_bom catalogue output must stay outside source checkouts")
+    receipt = RetainedInputReceipt.model_validate_json(args.input_receipt.read_bytes())
+    sources = read_catalogue_sources(evidence_root, selection_path=args.selection, input_receipt=receipt)
+    catalogue = build_catalogue(
+        sources.native_table,
+        STATION_CATALOGUE_ORIGINS,
+        associations=sources.associations,
+        checked_on=sources.checked_on,
+        provenance=sources.provenance,
+    )
+    write_catalogue(
+        catalogue,
+        output,
+        build_inputs=CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes()),
+        native_table=sources.native_table,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
