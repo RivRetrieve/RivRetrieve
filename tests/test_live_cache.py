@@ -109,7 +109,10 @@ class RefusedTransport:
 class ParseOutputControl:
     config = _STAGES.config
     window_declarations = _STAGES.window_declarations
-    fetch = staticmethod(_STAGES.fetch)
+
+    @staticmethod
+    def fetch(*args, **kwargs):
+        return replace(_STAGES.fetch(*args, **kwargs), interpretations=())
 
     def __init__(self, limit: int) -> None:
         self.limit = limit
