@@ -18,7 +18,6 @@ from rivretrieve._internal.providers.au_bom.config import (
     AuBomTimeseriesListCoordinates,
     AuBomTimeseriesValuesCoordinates,
 )
-from rivretrieve._internal.providers.au_bom.fetch import resolve_timeseries_list
 from rivretrieve._internal.providers.au_bom.series import PRODUCT_DEFINITIONS, describe_series
 from rivretrieve._internal.source_annotations import (
     OBSERVATION_STRUCTURAL_SCHEMA,
@@ -41,6 +40,46 @@ from rivretrieve._internal.source_series import (
 _PROVIDER_ID = ProviderId("au_bom")
 _QUANTITY_BY_PRODUCT_ID = {d.product_id: d.quantity for d in PRODUCT_DEFINITIONS}
 _PLUS_TEN_HOURS = timedelta(hours=10)
+
+
+def resolve_timeseries_list(content: bytes, station: str) -> dict[tuple[str, str], tuple[tuple[str, str], ...]]:
+    """Map each ``(ts_name, parametertype_name)`` at ``station`` to its ``(ts_id, ts_unitsymbol)`` pairs.
+
+    ``ts_name`` alone is ambiguous (confirmed live, 2026-11-03: station 410730's
+    ``DMQaQc.Merged.DailyMean.24HR`` is shared by discharge, stage, pH,
+    turbidity, conductivity and water temperature alike); ``parametertype_name``
+    disambiguates it. A resolved pair can still map to more than one ``ts_id``
+    (confirmed live, 2026-11-03: 74 discharge, 79 stage and 4 water-temperature
+    stations each carry two ``ts_id`` for one admitted series, with no field
+    distinguishing them). This returns every pair found, never collapsing them.
+    """
+    try:
+        document = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise UnsupportedSourceStructureError("BoM getTimeseriesList response is not valid JSON") from error
+    if not isinstance(document, list) or not document or not isinstance(document[0], list):
+        raise UnsupportedSourceStructureError("BoM getTimeseriesList response must be a JSON array of arrays")
+    header = document[0]
+    try:
+        name_index = header.index("ts_name")
+        parameter_index = header.index("parametertype_name")
+        id_index = header.index("ts_id")
+        unit_index = header.index("ts_unitsymbol")
+        station_index = header.index("station_no")
+    except ValueError as error:
+        raise UnsupportedSourceStructureError("BoM getTimeseriesList header lacks a required column") from error
+
+    resolved: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    for row in document[1:]:
+        if not isinstance(row, list) or len(row) != len(header):
+            raise UnsupportedSourceStructureError("BoM getTimeseriesList row does not match its header width")
+        if str(row[station_index]) != station:
+            raise UnsupportedSourceStructureError(
+                f"BoM getTimeseriesList row station_no {row[station_index]!r} contradicts requested station {station!r}"
+            )
+        key = (str(row[name_index]), str(row[parameter_index]))
+        resolved.setdefault(key, []).append((str(row[id_index]), str(row[unit_index])))
+    return {key: tuple(pairs) for key, pairs in resolved.items()}
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
@@ -67,11 +106,62 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
 
 
 def _parse_list_prerequisite(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
-    """Resolve NO_MATCH, or UNSUPPORTED for a reported-but-wrong-unit series, for any product
-    this station's ts_id lookup did not resolve into a genuine values request.
+    """Decode the getTimeseriesList response and interpret it (the driver's fallback path
+    when fetch.py's own acquisition-time interpretation was not handed off for reuse; see
+    interpret_timeseries_list below).
+    """
+    station = payload.station_products[0][0]
+    try:
+        ts_id_map = resolve_timeseries_list(payload.content, station)
+    except UnsupportedSourceStructureError as error:
+        return interpret_timeseries_list_failure(payload, str(error))
+    return interpret_timeseries_list(payload, provider_config, ts_id_map)
 
-    A product the lookup *did* resolve has its own values Payload (or
-    FailedSourceRequest) owning the real outcome; this never double-reports it.
+
+def interpret_timeseries_list_failure(payload: Payload, reason: str) -> ParsedSeries:
+    """Isolate a malformed getTimeseriesList response as a FAILED outcome per product."""
+    station = payload.station_products[0][0]
+    window = SeriesWindow(
+        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+    )
+    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+    outcomes = tuple(
+        RetrievalOutcome(
+            outcome_id=stable_id(payload.acquisition_id, station, str(product), "list-failed"),
+            series_id=None,
+            station_id=station,
+            product_id=str(product),
+            window=window,
+            status=OutcomeStatus.FAILED,
+            reason=reason,
+            retrieved_at=retrieved,
+        )
+        for _, product in payload.station_products
+    )
+    issue = Issue(
+        severity="error",
+        code="source.unsupported_structure",
+        message=reason,
+        details={"station_id": station},
+        provider_id=_PROVIDER_ID,
+    )
+    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), outcomes, (issue,))
+
+
+def interpret_timeseries_list(
+    payload: Payload,
+    provider_config: ProviderConfig,
+    ts_id_map: dict[tuple[str, str], tuple[tuple[str, str], ...]],
+) -> ParsedSeries:
+    """Resolve NO_MATCH, or UNSUPPORTED for a reported-but-wrong-unit series, for any product
+    this station's already-decoded ts_id lookup did not resolve into a genuine values request.
+
+    A product the lookup *did* resolve has its own values Payload (or FailedSourceRequest)
+    owning the real outcome; this never double-reports it. Takes the already-decoded
+    ts_id_map rather than payload.content so fetch.py can hand off its own acquisition-time
+    interpretation (built from the one resolve_timeseries_list call it already makes to
+    decide which values calls to issue) instead of the driver decoding the same JSON again.
     """
     station = payload.station_products[0][0]
     window = SeriesWindow(
@@ -80,32 +170,6 @@ def _parse_list_prerequisite(payload: Payload, provider_config: ProviderConfig) 
     )
     retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
     evidence = f"source-call:{payload.acquisition_id}"
-    try:
-        ts_id_map = resolve_timeseries_list(payload.content, station)
-    except UnsupportedSourceStructureError as error:
-        reason = str(error)
-        outcomes = tuple(
-            RetrievalOutcome(
-                outcome_id=stable_id(payload.acquisition_id, station, str(product), "list-failed"),
-                series_id=None,
-                station_id=station,
-                product_id=str(product),
-                window=window,
-                status=OutcomeStatus.FAILED,
-                reason=reason,
-                retrieved_at=retrieved,
-            )
-            for _, product in payload.station_products
-        )
-        issue = Issue(
-            severity="error",
-            code="source.unsupported_structure",
-            message=reason,
-            details={"station_id": station},
-            provider_id=_PROVIDER_ID,
-        )
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), outcomes, (issue,))
-
     outcomes: list[RetrievalOutcome] = []
     inventories: list[InventorySnapshot] = []
     issues: list[Issue] = []
