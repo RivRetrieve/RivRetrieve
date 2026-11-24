@@ -104,6 +104,7 @@ nav:
   - Station Map: map.md
   - Providers:
       - Argentina (INA): providers/ar_ina.md
+      - Australia (BoM): providers/au_bom.md
       - Austria (eHYD): providers/at_ehyd.md
       - Belgium (Wallonia, SPW Hydrométrie): providers/be_wal.md
       - Bosnia and Herzegovina (AVP Sava): providers/ba_fhmzbih.md

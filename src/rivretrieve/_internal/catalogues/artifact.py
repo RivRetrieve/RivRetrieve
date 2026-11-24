@@ -47,6 +47,7 @@ ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
     {
         "ar_ina",
         "at_ehyd",
+        "au_bom",
         "ba_fhmzbih",
         "be_wal",
         "br_ana",

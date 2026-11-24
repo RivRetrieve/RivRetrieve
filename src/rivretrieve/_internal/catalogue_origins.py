@@ -226,6 +226,7 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
     {
         ProviderId("ar_ina"),
         ProviderId("at_ehyd"),
+        ProviderId("au_bom"),
         ProviderId("ba_fhmzbih"),
         ProviderId("be_wal"),
         ProviderId("br_ana"),
