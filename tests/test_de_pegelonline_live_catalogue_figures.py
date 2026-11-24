@@ -9,11 +9,13 @@ derived-input/recorded-response test levels
 material rather than proving conversion logic in isolation.
 
 Figures were re-derived from a fresh live fetch made while building this
-catalogue (2026-11-24T17:20:15Z), not trusted from the step-2 vision's pinned
-table, per that vision's own instruction. One genuine discrepancy was found and
-is deliberately NOT papered over here: the vision expects 120 stations with a
-`TRM` timeseries and 2 with `TRM_WT`; the live fetch found zero of either. See
-`generate_catalogue.py`'s module docstring and the PR description.
+catalogue, not trusted from the step-2 vision's pinned table, per that vision's
+own instruction. An initial fetch (without `includeTrmTimeseries=true`, a
+separate opt-in flag from `includeTimeseries`/`includeCharacteristicValues`)
+found zero `TRM`/`TRM_WT` stations, apparently contradicting the vision; adding
+that flag (the committed fixture below) restores `TRM = 120`, `TRM_WT = 2`,
+matching the vision exactly. See `generate_catalogue.py`'s module docstring and
+the vision's corrected "Source" section.
 """
 
 from __future__ import annotations
@@ -32,8 +34,8 @@ from rivretrieve._internal.providers.de_pegelonline.origins import STATION_CATAL
 
 FIXTURE_PATH = Path("tests/test_data/de_pegelonline_stations.json")
 NATIVE_PATH = Path("src/rivretrieve/_internal/providers/de_pegelonline/catalogue/native.parquet")
-ATTESTED_RETRIEVED_AT = datetime(2026, 11, 24, 17, 20, 15, tzinfo=UTC)
-ATTESTED_FIXTURE_SHA256 = "75aaf0d4ecd63c2672c7ab77e152ebb417711361188cb4c30048e593dfef6aae"
+ATTESTED_RETRIEVED_AT = datetime(2026, 11, 24, 20, 8, 8, tzinfo=UTC)
+ATTESTED_FIXTURE_SHA256 = "441cc00ade408d13f099c908be0fbc374e7ad7248fbecdeaf205e560b5addc67"
 CHECKED_ON = date(2026, 11, 24)
 
 
@@ -84,10 +86,10 @@ def test_station_catalogue_has_787_stations_with_57_null_coordinates(retained_ev
 
 
 @pytest.mark.derived(str(NATIVE_PATH))
-def test_product_catalogue_has_exactly_the_three_witnessed_product_ids(retained_evidence_root) -> None:
+def test_product_catalogue_has_exactly_the_five_settled_product_ids(retained_evidence_root) -> None:
     catalogue = _catalogue(retained_evidence_root)
 
-    assert catalogue.products["product_id"].sort().to_list() == ["Q", "W", "WT"]
+    assert catalogue.products["product_id"].sort().to_list() == ["Q", "TRM", "TRM_WT", "W", "WT"]
     assert set(catalogue.products["statistic"]) == {"unknown"}
 
 
@@ -97,7 +99,7 @@ def test_station_product_availability_matches_attested_per_timeseries_counts(ret
 
     available = catalogue.station_products.filter(pl.col("availability") == "available")
     counts = dict(available.group_by("product_id").len().iter_rows())
-    assert counts == {"W": 738, "WT": 142, "Q": 96}
+    assert counts == {"W": 738, "WT": 142, "Q": 96, "TRM": 120, "TRM_WT": 2}
     assert set(catalogue.station_products["published_record_start_date"]) == {None}
     assert set(catalogue.station_products["published_record_end_date"]) == {None}
 

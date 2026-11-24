@@ -75,6 +75,23 @@ SAMPLE_PAYLOAD = [
         timeseries=[
             _w_series("cm", gauge_zero_value=31.82),
             {"shortname": "WT", "longname": "WASSERTEMPERATUR ROHDATEN", "unit": "°C", "equidistance": 15},
+            # TRM/TRM_WT are the "Terminwerte" scheduled-reading variants of W/WT,
+            # each keeping its own product_id (step 2 vision). They carry no
+            # gaugeZero of their own; the shared gauge reference lives on `W`.
+            {
+                "shortname": "TRM",
+                "longname": "TERMINWERTE",
+                "unit": "cm",
+                "start": "2026-10-24T05:00:00+02:00",
+                "end": "2026-11-24T13:00:00+01:00",
+            },
+            {
+                "shortname": "TRM_WT",
+                "longname": "TERMINWERTE WASSERTEMPERATUR",
+                "unit": "°C",
+                "start": "2026-10-24T07:00:00+02:00",
+                "end": "2026-11-24T07:00:00+01:00",
+            },
         ],
     ),
     _station(
@@ -144,7 +161,7 @@ def test_station_native_table_parses_core_fields_and_flattens_water():
     assert row["water_longname"] == "ALLER"
     assert row["w_unit"] == "cm"
     assert row["w_gauge_zero_value"] == pytest.approx(31.82)
-    assert {entry["shortname"] for entry in row["timeseries"]} == {"W", "WT"}
+    assert {entry["shortname"] for entry in row["timeseries"]} == {"W", "WT", "TRM", "TRM_WT"}
 
 
 def test_station_native_table_keeps_blank_remark_distinct_from_absent_remark():
@@ -215,15 +232,26 @@ def _catalogue():
     return generate_catalogue.build_catalogue(_native_table(), STATION_CATALOGUE_ORIGINS)
 
 
-def test_build_products_returns_exactly_w_q_wt_with_distinct_observed_properties():
+def test_build_products_returns_all_five_product_ids_with_distinct_observed_properties():
     catalogue = _catalogue()
     products = catalogue.products.sort("product_id")
 
-    assert products["product_id"].to_list() == ["Q", "W", "WT"]
-    assert products["observed_property"].to_list() == ["discharge", "stage", "water_temperature"]
+    assert products["product_id"].to_list() == ["Q", "TRM", "TRM_WT", "W", "WT"]
+    assert products["observed_property"].to_list() == [
+        "discharge",
+        "stage",
+        "water_temperature",
+        "stage",
+        "water_temperature",
+    ]
     assert products.filter(pl.col("product_id") == "W")["unit"].item() == "unknown"
     assert products.filter(pl.col("product_id") == "Q")["unit"].item() == "m3/s"
     assert products.filter(pl.col("product_id") == "WT")["unit"].item() == "degC"
+    assert products.filter(pl.col("product_id") == "TRM")["unit"].item() == "cm"
+    assert products.filter(pl.col("product_id") == "TRM_WT")["unit"].item() == "degC"
+    # TRM and TRM_WT are never folded into the raw series they accompany.
+    assert products.filter(pl.col("product_id") == "TRM")["observed_property"].item() == "stage"
+    assert products.filter(pl.col("product_id") == "TRM_WT")["observed_property"].item() == "water_temperature"
     assert set(products["statistic"]) == {"unknown"}
     assert set(products["frequency"]) == {"unknown"}
 
@@ -248,6 +276,8 @@ def test_build_station_products_availability_matches_listed_timeseries():
     celle = pairs.filter(pl.col("station_id") == "b475386c-30cc-453a-b3b7-1d17ace13595")
     assert celle.filter(pl.col("product_id") == "W")["availability"].item() == "available"
     assert celle.filter(pl.col("product_id") == "WT")["availability"].item() == "available"
+    assert celle.filter(pl.col("product_id") == "TRM")["availability"].item() == "available"
+    assert celle.filter(pl.col("product_id") == "TRM_WT")["availability"].item() == "available"
     assert celle.filter(pl.col("product_id") == "Q")["availability"].item() == "unknown"
 
     gimbsheim = pairs.filter(pl.col("station_id") == "0a111111-0000-0000-0000-000000000001")

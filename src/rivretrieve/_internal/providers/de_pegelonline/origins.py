@@ -39,7 +39,7 @@ from rivretrieve._internal.catalogues.station_metadata import MetadataField
 
 STATIONS_URL = (
     "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json"
-    "?includeTimeseries=true&includeCharacteristicValues=true"
+    "?includeTimeseries=true&includeCharacteristicValues=true&includeTrmTimeseries=true"
 )
 TERMS_URL = "https://pegelonline.wsv.de/gast/nutzungsbedingungen"
 

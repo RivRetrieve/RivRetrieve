@@ -2,20 +2,21 @@
 
 Builds `StationCatalog`, `ProductCatalog`, `StationProductCatalog` and
 `ProviderInfoCatalog` from one retained snapshot of PEGELONLINE's REST API v2
-`stations.json?includeTimeseries=true&includeCharacteristicValues=true` response
-(step 1's settled source). Mirrors `lt_lhmt`'s lighter single-endpoint pattern
-rather than `ch_foen`/`dk_vanda`'s retained-input-receipt/selection.json trail,
-since this provider has one public, unauthenticated endpoint and no archive
-member to select between.
+`stations.json?includeTimeseries=true&includeCharacteristicValues=true&includeTrmTimeseries=true`
+response (step 1's settled source). Mirrors `lt_lhmt`'s lighter single-endpoint
+pattern rather than `ch_foen`/`dk_vanda`'s retained-input-receipt/selection.json
+trail, since this provider has one public, unauthenticated endpoint and no
+archive member to select between.
 
-Scope note (see the implementation PR description for the full account): a
-fresh live fetch made while building this catalogue found zero stations
-publishing a `TRM` or `TRM_WT` timeseries shortname, contradicting step 2's
-vision text (which expected 120 and 2 stations respectively, from the private
-verification-evidence research record). This builder therefore only defines the
-three `product_id`s actually witnessed in the live catalogue (`W`, `Q`, `WT`);
-`TRM`/`TRM_WT` are intentionally not fabricated. This is flagged as an open
-question for the orchestrating session, not resolved here.
+Resolved scope note: an initial live fetch made while building this catalogue
+omitted `includeTrmTimeseries=true` and found zero stations publishing a `TRM`
+or `TRM_WT` timeseries shortname, apparently contradicting step 2's vision text
+(120 and 2 stations respectively). That flag is a separate opt-in from
+`includeTimeseries`/`includeCharacteristicValues` — without it PEGELONLINE
+silently omits `TRM`/`TRM_WT` from every station's `timeseries` list, still
+`HTTP 200`, no error. Adding it restores `TRM = 120`, `TRM_WT = 2`, exactly
+matching the vision; both products are defined below. See the vision's own
+corrected "Source" section for the confirmed request shape.
 """
 
 from __future__ import annotations
@@ -62,11 +63,25 @@ PROVIDER_NAME = (
     "Generaldirektion Wasserstraßen und Schifffahrt (GDWS), PEGELONLINE"
 )
 
-# Native timeseries shortname -> RivRetrieve observed_property. Only the
-# shortnames actually witnessed in a fresh live fetch are mapped; see the
-# module docstring's scope note about TRM/TRM_WT.
-PRODUCTS: dict[str, str] = {"W": "stage", "Q": "discharge", "WT": "water_temperature"}
-PRODUCT_UNITS: dict[str, str] = {"W": "unknown", "Q": "m3/s", "WT": "degC"}
+# Native timeseries shortname -> RivRetrieve observed_property. `TRM`/`TRM_WT`
+# are the scheduled ("Terminwerte") reading variants of `W`/`WT` respectively;
+# each keeps its own distinct product_id, never folded into the raw series it
+# accompanies (step 2 vision). `WV`, `F`, `T`, and the other scheduled variants
+# this source publishes for out-of-scope parameters (`TRM_LT`, `TRM_DFH`) stay
+# out of scope entirely.
+PRODUCTS: dict[str, str] = {
+    "W": "stage",
+    "Q": "discharge",
+    "WT": "water_temperature",
+    "TRM": "stage",
+    "TRM_WT": "water_temperature",
+}
+# W merges three vertical-datum regimes (cm/m+NN/m+PNP) under one product_id,
+# so its catalogue-level unit is genuinely unknown; TRM and TRM_WT each use one
+# fixed native unit across every witnessed station (confirmed from a complete
+# live fetch: 120/120 TRM series are "cm", 2/2 TRM_WT series are "°C"), so no
+# such ambiguity applies to them.
+PRODUCT_UNITS: dict[str, str] = {"W": "unknown", "Q": "m3/s", "WT": "degC", "TRM": "cm", "TRM_WT": "degC"}
 
 TIMESERIES_STRUCT = pl.Struct({"shortname": pl.String, "unit": pl.String})
 NATIVE_SCHEMA = pl.Schema(

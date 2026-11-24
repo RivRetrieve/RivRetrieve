@@ -103,6 +103,13 @@
         "unit": "°C",
         "equidistance": 15,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -398,6 +405,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -702,6 +716,13 @@
             "timespanEnd": "2015-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -1695,6 +1716,13 @@
             "validFrom": "2012-09-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T05:00:00+01:00"
       }
     ]
   },
@@ -1944,6 +1972,27 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
+      },
+      {
+        "shortname": "TRM_LT",
+        "longname": "TERMINWERTE LUFTTEMPERATUR",
+        "unit": "°C",
+        "start": "2026-10-24T07:00:00+02:00",
+        "end": "2026-11-24T07:00:00+01:00"
+      },
+      {
+        "shortname": "TRM_WT",
+        "longname": "TERMINWERTE WASSERTEMPERATUR",
+        "unit": "°C",
+        "start": "2026-10-24T07:00:00+02:00",
+        "end": "2026-11-24T07:00:00+01:00"
       }
     ]
   },
@@ -2205,6 +2254,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T07:00:00+01:00"
       }
     ]
   },
@@ -2339,6 +2395,13 @@
           "shortDescription": "Ausfall",
           "longDescription": "Ausfall"
         }
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -2455,6 +2518,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -2578,6 +2648,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -2694,6 +2771,13 @@
             "timespanEnd": "2010-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -2830,6 +2914,27 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
+      },
+      {
+        "shortname": "TRM_LT",
+        "longname": "TERMINWERTE LUFTTEMPERATUR",
+        "unit": "°C",
+        "start": "2026-10-24T07:00:00+02:00",
+        "end": "2026-11-24T07:00:00+01:00"
+      },
+      {
+        "shortname": "TRM_WT",
+        "longname": "TERMINWERTE WASSERTEMPERATUR",
+        "unit": "°C",
+        "start": "2026-10-24T07:00:00+02:00",
+        "end": "2026-11-24T07:00:00+01:00"
       }
     ]
   },
@@ -2938,6 +3043,13 @@
             "timespanEnd": "2010-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T07:00:00+01:00"
       }
     ]
   },
@@ -3102,6 +3214,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -3264,6 +3383,13 @@
           "validFrom": "2012-01-01"
         },
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -4744,6 +4870,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -4894,6 +5027,13 @@
             "validFrom": "2002-11-05"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -5203,6 +5343,13 @@
             "validFrom": "2002-11-05"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -5433,6 +5580,13 @@
             "validFrom": "2002-11-05"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -5728,6 +5882,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -5807,6 +5968,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -5893,6 +6061,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -6124,6 +6299,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -6210,6 +6392,13 @@
             "validFrom": "2003-01-08"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -6282,6 +6471,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -6440,6 +6636,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -6744,6 +6947,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -7112,6 +7322,13 @@
             "validFrom": "2002-11-05"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -7337,6 +7554,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -7409,6 +7633,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -7481,6 +7712,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -7567,6 +7805,13 @@
         "unit": "°C",
         "equidistance": 1,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -13780,6 +14025,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -13866,6 +14118,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -14031,6 +14290,13 @@
             "validFrom": "2003-01-08"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -16362,6 +16628,13 @@
           "validFrom": "1987-11-01"
         },
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T05:00:00+01:00"
       }
     ]
   },
@@ -16628,6 +16901,13 @@
         "unit": "°C",
         "equidistance": 15,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -16876,6 +17156,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -17143,6 +17430,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -17496,6 +17790,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -18013,6 +18314,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -18097,6 +18405,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -18626,6 +18941,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -18776,6 +19098,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -18834,6 +19163,13 @@
           "validFrom": "2019-11-01"
         },
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM_DFH",
+        "longname": "TERMINWERTE DURCHFAHRTSHOEHE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -19191,6 +19527,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -19334,6 +19677,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -19660,6 +20010,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -19810,6 +20167,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -20060,6 +20424,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -20210,6 +20581,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -20276,6 +20654,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -20321,6 +20706,13 @@
             "validFrom": "2003-01-08"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -22100,6 +22492,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -22686,6 +23085,13 @@
         "unit": "°C",
         "equidistance": 15,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -22793,6 +23199,13 @@
             "validFrom": "2007-08-14"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -22880,6 +23293,13 @@
             "validFrom": "2007-08-14"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -22987,6 +23407,13 @@
             "validFrom": "2007-08-14"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -23113,6 +23540,13 @@
           "shortDescription": "Außer Betrieb wegen Prüfung",
           "longDescription": "Außer Betrieb wegen Prüfung"
         }
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -25325,6 +25759,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -25562,6 +26003,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T05:00:00+01:00"
       }
     ]
   },
@@ -25800,6 +26248,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -26226,6 +26681,13 @@
             "validFrom": "2011-12-16"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -26840,6 +27302,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -29666,6 +30135,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -29773,6 +30249,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -29966,6 +30449,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -30059,6 +30549,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -30166,6 +30663,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -30266,6 +30770,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -33280,6 +33791,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -33956,6 +34474,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -34037,6 +34562,13 @@
             "validFrom": "2006-12-12"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -34413,6 +34945,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -34650,6 +35189,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -34880,6 +35426,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -35009,6 +35562,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -35145,6 +35705,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -35411,6 +35978,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -35519,6 +36093,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -35648,6 +36229,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -35784,6 +36372,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -36130,6 +36725,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -36295,6 +36897,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -36408,6 +37017,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -36501,6 +37117,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -36622,6 +37245,13 @@
         "unit": "°C",
         "equidistance": 15,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -36736,6 +37366,13 @@
             "validFrom": "1950-01-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -36851,6 +37488,13 @@
             "validFrom": "1950-01-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -36966,6 +37610,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -37060,6 +37711,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -37178,6 +37836,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -37637,6 +38302,13 @@
           "validFrom": "2007-11-01"
         },
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -37745,6 +38417,13 @@
           "validFrom": "2011-11-01"
         },
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T21:00:00+02:00",
+        "end": "2026-11-21T21:00:00+01:00"
       }
     ]
   },
@@ -38133,6 +38812,13 @@
             "validFrom": "2003-01-08"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -38205,6 +38891,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -38356,6 +39049,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -38572,6 +39272,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -38946,6 +39653,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -39668,6 +40382,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -40096,6 +40817,13 @@
         "unit": "m/s",
         "equidistance": 15,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -40269,6 +40997,13 @@
             "timespanEnd": "2015-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -42920,6 +43655,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -43316,6 +44058,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -43460,6 +44209,13 @@
             "timespanEnd": "2020-10-31"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -44683,6 +45439,13 @@
         "unit": "Grad",
         "equidistance": 15,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
@@ -45865,6 +46628,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -46300,6 +47070,13 @@
         "unit": "°C",
         "equidistance": 15,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -46482,6 +47259,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -46900,6 +47684,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -47192,6 +47983,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -47395,6 +48193,13 @@
         "unit": "°C",
         "equidistance": 15,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -47499,6 +48304,13 @@
           "shortDescription": "Funktionsstörung, fehlerhafte Messwerte",
           "longDescription": "Funktionsstörung, fehlerhafte Messwerte"
         }
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -47599,6 +48411,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -47699,6 +48518,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -47799,6 +48625,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -47894,6 +48727,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -47994,6 +48834,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -48194,6 +49041,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -48389,6 +49243,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -48489,6 +49350,13 @@
             "validFrom": "1985-06-01"
           }
         ]
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T05:00:00+02:00",
+        "end": "2026-11-24T13:00:00+01:00"
       }
     ]
   },
@@ -48765,6 +49633,13 @@
         "unit": "°C",
         "equidistance": 60,
         "characteristicValues": []
+      },
+      {
+        "shortname": "TRM",
+        "longname": "TERMINWERTE",
+        "unit": "cm",
+        "start": "2026-10-24T06:00:00+02:00",
+        "end": "2026-11-24T06:00:00+01:00"
       }
     ]
   },
