@@ -357,6 +357,17 @@ def test_parse_cet_conversion_null_quality_annotations_and_empty_window() -> Non
                 stationparameter_name="Débit",
                 parametertype_name="Q",
                 unit="m³/s",
+                data=[["2011-08-03T23:00:00.000Z", 10**401, 40, "Good"]],
+            )
+        ).encode(),
+        json.dumps(
+            _values_block(
+                ts_id="297170010",
+                ts_name="20-Debit.Jour.Moyen",
+                station="3561",
+                stationparameter_name="Débit",
+                parametertype_name="Q",
+                unit="m³/s",
                 data=[
                     ["2011-08-03T23:00:00.000Z", 1.0, 40, "Good"],
                     ["2011-08-03T23:00:00.000Z", 2.0, 40, "Good"],
