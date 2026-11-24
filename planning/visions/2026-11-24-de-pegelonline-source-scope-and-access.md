@@ -8,7 +8,10 @@ code or provider integration. Verified completion of this vision completes
 #1016; publishing this vision alone does not.
 
 The port's coordination issue is [#874](https://github.com/RivRetrieve/RivRetrieve/issues/874),
-which holds the full research record this vision draws on. Follow
+which holds most of the research record this vision draws on. One
+additional check (terms and attribution, below) was performed during this
+discussion and is recorded separately, in the private research record
+referenced in "Completion". Follow
 [provider-port step 1](../../docs/maintenance/provider-ports.md) and the
 [evidence process](../../docs/maintenance/evidence.md). Keep all provider
 port work on the dedicated `port/de-pegelonline` branch until the full port
@@ -54,18 +57,28 @@ gauges from other agencies (see provenance below).
      Kleines Haff), which measure sea/lagoon level rather than river stage,
      alongside the inland river, canal and estuarine gauges.
 - **Products:** the core quantities `W` → `stage`, `Q` → `discharge`, `WT` →
-  `water_temperature`, plus the plausibilized `TRM`/`TRM_WT` (*Terminwerte*)
-  scheduled readings as a distinct stage variant. `WV`
+  `water_temperature`, plus the plausibilized *Terminwerte* scheduled
+  readings as two distinct variants: `TRM` alongside raw `W` (stage, 120
+  stations) and `TRM_WT` alongside raw `WT` (water temperature, 2
+  stations) — `TRM` is not itself a stage reading plus a water-temperature
+  reading combined; each variant attaches to its own quantity. `WV`
   (*Wasserstandvorhersage*, model forecasts/estimates) and navigational
   `F`/`T` (channel depth/draft) are excluded as out of RivRetrieve's
   observational scope.
 - **Vertical datum on `W` — do not collapse these:** `unit == "cm"` (669
-  series) is relative to the station's gauge zero (*Pegelnullpunkt*) and
-  converts `÷ 100` to metres. `unit == "m+NN"` (67 series, canal/lock-pool
-  gauges) and `unit == "m+PNP"` (2 reservoir gauges) are **already in
-  metres**, report absolute elevation above sea level (a different vertical
-  reference than gauge zero), and must **not** be scaled — this is the exact
-  100× bug present in the existing `wetterdienst` Python adapter.
+  series) is relative to the station's gauge zero (*Pegelnullpunkt*, PNP)
+  and converts `÷ 100` to metres. `unit == "m+NN"` (67 series,
+  canal/lock-pool gauges) is **already in metres** and reports absolute
+  elevation above sea level (*Normalnull*) — a genuinely different vertical
+  reference than gauge zero. `unit == "m+PNP"` (2 reservoir gauges) is also
+  **already in metres**, but despite superficially resembling `m+NN`, it is
+  still gauge-zero-referenced (PNP is literally *Pegelnullpunkt*): these two
+  reservoirs' gauge zero happens to be set near `0 m. ü. NN`, so their
+  readings numerically approximate sea-level elevation, but that is a
+  coincidence of where their gauge zero was fixed, not what the quantity
+  means. Scaling either `m+NN` or `m+PNP` by `÷ 100` is the exact 100× bug
+  present in the existing `wetterdienst` Python adapter; keep both
+  already-metric, but keep their differing references distinct.
 
 ### Deliberately out of scope for this port
 
@@ -130,7 +143,9 @@ carries an `agency` field in the API naming its actual operator (e.g.
 `HATTINGEN` (`number 2769510000100`) confirmed neither the API nor its
 human-readable station page carries any per-station licence text — the
 site's copyright clause is never actually invoked for this data one way or
-the other. Decisive beyond that textual reading:
+the other. (Recorded 2026-11-24 in the private research record; see
+"Completion" below. This check covered only Ruhrverband; the other six
+domestic non-WSV institutions were not individually checked.) Decisive beyond that textual reading:
 [`docs/catalogue-provenance.md`](../../docs/catalogue-provenance.md)
 already establishes the project-wide rule that "each issuing body's terms
 stay on that body's material. A dataset with several issuing bodies does
@@ -169,9 +184,10 @@ The handoff establishes downstream responsibilities across the port:
   `TRM_WT`. Encode the 13 domestic non-WSV stations' unresolved terms as an
   explicit provenance fact, per the convention above.
 - **[Series identity #1018](https://github.com/RivRetrieve/RivRetrieve/issues/1018):**
-  Map `W`/`Q`/`WT`/`TRM` to distinct `SourceIdentity`/`PhysicalFacts`
+  Map `W`/`Q`/`WT`/`TRM`/`TRM_WT` to distinct `SourceIdentity`/`PhysicalFacts`
   records with the `cm` vs `m+NN`/`m+PNP` vertical-datum split preserved
-  exactly as scoped above.
+  exactly as scoped above, and `TRM_WT` kept attached to water temperature,
+  not folded into the `TRM` stage variant.
 - **[Retrieval #1019](https://github.com/RivRetrieve/RivRetrieve/issues/1019):**
   Implement request rules that always pass explicit `start`/`end`, address
   by `uuid`, and treat an out-of-window empty response as rolling retention,
@@ -192,9 +208,10 @@ The handoff establishes downstream responsibilities across the port:
 
 ## Completion
 
-Keep the continuing PEGELONLINE research record in the private
-`verification-evidence` repository under the established evidence process;
-no dedicated research branch exists there yet at the time of this vision, so
-the Effort that creates or extends it should follow
-[the evidence workflow](../../docs/maintenance/evidence.md) to establish one
-rather than assume a prior path.
+The continuing PEGELONLINE research record lives in the private
+`verification-evidence` repository, branch `research/de-pegelonline-source-access`
+(`research/de-pegelonline-source-access.md`), which extends #874's findings
+with the terms-and-attribution check this vision cites above. Later Efforts
+should keep extending this same file, per
+[the evidence workflow](../../docs/maintenance/evidence.md), rather than
+starting a separate one.
