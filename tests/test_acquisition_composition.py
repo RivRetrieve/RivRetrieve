@@ -512,3 +512,584 @@ def test_failed_siblings_keep_original_call_group_order(with_independent):
     independent = ({"call_id": "independent-one"}, {"call_id": "independent-two"}) if with_independent else ()
     failures = (*independent[:1], *first, second, *independent[1:])
     assert _calls_with_failed_acquisitions((html,), failures) == (*independent, html, *first, second)
+
+
+def test_bypass_skips_persistence_copies_and_preserves_outcome_and_axis_composition(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    import rivretrieve._internal.driver as drv_mod
+    from rivretrieve._internal.engine import (
+        Instant,
+        Payload,
+        ProductConfig,
+        ProductWindowDeclarations,
+        ProviderConfig,
+        SourceCallOrigin,
+        StopConvention,
+        Unit,
+        UnknownOriginFact,
+        WindowDeclaration,
+        WindowGranularity,
+        WindowRenderingVocabulary,
+        ZoneValue,
+    )
+    from rivretrieve._internal.issues import FatalContractError
+    from rivretrieve._internal.source_annotations import (
+        AnnotationBundle,
+        AnnotationField,
+        AnnotationSchema,
+        AnnotationScope,
+        ObservationAnnotationTable,
+    )
+    from rivretrieve._internal.source_series import (
+        ParsedSeries,
+        PhysicalFacts,
+        RetrievalOutcome,
+        SeriesWindow,
+        SourceIdentity,
+        SourceSeries,
+        known,
+    )
+
+    product = ProductId("discharge_daily_mean")
+    config = ProviderConfig(
+        zone=ZoneValue("+00:00"),
+        products={product: ProductConfig(SourceCoordinates({"p": "q"}), unit=Unit.M3_S, semantics=Instant())},
+    )
+    decls = ProductWindowDeclarations(
+        {
+            product: WindowDeclaration(
+                WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE
+            )
+        }
+    )
+    fact_nat = PhysicalFacts(
+        facts_id="fact-native",
+        quantity=known("discharge", "test"),
+        source_unit=known("m3/s", "test"),
+        normalized_unit="m3/s",
+    )
+    fact_utc = PhysicalFacts(
+        facts_id="fact-utc",
+        quantity=known("discharge", "test"),
+        source_unit=known("ft3/s", "test"),
+        normalized_unit="ft3/s",
+    )
+    series_def = SourceSeries(
+        series_id="s-multi-axis",
+        provider_id="throwaway",
+        station_id="st-1",
+        product_id=str(product),
+        identity=SourceIdentity(namespace="test", published_id="s-multi-axis", origin="response", evidence=("test",)),
+        facts=(fact_nat, fact_utc),
+    )
+    empty_series = SourceSeries(
+        series_id="s-empty",
+        provider_id="throwaway",
+        station_id="st-1",
+        product_id=str(product),
+        identity=SourceIdentity(namespace="test", published_id="s-empty", origin="response", evidence=("test",)),
+        facts=(fact_nat,),
+    )
+    ann_schema = AnnotationSchema(
+        schema_id="throwaway.qc",
+        provider_id="throwaway",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="flag", dtype="String", description="Flag"),),
+    )
+    win = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2023, 6, 1)),
+        WindowEndpoint.from_datetime(datetime(2023, 6, 2, 23, 59, 59, 999999)),
+    )
+    req = ObservationRequest(ProviderId("throwaway"), ("st-1",), (product,), win)
+    fw = _make_fetch_window(win.start, win.end)
+
+    def _mk_payload(acq_id: str) -> Payload:
+        return Payload(
+            source_coordinates=SourceCoordinates({"p": "q"}),
+            station_products=(("st-1", product),),
+            fetch_window=fw,
+            content=b"{}",
+            origin=SourceCallOrigin(
+                "https://example.invalid/obs",
+                {"id": acq_id},
+                200,
+                datetime(2023, 6, 3, tzinfo=UTC),
+                "application/json",
+                UnknownOriginFact(),
+                UnknownOriginFact(),
+            ),
+            prerequisite_calls=(),
+            acquisition_id=acq_id,
+        )
+
+    def _mk_parsed(mode: str):
+        rows = pl.DataFrame(
+            {
+                "station_id": ["st-1", "st-1"],
+                "product_id": [str(product), str(product)],
+                "time": [datetime(2023, 6, 1, 12, 0), datetime(2023, 6, 2, 12, 0)],
+                "value": [10.0, 20.0],
+                "time_zone": ["+00:00", "+00:00"],
+                "series_id": ["s-multi-axis", "s-multi-axis"],
+                "facts_id": ["fact-native", "fact-utc"],
+                "source_unit": ["m3/s", "ft3/s"],
+            },
+            schema=drv_mod.RowsSchema.polars_schema,
+        )
+        ann = AnnotationBundle(
+            observation_tables={
+                "throwaway.qc": ObservationAnnotationTable.from_rows(
+                    schema=ann_schema,
+                    rows=pl.DataFrame(
+                        {
+                            "series_id": ["s-multi-axis", "s-multi-axis"],
+                            "facts_id": ["fact-native", "fact-utc"],
+                            "station_id": ["st-1", "st-1"],
+                            "product_id": [str(product), str(product)],
+                            "time": [datetime(2023, 6, 1, 12, 0), datetime(2023, 6, 2, 12, 0)],
+                            "time_zone": ["+00:00", "+00:00"],
+                            "measured": [True, True],
+                            "flag": ["nat-ok", "utc-ok"],
+                        },
+                        schema={
+                            "series_id": pl.String,
+                            "facts_id": pl.String,
+                            "station_id": pl.String,
+                            "product_id": pl.String,
+                            "time": pl.Datetime("us"),
+                            "time_zone": pl.String,
+                            "measured": pl.Boolean,
+                            **ann_schema.polars_schema(),
+                        },
+                    ),
+                    measurement_indices=(0, 1),
+                )
+            }
+        )
+        if mode == "independent_axes":
+            sw_nat = SeriesWindow(
+                start=datetime(2023, 6, 1), end=datetime(2023, 6, 2, 23, 59, 59, 999999), axis=TimeAxis.NATIVE
+            )
+            sw_utc = SeriesWindow(
+                start=datetime(2023, 6, 1, tzinfo=None), end=datetime(2023, 6, 2, 23, 59, 59, 999999), axis=TimeAxis.UTC
+            )
+            outs = (
+                RetrievalOutcome(
+                    outcome_id="o-nat",
+                    series_id="s-multi-axis",
+                    station_id="st-1",
+                    product_id=str(product),
+                    window=sw_nat,
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("fact-native",),
+                    coverage="observations",
+                ),
+                RetrievalOutcome(
+                    outcome_id="o-utc",
+                    series_id="s-multi-axis",
+                    station_id="st-1",
+                    product_id=str(product),
+                    window=sw_utc,
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("fact-utc",),
+                    coverage="observations",
+                ),
+                RetrievalOutcome(
+                    outcome_id="o-empty",
+                    series_id="s-empty",
+                    station_id="st-1",
+                    product_id=str(product),
+                    window=sw_nat,
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("fact-native",),
+                    coverage="interval",
+                ),
+            )
+            return ParsedSeries(
+                rows=rows,
+                series=(series_def, empty_series),
+                inventories=(),
+                annotations=ann,
+                outcomes=outs,
+            )
+        if mode == "mixed_same_fact":
+            return "split"
+        return "overlap"
+
+    # 1. Verify bypass skips _authorize_fact_retirement and per-outcome annotation-copying slice, yet matches refresh!
+    filter_expr_calls = 0
+    orig_filter_expr = drv_mod.filter_native_with_annotations_by_expr
+
+    def spy_filter_expr(rows, bundle, predicate, *, allowed_series_ids=None):
+        nonlocal filter_expr_calls
+        filter_expr_calls += 1
+        return orig_filter_expr(rows, bundle, predicate, allowed_series_ids=allowed_series_ids)
+
+    def _forbid_retirement(*a, **kw):
+        raise AssertionError("_authorize_fact_retirement ran in bypass mode")
+
+    def _run_case(cache_mode, parse_fn, payload_ids=("p1",)):
+        prov = SimpleNamespace(
+            config=config,
+            window_declarations=decls,
+            fetch=lambda *a, **k: WithIssues(tuple(_mk_payload(pid) for pid in payload_ids)),
+            parse=parse_fn,
+        )
+        return drive(
+            req,
+            prov,
+            provenance=ObservationProvenance(source="test", provider_id=ProviderId("throwaway")),
+            cache=cache_mode,
+            store=StoreRoot(tmp_path / f"store_{cache_mode}_{'_'.join(payload_ids)}")
+            if cache_mode != "bypass"
+            else None,
+            receipts=ReceiptMode.OMIT,
+        )
+
+    parsed_independent = _mk_parsed("independent_axes")
+    with monkeypatch.context() as mp:
+        mp.setattr(drv_mod, "_authorize_fact_retirement", _forbid_retirement)
+        mp.setattr(drv_mod, "filter_native_with_annotations_by_expr", spy_filter_expr)
+        bypass_res = _run_case("bypass", lambda p, c: parsed_independent)
+    bypass_filter_calls = filter_expr_calls
+    filter_expr_calls = 0
+    with monkeypatch.context() as mp:
+        mp.setattr(drv_mod, "filter_native_with_annotations_by_expr", spy_filter_expr)
+        refresh_res = _run_case("refresh", lambda p, c: parsed_independent)
+    refresh_filter_calls = filter_expr_calls
+    assert bypass_filter_calls <= 3
+    assert bypass_filter_calls < refresh_filter_calls
+    assert_frame_equal(bypass_res.canonical_rows, refresh_res.canonical_rows)
+    assert_frame_equal(
+        bypass_res.annotations.observation_tables["throwaway.qc"].rows,
+        refresh_res.annotations.observation_tables["throwaway.qc"].rows,
+    )
+    assert (
+        bypass_res.annotations.observation_tables["throwaway.qc"].measurement_indices
+        == refresh_res.annotations.observation_tables["throwaway.qc"].measurement_indices
+    )
+    assert bypass_res.outcomes == refresh_res.outcomes
+    assert any(o.series_id == "s-empty" and o.status is OutcomeStatus.EMPTY for o in bypass_res.outcomes)
+    obs_o = next(o for o in bypass_res.outcomes if o.facts_ids == ("fact-native",) and o.coverage == "observations")
+    assert len(obs_o.observation_keys) == 1
+
+    # 2. Same (series_id, facts_id) mixing NATIVE & UTC fails in both bypass and refresh
+    def _mix_axis_parse(payload, cfg):
+        axis = TimeAxis.UTC if payload.acquisition_id == "utc" else TimeAxis.NATIVE
+        sw = SeriesWindow(start=datetime(2023, 6, 1), end=datetime(2023, 6, 2, 23, 59, 59, 999999), axis=axis)
+        return ParsedSeries(
+            rows=parsed_independent.rows.head(1),
+            series=(series_def,),
+            inventories=(),
+            outcomes=(
+                RetrievalOutcome(
+                    outcome_id=f"o-{payload.acquisition_id}",
+                    series_id="s-multi-axis",
+                    station_id="st-1",
+                    product_id=str(product),
+                    window=sw,
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("fact-native",),
+                ),
+            ),
+        )
+
+    with pytest.raises(FatalContractError, match="cannot mix acquisition time axes"):
+        _run_case("bypass", _mix_axis_parse, ("nat", "utc"))
+    with pytest.raises(FatalContractError, match="cannot mix acquisition time axes"):
+        _run_case("refresh", _mix_axis_parse, ("nat", "utc"))
+
+    # 3. Overlapping independent snapshot observation keys fails in both bypass and refresh
+    def _overlap_snap_parse(payload, cfg):
+        sw = SeriesWindow(
+            start=datetime(2023, 6, 1), end=datetime(2023, 6, 2, 23, 59, 59, 999999), axis=TimeAxis.NATIVE
+        )
+        return ParsedSeries(
+            rows=parsed_independent.rows.head(1),
+            series=(series_def,),
+            inventories=(),
+            outcomes=(
+                RetrievalOutcome(
+                    outcome_id=f"snap-{payload.acquisition_id}",
+                    series_id="s-multi-axis",
+                    station_id="st-1",
+                    product_id=str(product),
+                    window=sw,
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("fact-native",),
+                    coverage="observations",
+                ),
+            ),
+        )
+
+    with pytest.raises(FatalContractError, match="Independent snapshot acquisitions overlap observation keys"):
+        _run_case("bypass", _overlap_snap_parse, ("s1", "s2"))
+    with pytest.raises(FatalContractError, match="Independent snapshot acquisitions overlap observation keys"):
+        _run_case("refresh", _overlap_snap_parse, ("s1", "s2"))
+
+
+def test_late_page_refresh_failure_retains_held_data_and_independent_fact_outcomes(tmp_path):
+    from rivretrieve._internal.driver import RowsSchema
+    from rivretrieve._internal.engine import (
+        Instant,
+        Payload,
+        ProductConfig,
+        ProductWindowDeclarations,
+        ProviderConfig,
+        SourceCallOrigin,
+        StopConvention,
+        Unit,
+        UnknownOriginFact,
+        WindowDeclaration,
+        WindowGranularity,
+        WindowRenderingVocabulary,
+        ZoneValue,
+    )
+    from rivretrieve._internal.source_series import (
+        ParsedSeries,
+        PhysicalFacts,
+        RetrievalOutcome,
+        SeriesWindow,
+        SourceIdentity,
+        SourceSeries,
+        known,
+    )
+
+    product = ProductId("discharge_daily_mean")
+    config = ProviderConfig(
+        zone=ZoneValue("+00:00"),
+        products={product: ProductConfig(SourceCoordinates({"p": "q"}), unit=Unit.M3_S, semantics=Instant())},
+    )
+    decls = ProductWindowDeclarations(
+        {
+            product: WindowDeclaration(
+                WindowGranularity("date"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE
+            )
+        }
+    )
+    fact_a = PhysicalFacts(
+        facts_id="fact-a", quantity=known("discharge", "t"), source_unit=known("m3/s", "t"), normalized_unit="m3/s"
+    )
+    fact_b = PhysicalFacts(
+        facts_id="fact-b", quantity=known("discharge", "t"), source_unit=known("m3/s", "t"), normalized_unit="m3/s"
+    )
+    s_def = SourceSeries(
+        series_id="s-two-facts",
+        provider_id="throwaway",
+        station_id="st-1",
+        product_id=str(product),
+        identity=SourceIdentity(namespace="t", published_id="s-two-facts", origin="response", evidence=("t",)),
+        facts=(fact_a, fact_b),
+    )
+    win = RequestedWindow(
+        WindowEndpoint.from_datetime(datetime(2023, 6, 1)),
+        WindowEndpoint.from_datetime(datetime(2023, 6, 2, 23, 59, 59, 999999)),
+    )
+    sw = SeriesWindow(start=datetime(2023, 6, 1), end=datetime(2023, 6, 2, 23, 59, 59, 999999))
+    req = ObservationRequest(ProviderId("throwaway"), ("st-1",), (product,), win)
+    fw = _make_fetch_window(win.start, win.end)
+    store = StoreRoot(tmp_path / "store")
+    t_held = datetime(2023, 6, 3, 10, 0, tzinfo=UTC)
+    t_fresh = datetime(2023, 6, 4, 12, 0, tzinfo=UTC)
+
+    def _payload(acq_id: str, retrieved: datetime) -> Payload:
+        return Payload(
+            source_coordinates=SourceCoordinates({"p": "q"}),
+            station_products=(("st-1", product),),
+            fetch_window=fw,
+            content=b"{}",
+            origin=SourceCallOrigin(
+                "https://example.invalid/obs",
+                {"id": acq_id},
+                200,
+                retrieved,
+                "application/json",
+                UnknownOriginFact(),
+                UnknownOriginFact(),
+            ),
+            prerequisite_calls=(),
+            acquisition_id=acq_id,
+        )
+
+    def _run_refresh(payloads, parse_fn):
+        prov = SimpleNamespace(
+            config=config,
+            window_declarations=decls,
+            fetch=lambda *a, **k: WithIssues(payloads),
+            parse=parse_fn,
+        )
+        return drive(
+            req,
+            prov,
+            provenance=ObservationProvenance(source="t", provider_id=ProviderId("throwaway")),
+            cache="refresh",
+            store=store,
+            receipts=ReceiptMode.OMIT,
+        )
+
+    def _parse_held(p, c):
+        rows = pl.DataFrame(
+            {
+                "station_id": ["st-1", "st-1"],
+                "product_id": [str(product), str(product)],
+                "time": [datetime(2023, 6, 1, 12, 0), datetime(2023, 6, 2, 12, 0)],
+                "value": [1.0, 2.0],
+                "time_zone": ["+00:00", "+00:00"],
+                "series_id": ["s-two-facts", "s-two-facts"],
+                "facts_id": ["fact-a", "fact-b"],
+                "source_unit": ["m3/s", "m3/s"],
+            },
+            schema=RowsSchema.polars_schema,
+        )
+        return ParsedSeries(
+            rows=rows,
+            series=(s_def,),
+            inventories=(),
+            outcomes=(
+                RetrievalOutcome(
+                    outcome_id="held-a",
+                    series_id="s-two-facts",
+                    station_id="st-1",
+                    product_id=str(product),
+                    window=sw,
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("fact-a",),
+                    retrieved_at=t_held,
+                ),
+                RetrievalOutcome(
+                    outcome_id="held-b",
+                    series_id="s-two-facts",
+                    station_id="st-1",
+                    product_id=str(product),
+                    window=sw,
+                    status=OutcomeStatus.SUCCESS,
+                    facts_ids=("fact-b",),
+                    retrieved_at=t_held,
+                ),
+            ),
+        )
+
+    _run_refresh((_payload("init", t_held),), _parse_held)
+
+    def _parse_late_partial_failure(p, c):
+        if p.acquisition_id == "page1-b":
+            rows = pl.DataFrame(
+                {
+                    "station_id": ["st-1"],
+                    "product_id": [str(product)],
+                    "time": [datetime(2023, 6, 2, 12, 0)],
+                    "value": [22.0],
+                    "time_zone": ["+00:00"],
+                    "series_id": ["s-two-facts"],
+                    "facts_id": ["fact-b"],
+                    "source_unit": ["m3/s"],
+                },
+                schema=RowsSchema.polars_schema,
+            )
+            return ParsedSeries(
+                rows=rows,
+                series=(s_def,),
+                inventories=(),
+                outcomes=(
+                    RetrievalOutcome(
+                        outcome_id="fresh-b",
+                        series_id="s-two-facts",
+                        station_id="st-1",
+                        product_id=str(product),
+                        window=sw,
+                        status=OutcomeStatus.SUCCESS,
+                        facts_ids=("fact-b",),
+                        retrieved_at=t_fresh,
+                    ),
+                ),
+            )
+        return ParsedSeries(
+            rows=pl.DataFrame(schema=RowsSchema.polars_schema),
+            series=(s_def,),
+            inventories=(),
+            outcomes=(
+                RetrievalOutcome(
+                    outcome_id="fail-a",
+                    series_id="s-two-facts",
+                    station_id="st-1",
+                    product_id=str(product),
+                    window=sw,
+                    status=OutcomeStatus.FAILED,
+                    facts_ids=("fact-a",),
+                    reason="late page failed",
+                ),
+            ),
+        )
+
+    refreshed = _run_refresh(
+        (_payload("page1-b", t_fresh), _payload("page2-fail-a", t_fresh)), _parse_late_partial_failure
+    )
+    df = refreshed.canonical_rows.sort("facts_id")
+    assert df["facts_id"].to_list() == ["fact-a", "fact-b"]
+    assert df["value"].to_list() == [1.0, 22.0]
+    # note: fact-a has both the retained held SUCCESS (with original t_held) and the FAILED diagnostic outcome
+    held_a = [o for o in refreshed.outcomes if o.facts_ids == ("fact-a",) and o.status is OutcomeStatus.SUCCESS]
+    failed_a = [o for o in refreshed.outcomes if o.facts_ids == ("fact-a",) and o.status is OutcomeStatus.FAILED]
+    fresh_b = [o for o in refreshed.outcomes if o.facts_ids == ("fact-b",) and o.status is OutcomeStatus.SUCCESS]
+    assert len(held_a) == 1 and held_a[0].retrieved_at == t_held
+    assert len(failed_a) == 1
+    assert len(fresh_b) == 1 and fresh_b[0].retrieved_at == t_fresh
+
+
+def test_failed_acquisition_chains_and_partial_missing_prerequisites():
+    from rivretrieve._internal.driver import _calls_with_failed_acquisitions
+    from rivretrieve._internal.issues import FatalContractError
+
+    parent = {"call_id": "overflow-parent", "acquisition_id": "overflow-parent"}
+    failed_child = {
+        "call_id": "failed-child",
+        "acquisition_id": "failed-child",
+        "prerequisite_acquisition_ids": ("overflow-parent",),
+    }
+    failed_grandchild = {
+        "call_id": "failed-grandchild",
+        "acquisition_id": "failed-grandchild",
+        "prerequisite_acquisition_ids": ("failed-child",),
+    }
+    assert _calls_with_failed_acquisitions((parent,), (failed_grandchild, failed_child)) == (
+        parent,
+        failed_child,
+        failed_grandchild,
+    )
+
+    partial = {
+        "call_id": "partial-missing",
+        "acquisition_id": "partial-missing",
+        "prerequisite_acquisition_ids": ("overflow-parent", "missing"),
+    }
+    with pytest.raises(FatalContractError, match="Failed acquisition lacks its prerequisite call evidence"):
+        _calls_with_failed_acquisitions((parent,), (partial,))
+
+
+def test_order_support_calls_handles_leading_deferred_and_missing_prerequisites():
+    from rivretrieve._internal.driver import _order_support_calls
+    from rivretrieve._internal.issues import FatalContractError
+
+    leading = {"call_id": "overflow-parent", "acquisition_id": "overflow-parent"}
+    payload = {
+        "call_id": "payload-1",
+        "acquisition_id": "payload-1",
+        "prerequisite_acquisition_ids": ("overflow-parent",),
+    }
+    post_payload = {
+        "call_id": "aux-after",
+        "acquisition_id": "aux-after",
+        "prerequisite_acquisition_ids": ("payload-1",),
+    }
+    chained = {"call_id": "aux-chain", "acquisition_id": "aux-chain", "prerequisite_acquisition_ids": ("aux-after",)}
+    assert _order_support_calls((chained, leading, post_payload), (payload,)) == (
+        leading,
+        payload,
+        post_payload,
+        chained,
+    )
+
+    dangling = {"call_id": "aux-missing", "acquisition_id": "aux-missing", "prerequisite_acquisition_ids": ("missing",)}
+    with pytest.raises(FatalContractError, match="Auxiliary acquisition lacks its prerequisite call evidence"):
+        _order_support_calls((dangling,), (payload,))

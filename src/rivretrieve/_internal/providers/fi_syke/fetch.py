@@ -2,32 +2,30 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from datetime import datetime
 from urllib.parse import parse_qsl, urlsplit  # noqa: TID251 - URL validation only; no network access
-from uuid import uuid4
 
-from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
+    InterpretedPayload,
     Payload,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
     SourceCallOrigin,
-    UnknownOriginFact,
 )
 from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.page_acquisition import PageStep, acquire_pages
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.fi_syke.config import FiSykeSourceCoordinates
-from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget, attempt_request
+from rivretrieve._internal.providers.fi_syke.parse import interpret_page
+from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget
 from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries
 from rivretrieve._internal.transport import (
     HttpMethod,
     Transport,
-    TransportFailure,
     TransportRequest,
     TransportResponse,
 )
@@ -48,19 +46,12 @@ def _request(native_table: str, station: str, rendered: RenderedWindow) -> Trans
     )
 
 
-def _next_request(
-    content: bytes, initial: TransportRequest, visited: set[tuple[tuple[str, str], ...]]
-) -> TransportRequest | None:
-    """Follow one page's odata.nextLink, never trusting it beyond its own origin, path and filter."""
-    try:
-        document = json.loads(content)
-    except (ValueError, UnicodeDecodeError) as error:
-        raise UnsupportedSourceStructureError("fi_syke observation response is not valid JSON") from error
-    if not isinstance(document, dict) or not isinstance(document.get("value"), list):
-        raise UnsupportedSourceStructureError("fi_syke observation response must be a JSON object with a value array")
-    link = document.get("odata.nextLink")
+def _next_request_from_link(
+    link: object, initial: TransportRequest
+) -> tuple[TransportRequest | None, tuple[tuple[str, str], ...] | None]:
+    """Validate one page's odata.nextLink without trusting it beyond origin, path and filter."""
     if link is None:
-        return None
+        return None, None
     if not isinstance(link, str) or not link:
         raise UnsupportedSourceStructureError("fi_syke odata.nextLink is present but not a non-empty string")
     parsed = urlsplit(link)
@@ -79,12 +70,21 @@ def _next_request(
     if any(params.get(key) != value for key, value in base.items()):
         raise UnsupportedSourceStructureError("fi_syke odata.nextLink changes request filters")
     identity = tuple(sorted(params.items()))
-    if identity in visited:
-        raise UnsupportedSourceStructureError("fi_syke pagination cycle")
-    visited.add(identity)
-    return TransportRequest(
+    request = TransportRequest(
         method=HttpMethod.GET, url=f"{expected.scheme}://{expected.netloc}{expected.path}", params=params
     )
+    return request, identity
+
+
+def _step_page(payload: Payload, initial: TransportRequest, config: ProviderConfig) -> PageStep:
+    interpreted = interpret_page(payload, config)
+    try:
+        next_request, cursor_key = _next_request_from_link(interpreted.next_link, initial)
+    except UnsupportedSourceStructureError:
+        # Parse independently classifies this payload's own content;
+        # a malformed nextLink stops paging without discarding it.
+        return PageStep(parsed=interpreted.parsed, stop_reason="fi_syke invalid odata.nextLink")
+    return PageStep(parsed=interpreted.parsed, next_request=next_request, cursor_key=cursor_key)
 
 
 def fetch(
@@ -113,6 +113,7 @@ def fetch(
         end=datetime.fromisoformat(fetch_window.end.isoformat()),
     )
     payloads: list[Payload] = []
+    interpretations: list[InterpretedPayload] = []
     failures: list[FailedSourceRequest] = []
 
     for station in stations:
@@ -126,42 +127,47 @@ def fetch(
             if len(windows) != 1:
                 raise FatalContractError(f"fi_syke product requires exactly one rendered window: {product}")
             initial = _request(coords.native_table, station, windows[0])
-            request: TransportRequest | None = initial
-            visited: set[tuple[tuple[str, str], ...]] = set()
-            while request is not None:
-                response = attempt_request(transport, request)
-                if isinstance(response, (TransportFailure, CredentialExchangeError)):
-                    failures.append(
-                        FailedSourceRequest(
-                            uuid4().hex,
-                            _request_target(station, product, known_series),
-                            window,
-                            request,
-                            response,
-                        )
-                    )
-                    break
-                payloads.append(
-                    Payload(
-                        source_coordinates=config.products[product].coordinates,
-                        station_products=((station, product),),
-                        fetch_window=fetch_window,
-                        content=response.content,
-                        origin=_origin(response),
-                        prerequisite_calls=response.prerequisite_calls,
-                        scope=scope,
-                        known_series=known_series,
-                        attempt_traces=response.attempt_traces,
-                    )
-                )
-                try:
-                    request = _next_request(response.content, initial, visited)
-                except UnsupportedSourceStructureError:
-                    # Parse independently classifies this payload's own content;
-                    # a malformed nextLink stops paging without discarding it.
-                    break
+            product_coordinates = config.products[product].coordinates
 
-    return SourceAcquisition(value=tuple(payloads), failed_requests=tuple(failures))
+            def _build_payload(
+                response: TransportResponse,
+                *,
+                product_coordinates=product_coordinates,
+                station=station,
+                product=product,
+            ) -> Payload:
+                return Payload(
+                    source_coordinates=product_coordinates,
+                    station_products=((station, product),),
+                    fetch_window=fetch_window,
+                    content=response.content,
+                    origin=SourceCallOrigin.from_response(response),
+                    prerequisite_calls=response.prerequisite_calls,
+                    scope=scope,
+                    known_series=known_series,
+                    attempt_traces=response.attempt_traces,
+                )
+
+            page_acq = acquire_pages(
+                initial,
+                transport=transport,
+                window=window,
+                build_payload=_build_payload,
+                interpret_page=lambda payload, initial=initial: _step_page(payload, initial, config),
+                failure_targets=lambda station=station, product=product: (
+                    _request_target(station, product, known_series),
+                ),
+                on_cycle=None,
+            )
+            payloads.extend(page_acq.payloads)
+            interpretations.extend(page_acq.interpretations)
+            failures.extend(page_acq.failed_requests)
+
+    return SourceAcquisition(
+        value=tuple(payloads),
+        failed_requests=tuple(failures),
+        interpretations=tuple(interpretations),
+    )
 
 
 def _request_target(
@@ -171,16 +177,3 @@ def _request_target(
     if len(matching) == 1:
         return matching[0]
     return SourceRequestTarget(station, str(product))
-
-
-def _origin(response: TransportResponse) -> SourceCallOrigin:
-    return SourceCallOrigin(
-        url=response.url,
-        request_parameters=response.request_parameters,
-        status_code=response.status_code,
-        retrieved_at=response.retrieved_at,
-        content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
-        source_path=UnknownOriginFact(),
-        query=UnknownOriginFact(),
-        attempts=response.attempts,
-    )

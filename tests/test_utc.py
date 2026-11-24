@@ -360,3 +360,171 @@ def test_to_utc_usgs_dst_boundary_uses_each_payload_offset_without_catalogue(
     assert converted.provenance is native.provenance
     assert converted.issues is native.issues
     assert converted.receipts is native.receipts
+
+
+def test_to_utc_vectorizes_fixed_offsets_and_matches_zoneinfo_on_iana_dst_and_gaps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from zoneinfo import ZoneInfo
+
+    import rivretrieve._internal.utc as utc_mod
+    from rivretrieve._internal.source_annotations import (
+        AnnotationBundle,
+        AnnotationField,
+        AnnotationSchema,
+        AnnotationScope,
+        ObservationAnnotationTable,
+        with_annotations,
+    )
+
+    # 1. Fixed offsets across data + measured & unmeasured annotations avoid Python per-row wall-clock loop
+    zones = ["-05:00", "+00:00", "+05:30", "-03:30", "+01:00"]
+    times = [datetime(2026, 1, 1, 12, 30) + timedelta(minutes=15 * i) for i in range(100)]
+    fixed_zones = [zones[i % len(zones)] for i in range(100)]
+    fixed_data = _frame(
+        {
+            "time": times,
+            "time_zone": fixed_zones,
+            "station_id": ["s1"] * 100,
+            "product_id": ["flow"] * 100,
+            "value": [float(i) for i in range(100)],
+        }
+    )
+    ann_schema = AnnotationSchema(
+        schema_id="provider-a.qc",
+        provider_id="provider-a",
+        scope=AnnotationScope.OBSERVATION,
+        fields=(AnnotationField(name="qc", dtype="String", description="Flag."),),
+    )
+    ann_table = ObservationAnnotationTable.from_rows(
+        schema=ann_schema,
+        rows=pl.DataFrame(
+            {
+                "series_id": [fixed_data["series_id"][0]] * 2,
+                "facts_id": [fixed_data["facts_id"][0]] * 2,
+                "station_id": ["s1", "s1"],
+                "product_id": ["flow", "flow"],
+                "time": [times[1], datetime(2026, 1, 2, 0, 0)],
+                "time_zone": [fixed_zones[1], "+05:30"],
+                "measured": [True, False],
+                "qc": ["m1", "u1"],
+            },
+            schema={
+                "series_id": pl.String,
+                "facts_id": pl.String,
+                "station_id": pl.String,
+                "product_id": pl.String,
+                "time": pl.Datetime("us"),
+                "time_zone": pl.String,
+                "measured": pl.Boolean,
+                **ann_schema.polars_schema(),
+            },
+        ),
+        measurement_indices=(1, None),
+    )
+    fixed_result = with_annotations(
+        _result(fixed_data), AnnotationBundle(observation_tables={"provider-a.qc": ann_table})
+    )
+    expected_fixed_times = [utc_mod._convert_wall_clock(t, z) for t, z in zip(times, fixed_zones, strict=True)]
+    expected_ann_times = [
+        utc_mod._convert_wall_clock(times[1], fixed_zones[1]),
+        utc_mod._convert_wall_clock(datetime(2026, 1, 2, 0, 0), "+05:30"),
+    ]
+
+    def _forbid_python_wall_clock(*args: object, **kwargs: object) -> None:
+        raise AssertionError("_convert_wall_clock called for fixed offsets")
+
+    with monkeypatch.context() as mp:
+        mp.setattr(utc_mod, "_convert_wall_clock", _forbid_python_wall_clock)
+        fixed_utc = rivretrieve.to_utc(fixed_result)
+
+    assert fixed_utc.data["time"].to_list() == expected_fixed_times
+    assert fixed_utc.data["time_zone"].to_list() == ["+00:00"] * 100
+    utc_ann = fixed_utc._annotations.observation_tables["provider-a.qc"]
+    assert utc_ann.rows["time"].to_list() == expected_ann_times
+    assert utc_ann.rows["time_zone"].to_list() == ["+00:00", "+00:00"]
+    assert utc_ann.measurement_indices == (1, None)
+
+    # 2. Mixed fixed offsets + IANA zones including DST fall-back ambiguous fold=0 and spring-forward gap
+    iana_times = [
+        datetime(2026, 1, 15, 12, 0),  # winter America/New_York (-05:00)
+        datetime(2026, 7, 15, 12, 0),  # summer America/New_York (-04:00)
+        datetime(2026, 11, 1, 1, 30),  # ambiguous fall-back America/New_York (fold=0 -> -04:00)
+        datetime(2026, 3, 8, 2, 30),  # non-existent spring-forward gap in America/New_York
+        datetime(2026, 6, 1, 10, 0),  # Europe/Zurich
+        datetime(2026, 6, 1, 10, 0),  # fixed offset +05:30
+    ]
+    iana_zones = [
+        "America/New_York",
+        "America/New_York",
+        "America/New_York",
+        "America/New_York",
+        "Europe/Zurich",
+        "+05:30",
+    ]
+    orig_wall_clock = utc_mod._convert_wall_clock
+    expected_iana = [orig_wall_clock(t, z) for t, z in zip(iana_times, iana_zones, strict=True)]
+    # Verify reference matches Python ZoneInfo directly
+    assert expected_iana[2] == datetime(2026, 11, 1, 1, 30, tzinfo=ZoneInfo("America/New_York")).astimezone(
+        UTC
+    ).replace(tzinfo=None)
+
+    iana_result = _result(
+        _frame(
+            {
+                "time": iana_times,
+                "time_zone": iana_zones,
+                "station_id": ["s1"] * 6,
+                "product_id": ["flow"] * 6,
+                "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            }
+        )
+    )
+    iana_utc = rivretrieve.to_utc(iana_result)
+    assert iana_utc.data["time"].to_list() == expected_iana
+    assert iana_utc.data["time_zone"].to_list() == ["+00:00"] * 6
+
+    # Invalid IANA raises ValueError, and unknown in annotation refuses atomically
+    bad_iana = iana_result.model_copy(
+        update={
+            "data": _frame(
+                {
+                    "time": [datetime(2026, 1, 1, 0, 0)],
+                    "time_zone": ["Mars/Olympus_Mons"],
+                    "station_id": ["s1"],
+                    "product_id": ["flow"],
+                    "value": [1.0],
+                }
+            )
+        }
+    )
+    with pytest.raises(ValueError):
+        rivretrieve.to_utc(bad_iana)
+
+    unknown_ann = with_annotations(
+        _result(
+            _frame(
+                {
+                    "time": [datetime(2026, 1, 1, 0, 0)],
+                    "time_zone": ["+00:00"],
+                    "station_id": ["s1"],
+                    "product_id": ["flow"],
+                    "value": [1.0],
+                }
+            )
+        ),
+        AnnotationBundle(
+            observation_tables={
+                "provider-a.qc": ObservationAnnotationTable.from_rows(
+                    schema=ann_schema,
+                    rows=ann_table.rows.head(1).with_columns(
+                        pl.lit("unknown").alias("time_zone"),
+                        pl.lit(False).alias("measured"),
+                    ),
+                    measurement_indices=(None,),
+                )
+            }
+        ),
+    )
+    with pytest.raises(FatalContractError, match="Cannot convert 1 annotation rows"):
+        rivretrieve.to_utc(unknown_ann)

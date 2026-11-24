@@ -1,0 +1,23 @@
+# Decode shared-product responses once
+
+When a publisher sends several requested products in one response, decode the response once and let each product keep its own observations, outcomes and failures. Lithuania illustrates what a caller should see. One station-month request returns both water level and discharge. A malformed water-level field leaves the valid discharge observations available, with the reason for the water-level outcome traceable to the same call. Implementing and verifying this vision completes [discussion #950](https://github.com/RivRetrieve/RivRetrieve/issues/950). Base implementation PRs on `program/938-efficient-shared-retrieval` and target that branch. [Lithuania shared-acquisition tests](../../tests/test_lt_lhmt_shared_acquisition.py) · [Program scope](https://github.com/RivRetrieve/RivRetrieve/issues/938#issuecomment-7100576546)
+
+## Give provider authors a proven path
+
+Start from the context-bound interpretation handoff introduced by #949. One acquisition can carry separate parsed results for its products. The driver reuses a result only when its effective parsing context matches, including the station and product, source coordinates, window, time axis, scope and known series. Two products can safely read the same decoded document while requiring different interpretations. Preserve the engine’s ability to interpret a response under changed inputs. [Implemented handoff](https://github.com/RivRetrieve/RivRetrieve/pull/970)
+
+The implementing agent owns the design. Explore how far the existing handoff goes and use judgment about any shared engine changes, the provider API, and the number of passes over a decoded document. Keep publisher-specific interpretation in the port and give the core responsibility for work that ports would otherwise repeat. Choose representative integrations using these three existing patterns.
+
+- **Lithuania.** Two observation fields share a station, dates and a monthly response. Each field can succeed or fail independently.
+- **Peru.** Acquisition inspects the response envelope for publisher-reported failure. Several monthly products then read fields from the same data. Count decoding across both acquisition and parsing.
+- **Austria.** The shared station lookup identifies the files available for individual products. A missing file produces a product-specific `no_match`. When a file is listed, the subsequent request owns its result and retains the lookup as a prerequisite.
+
+Use these cases to judge what each port must implement, how much data stays live, and how existing and in-progress ports could migrate. The research proposal for `parse_group` is one possible design. HTTP request grouping is outside this effort. [Research, Slice 4](https://github.com/RivRetrieve/RivRetrieve/issues/938#issuecomment-7094994897)
+
+## What the integrations must demonstrate
+
+Compare equivalent retrievals on the Program baseline and the implementation. Show the number of decodes per shared response, CPU time, elapsed time and peak memory. Include the cost of retaining decoded documents or per-product results across responses, with and without requested receipts. The research timings supply starting workloads and establish no speedup target. [Program verification requirements](https://github.com/RivRetrieve/RivRetrieve/issues/938)
+
+Compare observations and their ordering, source series and physical facts, annotations and occurrence links, inventories, outcomes, issues, provenance and requested receipt bytes exactly. Exercise a product-specific failure alongside a successful sibling and a shared failure affecting every dependent product. Preserve the distinction between a null value, an absent row, an empty result and a failed request. On refresh, preserve held successful data and its original retrieval time when its replacement fails. Keep fatal stage-contract validation effective, including for definitions with zero rows. Run the source-independent suite and applicable retained-source checks. Report unavailable mandatory evidence as blocked. [Testing guide](../../docs/maintenance/testing.md) · [Evidence guide](../../docs/maintenance/evidence.md)
+
+Update Steps 4–5 of the provider port guide and its linked examples so the next port author can see where decoding happens, how each selected product obtains its result, and how failures retain their source evidence. Deliver the representative integrations, evidence and guide together as the handoff to #951, which owns the remaining migrations. [Provider port guide](../../docs/maintenance/provider-ports.md) · [Adoption effort #951](https://github.com/RivRetrieve/RivRetrieve/issues/951)

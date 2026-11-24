@@ -3,34 +3,39 @@
 Contributed by: Thiago von Däniken
 """
 
-import json
 from collections.abc import Mapping
-from dataclasses import dataclass
 
 from rivretrieve._internal.engine import (
     FetchWindow,
+    InterpretedPayload,
     Payload,
     ProviderConfig,
     RenderedWindow,
+    SourceAcquisition,
     SourceCallOrigin,
     SourceCoordinates,
     UnknownOriginFact,
-    WithIssues,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
-from rivretrieve._internal.providers.ba_fhmzbih.config import BaFhmzbihSourceCoordinates
+from rivretrieve._internal.providers.ba_fhmzbih.config import (
+    BaFhmzbihMetadataCoordinates as BaFhmzbihMetadataCoordinates,
+)
+from rivretrieve._internal.providers.ba_fhmzbih.config import (
+    BaFhmzbihSourceCoordinates,
+)
+from rivretrieve._internal.providers.ba_fhmzbih.parse import (
+    interpret_metadata_payload,
+)
+from rivretrieve._internal.providers.ba_fhmzbih.parse import (
+    metadata_groups as metadata_groups,
+)
 from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
 
 _METADATA_URL = "https://vodostaji.voda.ba/data/internet/layers/20/index.json"
 _WORKBOOK_ROOT = "https://vodostaji.voda.ba/data/internet/stations"
-
-
-@dataclass(frozen=True, slots=True)
-class BaFhmzbihMetadataCoordinates:
-    pass
 
 
 def fetch(
@@ -43,7 +48,7 @@ def fetch(
     *,
     scope: SeriesScope | None = None,
     known_series: tuple[SourceSeries, ...] = (),
-) -> WithIssues[tuple[Payload, ...]]:
+) -> SourceAcquisition:
     if len(stations) != 1 or len(products) != 1:
         raise FatalContractError("ba_fhmzbih fetch requires exactly one station-product pair")
     for product in products:
@@ -58,9 +63,14 @@ def fetch(
     )
     try:
         groups = metadata_groups(metadata_response.content, stations)
-    except UnsupportedSourceStructureError:
+    except UnsupportedSourceStructureError as error:
         # Keep exact source bytes for parse-owned diagnostics and optional receipts.
-        return WithIssues((metadata_payload,))
+        metadata_parsed = interpret_metadata_payload(metadata_payload, config, error=error)
+        return SourceAcquisition(
+            value=(metadata_payload,),
+            interpretations=(InterpretedPayload.from_payload(metadata_payload, metadata_parsed),),
+        )
+    metadata_parsed = interpret_metadata_payload(metadata_payload, config)
     payloads = [metadata_payload]
     for station, product in pairs:
         product_config = config.products[product]
@@ -79,7 +89,11 @@ def fetch(
         payloads.append(
             _payload(product_config.coordinates, ((station, product),), fetch_window, response, scope, known_series)
         )
-    return WithIssues(tuple(payloads))
+    del groups
+    return SourceAcquisition(
+        value=tuple(payloads),
+        interpretations=(InterpretedPayload.from_payload(metadata_payload, metadata_parsed),),
+    )
 
 
 def _payload(
@@ -108,26 +122,3 @@ def _payload(
         scope=scope,
         known_series=known_series,
     )
-
-
-def metadata_groups(content: bytes, stations: tuple[str, ...]) -> dict[str, str]:
-    """Resolve publisher station routes without inventing missing group identifiers."""
-    try:
-        document = json.loads(content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise UnsupportedSourceStructureError("ba_fhmzbih metadata index is not valid JSON") from error
-    if not isinstance(document, list):
-        raise UnsupportedSourceStructureError("ba_fhmzbih metadata index must be a JSON array")
-    groups: dict[str, str] = {}
-    for station in stations:
-        matches = [row for row in document if isinstance(row, dict) and row.get("metadata_station_no") == station]
-        if (
-            len(matches) != 1
-            or not isinstance(matches[0].get("metadata_site_no"), str)
-            or not matches[0]["metadata_site_no"]
-        ):
-            raise UnsupportedSourceStructureError(
-                f"ba_fhmzbih metadata index does not resolve exactly one group for station {station}"
-            )
-        groups[station] = matches[0]["metadata_site_no"]
-    return groups
