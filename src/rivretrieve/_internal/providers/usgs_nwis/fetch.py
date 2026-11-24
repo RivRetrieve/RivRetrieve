@@ -5,29 +5,28 @@ Contributed by: Thiago von Däniken
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from urllib.parse import parse_qsl, urlsplit  # noqa: TID251 - URL validation only; no network access
 from uuid import uuid4
 
-from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
+    InterpretedPayload,
     Payload,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
     SourceCallOrigin,
     SourceCoordinates,
-    UnknownOriginFact,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.page_acquisition import PageStep, acquire_pages
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.usgs_nwis.config import UsgsNwisSourceCoordinates
-from rivretrieve._internal.providers.usgs_nwis.parse import parse, parse_time_label
-from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget, attempt_request
+from rivretrieve._internal.providers.usgs_nwis.parse import interpret_page
+from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
@@ -44,20 +43,11 @@ from rivretrieve._internal.transport import (
     HttpMethod,
     RedirectPolicy,
     Transport,
-    TransportFailure,
     TransportRequest,
     TransportResponse,
 )
 
 _BASE_URL = "https://api.waterdata.usgs.gov/ogcapi/v1/collections/"
-
-
-class _RepeatedObservationError(ValueError):
-    """A source cursor chain repeated concrete series/time keys."""
-
-    def __init__(self, published_ids: set[str]) -> None:
-        self.published_ids = published_ids
-        super().__init__("USGS cursor chain repeats a logical series/time observation")
 
 
 def fetch(
@@ -72,12 +62,13 @@ def fetch(
     scope: SeriesScope | None = None,
     known_series: tuple[SourceSeries, ...] = (),
 ) -> SourceAcquisition:
-    payloads = []
+    payloads: list[Payload] = []
+    interpretations: list[InterpretedPayload] = []
     definitions: dict[str, SourceSeries] = {}
-    inventories = []
-    outcomes = []
-    issues = []
-    failed_requests = []
+    inventories: list[InventorySnapshot] = []
+    outcomes: list[RetrievalOutcome] = []
+    issues: list[Issue] = []
+    failed_requests: list[FailedSourceRequest] = []
     for station in stations:
         try:
             location = monitoring_locations[station]
@@ -116,9 +107,9 @@ def fetch(
                             | set(local_scope.variants)
                         )
                     )
-                transaction_errors = []
-                transaction_calls = []
-                retrieved_at = None
+                transaction_errors: list[str] = []
+                transaction_calls: list[str] = []
+                retrieved_at: datetime | None = None
                 if not selectors:
                     transaction_errors.append("No published USGS series ID is established for the requested selector")
                 for selector in selectors:
@@ -134,48 +125,25 @@ def fetch(
                     )
                     target_members = {item.series_id: item for item in selected}
                     observed_ids: set[str] = set()
-                    target_errors = []
-                    target_calls = []
+                    target_errors: list[str] = []
                     source_failures: dict[str, RetrievalOutcome] = {}
                     unsupported_ids: set[str] = set()
                     # A logical source observation is series + published time, not feature id.
                     seen_observations: set[tuple[str, datetime]] = set()
                     initial = _request(coordinates, rendered, selector)
-                    request: TransportRequest | None = initial
-                    visited: set[tuple[tuple[str, str], ...]] = set()
-                    while request is not None:
-                        attempted = attempt_request(transport, request)
-                        if isinstance(attempted, (TransportFailure, CredentialExchangeError)):
-                            error = attempted
-                            reason = str(error)
-                            target_errors.append(reason)
-                            call_id = uuid4().hex
-                            target_calls.extend(
-                                tuple(item.attempt_id for item in error.attempt_traces)
-                                if isinstance(error, TransportFailure) and error.attempt_traces
-                                else (call_id,)
-                            )
-                            for definition in target_members.values():
-                                failed_requests.append(
-                                    FailedSourceRequest(
-                                        uuid4().hex, definition, window, request, error, call_id=call_id
-                                    )
-                                )
-                            if not target_members:
-                                failed_requests.append(
-                                    FailedSourceRequest(
-                                        uuid4().hex,
-                                        SourceRequestTarget(station, str(product)),
-                                        window,
-                                        request,
-                                        error,
-                                        call_id=call_id,
-                                    )
-                                )
-                            break
-                        response = attempted
-                        retrieved_at = response.retrieved_at
-                        payload = _payload(
+                    identity_scope = request_scope.model_copy(update={"predicates": ()})
+
+                    def _build_payload(
+                        response: TransportResponse,
+                        *,
+                        coordinates=coordinates,
+                        station=station,
+                        product=product,
+                        acquisition_window=acquisition_window,
+                        request_scope=request_scope,
+                        target_members=target_members,
+                    ) -> Payload:
+                        return _payload(
                             coordinates,
                             station,
                             product,
@@ -184,13 +152,25 @@ def fetch(
                             request_scope,
                             tuple(target_members.values()),
                         )
-                        payloads.append(payload)
-                        target_calls.extend(item.attempt_id for item in payload.attempt_traces)
-                        if not payload.attempt_traces:
-                            target_calls.append(payload.acquisition_id)
-                        # Pure decoding is also run by the driver. Here it establishes whether
-                        # this complete chain can certify inventory/empty coverage.
-                        parsed = parse(payload, config)
+
+                    def _step_page(
+                        payload: Payload,
+                        *,
+                        station=station,
+                        product=product,
+                        selector=selector,
+                        initial=initial,
+                        selected=selected,
+                        target_members=target_members,
+                        observed_ids=observed_ids,
+                        target_errors=target_errors,
+                        source_failures=source_failures,
+                        unsupported_ids=unsupported_ids,
+                        seen_observations=seen_observations,
+                        identity_scope=identity_scope,
+                    ) -> PageStep:
+                        interpreted = interpret_page(payload, config)
+                        parsed = interpreted.parsed
                         for definition in parsed.series:
                             if definition.series_id in observed_ids:
                                 previous = target_members[definition.series_id]
@@ -202,7 +182,6 @@ def fetch(
                                 definition = definition.model_copy(update={"facts": tuple(facts.values())})
                             target_members[definition.series_id] = definition
                             observed_ids.add(definition.series_id)
-                        identity_scope = request_scope.model_copy(update={"predicates": ()})
                         requested_ids = {item.series_id for item in parsed.series if identity_scope.matches(item)}
                         requested_ids.update(item.series_id for item in selected)
                         for outcome in parsed.outcomes:
@@ -229,19 +208,80 @@ def fetch(
                                         + (outcome.reason or "unsupported source data"),
                                     }
                                 )
-                        try:
-                            document = _document(response.content)
-                            _check_duplicates(document, seen_observations, coordinates)
-                            request = _next_request(document, initial, visited)
-                        except ValueError as error:
-                            if isinstance(error, _RepeatedObservationError):
-                                unsupported_ids.update(error.published_ids)
-                            target_errors.append(str(error))
-                            issues.extend(
-                                _issue(station, product, str(error), failed_id)
-                                for failed_id in target_members or (None,)
+                        if interpreted.document_error is not None:
+                            return PageStep(
+                                parsed=parsed,
+                                stop_reason=interpreted.document_error,
+                                issues=tuple(
+                                    _issue(station, product, interpreted.document_error, failed_id)
+                                    for failed_id in target_members or (None,)
+                                ),
                             )
-                            break
+                        repeated = {key[0] for key in interpreted.observation_keys if key in seen_observations}
+                        seen_observations.update(interpreted.observation_keys)
+                        if repeated:
+                            unsupported_ids.update(repeated)
+                            reason = "USGS cursor chain repeats a logical series/time observation"
+                            return PageStep(
+                                parsed=parsed,
+                                stop_reason=reason,
+                                issues=tuple(
+                                    _issue(station, product, reason, failed_id)
+                                    for failed_id in target_members or (None,)
+                                ),
+                            )
+                        if interpreted.links_error is not None:
+                            return PageStep(
+                                parsed=parsed,
+                                stop_reason=interpreted.links_error,
+                                issues=tuple(
+                                    _issue(station, product, interpreted.links_error, failed_id)
+                                    for failed_id in target_members or (None,)
+                                ),
+                            )
+                        if interpreted.next_href is None:
+                            return PageStep(parsed=parsed)
+                        try:
+                            next_request, cursor_key = _next_request_from_href(interpreted.next_href, initial)
+                        except ValueError as error:
+                            reason = str(error)
+                            return PageStep(
+                                parsed=parsed,
+                                stop_reason=reason,
+                                issues=tuple(
+                                    _issue(station, product, reason, failed_id)
+                                    for failed_id in target_members or (None,)
+                                ),
+                            )
+                        return PageStep(parsed=parsed, next_request=next_request, cursor_key=cursor_key)
+
+                    page_acq = acquire_pages(
+                        initial,
+                        transport=transport,
+                        window=window,
+                        build_payload=_build_payload,
+                        interpret_page=_step_page,
+                        failure_targets=lambda station=station, product=product, target_members=target_members: (
+                            tuple(target_members.values()) or (SourceRequestTarget(station, str(product)),)
+                        ),
+                        on_cycle=lambda station=station, product=product, target_members=target_members: (
+                            "USGS pagination cursor cycle",
+                            tuple(
+                                _issue(station, product, "USGS pagination cursor cycle", failed_id)
+                                for failed_id in target_members or (None,)
+                            ),
+                        ),
+                    )
+                    payloads.extend(page_acq.payloads)
+                    interpretations.extend(page_acq.interpretations)
+                    failed_requests.extend(page_acq.failed_requests)
+                    issues.extend(page_acq.issues)
+                    if page_acq.retrieved_at is not None:
+                        retrieved_at = page_acq.retrieved_at
+                    if page_acq.stop_reason is not None:
+                        target_errors.append(page_acq.stop_reason)
+                    target_calls = page_acq.calls
+
                     if selector is not None and not target_members and not target_errors:
                         target_errors.append(
                             "An empty selected response does not establish the requested source identity"
@@ -272,7 +312,7 @@ def fetch(
                                     else OutcomeStatus.UNRESOLVED,
                                     reason,
                                     retrieved_at,
-                                    calls=tuple(target_calls),
+                                    calls=target_calls,
                                 )
                             )
                         if not target_members:
@@ -285,7 +325,7 @@ def fetch(
                                     OutcomeStatus.UNRESOLVED,
                                     reason,
                                     retrieved_at,
-                                    calls=tuple(target_calls),
+                                    calls=target_calls,
                                 ).model_copy(
                                     update={
                                         "requested_selector": RequestedSelector(kind="variant", value=selector)
@@ -306,7 +346,7 @@ def fetch(
                                         OutcomeStatus.EMPTY,
                                         None,
                                         retrieved_at,
-                                        calls=tuple(target_calls),
+                                        calls=target_calls,
                                     )
                                 )
                 if not members and not transaction_errors:
@@ -363,6 +403,7 @@ def fetch(
         inventories=tuple(inventories),
         outcomes=tuple(outcomes),
         failed_requests=tuple(failed_requests),
+        interpretations=tuple(interpretations),
     )
 
 
@@ -399,58 +440,9 @@ def _request(coordinates: UsgsNwisSourceCoordinates, window: RenderedWindow, sel
     )
 
 
-def _document(content: bytes) -> dict:
-    try:
-        document = json.loads(content)
-    except (ValueError, UnicodeDecodeError) as error:
-        raise ValueError("USGS observation response is not valid JSON") from error
-    if (
-        not isinstance(document, dict)
-        or document.get("type") != "FeatureCollection"
-        or not isinstance(document.get("features"), list)
-    ):
-        raise ValueError("USGS observation response must be a FeatureCollection")
-    return document
-
-
-def _check_duplicates(document: dict, seen: set[tuple[str, datetime]], coordinates: UsgsNwisSourceCoordinates) -> None:
-    repeated: set[str] = set()
-    page_keys: set[tuple[str, datetime]] = set()
-    for feature in document["features"]:
-        properties = feature.get("properties") if isinstance(feature, dict) else None
-        if not isinstance(properties, dict):
-            continue  # Parse has already retained the unattributable source failure.
-        identifier = properties.get("time_series_id")
-        if not isinstance(identifier, str) or not identifier:
-            continue  # Missing identity cannot establish a logical duplicate key.
-        try:
-            stamp, zone = parse_time_label(properties.get("time"), coordinates.endpoint == "daily")
-        except ValueError:
-            continue  # Parse has already scoped this invalid label to its source series.
-        identity_time = stamp if zone == "unknown" else datetime.fromisoformat(f"{stamp.isoformat()}{zone}")
-        key = (identifier, identity_time)
-        if key in seen:
-            repeated.add(key[0])
-        page_keys.add(key)
-    seen.update(page_keys)
-    if repeated:
-        raise _RepeatedObservationError(repeated)
-
-
-def _next_request(
-    document: dict, initial: TransportRequest, visited: set[tuple[tuple[str, str], ...]]
-) -> TransportRequest | None:
-    links = document.get("links")
-    if not isinstance(links, list) or any(
-        not isinstance(link, dict) or not isinstance(link.get("rel"), str) for link in links
-    ):
-        raise ValueError("USGS observation page has malformed links")
-    following = [link for link in links if link["rel"] == "next"]
-    if not following:
-        return None
-    if len(following) != 1 or not isinstance(following[0].get("href"), str):
-        raise ValueError("USGS observation page requires one valid next link")
-    href = following[0]["href"]
+def _next_request_from_href(
+    href: str, initial: TransportRequest
+) -> tuple[TransportRequest, tuple[tuple[str, str], ...]]:
     parsed = urlsplit(href)
     expected = urlsplit(initial.url)
     if (parsed.scheme, parsed.netloc, parsed.path) != (
@@ -467,11 +459,14 @@ def _next_request(
     if any(params.get(key) != value for key, value in base.items()):
         raise ValueError("USGS next link changes request filters")
     identity = tuple(sorted(params.items()))
-    if identity in visited:
-        raise ValueError("USGS pagination cursor cycle")
-    visited.add(identity)
-    return TransportRequest(
-        method=HttpMethod.GET, url=href, headers={"Accept": "application/json"}, redirect_policy=RedirectPolicy.REFUSE
+    return (
+        TransportRequest(
+            method=HttpMethod.GET,
+            url=href,
+            headers={"Accept": "application/json"},
+            redirect_policy=RedirectPolicy.REFUSE,
+        ),
+        identity,
     )
 
 
@@ -506,16 +501,7 @@ def _payload(coordinates, station, product, fetch_window, response: TransportRes
         station_products=((station, product),),
         fetch_window=fetch_window,
         content=response.content,
-        origin=SourceCallOrigin(
-            url=response.url,
-            request_parameters=response.request_parameters,
-            status_code=response.status_code,
-            retrieved_at=response.retrieved_at,
-            content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
-            source_path=UnknownOriginFact(),
-            query=UnknownOriginFact(),
-            attempts=response.attempts,
-        ),
+        origin=SourceCallOrigin.from_response(response),
         prerequisite_calls=response.prerequisite_calls,
         scope=scope,
         known_series=known,

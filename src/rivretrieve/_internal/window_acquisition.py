@@ -77,4 +77,5 @@ def acquire_window(
         outcomes=tuple(item for result in results for item in result.outcomes),
         calls=tuple(item for result in results for item in result.calls),
         failed_requests=tuple(item for result in results for item in result.failed_requests),
+        interpretations=tuple(item for result in results for item in result.interpretations),
     )
