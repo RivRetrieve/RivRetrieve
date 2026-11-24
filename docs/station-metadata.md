@@ -73,6 +73,7 @@ of the source view.
 | [`no_nve`](providers/no_nve.md) | `stationName` | `lakeName`, `reservoirName`, `riverName` | `drainageBasinArea`, `drainageBasinAreaNorway`, `transferAreaIn`, `transferAreaOut` (km2) | `masl` (m) |
 | [`pe_senamhi`](providers/pe_senamhi.md) | `name` | `waterBody` | — | `altitude` (m) |
 | [`pl_imgw`](providers/pl_imgw.md) | — | — | `area` (square kilometre) | `gauge_altitude` (m) |
+| [`si_arso`](providers/si_arso.md) | `Postaja`, `VODOMERNA POSTAJA`, `dropdown_postaja` | `VODOTOK`, `Vodotok`, `dropdown_vodotok` | `F (km2)`, `ZALEDJE - F (km2)` (km2) | — |
 | [`th_thaiwater`](providers/th_thaiwater.md) | — | — | — | — |
 | [`usgs_nwis`](providers/usgs_nwis.md) | `monitoring_location_name` | — | `contrib_drain_area_va`, `drain_area_va` (sq mi) | `alt_va` (feet) |
 <!-- fields-by-provider:end -->

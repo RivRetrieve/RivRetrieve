@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from nineteen different providers in eighteen countries.
+from twenty different providers in nineteen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -53,6 +53,7 @@ for how to supply them.
 | Norway | Norwegian Water Resources and Energy Directorate (NVE) | `no_nve` | 3,804 | Credentials required |
 | Peru | Servicio Nacional de Meteorología e Hidrología del Perú (SENAMHI) | `pe_senamhi` | 270 | Open |
 | Poland | Institute of Meteorology and Water Management (IMGW) | `pl_imgw` | 1,301 | Bulk download |
+| Slovenia | Agencija Republike Slovenije za okolje (ARSO) | `si_arso` | 615 | Open |
 | Switzerland | Federal Office for the Environment (FOEN) | `ch_foen` | 558 | Open |
 | Thailand | Hydro-Informatics Institute (HII), ThaiWater | `th_thaiwater` | 825 | Open |
 | United States | U.S. Geological Survey (USGS) | `usgs_nwis` | 29,387 | Open |
@@ -62,6 +63,8 @@ See the [Argentine provider guide](https://rivretrieve.github.io/providers/ar_in
 Austria's `at_ehyd` catalogue retains 746 river station identities; 744 have selectable series in this snapshot.
 See the [Austrian provider guide](https://rivretrieve.github.io/providers/at_ehyd/) for catalogue coverage and limitations.
 SENAMHI retains 771 station identities; 270 have selectable series in this snapshot.
+Slovenia's `si_arso` catalogue retains 619 river and canal station identities; 615 have selectable series in this snapshot.
+See the [Slovenian provider guide](https://rivretrieve.github.io/providers/si_arso/) for network scope, coordinate transformations and sentinel drainage areas.
 A station can appear under both French services; their series remain separate.
 
 </details>
@@ -71,7 +74,7 @@ A station can appear under both French services; their series remain separate.
 
 Afghanistan, Armenia, Belgium, Benin, Bulgaria, Burkina Faso, Cameroon, Chad, Chile,
 Estonia, Germany, Greece, Guinea, Indonesia, Ireland, Israel, Italy, Ivory Coast, Malaysia,
-Mali, Mexico, Netherlands, New Zealand, Niger, Nigeria, Portugal, Rwanda, Slovenia, South Africa,
+Mali, Mexico, Netherlands, New Zealand, Niger, Nigeria, Portugal, Rwanda, South Africa,
 South Korea, Spain, Sri Lanka, Sweden, Taiwan and the United Kingdom.
 
 Some of these have a fetcher in the legacy

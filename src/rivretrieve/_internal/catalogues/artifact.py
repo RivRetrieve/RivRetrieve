@@ -61,6 +61,7 @@ ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
         "lt_lhmt",
         "no_nve",
         "pl_imgw",
+        "si_arso",
         "th_thaiwater",
         "usgs_nwis",
         "za_dws",

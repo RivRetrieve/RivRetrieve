@@ -176,6 +176,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
 | `pe_senamhi` | live | none | 771 | 1170 | 10395 | 0 |
 | `pl_imgw` | bulk store | none | 1301 | 0 | 3903 | 0 |
+| `si_arso` | live | none | 619 | 5628 | 0 | 5514 |
 | `th_thaiwater` | live | none | 825 | 1096 | 554 | 0 |
 | `usgs_nwis` | live | none | 29642 | 63502 | 0 | 114350 |
 
@@ -340,6 +341,24 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `pl_imgw` | `discharge_daily` | `m3/s` |
 | `pl_imgw` | `stage_daily` | `m` |
 | `pl_imgw` | `water_temperature_daily` | `degC` |
+| `si_arso` | `archive_discharge_daily` | `m3/s` |
+| `si_arso` | `archive_discharge_monthly_max` | `m3/s` |
+| `si_arso` | `archive_discharge_monthly_min` | `m3/s` |
+| `si_arso` | `archive_stage_daily` | `m` |
+| `si_arso` | `archive_stage_monthly_max` | `m` |
+| `si_arso` | `archive_stage_monthly_min` | `m` |
+| `si_arso` | `archive_temperature_daily` | `degC` |
+| `si_arso` | `archive_temperature_monthly_max` | `degC` |
+| `si_arso` | `archive_temperature_monthly_min` | `degC` |
+| `si_arso` | `operational_discharge_10min` | `m3/s` |
+| `si_arso` | `operational_discharge_30min` | `m3/s` |
+| `si_arso` | `operational_discharge_hourly` | `m3/s` |
+| `si_arso` | `operational_stage_10min` | `m` |
+| `si_arso` | `operational_stage_30min` | `m` |
+| `si_arso` | `operational_stage_hourly` | `m` |
+| `si_arso` | `operational_temperature_10min` | `degC` |
+| `si_arso` | `operational_temperature_30min` | `degC` |
+| `si_arso` | `operational_temperature_hourly` | `degC` |
 | `th_thaiwater` | `discharge_reported` | `m3/s` |
 | `th_thaiwater` | `stage_reported` | `m` |
 | `usgs_nwis` | `discharge_daily_mean` | `m3/s` |
