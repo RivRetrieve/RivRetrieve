@@ -213,7 +213,7 @@ def test_cl_dga_series_mappings_and_catalogue_descriptions() -> None:
     assert daily_facts.quantity.value == "discharge"
     assert daily_facts.source_unit.value == "m3/s"
     assert daily_facts.normalized_unit == "m3/s"
-    assert daily_facts.frequency.value == "daily"
+    assert daily_facts.frequency.value == "P1D"
     assert daily_facts.statistic.state is EvidenceState.NOT_ESTABLISHED
     assert daily_facts.statistic.value is None
     assert daily_facts.temporal_support.state is EvidenceState.NOT_ESTABLISHED
@@ -228,7 +228,7 @@ def test_cl_dga_series_mappings_and_catalogue_descriptions() -> None:
     assert monthly_facts.quantity.value == "discharge"
     assert monthly_facts.source_unit.value == "m3/s"
     assert monthly_facts.normalized_unit == "m3/s"
-    assert monthly_facts.frequency.value == "monthly"
+    assert monthly_facts.frequency.value == "P1M"
     assert monthly_facts.statistic.state is EvidenceState.KNOWN
     assert monthly_facts.statistic.value == "mean"
     assert monthly_facts.temporal_support.state is EvidenceState.NOT_ESTABLISHED
@@ -303,10 +303,10 @@ def test_cl_dga_series_admission_and_physical_filters() -> None:
     means = rr.find(provider="cl_dga", station="01001001", quantity="discharge", statistic="mean")
     assert {item.product_id for item in means.series} == {"discharge_monthly_mean"}
 
-    daily_found = rr.find(provider="cl_dga", station="01001001", frequency="daily")
+    daily_found = rr.find(provider="cl_dga", station="01001001", frequency="P1D")
     assert {item.product_id for item in daily_found.series} == {"discharge_daily"}
 
-    monthly_found = rr.find(provider="cl_dga", station="01001001", frequency="monthly")
+    monthly_found = rr.find(provider="cl_dga", station="01001001", frequency="P1M")
     assert {item.product_id for item in monthly_found.series} == {"discharge_monthly_mean"}
 
     for field_name, probe_value in (

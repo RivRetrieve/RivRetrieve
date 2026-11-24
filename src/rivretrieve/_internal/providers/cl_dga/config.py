@@ -85,5 +85,5 @@ config: Final[ProviderConfig] = ProviderConfig(
             semantics=UnknownTemporalSupport(),
         ),
     },
-    cache=CacheConfig(store=ObservationStoreConfig(format_version=10)),
+    cache=CacheConfig(store=ObservationStoreConfig(format_version=12)),
 )

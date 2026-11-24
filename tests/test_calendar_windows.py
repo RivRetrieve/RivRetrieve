@@ -636,7 +636,7 @@ def test_series_mapping_clipping_axis_opt_in_preserves_monthly_default_and_rejec
         quantity="discharge",
         source_unit="m3/s",
         normalized_unit="m3/s",
-        frequency="monthly",
+        frequency="P1M",
         statistic="mean",
         evidence=("test:monthly",),
         clipping_axis=ClippingAxis.CALENDAR_MONTH,
@@ -648,7 +648,7 @@ def test_series_mapping_clipping_axis_opt_in_preserves_monthly_default_and_rejec
         quantity="discharge",
         source_unit="m3/s",
         normalized_unit="m3/s",
-        frequency="monthly",
+        frequency="P1M",
         statistic="mean",
         evidence=("test:monthly",),
     )
@@ -659,9 +659,9 @@ def test_series_mapping_clipping_axis_opt_in_preserves_monthly_default_and_rejec
         quantity="discharge",
         source_unit="m3/s",
         normalized_unit="m3/s",
-        frequency="daily",
+        frequency="P1D",
         evidence=("test:daily",),
         clipping_axis=ClippingAxis.CALENDAR_MONTH,
     )
-    with pytest.raises(ValidationError, match="monthly"):
+    with pytest.raises(ValidationError, match="P1M"):
         invalid_daily.physical_facts()

@@ -629,7 +629,7 @@ def test_cl_dga_end_to_end_public_api_windows_refresh_and_bundle(
     assert status.source_vintage is None
     assert rr.audit_cache("cl_dga").rows_checked == 9
 
-    daily_sel = rr.find(provider="cl_dga", station="01001002", frequency="daily")
+    daily_sel = rr.find(provider="cl_dga", station="01001002", frequency="P1D")
     assert len(daily_sel.series) == 1
 
     # Daily year boundary + leap day + duplicates + published blank.
@@ -661,7 +661,7 @@ def test_cl_dga_end_to_end_public_api_windows_refresh_and_bundle(
     assert restored_receipt.source_vintage is None
 
     # Monthly CALENDAR_MONTH mid-month and year-boundary windows.
-    monthly_sel = rr.find(provider="cl_dga", station="01001002", frequency="monthly")
+    monthly_sel = rr.find(provider="cl_dga", station="01001002", frequency="P1M")
     assert len(monthly_sel.series) == 1
     assert monthly_sel.series[0].facts[0].clipping_axis is ClippingAxis.CALENDAR_MONTH
     mid_month = rr.fetch(monthly_sel, start="2024-02-10", end="2024-02-20", on_issue="raise")
@@ -697,7 +697,7 @@ def test_cl_dga_end_to_end_public_api_windows_refresh_and_bundle(
     removed = rr.fetch(daily_sel, start="2024-01-01", end="2024-03-01", on_issue="ignore")
     assert removed.data.is_empty()
     assert removed.outcomes[0].status is OutcomeStatus.UNRESOLVED
-    new_sel = rr.find(provider="cl_dga", station="02112007", frequency="daily")
+    new_sel = rr.find(provider="cl_dga", station="02112007", frequency="P1D")
     assert rr.fetch(new_sel, start="2024-01-05", end="2024-01-05", on_issue="raise").data["value"].to_list() == [9.5]
 
     rr.clear_cache("cl_dga")

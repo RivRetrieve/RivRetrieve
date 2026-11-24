@@ -339,7 +339,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     assert rr.audit_cache("cl_dga").rows_checked == _TOTAL_DAILY_ROWS + _TOTAL_MONTHLY_ROWS
 
     # Daily year boundary, leap day, 1960 historical edge, and internal gap.
-    daily_sel = rr.find(provider="cl_dga", station="01050002", frequency="daily")
+    daily_sel = rr.find(provider="cl_dga", station="01050002", frequency="P1D")
     assert len(daily_sel.series) == 1
     daily_series = daily_sel.series[0]
     assert (daily_series.identity.namespace, daily_series.identity.published_id) == (
@@ -350,7 +350,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     assert daily_facts.quantity.value == "discharge"
     assert daily_facts.source_unit.value == "m3/s"
     assert daily_facts.normalized_unit == "m3/s"
-    assert daily_facts.frequency.value == "daily"
+    assert daily_facts.frequency.value == "P1D"
     assert daily_facts.statistic.state is EvidenceState.NOT_ESTABLISHED
     assert daily_facts.clipping_axis is ClippingAxis.CALENDAR_DATE
     assert daily_facts.label_time is None
@@ -358,7 +358,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
         assert getattr(daily_facts, unknown_field).state is EvidenceState.NOT_ESTABLISHED
 
     # Unknown daily statistic refuses statistic="mean" filtering via EmptySelectionError.
-    empty_stat_sel = rr.find(provider="cl_dga", station="01050002", frequency="daily", statistic="mean")
+    empty_stat_sel = rr.find(provider="cl_dga", station="01050002", frequency="P1D", statistic="mean")
     with pytest.raises(EmptySelectionError):
         rr.fetch(empty_stat_sel, start="2024-01-01", end="2024-01-02")
 
@@ -420,7 +420,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     assert pre_history_res.outcomes[0].status is OutcomeStatus.EMPTY
 
     # Conflicting duplicate daily date preservation, verbatim receipt, and bundle round-trip.
-    dup_sel = rr.find(provider="cl_dga", station="01201001", frequency="daily")
+    dup_sel = rr.find(provider="cl_dga", station="01201001", frequency="P1D")
     dup_series_id = dup_sel.series[0].series_id
     dup_res = rr.fetch(dup_sel, start="2020-02-12", end="2020-02-13", receipts=True, on_issue="raise")
     raw_dup = [
@@ -471,7 +471,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     assert restored_receipt.content == daily_receipt.content
 
     # Genuine zero-flow daily + monthly values, and genuine scientific-notation daily value.
-    zero_daily_sel = rr.find(provider="cl_dga", station="01020002", frequency="daily")
+    zero_daily_sel = rr.find(provider="cl_dga", station="01020002", frequency="P1D")
     zero_daily_res = rr.fetch(zero_daily_sel, start="1966-02-22", end="1966-02-23", on_issue="raise")
     zero_daily_expected = _expected_daily_frame(
         genuine_cl_dga_store.daily_rows,
@@ -489,7 +489,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
         zero_daily_expected,
     )
 
-    sci_daily_sel = rr.find(provider="cl_dga", station="04515002", frequency="daily")
+    sci_daily_sel = rr.find(provider="cl_dga", station="04515002", frequency="P1D")
     raw_sci = [
         w
         for w in genuine_cl_dga_store.daily_rows
@@ -512,7 +512,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     )
 
     # Monthly mean product: identity, facts, mid-month selection, year boundary, 1960 edge, zero, empty, receipt.
-    monthly_sel = rr.find(provider="cl_dga", station="01050002", frequency="monthly")
+    monthly_sel = rr.find(provider="cl_dga", station="01050002", frequency="P1M")
     assert len(monthly_sel.series) == 1
     monthly_series = monthly_sel.series[0]
     assert (monthly_series.identity.namespace, monthly_series.identity.published_id) == (
@@ -523,7 +523,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
     assert monthly_facts.quantity.value == "discharge"
     assert monthly_facts.source_unit.value == "m3/s"
     assert monthly_facts.normalized_unit == "m3/s"
-    assert monthly_facts.frequency.value == "monthly"
+    assert monthly_facts.frequency.value == "P1M"
     assert monthly_facts.statistic.value == "mean"
     assert monthly_facts.clipping_axis is ClippingAxis.CALENDAR_MONTH
     assert monthly_facts.label_time is None
@@ -589,7 +589,7 @@ def test_cl_dga_public_api_matches_genuine_source_identities_values_and_edges(
         ),
     )
 
-    zero_monthly_sel = rr.find(provider="cl_dga", station="01020002", frequency="monthly")
+    zero_monthly_sel = rr.find(provider="cl_dga", station="01020002", frequency="P1M")
     zero_monthly_res = rr.fetch(zero_monthly_sel, start="1967-01-05", end="1967-02-20", on_issue="raise")
     zero_monthly_expected = _expected_monthly_frame(
         genuine_cl_dga_store.monthly_rows,

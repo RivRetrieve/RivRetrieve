@@ -148,7 +148,7 @@ def test_store_compile_request_rejects_datetime_and_roundtrips_none_source_vinta
     config = ProviderConfig(
         zone=ZoneValue("unknown"),
         products={ProductId("discharge"): ProductConfig(SourceCoordinates({}), Unit.M3_S, Instant())},
-        cache=CacheConfig(ObservationStoreConfig(format_version=10)),
+        cache=CacheConfig(ObservationStoreConfig(format_version=12)),
     )
     registry = ProviderRegistry()
     registry.register(

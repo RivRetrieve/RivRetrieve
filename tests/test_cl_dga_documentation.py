@@ -109,7 +109,7 @@ def test_cl_dga_page_catalogue_links_and_offline_selection(monkeypatch: pytest.M
     assert len(all_cl.locations) == 784
     all_series = rr.series(all_cl)
 
-    freq_map = {"Daily": "daily", "Monthly": "monthly"}
+    freq_map = {"Daily": "P1D", "Monthly": "P1M"}
     stat_map = {"Mean": "mean", "Unknown": None}
     unit_map = {"m³/s": "m3/s"}
     covered_published_ids: set[str] = set()
@@ -151,11 +151,11 @@ def test_cl_dga_page_catalogue_links_and_offline_selection(monkeypatch: pytest.M
         "source_unit",
         "unit",
         "time_zone",
-    ).rows() == [("01050002", "discharge_daily", "Caudal_diario", "discharge", "daily", None, "m3/s", "m3/s", None)]
+    ).rows() == [("01050002", "discharge_daily", "Caudal_diario", "discharge", "P1D", None, "m3/s", "m3/s", None)]
 
     mean_selection = rr.find(provider="cl_dga", station="01050002", statistic="mean")
     assert rr.series(mean_selection).select("product_id", "published_id", "frequency", "statistic").rows() == [
-        ("discharge_monthly_mean", "Caudal_Medio_mensual", "monthly", "mean")
+        ("discharge_monthly_mean", "Caudal_Medio_mensual", "P1M", "mean")
     ]
 
     source_meta = rr.metadata(all_cl, view="source").filter(

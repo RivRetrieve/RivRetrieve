@@ -33,7 +33,7 @@ selection = rr.find(
     provider="cl_dga",
     station="01050002",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
 )
 
 result = rr.fetch(
@@ -152,11 +152,12 @@ preserves any existing committed store.
 Both products publish discharge in cubic metres per second (`m3/s`) and need no
 unit conversion. `Caudal_diario` has no established statistic in DGA's files or
 manuals, so `statistic` remains unknown. As a consequence, filtering with
-`statistic="mean"` selects only the monthly mean series (`Caudal_Medio_mensual`),
-and combining `frequency="daily"` with `statistic="mean"` matches nothing.
-To retrieve daily discharge, request `frequency="daily"` without `statistic="mean"`,
-as shown in the example above. RivRetrieve reads DGA's published monthly means
-directly; it does not calculate them from the daily series.
+`statistic="mean"` selects only the monthly mean series (`Caudal_Medio_mensual`,
+`frequency="P1M"`), and combining `frequency="P1D"` with `statistic="mean"`
+matches nothing. To retrieve daily discharge, request `frequency="P1D"` without
+`statistic="mean"`, as shown in the example above. RivRetrieve reads DGA's
+published monthly means directly; it does not calculate them from the daily
+series.
 
 A station being listed in the catalogue does not guarantee data for every
 requested period. In the verified snapshot, the packaged catalogue contains

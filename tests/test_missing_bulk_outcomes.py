@@ -15,9 +15,9 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 @pytest.mark.parametrize(
     "provider,station,quantity,frequency",
     [
-        ("ca_eccc", "02GA010", "stage", "daily"),
-        ("pl_imgw", "154210010", "stage", "daily"),
-        ("cl_dga", "01001002", "discharge", "daily"),
+        ("ca_eccc", "02GA010", "stage", "P1D"),
+        ("pl_imgw", "154210010", "stage", "P1D"),
+        ("cl_dga", "01001002", "discharge", "P1D"),
     ],
 )
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
