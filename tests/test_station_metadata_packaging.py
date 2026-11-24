@@ -206,6 +206,30 @@ assert dict(ar_ina_source.select("attribute_role", "state").iter_rows()) == {
     "elevation": "no_metadata",
 }
 
+be_wal_gauge = rr.find(provider="be_wal", station="1046")
+be_wal_summary = rr.metadata(be_wal_gauge).row(0, named=True)
+assert be_wal_summary["station_name"] == "BIERGES"
+assert be_wal_summary["water_body_name_field"] == ["river_name"]
+assert be_wal_summary["water_body_name_value"] == ["Dyle"]
+assert be_wal_summary["drainage_area_field"] == ["CATCHMENT_SIZE"]
+assert be_wal_summary["drainage_area_value"] == ["310.19"]
+assert be_wal_summary["drainage_area_unit"] == ["km2"]
+assert be_wal_summary["elevation_value"] is None
+be_wal_source = rr.metadata(be_wal_gauge, view="source")
+assert dict(be_wal_source.select("attribute_role", "state").iter_rows()) == {
+    "station_name": "value",
+    "water_body_name": "value",
+    "drainage_area": "value",
+    "elevation": "no_metadata",
+}
+be_wal_liege_source = rr.metadata(rr.find(provider="be_wal", station="7102"), view="source")
+assert dict(be_wal_liege_source.select("attribute_role", "state").iter_rows()) == {
+    "station_name": "value",
+    "water_body_name": "value",
+    "drainage_area": "source_null",
+    "elevation": "no_metadata",
+}
+
 empty = rr.pick(rr.pick(selection, quantity="discharge"), quantity="stage")
 assert_frame_equal(rr.metadata(empty, view="source"), pl.DataFrame(schema=schema))
 assert rr.metadata(empty).is_empty()

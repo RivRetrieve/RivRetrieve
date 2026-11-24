@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit  # noqa: TID251 - URL parsing for retained receipt replay only
 
 import polars as pl
 import pytest
@@ -25,6 +27,7 @@ from rivretrieve._internal.providers.registration import load_manifest
 from rivretrieve._internal.recordings import ReplayTransport
 from rivretrieve._internal.selection import _Selection
 from rivretrieve._internal.source_series import OutcomeStatus
+from rivretrieve._internal.transport import TransportRequest, TransportResponse
 from tests.test_be_wal_retrieval_recorded import _RECORDING_SLUGS, _envelope_from_capture
 
 _SCOPE = "maintenance/observations/be_wal/retrieval"
@@ -593,6 +596,34 @@ _PROBE_EXPECTATIONS: tuple[tuple[str, str, str, str, int, str, str], ...] = (
 )
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
+
+
+def _response_matching_request(
+    root: Path,
+    slug: str,
+    request: TransportRequest,
+    *,
+    group: str = "web",
+) -> TransportResponse:
+    base = root / _SCOPE / group / slug
+    content = base.with_suffix(".body").read_bytes()
+    receipt = json.loads(base.with_suffix(".receipt.json").read_text())
+    source = urlsplit(str(receipt["url"]))
+    expected_params = {k: vals[0] for k, vals in parse_qs(source.query, keep_blank_values=True).items()}
+    requested = urlsplit(request.url)
+    assert (requested.scheme, requested.netloc, requested.path) == (source.scheme, source.netloc, source.path)
+    actual_params = dict(request.params or {})
+    assert actual_params == expected_params
+    retrieved_raw = str(receipt.get("retrieved_at") or receipt.get("acquired_at")).replace("Z", "+00:00")
+    media_type = receipt.get("media_type")
+    return TransportResponse(
+        content=content,
+        status_code=int(str(receipt["http_status"])),
+        retrieved_at=datetime.fromisoformat(retrieved_raw),
+        content_type=str(media_type) if isinstance(media_type, str) and media_type else None,
+        url=f"{source.scheme}://{source.netloc}{source.path}",
+        request_parameters=actual_params,
+    )
 
 
 def _select_products(station: str, *products: str) -> _Selection:

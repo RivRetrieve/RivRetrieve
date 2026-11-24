@@ -113,7 +113,10 @@ def _finite_float_or_none(raw_value: object, *, index: int) -> float | None:
         raise UnsupportedSourceStructureError(
             f"KiWIS row {index} Value must be numeric or null, got {type(raw_value).__name__}"
         )
-    numeric = float(raw_value)
+    try:
+        numeric = float(raw_value)
+    except OverflowError as error:
+        raise UnsupportedSourceStructureError(f"KiWIS row {index} Value overflows float64") from error
     if not math.isfinite(numeric):
         raise UnsupportedSourceStructureError(f"KiWIS row {index} Value must be finite, got {raw_value!r}")
     return numeric
@@ -147,7 +150,7 @@ def _validate_block(
 ) -> tuple[str, list[object]]:
     try:
         document = json.loads(payload_content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
         raise UnsupportedSourceStructureError(f"Invalid KiWIS getTimeseriesValues JSON: {error}") from error
 
     if isinstance(document, dict) and document.get("type") == "error":
