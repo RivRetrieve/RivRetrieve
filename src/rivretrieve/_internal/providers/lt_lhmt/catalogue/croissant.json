@@ -78,7 +78,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "5a974243d512073df580a1291abf893f9bd5de08284beea2d1219becb96c56ac",
+      "sha256": "38cba9ba874a395f1cd58a56f4162cea40d8822c34145dce03a729f1ad1eec9c",
       "contentSize": "9610 B"
     },
     {
