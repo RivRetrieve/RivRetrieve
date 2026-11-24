@@ -432,6 +432,8 @@ def _build_interval_result(
 
 def _decode_year_json_blocks(
     content: bytes,
+    *,
+    allowed_shortnames: frozenset[str] | set[str] | None = None,
 ) -> tuple[dict[str, dict[str, object]], set[str]]:
     try:
         document = json.loads(content)
@@ -441,6 +443,7 @@ def _decode_year_json_blocks(
         raise UnsupportedSourceStructureError("OPW Hydro-Data year.json response must be a JSON array")
 
     blocks: dict[str, dict[str, object]] = {}
+    seen_shortnames: set[str] = set()
     duplicates: set[str] = set()
     for index, raw_entry in enumerate(document):
         if not isinstance(raw_entry, dict):
@@ -449,10 +452,13 @@ def _decode_year_json_blocks(
         shortname = entry.get("ts_shortname")
         if not isinstance(shortname, str) or not shortname:
             raise UnsupportedSourceStructureError(f"OPW year.json entry {index} lacks non-empty string ts_shortname")
-        if shortname in blocks:
+        if shortname in seen_shortnames:
             duplicates.add(shortname)
+            blocks.pop(shortname, None)
         else:
-            blocks[shortname] = entry
+            seen_shortnames.add(shortname)
+            if allowed_shortnames is None or shortname in allowed_shortnames:
+                blocks[shortname] = entry
     return blocks, duplicates
 
 
@@ -580,8 +586,9 @@ def _interpret_year_block(
         qcodes.append(qc)
 
     total_slots = len(all_times)
+    del raw_data, seen_times
     if not monotonic:
-        order = sorted(range(total_slots), key=lambda i: all_times[i])
+        order = [idx for _, idx in sorted((dt, idx) for idx, dt in enumerate(all_times))]
         all_times = [all_times[i] for i in order]
         values = [values[i] for i in order]
         qcodes = [qcodes[i] for i in order]
@@ -631,6 +638,20 @@ def _interpret_year_block(
         rows=ann_frame,
         measurement_indices=measurement_indices,
     )
+    first_slot = all_times[0]
+    last_slot = all_times[-1]
+    del (
+        all_times,
+        values,
+        qcodes,
+        accs,
+        meas_times,
+        meas_values,
+        measured_flags,
+        measurement_indices,
+        ann_columns,
+        ann_frame,
+    )
     return _build_interval_result(
         payload=payload,
         definition=definition,
@@ -643,8 +664,8 @@ def _interpret_year_block(
         rows_df=rows_df,
         ann_table=ann_table,
         schema=schema,
-        first_slot=all_times[0],
-        last_slot=all_times[-1],
+        first_slot=first_slot,
+        last_slot=last_slot,
     )
 
 
@@ -910,8 +931,10 @@ def parse_group(
                 )
             }
 
+    daily_coords_by_pair = {key: cast("OpwDailyYearJsonCoordinates", coords) for key, coords in coords_by_pair.items()}
+    allowed_shortnames = {coords.ts_shortname for coords in daily_coords_by_pair.values()}
     try:
-        blocks, duplicates = _decode_year_json_blocks(payload.content)
+        blocks, duplicates = _decode_year_json_blocks(payload.content, allowed_shortnames=allowed_shortnames)
     except UnsupportedSourceStructureError as error:
         reason = str(error)
         return {
@@ -922,15 +945,19 @@ def parse_group(
                 window,
                 retrieved,
                 scope,
-                access=f"Hydro-Data {cast('OpwDailyYearJsonCoordinates', coords_by_pair[key]).parameter}/year.json",
+                access=f"Hydro-Data {daily_coords_by_pair[key].parameter}/year.json",
                 reason=reason,
             )
             for key, (pair_payload, window, retrieved, scope) in meta_by_pair.items()
         }
 
+    remaining_uses: dict[str, int] = {}
+    for pair_coords in daily_coords_by_pair.values():
+        remaining_uses[pair_coords.ts_shortname] = remaining_uses.get(pair_coords.ts_shortname, 0) + 1
+
     results: dict[tuple[str, ProductId], ParsedSeries] = {}
     for key, (pair_payload, window, retrieved, scope) in meta_by_pair.items():
-        pair_coords = cast("OpwDailyYearJsonCoordinates", coords_by_pair[key])
+        pair_coords = daily_coords_by_pair[key]
         try:
             results[key] = _interpret_year_block(
                 pair_payload,
@@ -954,6 +981,9 @@ def parse_group(
                 access=f"Hydro-Data {pair_coords.parameter}/year.json {pair_coords.ts_shortname}",
                 reason=str(error),
             )
+        remaining_uses[pair_coords.ts_shortname] -= 1
+        if remaining_uses[pair_coords.ts_shortname] == 0:
+            blocks.pop(pair_coords.ts_shortname, None)
     del blocks, duplicates
     return results
 

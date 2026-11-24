@@ -295,6 +295,9 @@ def test_station_validation_url_builders_and_fetch_grouping_contracts() -> None:
         "water_temperature_daily_mean",
         "water_temperature_daily_max",
     }
+    assert len({item.call_id for item in acq.failed_requests}) == 1
+    assert acq.failed_requests[0].call_id is not None
+    assert len({item.event_id for item in acq.failed_requests}) == 2
 
 
 def test_shared_daily_triplet_decodes_once_caches_subset_and_preserves_unmeasured(
@@ -303,10 +306,10 @@ def test_shared_daily_triplet_decodes_once_caches_subset_and_preserves_unmeasure
     decode_calls = 0
     real_decode = ie_parse_mod._decode_year_json_blocks
 
-    def counting_decode(content: bytes) -> Any:
+    def counting_decode(content: bytes, **kwargs: Any) -> Any:
         nonlocal decode_calls
         decode_calls += 1
-        return real_decode(content)
+        return real_decode(content, **kwargs)
 
     monkeypatch.setattr(ie_parse_mod, "_decode_year_json_blocks", counting_decode)
 
@@ -745,3 +748,393 @@ def test_parse_strictness_unit_bool_nonfinite_and_per_product_isolation() -> Non
         cfg,
     )
     assert mismatch_parsed.outcomes[0].status is OutcomeStatus.FAILED
+
+
+def _discharge_year_payload(
+    *,
+    mean_rows: list[list[object]],
+    min_rows: list[list[object]],
+    max_rows: list[list[object]],
+    extra_blocks: list[dict[str, object]] = (),
+) -> list[dict[str, object]]:
+    return [
+        {
+            "stationparameter_name": "Q",
+            "ts_shortname": "WEB.Day.Mean",
+            "ts_unitsymbol": "cumec",
+            "rows": str(len(mean_rows)),
+            "columns": "Timestamp,Value,Quality Code",
+            "data": mean_rows,
+        },
+        {
+            "stationparameter_name": "Q",
+            "ts_shortname": "WEB.Day.Min",
+            "ts_unitsymbol": "cumec",
+            "rows": str(len(min_rows)),
+            "columns": "Timestamp,Value,Quality Code",
+            "data": min_rows,
+        },
+        {
+            "stationparameter_name": "Q",
+            "ts_shortname": "WEB.Day.Max",
+            "ts_unitsymbol": "cumec",
+            "rows": str(len(max_rows)),
+            "columns": "Timestamp,Value,Quality Code",
+            "data": max_rows,
+        },
+        *extra_blocks,
+    ]
+
+
+@pytest.mark.parametrize("receipts", [ReceiptMode.OMIT, ReceiptMode.INCLUDE])
+def test_shared_year_json_driver_equivalence_with_without_parse_group(
+    monkeypatch: pytest.MonkeyPatch,
+    receipts: ReceiptMode,
+) -> None:
+    from types import SimpleNamespace
+
+    import polars.testing as pl_testing
+
+    from rivretrieve._internal.engine import SourceAcquisition
+    from tests.test_provider_interpretation_adoption import _assert_driver_results_identical
+
+    q_url = daily_year_json_url("01041", "Q")
+    payload_body = _discharge_year_payload(
+        mean_rows=[
+            ["2025-07-14T00:00:00.000Z", 2.5, 31],
+            ["2025-07-15T00:00:00.000Z", None, -1],
+            ["2025-07-16T00:00:00.000Z", 3.1, 31],
+        ],
+        min_rows=[
+            ["2025-07-14T00:00:00.000Z", 2.1, 31],
+            ["2025-07-15T00:00:00.000Z", None, -1],
+            ["2025-07-16T00:00:00.000Z", 2.7, 31],
+        ],
+        max_rows=[
+            ["2025-07-14T00:00:00.000Z", 3.0, 31],
+            ["2025-07-15T00:00:00.000Z", None, -1],
+            ["2025-07-16T00:00:00.000Z", 3.8, 31],
+        ],
+        extra_blocks=[
+            {
+                "stationparameter_name": "Q",
+                "ts_shortname": "WEB.Day.UnrequestedSibling",
+                "ts_unitsymbol": "cumec",
+                "rows": "1",
+                "columns": "Timestamp,Value,Quality Code",
+                "data": [["2025-07-14T00:00:00.000Z", 99.0, 31]],
+            }
+        ],
+    )
+    req = ObservationRequest(
+        provider_id=ProviderId("ie_opw"),
+        stations=("01041",),
+        products=(
+            ProductId("discharge_daily_mean"),
+            ProductId("discharge_daily_min"),
+            ProductId("discharge_daily_max"),
+        ),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2025, 7, 14)),
+            WindowEndpoint.from_datetime(datetime(2025, 7, 16)),
+        ),
+        known_series=tuple(
+            source_series("01041", pid, origin="catalogue")
+            for pid in ("discharge_daily_mean", "discharge_daily_min", "discharge_daily_max")
+        ),
+    )
+
+    json_calls = 0
+    real_loads = ie_parse_mod.json.loads
+
+    def counting_loads(*args: Any, **kwargs: Any) -> Any:
+        nonlocal json_calls
+        json_calls += 1
+        return real_loads(*args, **kwargs)
+
+    seen_allowed: list[frozenset[str] | set[str] | None] = []
+    seen_retained_keys: list[set[str]] = []
+    real_decode_blocks = ie_parse_mod._decode_year_json_blocks
+
+    def tracking_decode_blocks(
+        content: bytes,
+        *,
+        allowed_shortnames: frozenset[str] | set[str] | None = None,
+    ) -> tuple[dict[str, dict[str, object]], set[str]]:
+        seen_allowed.append(allowed_shortnames)
+        blocks, duplicates = real_decode_blocks(content, allowed_shortnames=allowed_shortnames)
+        seen_retained_keys.append(set(blocks))
+        return blocks, duplicates
+
+    monkeypatch.setattr(
+        ie_parse_mod,
+        "json",
+        SimpleNamespace(loads=counting_loads, JSONDecodeError=json.JSONDecodeError),
+    )
+    monkeypatch.setattr(ie_parse_mod, "_decode_year_json_blocks", tracking_decode_blocks)
+
+    captured: list[SourceAcquisition] = []
+
+    class _GroupStages(_IeOpwStages):
+        @staticmethod
+        def fetch(*args: Any, **kwargs: Any) -> SourceAcquisition:
+            acq = fetch(*args, **kwargs)
+            captured.append(acq)
+            return acq
+
+    group_result = drive(
+        req,
+        _GroupStages(),
+        provenance=_provenance(req),
+        receipts=receipts,
+        transport=ReplayTransport((_envelope(q_url, payload_body),)),
+    )
+    assert json_calls == 1
+    assert seen_allowed == [{"WEB.Day.Mean", "WEB.Day.Min", "WEB.Day.Max"}]
+    assert seen_retained_keys == [{"WEB.Day.Mean", "WEB.Day.Min", "WEB.Day.Max"}]
+
+    @dataclass(frozen=True)
+    class _BaselineNoGroupStages:
+        observation_source: str = "live"
+        config: ProviderConfig = config()
+        window_declarations: ProductWindowDeclarations = window_declarations()
+        shared_acquisition_products: tuple[frozenset[ProductId], ...] = SHARED_DAILY_PRODUCTS
+        fetch = staticmethod(lambda *args, **kwargs: captured[0])
+        parse = staticmethod(parse)
+
+    json_calls = 0
+    baseline_result = drive(
+        req,
+        _BaselineNoGroupStages(),
+        provenance=_provenance(req),
+        receipts=receipts,
+    )
+    assert json_calls == 3
+    _assert_driver_results_identical(group_result, baseline_result)
+
+    # Subset parse_group retains only requested shortnames in memory during block decode.
+    subset_payload = _discharge_year_payload(
+        mean_rows=[["2025-07-14T00:00:00.000Z", 2.5, 31]],
+        min_rows=[["2025-07-14T00:00:00.000Z", 2.1, 31]],
+        max_rows=[["2025-07-14T00:00:00.000Z", 3.0, 31]],
+    )
+    seen_allowed.clear()
+    seen_retained_keys.clear()
+    subset_req = ObservationRequest(
+        provider_id=ProviderId("ie_opw"),
+        stations=("01041",),
+        products=(ProductId("discharge_daily_mean"), ProductId("discharge_daily_max")),
+        window=req.window,
+    )
+    subset_res = drive(
+        subset_req,
+        _IeOpwStages(),
+        provenance=_provenance(subset_req),
+        receipts=ReceiptMode.OMIT,
+        transport=ReplayTransport((_envelope(q_url, subset_payload),)),
+    )
+    assert seen_allowed == [{"WEB.Day.Mean", "WEB.Day.Max"}]
+    assert seen_retained_keys == [{"WEB.Day.Mean", "WEB.Day.Max"}]
+    pl_testing.assert_frame_equal(
+        subset_res.canonical_rows.select("product_id", "value").sort("product_id"),
+        pl.DataFrame(
+            {
+                "product_id": ["discharge_daily_max", "discharge_daily_mean"],
+                "value": [3.0, 2.5],
+            }
+        ),
+    )
+
+
+def test_shared_year_json_failed_request_deduplicates_call_id_in_provenance() -> None:
+    class _Fail503Transport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            raise TransportFailure(
+                request,
+                TransportFailureReason.HTTP_STATUS,
+                1,
+                status_code=503,
+                category=TransportFailureCategory.HTTP_STATUS,
+            )
+
+    req = ObservationRequest(
+        provider_id=ProviderId("ie_opw"),
+        stations=("01041",),
+        products=(
+            ProductId("discharge_daily_mean"),
+            ProductId("discharge_daily_min"),
+            ProductId("discharge_daily_max"),
+        ),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2025, 7, 14)),
+            WindowEndpoint.from_datetime(datetime(2025, 7, 16)),
+        ),
+        known_series=tuple(
+            source_series("01041", pid, origin="catalogue")
+            for pid in ("discharge_daily_mean", "discharge_daily_min", "discharge_daily_max")
+        ),
+    )
+    res = drive(
+        req,
+        _IeOpwStages(),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_Fail503Transport(),
+    )
+    assert res.canonical_rows.is_empty()
+    assert len(res.outcomes) == 3
+    assert all(outcome.status is OutcomeStatus.FAILED for outcome in res.outcomes)
+    assert len({issue.details["outcome_id"] for issue in res.issues}) == 3
+    assert len(res.provenance.calls_made) == 1
+    assert set(res.provenance.calls_made[0]["station_products"]) == {
+        ("01041", "discharge_daily_mean"),
+        ("01041", "discharge_daily_min"),
+        ("01041", "discharge_daily_max"),
+    }
+
+
+def test_shared_year_json_refresh_preserves_held_rows_and_annotations_on_failures(tmp_path: Path) -> None:
+    import polars.testing as pl_testing
+
+    q_url = daily_year_json_url("01041", "Q")
+    t0 = datetime(2026, 11, 23, 21, 0, tzinfo=UTC)
+    t1 = datetime(2026, 11, 24, 7, 0, tzinfo=UTC)
+    store = StoreRoot(tmp_path / "refresh_store")
+
+    class _StampedTransport:
+        def __init__(self, content: bytes | None, retrieved_at: datetime) -> None:
+            self.content = content
+            self.retrieved_at = retrieved_at
+
+        def send(self, request: TransportRequest) -> TransportResponse:
+            assert request.url == q_url
+            if self.content is None:
+                raise TransportFailure(
+                    request,
+                    TransportFailureReason.HTTP_STATUS,
+                    1,
+                    status_code=503,
+                    category=TransportFailureCategory.HTTP_STATUS,
+                )
+            return TransportResponse(
+                content=self.content,
+                status_code=200,
+                retrieved_at=self.retrieved_at,
+                content_type="application/json",
+                url=request.url,
+                request_parameters={},
+            )
+
+    req = ObservationRequest(
+        provider_id=ProviderId("ie_opw"),
+        stations=("01041",),
+        products=(
+            ProductId("discharge_daily_mean"),
+            ProductId("discharge_daily_min"),
+            ProductId("discharge_daily_max"),
+        ),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2025, 7, 14)),
+            WindowEndpoint.from_datetime(datetime(2025, 7, 15)),
+        ),
+        known_series=tuple(
+            source_series("01041", pid, origin="catalogue")
+            for pid in ("discharge_daily_mean", "discharge_daily_min", "discharge_daily_max")
+        ),
+    )
+
+    seed_body = json.dumps(
+        _discharge_year_payload(
+            mean_rows=[["2025-07-14T00:00:00.000Z", 2.5, 31], ["2025-07-15T00:00:00.000Z", None, -1]],
+            min_rows=[["2025-07-14T00:00:00.000Z", 2.0, 31], ["2025-07-15T00:00:00.000Z", None, -1]],
+            max_rows=[["2025-07-14T00:00:00.000Z", 3.2, 31], ["2025-07-15T00:00:00.000Z", None, -1]],
+        )
+    ).encode()
+    seed = drive(
+        req,
+        _IeOpwStages(),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_StampedTransport(seed_body, t0),
+        cache="reuse",
+        store=store,
+    )
+    assert seed.canonical_rows.height == 3
+    seed_ann = seed.annotations.observation_tables[IE_OPW_SERIES_SCHEMA.schema_id]
+    assert seed_ann.row_count == 6
+
+    # (a) Full HTTP 503 failure during refresh retains all held rows, annotations, and t0 retrieved_at.
+    fail_refresh = drive(
+        req,
+        _IeOpwStages(),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_StampedTransport(None, t1),
+        cache="refresh",
+        store=store,
+    )
+    prod_by_sid = {s.series_id: s.product_id for s in req.known_series}
+    pl_testing.assert_frame_equal(fail_refresh.canonical_rows, seed.canonical_rows)
+    fail_ann = fail_refresh.annotations.observation_tables[IE_OPW_SERIES_SCHEMA.schema_id]
+    pl_testing.assert_frame_equal(fail_ann.rows, seed_ann.rows)
+    assert fail_ann.measurement_indices == seed_ann.measurement_indices
+    assert {prod_by_sid[item.series_id]: item.retrieved_at for item in fail_refresh.provenance.served_intervals} == {
+        "discharge_daily_mean": t0,
+        "discharge_daily_min": t0,
+        "discharge_daily_max": t0,
+    }
+    failed_calls = [c for c in fail_refresh.provenance.calls_made if c.get("status_code") == 503]
+    ok_calls = [c for c in fail_refresh.provenance.calls_made if c.get("status_code") == 200]
+    assert len(failed_calls) == 1
+    assert len(ok_calls) == 1
+    assert len(fail_refresh.provenance.calls_made) == 2
+    assert set(failed_calls[0]["station_products"]) == {
+        ("01041", "discharge_daily_mean"),
+        ("01041", "discharge_daily_min"),
+        ("01041", "discharge_daily_max"),
+    }
+
+    # (b) Corrupt WEB.Day.Min alongside updated Mean/Max -> Mean/Max update to t1, Min holds t0.
+    partial_body = json.dumps(
+        _discharge_year_payload(
+            mean_rows=[["2025-07-14T00:00:00.000Z", 4.5, 31], ["2025-07-15T00:00:00.000Z", None, -1]],
+            min_rows=[["2025-07-14T00:00:00.000Z", "bad-min", 31]],
+            max_rows=[["2025-07-14T00:00:00.000Z", 5.8, 31], ["2025-07-15T00:00:00.000Z", None, -1]],
+        )
+    ).encode()
+    partial_refresh = drive(
+        req,
+        _IeOpwStages(),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_StampedTransport(partial_body, t1),
+        cache="refresh",
+        store=store,
+    )
+    by_prod = dict(partial_refresh.canonical_rows.select("product_id", "value").iter_rows())
+    assert by_prod == {
+        "discharge_daily_mean": 4.5,
+        "discharge_daily_min": 2.0,
+        "discharge_daily_max": 5.8,
+    }
+    partial_ann = partial_refresh.annotations.observation_tables[IE_OPW_SERIES_SCHEMA.schema_id]
+    assert partial_ann.row_count == 6
+    assert partial_ann.rows.filter(pl.col("product_id") == "discharge_daily_min")["quality_code"].to_list() == [
+        31,
+        -1,
+    ]
+    assert any(
+        o.product_id == "discharge_daily_min" and o.status is OutcomeStatus.FAILED for o in partial_refresh.outcomes
+    )
+    served_by_prod = {
+        prod_by_sid[item.series_id]: item.retrieved_at for item in partial_refresh.provenance.served_intervals
+    }
+    assert served_by_prod == {"discharge_daily_min": t0}
+    success_retrieved = {
+        o.product_id: o.retrieved_at for o in partial_refresh.outcomes if o.status is OutcomeStatus.SUCCESS
+    }
+    assert success_retrieved == {
+        "discharge_daily_mean": t1,
+        "discharge_daily_max": t1,
+        "discharge_daily_min": t0,
+    }
