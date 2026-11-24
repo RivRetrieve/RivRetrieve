@@ -160,7 +160,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `ar_ina` | live | none | 829 | 2611 | 8166 | 0 |
 | `at_ehyd` | live | none | 746 | 4837 | 3369 | 0 |
 | `ba_fhmzbih` | live | none | 60 | 132 | 48 | 0 |
-| `be_wal` | catalogue-only | none | 338 | 8198 | 0 | 12758 |
+| `be_wal` | live | none | 338 | 8198 | 0 | 12758 |
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
 | `ch_foen` | live | none | 1341 | 7008 | 41268 | 0 |
