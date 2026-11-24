@@ -59,6 +59,7 @@ of the source view.
 | [`ar_ina`](providers/ar_ina.md) | `nombre` | `rio` | — | — |
 | [`at_ehyd`](providers/at_ehyd.md) | `messstelle`, `name` | `gewaesser`, `gewasser` | `orogr.Einzugsgebiet [km²]` (km²) | — |
 | [`ba_fhmzbih`](providers/ba_fhmzbih.md) | — | — | `metadata_CATCHMENT_SIZE` (km²) | — |
+| [`be_wal`](providers/be_wal.md) | `station_name` | `river_name` | `CATCHMENT_SIZE` (km2) | — |
 | [`br_ana`](providers/br_ana.md) | `Estacao_Nome` | `Rio_Nome` | `Area_Drenagem` | `Altitude` |
 | [`ca_eccc`](providers/ca_eccc.md) | `STATION_NAME` | — | `DRAINAGE_AREA_EFFECT`, `DRAINAGE_AREA_GROSS` (km2) | — |
 | [`ch_foen`](providers/ch_foen.md) | `data-name`, `name` | `data-hydro-body`, `riverName` | `Catchment size` (km2) | `Station altitude` (m) |
@@ -383,5 +384,9 @@ packaged catalogue descriptor offline; metadata notices appear in its
   to IDEAM and apply CC BY-SA 4.0. Adaptations must follow the licence's share-alike conditions.
 - [LHMT's terms](providers/lt_lhmt.md#terms-and-citation) require source attribution
   and apply CC BY-SA 4.0 unless stated otherwise. Adaptations must follow the licence's share-alike conditions.
+- [SPW Hydrométrie's terms](providers/be_wal.md#terms-and-citation) require attribution
+  (`Sources des données : Service public de Wallonie` or `Sources des données : SPW`),
+  permit free end-user download without credentials, and require SPW authorization for
+  third-party redistribution or commercial diffusion.
 
 See the [API reference](reference.md#metadata) for the function contract.
