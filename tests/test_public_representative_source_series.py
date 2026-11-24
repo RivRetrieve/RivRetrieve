@@ -232,7 +232,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
 
         class _BeWalReplay:
             def send(self, req):
-                return _response_matching_request(retained_evidence_root, "retrieval", "edge-9434-q20-1929", req)
+                return _response_matching_request(retained_evidence_root, "edge-9434-q20-1929", req)
 
         monkeypatch.setattr(discovery, "HttpClient", _BeWalReplay)
         selection = rr.find(

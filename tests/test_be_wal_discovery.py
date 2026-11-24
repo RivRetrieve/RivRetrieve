@@ -96,7 +96,7 @@ def test_be_wal_offline_discovery_stations_products_metadata_and_predicates(
         rr.find(provider="be_wal", station="1046", quantity="discharge", frequency="P12M", statistic="mean").series
         == y_mean.series
     )
-    with pytest.raises(ValueError, match="Unsupported frequency 'daily'"):
+    with pytest.raises(ValueError, match="Unsupported frequency filter 'daily'"):
         rr.find(provider="be_wal", station="1046", quantity="discharge", frequency="daily")
 
     complete_q = rr.find(provider="be_wal", station="1046", quantity="discharge", frequency=None, statistic=None)

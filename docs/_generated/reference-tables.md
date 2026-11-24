@@ -163,6 +163,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `at_ehyd` | live | none | 746 | 4837 | 3369 | 0 |
 | `au_bom` | live | none | 8120 | 94412 | 51748 | 0 |
 | `ba_fhmzbih` | live | none | 60 | 132 | 48 | 0 |
+| `be_wal` | live | none | 338 | 8198 | 0 | 12758 |
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
 | `ch_foen` | live | none | 1341 | 7008 | 41268 | 0 |
@@ -230,6 +231,68 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `ba_fhmzbih` | `discharge_reported` | `m3/s` |
 | `ba_fhmzbih` | `stage_reported` | `m` |
 | `ba_fhmzbih` | `water_temperature_reported` | `degC` |
+| `be_wal` | `discharge_complete` | `m3/s` |
+| `be_wal` | `discharge_daily_max` | `m3/s` |
+| `be_wal` | `discharge_daily_mean` | `m3/s` |
+| `be_wal` | `discharge_daily_min` | `m3/s` |
+| `be_wal` | `discharge_hourly_max` | `m3/s` |
+| `be_wal` | `discharge_hourly_mean` | `m3/s` |
+| `be_wal` | `discharge_hourly_min` | `m3/s` |
+| `be_wal` | `discharge_monthly_max` | `m3/s` |
+| `be_wal` | `discharge_monthly_mean` | `m3/s` |
+| `be_wal` | `discharge_monthly_min` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_complete` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_daily_max` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_daily_mean` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_daily_min` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_hourly_max` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_hourly_mean` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_hourly_min` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_monthly_max` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_monthly_mean` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_monthly_min` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_yearly_max` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_yearly_mean` | `m3/s` |
+| `be_wal` | `discharge_ultrasonic_yearly_min` | `m3/s` |
+| `be_wal` | `discharge_yearly_max` | `m3/s` |
+| `be_wal` | `discharge_yearly_mean` | `m3/s` |
+| `be_wal` | `discharge_yearly_min` | `m3/s` |
+| `be_wal` | `stage_absolute_complete` | `m` |
+| `be_wal` | `stage_absolute_daily_max` | `m` |
+| `be_wal` | `stage_absolute_daily_mean` | `m` |
+| `be_wal` | `stage_absolute_daily_min` | `m` |
+| `be_wal` | `stage_absolute_hourly_max` | `m` |
+| `be_wal` | `stage_absolute_hourly_mean` | `m` |
+| `be_wal` | `stage_absolute_hourly_min` | `m` |
+| `be_wal` | `stage_absolute_monthly_max` | `m` |
+| `be_wal` | `stage_absolute_monthly_mean` | `m` |
+| `be_wal` | `stage_absolute_monthly_min` | `m` |
+| `be_wal` | `stage_absolute_yearly_max` | `m` |
+| `be_wal` | `stage_absolute_yearly_mean` | `m` |
+| `be_wal` | `stage_absolute_yearly_min` | `m` |
+| `be_wal` | `stage_complete` | `m` |
+| `be_wal` | `stage_daily_max` | `m` |
+| `be_wal` | `stage_daily_mean` | `m` |
+| `be_wal` | `stage_daily_min` | `m` |
+| `be_wal` | `stage_hourly_max` | `m` |
+| `be_wal` | `stage_hourly_mean` | `m` |
+| `be_wal` | `stage_hourly_min` | `m` |
+| `be_wal` | `stage_monthly_max` | `m` |
+| `be_wal` | `stage_monthly_mean` | `m` |
+| `be_wal` | `stage_monthly_min` | `m` |
+| `be_wal` | `stage_yearly_max` | `m` |
+| `be_wal` | `stage_yearly_mean` | `m` |
+| `be_wal` | `stage_yearly_min` | `m` |
+| `be_wal` | `water_temperature_complete` | `degC` |
+| `be_wal` | `water_temperature_daily_max` | `degC` |
+| `be_wal` | `water_temperature_daily_mean` | `degC` |
+| `be_wal` | `water_temperature_daily_min` | `degC` |
+| `be_wal` | `water_temperature_hourly_max` | `degC` |
+| `be_wal` | `water_temperature_hourly_mean` | `degC` |
+| `be_wal` | `water_temperature_hourly_min` | `degC` |
+| `be_wal` | `water_temperature_monthly_max` | `degC` |
+| `be_wal` | `water_temperature_monthly_mean` | `degC` |
+| `be_wal` | `water_temperature_monthly_min` | `degC` |
 | `br_ana` | `discharge_daily_mean_bruto` | `m3/s` |
 | `br_ana` | `discharge_daily_mean_consistido` | `m3/s` |
 | `br_ana` | `discharge_instantaneous` | `m3/s` |
