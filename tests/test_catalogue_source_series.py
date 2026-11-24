@@ -267,7 +267,7 @@ def test_ee_est_packaged_series_meaning_preserves_utc_vs_daily_silence_and_gauge
     by_product = {item.product_id: item.facts[0] for item in series}
     assert len(by_product) == 18
 
-    assert by_product["discharge_daily_mean"].frequency.value == "daily"
+    assert by_product["discharge_daily_mean"].frequency.value == "P1D"
     assert by_product["discharge_daily_mean"].statistic.value == "mean"
     assert by_product["discharge_daily_mean"].temporal_support.value == "interval"
     assert by_product["discharge_daily_mean"].time_zone.value is None
@@ -278,7 +278,7 @@ def test_ee_est_packaged_series_meaning_preserves_utc_vs_daily_silence_and_gauge
     assert by_product["stage_daily_mean"].vertical_reference.value == "gauge_zero"
     assert by_product["stage_daily_mean"].vertical_datum.value is None
 
-    assert by_product["stage_hourly_mean"].frequency.value == "hourly"
+    assert by_product["stage_hourly_mean"].frequency.value == "PT1H"
     assert by_product["stage_hourly_mean"].source_unit.value == "cm"
     assert by_product["stage_hourly_mean"].time_zone.value == "+00:00"
     assert by_product["stage_hourly_mean"].vertical_reference.value == "gauge_zero"

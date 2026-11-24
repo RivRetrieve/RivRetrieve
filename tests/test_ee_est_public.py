@@ -256,9 +256,13 @@ def test_public_all_18_products_units_annotations_utc_and_provenance(
     assert ann_df.filter(pl.col("qualityFlag") == "UNCHECKED").height == 6
     assert ann_df.filter(pl.col("qualityFlag").is_null()).height == 12
 
-    hourly_only = rr.pick(result, frequency="hourly")
+    hourly_only = rr.pick(result, frequency="PT1H")
     utc_hourly = rr.to_utc(hourly_only)
     assert utc_hourly.data.height == 9
+    assert rr.pick(result, frequency="PT60M").data.height == 9
+    for legacy_freq in ("daily", "hourly"):
+        with pytest.raises(ValueError, match="Unsupported frequency"):
+            rr.pick(result, frequency=legacy_freq)
 
     statements = [
         stmt for record in result.provenance.acquisition_provenance.header.source_records for stmt in record.statements

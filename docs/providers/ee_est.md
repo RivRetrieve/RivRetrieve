@@ -25,7 +25,7 @@ selection = rr.find(
     provider="ee_est",
     station="SJA8821000",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 
@@ -110,24 +110,24 @@ series types (`Äravool`, `WL`, `WT` across `avg`, `max`, `min`):
 
 | Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
 |---|---|---|---|---|---|
-| `discharge` | `Q:MEAN` | Daily | Mean | m³/s | m³/s |
-| `discharge` | `Q:MAXIMUM` | Daily | Maximum | m³/s | m³/s |
-| `discharge` | `Q:MINIMUM` | Daily | Minimum | m³/s | m³/s |
-| `discharge` | `Äravool avg` | Hourly | Mean | m³/s | m³/s |
-| `discharge` | `Äravool max` | Hourly | Maximum | m³/s | m³/s |
-| `discharge` | `Äravool min` | Hourly | Minimum | m³/s | m³/s |
-| `stage` | `H:MEAN` | Daily | Mean | m | m |
-| `stage` | `H:MAXIMUM` | Daily | Maximum | m | m |
-| `stage` | `H:MINIMUM` | Daily | Minimum | m | m |
-| `stage` | `WL avg` | Hourly | Mean | cm | m |
-| `stage` | `WL max` | Hourly | Maximum | cm | m |
-| `stage` | `WL min` | Hourly | Minimum | cm | m |
-| `temperature` | `T:MEAN` | Daily | Mean | °C | °C |
-| `temperature` | `T:MAXIMUM` | Daily | Maximum | °C | °C |
-| `temperature` | `T:MINIMUM` | Daily | Minimum | °C | °C |
-| `temperature` | `WT avg` | Hourly | Mean | °C | °C |
-| `temperature` | `WT max` | Hourly | Maximum | °C | °C |
-| `temperature` | `WT min` | Hourly | Minimum | °C | °C |
+| `discharge` | `Q:MEAN` | `P1D` | Mean | m³/s | m³/s |
+| `discharge` | `Q:MAXIMUM` | `P1D` | Maximum | m³/s | m³/s |
+| `discharge` | `Q:MINIMUM` | `P1D` | Minimum | m³/s | m³/s |
+| `discharge` | `Äravool avg` | `PT1H` | Mean | m³/s | m³/s |
+| `discharge` | `Äravool max` | `PT1H` | Maximum | m³/s | m³/s |
+| `discharge` | `Äravool min` | `PT1H` | Minimum | m³/s | m³/s |
+| `stage` | `H:MEAN` | `P1D` | Mean | m | m |
+| `stage` | `H:MAXIMUM` | `P1D` | Maximum | m | m |
+| `stage` | `H:MINIMUM` | `P1D` | Minimum | m | m |
+| `stage` | `WL avg` | `PT1H` | Mean | cm | m |
+| `stage` | `WL max` | `PT1H` | Maximum | cm | m |
+| `stage` | `WL min` | `PT1H` | Minimum | cm | m |
+| `temperature` | `T:MEAN` | `P1D` | Mean | °C | °C |
+| `temperature` | `T:MAXIMUM` | `P1D` | Maximum | °C | °C |
+| `temperature` | `T:MINIMUM` | `P1D` | Minimum | °C | °C |
+| `temperature` | `WT avg` | `PT1H` | Mean | °C | °C |
+| `temperature` | `WT max` | `PT1H` | Maximum | °C | °C |
+| `temperature` | `WT min` | `PT1H` | Minimum | °C | °C |
 
 In `rr.series(...)`, each `published_id` combines the station or site key with
 the native series code shown above (for example `"SJA8821000:Q:MEAN"` on daily
