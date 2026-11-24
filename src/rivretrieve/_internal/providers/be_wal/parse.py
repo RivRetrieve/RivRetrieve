@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import cast
 
@@ -19,7 +20,6 @@ from rivretrieve._internal.providers.be_wal.config import (
     BeWalTimeseriesListCoordinates,
     BeWalTimeseriesValuesCoordinates,
 )
-from rivretrieve._internal.providers.be_wal.fetch import resolve_timeseries_list
 from rivretrieve._internal.providers.be_wal.series import (
     PRODUCT_BY_ID,
     ProductSpec,
@@ -273,7 +273,69 @@ def _failed_parse_result(
     )
 
 
-def _parse_timeseries_list(
+@dataclass(frozen=True, slots=True)
+class TimeseriesListInterpretation:
+    """Decoded KiWIS ``getTimeseriesList`` resolution and its engine ``ParsedSeries`` output."""
+
+    resolved_ts_id: str | None
+    scope_matched: bool
+    parsed: ParsedSeries
+
+
+def resolve_timeseries_list(
+    content: bytes,
+    station: str,
+    spec: ProductSpec,
+) -> str | None:
+    """Validate KiWIS ``getTimeseriesList`` JSON and return unique matching ``ts_id``, or ``None``."""
+    try:
+        document = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        raise UnsupportedSourceStructureError(f"Invalid KiWIS getTimeseriesList JSON: {error}") from error
+
+    if isinstance(document, dict) and document.get("type") == "error":
+        raise UnsupportedSourceStructureError(
+            f"KiWIS getTimeseriesList error ({document.get('code')!r}): {document.get('message')!r}"
+        )
+    if not isinstance(document, list) or not document or not isinstance(document[0], list):
+        raise UnsupportedSourceStructureError("KiWIS getTimeseriesList response must be a JSON header-plus-rows list")
+
+    header = document[0]
+    required = ("ts_id", "ts_name", "station_no", "stationparameter_name", "parametertype_name", "ts_unitsymbol")
+    try:
+        indices = {name: header.index(name) for name in required}
+    except ValueError as error:
+        raise UnsupportedSourceStructureError("KiWIS getTimeseriesList header lacks a required column") from error
+
+    if header[0] == "error":
+        raise UnsupportedSourceStructureError("KiWIS getTimeseriesList returned an error header")
+
+    matches: list[str] = []
+    for row_idx, row in enumerate(document[1:], start=1):
+        if not isinstance(row, list) or len(row) != len(header):
+            raise UnsupportedSourceStructureError(f"KiWIS getTimeseriesList row {row_idx} width does not match header")
+        row_station = str(row[indices["station_no"]])
+        row_name = str(row[indices["ts_name"]])
+        row_param = str(row[indices["stationparameter_name"]])
+        if row_station != station or row_name != spec.native_id or row_param not in spec.stationparameter_names:
+            continue
+        row_unit = str(row[indices["ts_unitsymbol"]])
+        if row_unit != spec.source_unit:
+            raise UnsupportedSourceStructureError(
+                f"KiWIS getTimeseriesList unit {row_unit!r} contradicts expected {spec.source_unit!r} for {station}/{spec.product_id}"
+            )
+        matches.append(validate_ts_id(str(row[indices["ts_id"]])))
+
+    if not matches:
+        return None
+    if len(matches) > 1:
+        raise UnsupportedSourceStructureError(
+            f"KiWIS getTimeseriesList returned multiple matching ts_id values for {station}/{spec.product_id}: {matches!r}"
+        )
+    return matches[0]
+
+
+def _interpret_timeseries_list(
     payload: Payload,
     station: str,
     product: ProductId,
@@ -281,7 +343,7 @@ def _parse_timeseries_list(
     window: SeriesWindow,
     retrieved: datetime | None,
     scope: SeriesScope,
-) -> ParsedSeries:
+) -> TimeseriesListInterpretation:
     evidence = f"source-call:{payload.acquisition_id}"
     unrestricted_scope = SeriesScope(
         provider_ids=("be_wal",),
@@ -291,16 +353,20 @@ def _parse_timeseries_list(
     try:
         resolved = resolve_timeseries_list(payload.content, station, spec)
     except UnsupportedSourceStructureError as error:
-        return _failed_parse_result(
-            payload,
-            None,
-            station,
-            product,
-            window,
-            retrieved,
-            unrestricted_scope,
-            access="KiWIS getTimeseriesList",
-            reason=str(error),
+        return TimeseriesListInterpretation(
+            resolved_ts_id=None,
+            scope_matched=False,
+            parsed=_failed_parse_result(
+                payload,
+                None,
+                station,
+                product,
+                window,
+                retrieved,
+                unrestricted_scope,
+                access="KiWIS getTimeseriesList",
+                reason=str(error),
+            ),
         )
 
     if resolved is not None:
@@ -313,7 +379,11 @@ def _parse_timeseries_list(
         )
         if scope_matches:
             # Child getTimeseriesValues payloads own observation outcomes and inventory coverage.
-            return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (definition,), (), (), ())
+            return TimeseriesListInterpretation(
+                resolved_ts_id=resolved,
+                scope_matched=True,
+                parsed=ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (definition,), (), (), ()),
+            )
 
         inventory = InventorySnapshot(
             snapshot_id=stable_id(payload.acquisition_id, station, str(product), resolved, "lookup-scope-no-match"),
@@ -328,7 +398,11 @@ def _parse_timeseries_list(
             evidence=(evidence,),
         )
         if scope.restriction is not RestrictionKind.ALL:
-            return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (definition,), (inventory,), (), ())
+            return TimeseriesListInterpretation(
+                resolved_ts_id=resolved,
+                scope_matched=False,
+                parsed=ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (definition,), (inventory,), (), ()),
+            )
         reason = f"Resolved KiWIS ts_id {resolved!r} for {station}/{product} does not match requested scope"
         outcome = RetrievalOutcome(
             outcome_id=stable_id(payload.acquisition_id, station, str(product), "lookup-scope-no-match-outcome"),
@@ -347,12 +421,16 @@ def _parse_timeseries_list(
             details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
             provider_id=_PROVIDER_ID,
         )
-        return ParsedSeries(
-            pl.DataFrame(schema=RowsSchema.polars_schema),
-            (definition,),
-            (inventory,),
-            (outcome,),
-            (issue,),
+        return TimeseriesListInterpretation(
+            resolved_ts_id=resolved,
+            scope_matched=False,
+            parsed=ParsedSeries(
+                pl.DataFrame(schema=RowsSchema.polars_schema),
+                (definition,),
+                (inventory,),
+                (outcome,),
+                (issue,),
+            ),
         )
 
     inventory = InventorySnapshot(
@@ -367,7 +445,11 @@ def _parse_timeseries_list(
         evidence=(evidence,),
     )
     if scope.restriction is not RestrictionKind.ALL:
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (inventory,), (), ())
+        return TimeseriesListInterpretation(
+            resolved_ts_id=None,
+            scope_matched=False,
+            parsed=ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (inventory,), (), ()),
+        )
     reason = f"Station {station} has no KiWIS series for {spec.native_id!r} ({spec.stationparameter_names!r})"
     outcome = RetrievalOutcome(
         outcome_id=stable_id(payload.acquisition_id, station, str(product), "lookup-no-match-outcome"),
@@ -386,7 +468,55 @@ def _parse_timeseries_list(
         details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
         provider_id=_PROVIDER_ID,
     )
-    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (inventory,), (outcome,), (issue,))
+    return TimeseriesListInterpretation(
+        resolved_ts_id=None,
+        scope_matched=False,
+        parsed=ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (inventory,), (outcome,), (issue,)),
+    )
+
+
+def _payload_context(
+    payload: Payload,
+    provider_config: ProviderConfig,
+) -> tuple[
+    str,
+    ProductId,
+    ProductSpec,
+    BeWalTimeseriesListCoordinates | BeWalTimeseriesValuesCoordinates,
+    SeriesWindow,
+    datetime | None,
+    SeriesScope,
+]:
+    if len(payload.station_products) != 1:
+        raise FatalContractError("be_wal payload requires exactly one station-product pair")
+    station, product = payload.station_products[0]
+    spec = PRODUCT_BY_ID.get(str(product))
+    if spec is None:
+        raise FatalContractError(f"be_wal product lacks series specification: {product}")
+    coords = _validated_coordinates(payload.source_coordinates.value, product, provider_config, spec)
+    window = SeriesWindow(
+        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+        axis=payload.acquisition_axis,
+    )
+    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+    scope = payload.scope or SeriesScope(
+        provider_ids=("be_wal",),
+        station_ids=(station,),
+        product_ids=(str(product),),
+    )
+    return station, product, spec, coords, window, retrieved, scope
+
+
+def interpret_timeseries_list_payload(
+    payload: Payload,
+    provider_config: ProviderConfig,
+) -> TimeseriesListInterpretation:
+    """Validate and interpret one KiWIS ``getTimeseriesList`` payload once for ``fetch`` and ``parse``."""
+    station, product, spec, coords, window, retrieved, scope = _payload_context(payload, provider_config)
+    if not isinstance(coords, BeWalTimeseriesListCoordinates):
+        raise FatalContractError("be_wal getTimeseriesList interpretation requires lookup coordinates")
+    return _interpret_timeseries_list(payload, station, product, spec, window, retrieved, scope)
 
 
 def _parse_timeseries_values(
@@ -480,16 +610,23 @@ def _parse_timeseries_values(
         )
 
         if n > 0:
-            ann_frame = rows_df.select(
-                "series_id", "facts_id", "station_id", "product_id", "time", "time_zone"
-            ).with_columns(
-                pl.lit(True).cast(pl.Boolean()).alias("measured"),
-                pl.Series("quality_code", quality_codes, dtype=pl.Int64),
-                pl.Series("quality_code_name", quality_names, dtype=pl.String),
+            ann_frame = pl.DataFrame(
+                {
+                    "series_id": rows_df["series_id"],
+                    "facts_id": rows_df["facts_id"],
+                    "station_id": rows_df["station_id"],
+                    "product_id": rows_df["product_id"],
+                    "time": rows_df["time"],
+                    "time_zone": rows_df["time_zone"],
+                    "measured": pl.repeat(True, n, dtype=pl.Boolean, eager=True),
+                    "quality_code": pl.Series("quality_code", quality_codes, dtype=pl.Int64),
+                    "quality_code_name": pl.Series("quality_code_name", quality_names, dtype=pl.String),
+                },
+                schema={**OBSERVATION_STRUCTURAL_SCHEMA, **BE_WAL_QUALITY_SCHEMA.polars_schema()},
             )
             ann_table = ObservationAnnotationTable.from_rows(
                 schema=BE_WAL_QUALITY_SCHEMA,
-                rows=ann_frame.select(*OBSERVATION_STRUCTURAL_SCHEMA, *BE_WAL_QUALITY_SCHEMA.polars_schema()),
+                rows=ann_frame,
                 measurement_indices=list(range(n)),
             )
             annotations = AnnotationBundle(observation_tables={BE_WAL_QUALITY_SCHEMA.schema_id: ann_table})
@@ -555,29 +692,15 @@ def _parse_timeseries_values(
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     """Parse one SPW KiWIS lookup or observation payload into native ``+01:00`` rows and quality annotations."""
-    if len(payload.station_products) != 1:
-        raise FatalContractError("be_wal payload requires exactly one station-product pair")
-    station, product = payload.station_products[0]
-    spec = PRODUCT_BY_ID.get(str(product))
-    if spec is None:
-        raise FatalContractError(f"be_wal product lacks series specification: {product}")
-    coords = _validated_coordinates(payload.source_coordinates.value, product, provider_config, spec)
-
-    window = SeriesWindow(
-        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
-        axis=payload.acquisition_axis,
-    )
-    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
-    scope = payload.scope or SeriesScope(
-        provider_ids=("be_wal",),
-        station_ids=(station,),
-        product_ids=(str(product),),
-    )
-
+    station, product, spec, coords, window, retrieved, scope = _payload_context(payload, provider_config)
     if isinstance(coords, BeWalTimeseriesListCoordinates):
-        return _parse_timeseries_list(payload, station, product, spec, window, retrieved, scope)
+        return _interpret_timeseries_list(payload, station, product, spec, window, retrieved, scope).parsed
     return _parse_timeseries_values(payload, station, product, coords, spec, window, retrieved, scope)
 
 
-__all__ = ["parse"]
+__all__ = [
+    "TimeseriesListInterpretation",
+    "interpret_timeseries_list_payload",
+    "parse",
+    "resolve_timeseries_list",
+]
