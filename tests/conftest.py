@@ -576,7 +576,7 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
             if provenance.provider_id == "usgs_nwis"
             else origins.NATIVE_TABLE_ACQUISITION_IDS
         )
-        if provenance.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "cl_dga", "co_ideam", "pe_senamhi"}:
+        if provenance.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "cl_dga", "co_ideam", "pe_senamhi", "si_arso"}:
             import json
 
             generator = importlib.import_module(
