@@ -374,6 +374,7 @@ DECLARATIONS = {
         "ch_foen",
         "co_ideam",
         "cz_chmi",
+        "de_pegelonline",
         "dk_vanda",
         "fi_syke",
         "fr_hydroportail",
@@ -482,6 +483,7 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
         return Withheld()
 
     from rivretrieve._internal.providers.au_bom.origins import GeorefsystemToEpsgConversion
+    from rivretrieve._internal.providers.de_pegelonline.origins import CrsFromCoordinatePresenceConversion
 
     return {
         (ProviderId("ar_ina"), "stations"): {
@@ -555,6 +557,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "latitude": field("GEOGR1", FloatConversion()),
             "longitude": field("GEOGR2", FloatConversion()),
             "crs": unpublished("https://opendata.chmi.cz/hydrology/read_me/Popis_kodu_historical.pdf"),
+        },
+        (ProviderId("de_pegelonline"), "stations"): {
+            "provider_id": authored("de_pegelonline"),
+            "station_id": field("uuid"),
+            "latitude": field("latitude"),
+            "longitude": field("longitude"),
+            "crs": field("latitude", CrsFromCoordinatePresenceConversion()),
         },
         (ProviderId("fi_syke"), "stations"): {
             "provider_id": authored("fi_syke"),
@@ -651,7 +660,10 @@ def test_provider_declarations_preserve_reviewed_identity_and_coordinate_fields(
     # deliberately absent from BUILTIN_PROVIDER_IDS. dk_vanda was in that same
     # state during Effort #800, step 5, until its real catalogue was built and
     # it was registered as a LiveStages provider (see declaration.py).
-    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
+    # de_pegelonline is in that same state during Effort #1017, step 2 (this
+    # catalogue step): its origin declarations and packaged catalogue exist, but
+    # provider registration/integration is #1020's job, not this one's.
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws"), ProviderId("de_pegelonline")}
     assert {(provider, case.identity): case.declarations for provider, case in CASES} == _expected_declarations()
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 
