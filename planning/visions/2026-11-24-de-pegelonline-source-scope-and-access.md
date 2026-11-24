@@ -122,6 +122,44 @@ gauges from other agencies (see provenance below).
 
 ## Terms and attribution
 
+**Corrected 2026-11-24, after a closer re-reading of PEGELONLINE's terms
+text; see below for what this section originally said.**
+
+PEGELONLINE's terms page (`/gast/nutzungsbedingungen`) states, scoped to the
+whole site and not to WSV-originated data specifically: "Informationen,
+Produkte oder Dienste, die Sie von dieser Website erhalten, dürfen
+übernommen werden. Dies geschieht auf der Grundlage der Lizenz
+DL-DE->Zero-2.0" ("Information, products or services that you receive from
+this website may be reused. This happens under the licence
+`DL-DE->Zero-2.0`"). The preceding sentence — "PEGELONLINE additionally
+displays third-party data from national and international authorities,
+organisations and institutions, to which the above liability disclaimer
+(*Haftungsausschluss*) also applies" — scopes only the liability/warranty
+disclaimer (the section's own "Haftungsausschluss" heading) to that
+third-party data. It does not say the licence grant is withheld from it, and
+the licence paragraph that follows carries no origin-based exception.
+
+RivRetrieve records the licence as the provider states it, without taking a
+view on whether WSV/GDWS actually holds the right to license data it does
+not itself originate — that is a question about the provider's own
+authority, not about what its terms page says. `DL-DE->Zero-2.0` applies as
+a single, provider-level licence across all 787 stations: the WSV-operated
+stations, the 13 domestic non-WSV stations (7 institutions: Hamburg Port
+Authority, Regierungspräsidium Freiburg, Wasserwirtschaftsamt Ingolstadt,
+Wasserwirtschaftsamt Landshut, Ruhrverband, Deichinformationszentrum
+Neuwied, BfG Koblenz), and the 26 foreign mirror stations (Rijkswaterstaat,
+Via Donau, Povodí Labe, Bundesamt für Umwelt) alike. No per-station or
+per-issuer split is needed, and the 26 foreign mirror stations' licence
+here does not depend on, or need to match, what `nl_rws`/`at_ehyd`/
+`cz_chmi`/`ch_foen` each separately established for their own direct
+channels — PEGELONLINE is its own redistribution channel with its own
+stated terms.
+
+All stations stay in the catalogue, under this one licence.
+
+<details>
+<summary>Original 2026-11-24 text (superseded above)</summary>
+
 WSV/GDWS's own data is published under **Datenlizenz Deutschland – Zero –
 Version 2.0** (`DL-DE->Zero-2.0`), which permits unrestricted commercial and
 non-commercial use, modification and redistribution without mandatory
@@ -158,19 +196,28 @@ genuinely unknown (not withheld, not guessed) until an institution-specific
 check establishes otherwise — optional future thoroughness, not a blocker
 for this Effort or any downstream one.
 
+This reading turned out to be mistaken: it treated "der obige
+Haftungsausschluss" (the liability disclaimer named just above) as if it
+also scoped the licence grant, and applied `docs/catalogue-provenance.md`'s
+rule against combining *separate* issuers' terms to a case where only one
+issuer (WSV) is making one statement over everything the site serves — not
+combining anyone else's terms into it.
+
+</details>
+
 ## Recorded unknowns
 
-Per step 1's guidance, these stay unknown rather than inferred:
+Per step 1's guidance, this stays unknown rather than inferred:
 
-- Terms of use, licence and required attribution for the 13 domestic
-  non-WSV stations (7 institutions; see above).
 - Whether a 15-minute or 60-minute reading is an instantaneous sample or an
   interval mean (`statistic`). Neither the REST API documentation nor the
   SOS service's `"Einzelwert"` label resolves this; it stays `unknown`
   rather than assumed.
-- The exact mechanical encoding of the unknown-terms status for the 13
-  stations (for example, a `withheld_facts`-style provenance record) is left
-  to the catalogue Effort, not decided here.
+
+(This section originally also listed the 13 domestic non-WSV stations'
+terms as unknown, with a mechanical unknown-terms encoding left to the
+catalogue Effort. That was resolved on 2026-11-24 — see "Terms and
+attribution" above — and no longer needs an encoding.)
 
 ## Required handoff
 
@@ -181,8 +228,9 @@ The handoff establishes downstream responsibilities across the port:
   as source metadata, direct WGS84 coordinates (57 stations lack
   coordinates), the three `gaugeZero` datum regimes attached per-timeseries,
   and station-product associations across `W`, `Q`, `WT`, `TRM` and
-  `TRM_WT`. Encode the 13 domestic non-WSV stations' unresolved terms as an
-  explicit provenance fact, per the convention above.
+  `TRM_WT`. Record `DL-DE->Zero-2.0` as the single provider-level licence
+  (see "Terms and attribution" above); no per-station terms encoding is
+  needed.
 - **[Series identity #1018](https://github.com/RivRetrieve/RivRetrieve/issues/1018):**
   Map `W`/`Q`/`WT`/`TRM`/`TRM_WT` to distinct `SourceIdentity`/`PhysicalFacts`
   records with the `cm` vs `m+NN`/`m+PNP` vertical-datum split preserved
