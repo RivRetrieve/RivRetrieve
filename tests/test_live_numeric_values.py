@@ -523,3 +523,95 @@ def test_ch_foen_official_numeric_guards_reject_unrepresentable_cells(
         assert changed.rows.height == baseline.rows.height
         assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25, "null": None}[mutation]
         assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))
+
+
+@pytest.mark.parametrize("route_kind", ["q_year_json", "s_year_json", "complete_zip"])
+@pytest.mark.parametrize("mutation", [*BAD, "boolean", "zero", "finite", "null"])
+@pytest.mark.recorded("maintenance/observations/ie_opw/retrieval")
+def test_ie_opw_numeric_guards_reject_unrepresentable_cells(
+    retained_evidence_root: Path, route_kind: str, mutation: str
+) -> None:
+    from rivretrieve._internal.providers.ie_opw.config import config as ie_config
+    from rivretrieve._internal.providers.ie_opw.parse import parse as ie_parse
+    from rivretrieve._internal.providers.ie_opw.series import source_series as ie_source_series
+    from rivretrieve._internal.source_series import OutcomeStatus
+
+    root = retained_evidence_root / "maintenance/observations/ie_opw/retrieval/web"
+    if route_kind == "q_year_json":
+        slug, station_id, prod_id = "opw-01041-q-year-json", "01041", "discharge_daily_mean"
+        media_type = "application/json"
+    elif route_kind == "s_year_json":
+        slug, station_id, prod_id = "opw-01041-s-year-json", "01041", "stage_daily_mean"
+        media_type = "application/json"
+    else:
+        slug, station_id, prod_id = "opw-14124-twater-complete-zip", "14124", "water_temperature_instantaneous"
+        media_type = "application/zip"
+
+    body = (root / f"{slug}.body").read_bytes()
+    receipt = json.loads((root / f"{slug}.receipt.json").read_text())
+    cfg = ie_config()
+    prod = ProductId(prod_id)
+    coords = cfg.products[prod].coordinates
+    win = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(1970, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2027, 1, 1)),
+    )
+    origin = SourceCallOrigin(
+        str(receipt["url"]),
+        {},
+        int(receipt["http_status"]),
+        datetime.fromisoformat(str(receipt["retrieved_at"])),
+        media_type,
+        UnknownOriginFact(),
+        UnknownOriginFact(),
+    )
+    source = Payload(
+        coords,
+        ((station_id, prod),),
+        win,
+        body,
+        origin,
+        (),
+        known_series=(ie_source_series(station_id, prod_id),),
+    )
+    baseline = ie_parse(source, cfg)
+    assert baseline.rows.height > 0
+
+    if route_kind in ("q_year_json", "s_year_json"):
+        doc = json.loads(body)
+        marker = "__IE_OPW_NUMERIC_CELL__"
+        target_block = next(block for block in doc if block["ts_shortname"] == "WEB.Day.Mean")
+        target_block["data"][0][1] = marker
+        raw_token = "true" if mutation == "boolean" else TOKENS[mutation]
+        mutated_bytes = json.dumps(doc).encode().replace(json.dumps(marker).encode(), raw_token.encode())
+    else:
+        with ZipFile(BytesIO(body)) as src_zf:
+            csv_text = src_zf.read("tsvalues.csv").decode("utf-8")
+        lines = csv_text.splitlines()
+        first_data_idx = next(
+            i for i, line in enumerate(lines) if not line.startswith("#") and line.split(";")[1] != ""
+        )
+        parts = lines[first_data_idx].split(";")
+        parts[1] = "true" if mutation == "boolean" else "" if mutation == "null" else TOKENS[mutation]
+        lines[first_data_idx] = ";".join(parts)
+        buf = BytesIO()
+        with ZipFile(buf, mode="w") as out_zf:
+            out_zf.writestr("tsvalues.csv", ("\n".join(lines) + "\n").encode("utf-8"))
+        mutated_bytes = buf.getvalue()
+
+    changed = ie_parse(replace(source, content=mutated_bytes), cfg)
+    if mutation in (*BAD, "boolean"):
+        assert [item.status for item in changed.outcomes] == [OutcomeStatus.FAILED], (route_kind, mutation)
+        assert changed.outcomes[0].reason
+        assert changed.rows.is_empty()
+    elif mutation == "null":
+        assert [item.status for item in changed.outcomes] == [item.status for item in baseline.outcomes]
+        assert any(item.status is OutcomeStatus.SUCCESS for item in changed.outcomes)
+        assert changed.rows.height == baseline.rows.height - 1
+        assert_frame_equal(changed.rows, baseline.rows.slice(1))
+    else:
+        assert [item.status for item in changed.outcomes] == [item.status for item in baseline.outcomes]
+        assert any(item.status is OutcomeStatus.SUCCESS for item in changed.outcomes)
+        assert changed.rows.height == baseline.rows.height
+        assert changed.rows["value"][0] == {"zero": 0.0, "finite": 1.25}[mutation]
+        assert_frame_equal(changed.rows.slice(1), baseline.rows.slice(1))

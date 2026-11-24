@@ -167,6 +167,7 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
         pytest.param("at_ehyd", marks=pytest.mark.recorded("maintenance/observations/at_ehyd/retrieval")),
         pytest.param("ar_ina", marks=pytest.mark.recorded("maintenance/observations/ar_ina/retrieval")),
         pytest.param("co_ideam", marks=pytest.mark.recorded("maintenance/observations/co_ideam/retrieval")),
+        pytest.param("ie_opw", marks=pytest.mark.recorded("maintenance/observations/ie_opw/retrieval")),
     ],
 )
 def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, monkeypatch, tmp_path, request):
@@ -244,6 +245,19 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             statistic="mean",
         )
         start, end = "2023-05-01", "2023-05-10"
+    elif provider == "ie_opw":
+        from tests.test_ie_opw_retrieval_recorded import _envelope_from_capture
+
+        replay = ReplayTransport((_envelope_from_capture(retained_evidence_root, "opw-01041-q-year-json"),))
+        monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
+        selection = rr.find(
+            provider=provider,
+            station="01041",
+            quantity="discharge",
+            frequency="daily",
+            statistic="mean",
+        )
+        start, end = "2025-07-01", "2025-07-10"
     elif provider == "ch_foen":
         from tests.test_partial_explicit_scope import _official_replay
 

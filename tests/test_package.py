@@ -80,6 +80,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         # Native inventories acquired 2026-09-21; these are snapshot checks.
         "fr_hubeau": (20_297, 0, 0),
         "fr_hydroportail": (12_818, 0, 0),
+        "ie_opw": (4_620, 0, 0),
         "lt_lhmt": (194, 0, 0),
         "no_nve": (44_118, 0, 0),
         "pl_imgw": (3_903, 0, 0),
@@ -109,6 +110,7 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
         "cz_chmi",
         "fr_hubeau",
         "fr_hydroportail",
+        "ie_opw",
         "lt_lhmt",
         "no_nve",
         "pl_imgw",
@@ -123,6 +125,10 @@ def test_all_packaged_catalogues_expose_exact_reduced_carriers() -> None:
     expected_provider_terms["co_ideam"] = (
         "Creative Commons Attribution | Share Alike 4.0 International",
         "Instituto de Hidrología, Meteorología y Estudios Ambientales - IDEAM, Bogotá D.C.",
+    )
+    expected_provider_terms["ie_opw"] = (
+        "CC BY 4.0",
+        "Contains Irish Public Sector Information licensed under a Creative Commons Attribution 4.0 International (CC BY 4.0) licence (source http://waterlevel.ie/hydro-data/ - provided by the Office of Public Works.)",
     )
     expected_provider_terms["no_nve"] = (
         "The data provided by the API is licensed under the Norwegian License for Open Government Data (NLOD) "
