@@ -50,11 +50,30 @@ def _values_json(blocks: list[tuple[str, list[tuple[str, float | None, int | Non
     ).encode("utf-8")
 
 
+def _assert_annotation_bundles_equal(left: Any, right: Any) -> None:
+    assert set(left.observation_tables) == set(right.observation_tables)
+    for key in left.observation_tables:
+        lt = left.observation_tables[key]
+        rt = right.observation_tables[key]
+        assert lt.schema == rt.schema
+        assert lt.measurement_indices == rt.measurement_indices
+        pl_testing.assert_frame_equal(lt.rows, rt.rows)
+    assert set(left.series_tables) == set(right.series_tables)
+    for key in left.series_tables:
+        lt = left.series_tables[key]
+        rt = right.series_tables[key]
+        assert lt.schema == rt.schema
+        pl_testing.assert_frame_equal(lt.rows, rt.rows)
+
+
 def _assert_driver_results_identical(left: Any, right: Any) -> None:
     pl_testing.assert_frame_equal(left.canonical_rows, right.canonical_rows)
+    _assert_annotation_bundles_equal(left.annotations, right.annotations)
     assert left.source_series == right.source_series
     assert left.inventories == right.inventories
     assert left.outcomes == right.outcomes
+    assert left.scope == right.scope
+    assert left.supporting_outcomes == right.supporting_outcomes
     assert left.issues == right.issues
     assert left.provenance == right.provenance
     assert [(e.content, e.origin, e.authorship) for e in left.receipts.entries] == [
