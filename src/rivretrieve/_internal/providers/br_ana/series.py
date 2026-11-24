@@ -37,7 +37,7 @@ def describe_series(
         quantity=known(quantity, evidence),
         source_unit=known(source_unit, evidence),
         normalized_unit=source_unit,
-        frequency=known("daily", evidence) if daily else EvidenceFact(),
+        frequency=known("P1D", evidence) if daily else EvidenceFact(),
         statistic=known("mean", evidence) if daily else EvidenceFact(),
         timestamp_anchor=EvidenceFact() if daily else known("measurement_time", evidence),
         clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,

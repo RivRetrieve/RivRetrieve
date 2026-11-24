@@ -193,7 +193,7 @@ def test_context_change_falls_back_to_provider_parse(mutation: str) -> None:
                 quantity=known("stage", "catalogue"),
                 source_unit=known("cm", "catalogue"),
                 normalized_unit="cm",
-                frequency=known("instantaneous", "catalogue"),
+                frequency=known("PT15M", "catalogue"),
             ),
         ),
     )
@@ -595,7 +595,7 @@ def test_shared_acquisition_reuses_per_product_contexts_and_releases_after_final
                     quantity=known(qty, "test"),
                     source_unit=known(unit_str, "test"),
                     normalized_unit=unit_str,
-                    frequency=known("daily", "test"),
+                    frequency=known("P1D", "test"),
                     clipping_axis=ClippingAxis.CALENDAR_DATE,
                     label_time="00:00",
                 )

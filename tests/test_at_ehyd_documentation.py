@@ -78,7 +78,7 @@ def test_at_ehyd_page_selection_discovery_and_catalogue_claims_are_offline(
     selected_series = rr.series(namespace["selection"])  # type: ignore[arg-type]
     assert selected_series.select(
         "station_id", "product_id", "quantity", "frequency", "statistic", "source_unit", "unit", "time_zone"
-    ).rows() == [("209486", "owf_abfl_tagesmittel", "discharge", "daily", "mean", "m³/s", "m3/s", None)]
+    ).rows() == [("209486", "owf_abfl_tagesmittel", "discharge", "P1D", "mean", "m³/s", "m3/s", None)]
 
     candidates = namespace["candidates"]
     assert sorted(candidates["product_id"].to_list()) == [  # type: ignore[index]
@@ -125,7 +125,7 @@ def test_at_ehyd_page_selection_discovery_and_catalogue_claims_are_offline(
     )
     assert len(table_rows) == 11
 
-    freq_map = {"Daily": "daily", "Monthly": "monthly", "Unknown": None}
+    freq_map = {"`P1D`": "P1D", "`P1M`": "P1M", "Unknown": None}
     stat_map = {"Mean": "mean", "Minimum": "min", "Maximum": "max", "Unknown": None}
     unit_map = {"m³/s": "m3/s", "m": "m", "°C": "degC"}
     covered_product_ids: set[str] = set()
@@ -136,8 +136,8 @@ def test_at_ehyd_page_selection_discovery_and_catalogue_claims_are_offline(
         assert set(sub["unit"].to_list()) == {unit_map[ret_unit_label]}
         assert set(sub["statistic"].to_list()) == {stat_map[stat_label]}
         if variant_id == "owf_wasserst_monatsminima":
-            assert freq_label == "Monthly (Unknown at `207340`)"
-            assert set(sub.filter(sub["station_id"] != "207340")["frequency"].to_list()) == {"monthly"}
+            assert freq_label == "`P1M` (Unknown at `207340`)"
+            assert set(sub.filter(sub["station_id"] != "207340")["frequency"].to_list()) == {"P1M"}
             assert sub.filter(sub["station_id"] == "207340")["frequency"].to_list() == [None]
         else:
             assert set(sub["frequency"].to_list()) == {freq_map[freq_label]}

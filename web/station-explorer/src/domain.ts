@@ -68,6 +68,57 @@ export function stationKey(
 ): string {
   return JSON.stringify([station.provider_id, station.station_id]);
 }
+
+const ELAPSED_RE = /^PT(?:([0-9]+)H)?(?:([0-9]+)M)?(?:([0-9]+)S)?$/;
+const CALENDAR_DAYS_RE = /^P(?:([0-9]+)W)?(?:([0-9]+)D)?$/;
+const CALENDAR_MONTHS_RE = /^P(?:([0-9]+)Y)?(?:([0-9]+)M)?$/;
+
+function parseOptionalBigInt(raw: string | undefined): bigint {
+  return raw === undefined ? 0n : BigInt(raw);
+}
+
+export function canonicalizeFrequency(raw: string): string | null {
+  const elapsed = ELAPSED_RE.exec(raw);
+  if (
+    elapsed &&
+    (elapsed[1] !== undefined ||
+      elapsed[2] !== undefined ||
+      elapsed[3] !== undefined)
+  ) {
+    const totalSeconds =
+      parseOptionalBigInt(elapsed[1]) * 3600n +
+      parseOptionalBigInt(elapsed[2]) * 60n +
+      parseOptionalBigInt(elapsed[3]);
+    if (totalSeconds <= 0n) return null;
+    if (totalSeconds % 3600n === 0n) return `PT${totalSeconds / 3600n}H`;
+    if (totalSeconds % 60n === 0n) return `PT${totalSeconds / 60n}M`;
+    return `PT${totalSeconds}S`;
+  }
+  const days = CALENDAR_DAYS_RE.exec(raw);
+  if (days && (days[1] !== undefined || days[2] !== undefined)) {
+    const totalDays =
+      parseOptionalBigInt(days[1]) * 7n + parseOptionalBigInt(days[2]);
+    if (totalDays <= 0n) return null;
+    if (totalDays % 7n === 0n) return `P${totalDays / 7n}W`;
+    return `P${totalDays}D`;
+  }
+  const months = CALENDAR_MONTHS_RE.exec(raw);
+  if (months && (months[1] !== undefined || months[2] !== undefined)) {
+    const totalMonths =
+      parseOptionalBigInt(months[1]) * 12n + parseOptionalBigInt(months[2]);
+    if (totalMonths <= 0n) return null;
+    if (totalMonths % 12n === 0n) return `P${totalMonths / 12n}Y`;
+    return `P${totalMonths}M`;
+  }
+  return null;
+}
+
+export function frequencyError(raw: string | undefined): string | null {
+  if (raw === undefined || raw === "") return null;
+  if (canonicalizeFrequency(raw) !== null) return null;
+  return 'Enter a positive ISO 8601 duration in one family, such as "PT15M", "PT1H", "P1D", "P1W", "P1M", or "P1Y".';
+}
+
 function fieldValues(
   station: Station,
   series: Series,
@@ -80,7 +131,11 @@ function fieldValues(
     const state = series[`${field as PhysicalField}_state`];
     if (state && state !== "known") return [null];
   }
-  return [series[field as keyof Series]];
+  const raw = series[field as keyof Series];
+  if (field === "frequency" && typeof raw === "string") {
+    return [canonicalizeFrequency(raw) ?? raw];
+  }
+  return [raw];
 }
 function activeFilters(filters: Filters): [FilterField, string][] {
   return filterFields.flatMap((field) =>
@@ -90,10 +145,21 @@ function activeFilters(filters: Filters): [FilterField, string][] {
   );
 }
 export function matchesStation(station: Station, filters: Filters): boolean {
+  const entries = activeFilters(filters);
+  const resolved: [FilterField, string][] = [];
+  for (const [field, value] of entries) {
+    if (field === "frequency") {
+      const canonical = canonicalizeFrequency(value);
+      if (canonical === null) return false;
+      resolved.push([field, canonical]);
+    } else {
+      resolved.push([field, value]);
+    }
+  }
   return station.series.some(
     (series) =>
       series.admission === "supported" &&
-      activeFilters(filters).every(([field, value]) =>
+      resolved.every(([field, value]) =>
         fieldValues(station, series, field).includes(value),
       ),
   );
@@ -136,17 +202,23 @@ export function selectionConflicts(
     .filter((station) => !matchesStation(station, settings))
     .map((station) => {
       const reasons = activeFilters(settings).flatMap(([field, requested]) => {
+        let target = requested;
+        if (field === "frequency") {
+          const err = frequencyError(requested);
+          if (err) return [err];
+          target = canonicalizeFrequency(requested) ?? requested;
+        }
         const values = station.series.flatMap((series) =>
           fieldValues(station, series, field),
         );
-        if (values.includes(requested)) return [];
+        if (values.includes(target)) return [];
         const known = [
           ...new Set(values.filter((value): value is string => value != null)),
         ];
         return [
           known.length
-            ? `${field}: requested ${JSON.stringify(requested)}; catalogue lists ${known.map((value) => JSON.stringify(value)).join(", ")}.${values.some((value) => value == null) ? " Other facts are not established." : ""}`
-            : `${field} is not established in the catalogue; it cannot match ${JSON.stringify(requested)}.`,
+            ? `${field}: requested ${JSON.stringify(target)}; catalogue lists ${known.map((value) => JSON.stringify(value)).join(", ")}.${values.some((value) => value == null) ? " Other facts are not established." : ""}`
+            : `${field} is not established in the catalogue; it cannot match ${JSON.stringify(target)}.`,
         ];
       });
       if (!station.series.length) {
@@ -213,6 +285,8 @@ export function generateRequest(
       `${conflicts.length} selected ${conflicts.length === 1 ? "gauge conflicts" : "gauges conflict"} with the request settings. Change request settings or remove non-matching gauges.`,
     );
   blockingReasons.push(...Object.values(dateErrors(dates)));
+  const freqError = frequencyError(settings.frequency);
+  if (freqError) blockingReasons.push(freqError);
   const groups = new Map<string, string[]>();
   for (const station of addStations([], selected)) {
     const group = groups.get(station.provider_id) ?? [];
@@ -260,7 +334,8 @@ export function generateRequest(
       }
     }
     const args = activeFilters(settings).map(
-      ([field, value]) => `${field}=${pythonString(value)}`,
+      ([field, value]) =>
+        `${field}=${pythonString(field === "frequency" ? (canonicalizeFrequency(value) ?? value) : value)}`,
     );
     const findCall = `selection = rr.find(${args.join(", ")})`;
     lines.push(

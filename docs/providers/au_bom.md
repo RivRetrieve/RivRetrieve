@@ -24,7 +24,7 @@ selection = rr.find(
     provider="au_bom",
     station="410730",
     quantity="stage",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 
@@ -124,7 +124,7 @@ selection = rr.find(
     provider="au_bom",
     station="138020A",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 print(sorted(rr.series(selection)["product_id"].to_list()))

@@ -32,7 +32,7 @@ def test_catalogue_physics_follow_publisher_field_definitions() -> None:
     artifact = load_packaged_catalogue_artifact(declaration.catalogue)
     assert artifact.source_descriptions is not None
     expected = {
-        "discharge_daily_mean": ("D AVG F/R", "discharge", "cubic metres/sec", "daily", "mean"),
+        "discharge_daily_mean": ("D AVG F/R", "discharge", "cubic metres/sec", "P1D", "mean"),
         "discharge_instantaneous": ("COR.FLOW", "discharge", "cubic metres/sec", None, None),
         "stage_instantaneous": ("COR.LEVEL", "stage", "m", None, None),
     }
@@ -83,10 +83,10 @@ def test_explicit_discovery_pick_and_fetch_refusal_are_offline(
     assert all(len(inventory.catalogue_claims) == 1 for inventory in selection.inventories)
     discharge = rr.pick(selection, quantity="discharge", on_issue=policy)
     assert rr.series(discharge).height == 2
-    daily = rr.pick(discharge, frequency="daily", statistic="mean", on_issue=policy)
+    daily = rr.pick(discharge, frequency="P1D", statistic="mean", on_issue=policy)
     assert rr.series(daily)["product_id"].to_list() == ["discharge_daily_mean"]
     direct = rr.find(
-        provider="za_dws", station="X3H001", quantity="discharge", frequency="daily", statistic="mean", on_issue=policy
+        provider="za_dws", station="X3H001", quantity="discharge", frequency="P1D", statistic="mean", on_issue=policy
     )
     pl_testing.assert_frame_equal(rr.series(daily), rr.series(direct))
     assert rr.series(selection).height == 3

@@ -81,7 +81,7 @@ def _register_no_nve(
         credential_headers=no_nve_declaration.credential_headers,
     )
     return rr.pick(
-        rr.find(provider="no_nve", station=_STATION, quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="no_nve", station=_STATION, quantity="discharge", frequency="P1D", statistic="mean"),
         variant="2",
     )
 
@@ -333,7 +333,7 @@ def test_import_and_open_provider_discovery_need_no_credentials(tmp_path: Path) 
             "-c",
             (
                 "import rivretrieve as rr; "
-                "selection = rr.find(provider='usgs_nwis', quantity='discharge', frequency='daily', statistic='mean'); "
+                "selection = rr.find(provider='usgs_nwis', quantity='discharge', frequency='P1D', statistic='mean'); "
                 "assert selection.series"
             ),
         ],

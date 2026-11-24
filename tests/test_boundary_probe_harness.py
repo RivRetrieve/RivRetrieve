@@ -187,12 +187,12 @@ def test_ba_fhmzbih_daily_mean_absent_and_unestablished_physical_request_refused
         provider="ba_fhmzbih",
         station="4024",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
     assert [(item.field, item.value) for item in selection.scope.predicates] == [
         ("quantity", "discharge"),
-        ("frequency", "daily"),
+        ("frequency", "P1D"),
         ("statistic", "mean"),
     ]
 

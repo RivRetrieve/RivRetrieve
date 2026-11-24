@@ -78,7 +78,7 @@ def transport(recording, monkeypatch, tmp_path):
 
 def selection(**kwargs):
     return rr.find(
-        provider="lt_lhmt", station=kwargs.pop("station", STATION), frequency="daily", statistic="mean", **kwargs
+        provider="lt_lhmt", station=kwargs.pop("station", STATION), frequency="P1D", statistic="mean", **kwargs
     )
 
 
@@ -137,7 +137,7 @@ def test_one_attempt_per_station_month_with_exact_receipts(transport, receipts, 
     for definition in result.source_series:
         assert definition.station_id == STATION
         for fact in definition.facts:
-            assert fact.frequency.value == "daily"
+            assert fact.frequency.value == "P1D"
             assert fact.statistic.value == "mean"
             assert fact.time_zone.value == "+00:00"
             assert fact.day_definition.value is None

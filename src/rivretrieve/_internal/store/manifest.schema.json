@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rivretrieve.org/schemas/observation-store-manifest-10.json",
-  "$comment": "Revision 10 compiled stores and revision 9 accumulated stores retain concrete source identity, physical facts, scoped inventory, outcomes, and source annotations.",
+  "$id": "https://rivretrieve.org/schemas/observation-store-manifest-12.json",
+  "$comment": "Revision 12 compiled stores and revision 11 accumulated stores retain concrete source identity, physical facts, scoped inventory, outcomes, and source annotations.",
   "title": "RivRetrieve observation-store manifest",
   "type": "object",
   "additionalProperties": false,
@@ -22,7 +22,7 @@
   ],
   "properties": {
     "format_version": {
-      "const": 10
+      "const": 12
     },
     "compiler_version": {
       "type": "string",
@@ -410,7 +410,7 @@
       ],
       "properties": {
         "format_version": {
-          "const": 9
+          "const": 11
         },
         "provider_id": {
           "type": "string",

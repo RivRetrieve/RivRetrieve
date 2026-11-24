@@ -29,7 +29,7 @@ everything up to the latest day USGS has published.
 ```python
 import rivretrieve as rr
 
-gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean")
+gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="P1D", statistic="mean")
 camels = rr.pick(gauges, station=["01013500", "01022500", "01030500"])
 result = rr.fetch(camels, start="2015-01-01", end="2026-09-30")
 

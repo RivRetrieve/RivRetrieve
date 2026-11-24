@@ -61,9 +61,7 @@ def test_clear_live_cache_removes_only_provider_store(tmp_path: Path, monkeypatc
 
 def test_refresh_bulk_refuses_before_store_or_transport(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
-    selection = rr.find(
-        provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="P1D", statistic="mean")
     with pytest.raises(FatalContractError, match=r'rivretrieve.download\("ca_eccc"\)'):
         rr.fetch(selection, start="2020-01-01", end="2020-01-02", cache="refresh")
     assert not (tmp_path / "cache").exists()
@@ -84,7 +82,7 @@ def test_multi_provider_refresh_refuses_before_live_provider_transfer(
         provider=("usgs_nwis", "ca_eccc"),
         station=("07374000", "02GA010"),
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
 

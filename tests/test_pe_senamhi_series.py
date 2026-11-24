@@ -50,7 +50,7 @@ def test_monthly_fields_stay_distinct_from_each_other_and_monitoring():
 
     for item in monthly:
         facts = item.facts[0]
-        for field, candidate in (("frequency", "daily"), ("frequency", "hourly"), ("statistic", "mean")):
+        for field, candidate in (("frequency", "P1D"), ("frequency", "PT1H"), ("statistic", "mean")):
             assert getattr(facts, field).state is EvidenceState.NOT_ESTABLISHED
             assert not SeriesScope(predicates=(PhysicalPredicate(field=field, value=candidate),)).matches_facts(facts)
     assert len({(item.identity.namespace, item.identity.published_id) for item in descriptions}) == 12
@@ -96,7 +96,7 @@ def test_mapped_facts_admit_numeric_values_without_inventing_time_or_datum():
             assert facts.label_time is None
             if subsystem == "monthly_archive":
                 assert facts.frequency.state is EvidenceState.NOT_ESTABLISHED
-                assert not SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="daily"),)).matches_facts(
+                assert not SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="P1D"),)).matches_facts(
                     facts
                 )
             assert facts.clipping_axis.value == ("calendar_date" if resolution == "DAILY" else "source_timestamp")
@@ -143,7 +143,7 @@ def test_phisis_frequency_matches_without_establishing_statistics_or_support():
     from rivretrieve._internal.providers.pe_senamhi.series import series_mappings
     from rivretrieve._internal.source_series import EvidenceState, PhysicalPredicate, SeriesScope
 
-    for resolution, frequency in (("DAILY", "daily"), ("HOURLY", "hourly")):
+    for resolution, frequency in (("DAILY", "P1D"), ("HOURLY", "PT1H")):
         for variable, unit in (("FLOW", "m3/s"), ("LEVEL", "m"), ("LEVEL", "m.s.n.m")):
             for mapping in series_mappings("phisis", resolution, variable, unit).values():
                 facts = mapping.physical_facts()

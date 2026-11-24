@@ -25,7 +25,7 @@ selection = rr.find(
     provider="co_ideam",
     station="0011017010",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 
@@ -111,25 +111,25 @@ discharge (*caudal*) and ten for water level (*nivel*):
 | Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
 |---|---|---|---|---|---|
 | `discharge` | `CAUDAL_H` | Unknown | Unknown | m³/s | m³/s |
-| `discharge` | `Q_MEDIA_D` | Daily | Mean | m³/s | m³/s |
-| `discharge` | `Q_MX_D` | Daily | Maximum | m³/s | m³/s |
-| `discharge` | `Q_MN_D` | Daily | Minimum | m³/s | m³/s |
-| `discharge` | `Q_MEDIA_M` | Monthly | Mean | m³/s | m³/s |
-| `discharge` | `Q_MX_M` | Monthly | Maximum | m³/s | m³/s |
-| `discharge` | `Q_MN_M` | Monthly | Minimum | m³/s | m³/s |
-| `discharge` | `Q_MEDIA_A` | Yearly | Mean | m³/s | m³/s |
-| `discharge` | `Q_MX_A` | Yearly | Maximum | m³/s | m³/s |
-| `discharge` | `Q_MN_A` | Yearly | Minimum | m³/s | m³/s |
+| `discharge` | `Q_MEDIA_D` | `P1D` | Mean | m³/s | m³/s |
+| `discharge` | `Q_MX_D` | `P1D` | Maximum | m³/s | m³/s |
+| `discharge` | `Q_MN_D` | `P1D` | Minimum | m³/s | m³/s |
+| `discharge` | `Q_MEDIA_M` | `P1M` | Mean | m³/s | m³/s |
+| `discharge` | `Q_MX_M` | `P1M` | Maximum | m³/s | m³/s |
+| `discharge` | `Q_MN_M` | `P1M` | Minimum | m³/s | m³/s |
+| `discharge` | `Q_MEDIA_A` | `P1Y` | Mean | m³/s | m³/s |
+| `discharge` | `Q_MX_A` | `P1Y` | Maximum | m³/s | m³/s |
+| `discharge` | `Q_MN_A` | `P1Y` | Minimum | m³/s | m³/s |
 | `stage` | `NIVEL_H` | Unknown | Unknown | cm | m |
-| `stage` | `NV_MEDIA_D` | Daily | Mean | cm | m |
-| `stage` | `NV_MX_D` | Daily | Maximum | cm | m |
-| `stage` | `NV_MN_D` | Daily | Minimum | cm | m |
-| `stage` | `NV_MEDIA_M` | Monthly | Mean | cm | m |
-| `stage` | `NV_MX_M` | Monthly | Maximum | cm | m |
-| `stage` | `NV_MN_M` | Monthly | Minimum | cm | m |
-| `stage` | `NV_MEDIA_A` | Yearly | Mean | cm | m |
-| `stage` | `NV_MX_A` | Yearly | Maximum | cm | m |
-| `stage` | `NV_MN_A` | Yearly | Minimum | cm | m |
+| `stage` | `NV_MEDIA_D` | `P1D` | Mean | cm | m |
+| `stage` | `NV_MX_D` | `P1D` | Maximum | cm | m |
+| `stage` | `NV_MN_D` | `P1D` | Minimum | cm | m |
+| `stage` | `NV_MEDIA_M` | `P1M` | Mean | cm | m |
+| `stage` | `NV_MX_M` | `P1M` | Maximum | cm | m |
+| `stage` | `NV_MN_M` | `P1M` | Minimum | cm | m |
+| `stage` | `NV_MEDIA_A` | `P1Y` | Mean | cm | m |
+| `stage` | `NV_MX_A` | `P1Y` | Maximum | cm | m |
+| `stage` | `NV_MN_A` | `P1Y` | Minimum | cm | m |
 
 A station may publish only a subset of these twenty files, and a listed series
 need not cover the requested period. RivRetrieve reads the aggregated daily,
@@ -145,7 +145,7 @@ series label spans both observation schedules without declaring whether readings
 are instantaneous or interval averages, RivRetrieve leaves both `frequency` and
 `statistic` unknown (`None`) on `CAUDAL_H` and `NIVEL_H`.
 
-Filtering by `frequency` (`"daily"`, `"monthly"`, or `"yearly"`) and `statistic`
+Filtering by `frequency` (`"P1D"`, `"P1M"`, or `"P1Y"`) and `statistic`
 (`"mean"`, `"max"`, or `"min"`) selects the corresponding derived series directly.
 To inspect all available series at a gauge offline or select `CAUDAL_H` or
 `NIVEL_H` explicitly, inspect `rr.series(...)` and pick by `series_id`:

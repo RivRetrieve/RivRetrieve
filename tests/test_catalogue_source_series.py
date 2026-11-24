@@ -58,7 +58,7 @@ def test_swiss_native_units_and_references_remain_independent():
 def test_ana_daily_alternatives_both_remain_quantity_matches():
     artifact = load_packaged_catalogue_artifact(BASE / "br_ana/catalogue")
     series, _ = catalogue_series(artifact, scope=SeriesScope(station_ids=("15400000",)))
-    daily = [s for s in series if s.facts[0].quantity.value == "discharge" and s.facts[0].frequency.value == "daily"]
+    daily = [s for s in series if s.facts[0].quantity.value == "discharge" and s.facts[0].frequency.value == "P1D"]
     assert {s.variant for s in daily} == {"bruto", "consistido"}
     assert all(s.facts[0].statistic.value == "mean" for s in daily)
     assert all(s.facts[0].day_definition.value is None for s in daily)
@@ -120,7 +120,7 @@ def test_modern_usgs_identities_survive_public_discovery_and_bundle_without_lega
     import rivretrieve as rr
 
     selection = rr.find(
-        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     restored = rr.from_bundle(rr.to_bundle(selection))
     assert restored.known_series == selection.known_series

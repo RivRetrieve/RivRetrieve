@@ -48,7 +48,7 @@ def _series_def(
 ) -> SourceSeries:
     pid = published_id or f"{station_id}-{product_id}"
     quantity, unit = ("discharge", "m3/s") if "discharge" in product_id else ("stage", "m")
-    frequency = "daily" if "daily" in product_id else "15min"
+    frequency = "P1D" if "daily" in product_id else "PT15M"
     return SourceSeries(
         series_id=f"{provider_id}/{station_id}/{product_id}",
         provider_id=provider_id,
@@ -1005,14 +1005,14 @@ def test_narrow_and_pick_preserve_order_null_measured_unmeasured_and_omit_native
                 quantity=known("discharge", "test-fixture"),
                 source_unit=known("m3/s", "test-fixture"),
                 normalized_unit="m3/s",
-                frequency=known("hourly", "test-fixture"),
+                frequency=known("PT1H", "test-fixture"),
             ),
             PhysicalFacts(
                 facts_id="provider_a/facts/q-ft3s",
                 quantity=known("discharge", "test-fixture"),
                 source_unit=known("ft^3/s", "test-fixture"),
                 normalized_unit="ft3/s",
-                frequency=known("daily", "test-fixture"),
+                frequency=known("P1D", "test-fixture"),
             ),
         ),
     )
@@ -1146,7 +1146,7 @@ def test_narrow_and_pick_preserve_order_null_measured_unmeasured_and_omit_native
         AnnotationBundle(observation_tables={"provider_a.obs": obs_table, "provider_a.stage_obs": drop_table}),
     )
 
-    picked = rr.pick(result, quantity="discharge", frequency="hourly", on_issue="ignore")
+    picked = rr.pick(result, quantity="discharge", frequency="PT1H", on_issue="ignore")
     assert picked.to_polars(annotations="tag").select("time", "value", "tag").rows() == [
         (datetime(2026, 1, 1, 0, 0), 2.0, "dup-1"),
         (datetime(2026, 1, 1, 0, 0), 1.0, "dup-2"),

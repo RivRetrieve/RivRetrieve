@@ -90,13 +90,13 @@ UNITS: dict[str, str] = {
 
 # (parameter_name, canonical_quantity, kind_code, canonical_statistic, expected_period_code, canonical_frequency)
 _OWF_ROUTE_SPECS: dict[str, tuple[str, str, str, str, str, str]] = {
-    "owf_abfl_tagesmittel": ("Abfluss", "discharge", "I", "mean", "T", "daily"),
-    "owf_abfl_monatsminima": ("Abfluss", "discharge", "M", "min", "M", "monthly"),
-    "owf_abfl_monatsmaxima": ("Abfluss", "discharge", "M", "max", "M", "monthly"),
-    "owf_wasserst_tagesmittel": ("Wasserstand", "stage", "I", "mean", "T", "daily"),
-    "owf_wasserst_monatsminima": ("Wasserstand", "stage", "M", "min", "M", "monthly"),
-    "owf_wasserst_monatsmaxima": ("Wasserstand", "stage", "M", "max", "M", "monthly"),
-    "owf_wassertemp_monatsmittel": ("WTemperatur", "temperature", "I", "mean", "M", "monthly"),
+    "owf_abfl_tagesmittel": ("Abfluss", "discharge", "I", "mean", "T", "P1D"),
+    "owf_abfl_monatsminima": ("Abfluss", "discharge", "M", "min", "M", "P1M"),
+    "owf_abfl_monatsmaxima": ("Abfluss", "discharge", "M", "max", "M", "P1M"),
+    "owf_wasserst_tagesmittel": ("Wasserstand", "stage", "I", "mean", "T", "P1D"),
+    "owf_wasserst_monatsminima": ("Wasserstand", "stage", "M", "min", "M", "P1M"),
+    "owf_wasserst_monatsmaxima": ("Wasserstand", "stage", "M", "max", "M", "P1M"),
+    "owf_wassertemp_monatsmittel": ("WTemperatur", "temperature", "I", "mean", "M", "P1M"),
 }
 
 _PEGEL_AKTUELL_PARAMETERS: dict[str, str] = {
@@ -444,7 +444,7 @@ def source_series(
                 units=units,
                 unit_evidence=unit_ev,
                 stage_reference_evidence=stage_reference_evidence,
-                frequency=known("daily", temp_ev),
+                frequency=known("P1D", temp_ev),
                 clipping_axis=ClippingAxis.CALENDAR_DATE,
             )
 

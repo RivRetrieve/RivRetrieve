@@ -15,7 +15,7 @@ import rivretrieve as rr
 @pytest.mark.parametrize("cache", ["bypass", "refresh"])
 def test_restored_selection_fetches_in_fresh_process(tmp_path, method, cache):
     selection = rr.find(
-        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     bundle = tmp_path / "selection.zip"
     bundle.write_bytes(rr.to_bundle(selection))

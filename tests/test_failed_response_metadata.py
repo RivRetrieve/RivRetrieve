@@ -60,7 +60,7 @@ def test_public_monthly_failure_retains_received_metadata(
 
     monkeypatch.setattr(discovery, "HttpClient", lambda: client(sender))
     selection = rr.find(
-        provider="lt_lhmt", station="anyksciu-vms", quantity="discharge", frequency="daily", statistic="mean"
+        provider="lt_lhmt", station="anyksciu-vms", quantity="discharge", frequency="P1D", statistic="mean"
     )
     result = rr.fetch(selection, start="2023-05-03", end="2023-06-28", cache="bypass", receipts=True, on_issue="ignore")
     assert result.data.height == 28

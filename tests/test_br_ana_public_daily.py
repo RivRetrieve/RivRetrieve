@@ -38,7 +38,7 @@ def _selection(product: str):
     quantity = "stage" if product.startswith("stage") else "discharge"
     variant = "bruto" if product.endswith("bruto") else "consistido"
     return rr.pick(
-        rr.find(provider="br_ana", station="15400000", quantity=quantity, frequency="daily", statistic="mean"),
+        rr.find(provider="br_ana", station="15400000", quantity=quantity, frequency="P1D", statistic="mean"),
         variant=variant,
     )
 
@@ -189,7 +189,7 @@ def test_daily_subset_cache_cannot_answer_all_and_refresh_preserves_sibling(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     transport = _authenticated_replay(retained_evidence_root, monkeypatch, "stage_daily_mean_bruto")
-    selection = rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean")
+    selection = rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="P1D", statistic="mean")
     bruto = rr.pick(selection, variant="bruto")
     consistido = rr.pick(selection, variant="consistido")
     first = rr.fetch(bruto, start=_START, end=_END, cache="reuse", on_issue="ignore")
@@ -219,9 +219,7 @@ def test_unobserved_daily_sibling_is_unresolved_not_successful_coverage(
     retained_evidence_root, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     transport = _authenticated_replay(retained_evidence_root, monkeypatch, "discharge_daily_mean_bruto")
-    selection = rr.find(
-        provider="br_ana", station="15400000", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="br_ana", station="15400000", quantity="discharge", frequency="P1D", statistic="mean")
     # This exact January 2024 response contains only Bruto daily means.
     both = rr.fetch(selection, start="2024-01-10", end="2024-01-20", cache="reuse", on_issue="ignore")
     assert {item.variant for item in both.source_series if item.series_id in both.data["series_id"]} == {"bruto"}

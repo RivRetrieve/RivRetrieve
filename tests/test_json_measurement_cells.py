@@ -18,7 +18,7 @@ CASES = (
     (
         "daily",
         "1011000101",
-        {"quantity": "discharge", "frequency": "daily", "statistic": "mean"},
+        {"quantity": "discharge", "frequency": "P1D", "statistic": "mean"},
         "2025-01-03",
         "2025-01-03",
         ("fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",),
@@ -190,7 +190,7 @@ def test_bad_daily_measurement_does_not_discard_independent_recorded_statistic(
     )
     replay = MeasurementReplay((mean, maximum), "resultat_obs_elab", mutation, selected_content=mean.content)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily")
+    selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="P1D")
     result = rr.fetch(selection, start="2025-01-03", end="2025-01-03", receipts=True, on_issue="ignore")
     assert result.data.height == 1
     successful = next(outcome for outcome in result.outcomes if outcome.status == "success")

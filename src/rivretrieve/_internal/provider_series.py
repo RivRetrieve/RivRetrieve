@@ -8,6 +8,7 @@ from datetime import datetime
 import polars as pl
 
 from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema, WithIssues
+from rivretrieve._internal.frequency import DAILY, canonicalize_frequency
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.source_series import (
@@ -69,6 +70,7 @@ class SeriesMapping:
                 else EvidenceFact()
             )
 
+        canonical_frequency = canonicalize_frequency(self.frequency) if self.frequency is not None else None
         unit_evidence = () if self.source_unit_definition is None else self.source_unit_definition.evidence
         facts = PhysicalFacts(
             facts_id="unidentified",
@@ -78,7 +80,7 @@ class SeriesMapping:
             ),
             normalized_unit=self.normalized_unit,
             source_unit_definition=self.source_unit_definition,
-            frequency=fact(self.frequency),
+            frequency=fact(canonical_frequency),
             statistic=fact(self.statistic),
             temporal_support=fact(self.temporal_support),
             day_definition=fact(self.day_definition),
@@ -86,7 +88,9 @@ class SeriesMapping:
             time_zone=fact(self.time_zone),
             vertical_reference=fact(self.vertical_reference),
             vertical_datum=fact(self.vertical_datum),
-            clipping_axis=ClippingAxis.CALENDAR_DATE if self.frequency == "daily" else ClippingAxis.SOURCE_TIMESTAMP,
+            clipping_axis=(
+                ClippingAxis.CALENDAR_DATE if canonical_frequency == DAILY.canonical else ClippingAxis.SOURCE_TIMESTAMP
+            ),
             label_time=self.label_time,
         )
         return facts.model_copy(update={"facts_id": stable_id(facts.model_dump_json(exclude={"facts_id"}))})

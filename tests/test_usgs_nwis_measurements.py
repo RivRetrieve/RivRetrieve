@@ -34,7 +34,7 @@ _RAW_NUMBER = "__authored_raw_json_number__"
 
 @pytest.fixture
 def selection():
-    return rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean")
+    return rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean")
 
 
 @pytest.fixture(scope="module")

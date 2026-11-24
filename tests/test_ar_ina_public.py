@@ -250,7 +250,7 @@ def test_public_stored_db_nulls_synthesized_boundary_nulls_and_empty_window(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Station 8 discharge_daily_mean -> published series_id 26605.
-    selection = rr.find(provider="ar_ina", station="8", quantity="discharge", frequency="daily", statistic="mean")
+    selection = rr.find(provider="ar_ina", station="8", quantity="discharge", frequency="P1D", statistic="mean")
     assert [item.identity.published_id for item in selection.series] == ["26605"]
 
     mixed_body = _obs_bytes(
@@ -328,7 +328,7 @@ def test_public_predicate_honesty_and_runtime_explicit_variant_resolution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # stage_hourly statistic is not_established, so statistic="mean" leaves an empty selection.
-    unmatched = rr.find(provider="ar_ina", station="52", quantity="stage", frequency="hourly", statistic="mean")
+    unmatched = rr.find(provider="ar_ina", station="52", quantity="stage", frequency="PT1H", statistic="mean")
     assert len(unmatched.series) == 0
     with pytest.raises(EmptySelectionError) as exc_info:
         rr.fetch(unmatched, start="2024-01-01", end="2024-01-02")
@@ -339,7 +339,7 @@ def test_public_predicate_honesty_and_runtime_explicit_variant_resolution(
         provider="ar_ina",
         station="8",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
         variant="999999",
         on_issue="ignore",
@@ -401,7 +401,7 @@ def test_public_sibling_failure_isolation_and_local_cache_lifecycle(
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
 
     # Select discharge_daily_mean (26605) and stage_daily_mean (26250) on station 8.
-    station_8 = rr.find(provider="ar_ina", station="8", frequency="daily", statistic="mean")
+    station_8 = rr.find(provider="ar_ina", station="8", frequency="P1D", statistic="mean")
     assert {item.product_id for item in station_8.series} == {"discharge_daily_mean", "stage_daily_mean"}
 
     q_body = _obs_bytes(

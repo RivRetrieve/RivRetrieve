@@ -148,7 +148,7 @@ def test_compiled_store_manifest_dispositions_partitions_and_cell_recovery(tmp_p
 
     validated = validate_store(store, ProviderId("ca_eccc"))
     manifest = validated.manifest
-    assert manifest.format_version == 10
+    assert manifest.format_version == 12
     assert manifest.series_annotations == ()
     assert {schema.schema_id for schema in manifest.annotation_schemas} == {
         "ca_eccc.dly_flows",

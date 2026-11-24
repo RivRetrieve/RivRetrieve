@@ -27,7 +27,7 @@ selection = rr.find(
     provider="lt_lhmt",
     station="nemajunu-vms",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 

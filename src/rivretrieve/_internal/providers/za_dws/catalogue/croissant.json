@@ -52,8 +52,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "f867ddbb3fd23f730ef93a026b429d968d1dbf6e9795e51c30a91b38840a200d",
-      "contentSize": "3535 B"
+      "sha256": "fce05b32f6f68f783aeb7b7cc179d26330a00b2b56b9799f8fc97fa1ea4dc986",
+      "contentSize": "3525 B"
     },
     {
       "@id": "stations.parquet",
@@ -76,7 +76,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "25d544961649e7b017747bcd87d65ee8a108d8a083e9d317da05d675b3e60927",
+      "sha256": "976d18542aa44207e4ac832b73dce669513ed2e0f769841609747991d42aa014",
       "contentSize": "8263 B"
     },
     {
@@ -132,8 +132,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "92efa897868dada1e8fc653045e8885900756afa4df367427c3a7c25da238c24",
-      "contentSize": "4354 B"
+      "sha256": "13f0d8df0064bc1a503fe9ec64919a39c9c7220900b1a986b550015e20fda3bc",
+      "contentSize": "4352 B"
     },
     {
       "@id": "series_claims.parquet",

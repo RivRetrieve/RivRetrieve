@@ -68,7 +68,7 @@ def _series(rows: pl.DataFrame, config: ProviderConfig) -> tuple[SourceSeries, .
                 EvidenceFact()
                 if isinstance(product.semantics, UnknownTemporalSupport)
                 else known(
-                    "daily" if daily else "hourly" if isinstance(product.semantics, Hourly) else "instantaneous",
+                    "P1D" if daily else "PT1H" if isinstance(product.semantics, Hourly) else "PT15M",
                     "test source definition",
                 )
             ),

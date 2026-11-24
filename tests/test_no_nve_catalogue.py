@@ -172,7 +172,7 @@ def test_build_populates_exact_attested_catalogue(retained_evidence_root) -> Non
 
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_public_discovery_selects_a_real_norwegian_edge() -> None:
-    selection = rr.find(provider="no_nve", station="1.200.0", quantity="stage", frequency="daily", statistic="mean")
+    selection = rr.find(provider="no_nve", station="1.200.0", quantity="stage", frequency="P1D", statistic="mean")
     assert len(selection.series) == 1
     assert (selection.series[0].provider_id, selection.series[0].station_id, selection.series[0].product_id) == (
         "no_nve",

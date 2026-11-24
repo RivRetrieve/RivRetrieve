@@ -180,7 +180,7 @@ def test_cz_chmi_offline_emits_no_annotations(tmp_path: Path, monkeypatch: pytes
         provider="cz_chmi",
         station="0-203-1-000400",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
     result = rr.fetch(selection, start="2023-06-01", end="2023-06-02", cache="bypass", on_issue="ignore")
@@ -341,7 +341,7 @@ def test_cz_chmi_recorded_emits_no_annotations(
         provider="cz_chmi",
         station="0-203-1-000400",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
     result = rr.fetch(selection, start="2023-06-01", end="2023-06-02", receipts=True, on_issue="ignore")

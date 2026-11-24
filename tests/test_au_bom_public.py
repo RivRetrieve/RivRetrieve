@@ -52,7 +52,7 @@ def _select_stage_daily_mean(station: str) -> rr.Selection:
     stage_daily_mean has no 09HR sibling, so quantity/frequency/statistic alone
     is unambiguous, unlike discharge's 24HR/09HR daily means.
     """
-    return rr.find(provider="au_bom", station=station, quantity="stage", frequency="daily", statistic="mean")
+    return rr.find(provider="au_bom", station=station, quantity="stage", frequency="P1D", statistic="mean")
 
 
 def test_public_discovery_is_network_free() -> None:

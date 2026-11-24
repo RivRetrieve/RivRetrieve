@@ -150,7 +150,7 @@ RivRetrieve converts stage from centimetres to metres. Stage is water level, not
 water depth or an elevation above sea level. RivRetrieve has not established its
 vertical reference.
 
-Each value is a daily value, and `frequency="daily"` matches all three quantities.
+Each value is a daily value, and `frequency="P1D"` matches all three quantities.
 IMGW-PIB does not state one statistic for the whole archive. Its 2025 yearbook
 describes daily water levels and discharges at automatic stations as means of
 10-minute values, but uses the 06:00 UTC reading at stations where only an observer

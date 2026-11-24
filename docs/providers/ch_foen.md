@@ -23,7 +23,7 @@ import rivretrieve as rr
 
 selection = rr.find(
     provider="ch_foen", station="2018", quantity="discharge",
-    frequency="daily", statistic="mean",
+    frequency="P1D", statistic="mean",
 )
 daily = rr.pick(selection, variant="TagMittel")
 result = rr.fetch(daily, start="2024-01-01", end="2024-01-07", cache="bypass")
@@ -82,11 +82,11 @@ of these products.
 
 | Frequency filter | Statistic filter | Product |
 |---|---|---|
-| `10min` | `mean` | Ten-minute mean |
-| `hourly` | `mean` | Hourly mean |
-| `daily` | `mean`, `min`, `max` | Daily mean, minimum or maximum |
-| `monthly` | `mean`, `min`, `max` | Monthly mean, minimum or maximum |
-| `yearly` | `mean`, `min`, `max` | Yearly mean, minimum or maximum |
+| `PT10M` | `mean` | Ten-minute mean |
+| `PT1H` | `mean` | Hourly mean |
+| `P1D` | `mean`, `min`, `max` | Daily mean, minimum or maximum |
+| `P1M` | `mean`, `min`, `max` | Monthly mean, minimum or maximum |
+| `P1Y` | `mean`, `min`, `max` | Yearly mean, minimum or maximum |
 
 The API also supplies recent raw readings separately from the archive products
 above. RivRetrieve has not established the exact period represented by each
@@ -187,7 +187,7 @@ preserves those source status fields as observation annotations:
 
 | Route group | Annotation schema | Field | Type |
 |---|---|---|---|
-| Archive (`10min`, `hourly`, `daily`, `monthly`, `yearly`) | `ch_foen.archive` | `releaseState` | `String` |
+| Archive (`PT10M`, `PT1H`, `P1D`, `P1M`, `P1Y`) | `ch_foen.archive` | `releaseState` | `String` |
 | Recent (`discharge_recent`, `stage_recent`, `water_temperature_recent`) | `ch_foen.recent` | `releaseStatus` | `Int64` |
 
 Inspect available annotation fields and join them onto the observations fetched

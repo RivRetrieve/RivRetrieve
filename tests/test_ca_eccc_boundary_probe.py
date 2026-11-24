@@ -187,9 +187,7 @@ def test_compact_mechanical_store_uses_canonical_public_path_without_claiming_hy
     monkeypatch.setattr(discovery, "_registry", registry)
     monkeypatch.setattr(discovery, "_provider_lookup", registry.get)
     monkeypatch.setattr(discovery, "_ensure_default_providers_registered", lambda: None)
-    selection = rr.find(
-        provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="P1D", statistic="mean")
     selection = rr.pick(selection, temporal_support="interval")
     result = rr.fetch(selection, start="2020-01-01", end="2020-01-03", on_issue="raise", receipts=True)
     assert result.data["facts_id"].unique().to_list() == [selection.series[0].facts[0].facts_id]

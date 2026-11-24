@@ -105,9 +105,7 @@ def test_french_daily_maxima_keep_distinct_published_physics(
         / f"fr_hubeau_1011000101_{code}_padded.recording.json"
     )
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
-    selected = rr.find(
-        provider="fr_hubeau", station="1011000101", quantity=quantity, frequency="daily", statistic="max"
-    )
+    selected = rr.find(provider="fr_hubeau", station="1011000101", quantity=quantity, frequency="P1D", statistic="max")
     result = rr.fetch(selected, start="2025-01-03", end="2025-01-03", receipts=True)
     pl_testing.assert_frame_equal(result.data.select("value"), pl.DataFrame({"value": [expected]}))
     assert result.data["time_zone"].unique().to_list() == ["unknown"]
