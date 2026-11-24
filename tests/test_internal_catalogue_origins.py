@@ -275,6 +275,7 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
         {
             ProviderId("ar_ina"),
             ProviderId("at_ehyd"),
+            ProviderId("au_bom"),
             ProviderId("ba_fhmzbih"),
             ProviderId("br_ana"),
             ProviderId("ca_eccc"),

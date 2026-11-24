@@ -30,6 +30,7 @@ BOUNDARIES = "https://naturalearth.s3.amazonaws.com/50m_cultural/ne_50m_admin_0_
 PROVIDER_COUNTRY = {
     "ar_ina": "ARG",
     "at_ehyd": "AUT",
+    "au_bom": "AUS",
     "ba_fhmzbih": "BIH",
     "br_ana": "BRA",
     "ca_eccc": "CAN",
@@ -49,7 +50,6 @@ PROVIDER_COUNTRY = {
     "usgs_nwis": "USA",
 }
 PLANNED_COUNTRY = {
-    "AUS": "Australia",
     "BEL": "Belgium (Flanders, Wallonia)",
     "CHL": "Chile",
     "DEU": "Germany (federal waterways, Bavaria, Baden-Württemberg, Berlin, NRW)",
