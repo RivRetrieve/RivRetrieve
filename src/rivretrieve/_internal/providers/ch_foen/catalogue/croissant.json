@@ -77,7 +77,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "752cd8366698a25d3ab4ce5617f3f1d49e2dd4241b4dc014f5a856d77a3868fa",
+      "sha256": "b78ab61b5822230e5127c39b3f00df7cd8437d687c7d915043d6569c24477376",
       "contentSize": "432353 B"
     },
     {
@@ -133,8 +133,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "source_series.json",
       "encodingFormat": "application/json",
-      "sha256": "deac572c2675447f2462a87a3b2c9943d38a1fc2def0a3bc59b2fb4e0a3208e1",
-      "contentSize": "11634692 B"
+      "sha256": "d2674c6ffe0d1497d0bd2126dbadea2d79972ac0e9241b53b92395f1bcfa1a35",
+      "contentSize": "11615889 B"
     },
     {
       "@id": "series_claims.parquet",

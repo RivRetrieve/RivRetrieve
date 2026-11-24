@@ -440,7 +440,7 @@ def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> Pro
     receipt = (
         request.getfixturevalue("catalogue_input_receipt")
         if request.param
-        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi", "usgs_nwis"}
+        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi", "usgs_nwis"}
         else None
     )
     return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param], input_receipt=receipt)
@@ -917,6 +917,10 @@ def _assert_reviewed_crs(
     elif adapter.provider_id == ProviderId("au_bom"):
         assert isinstance(origin, Field)
         assert str(origin.native_column) == "station_georefsystem"
+    elif adapter.provider_id == ProviderId("fi_syke"):
+        assert isinstance(origin, Field)
+        assert str(origin.native_column) == "KoordErTmIta"
+        assert stations["crs"].unique().to_list() == ["EPSG:4258"]
     else:
         assert adapter.provider_id == ProviderId("usgs_nwis")
         assert isinstance(origin, Field)
