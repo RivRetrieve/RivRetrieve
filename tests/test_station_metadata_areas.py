@@ -64,6 +64,7 @@ SOURCE_FIELDS = {
         },
     ),
     "pl_imgw": ("gauge_id", {"area": "square kilometre"}),
+    "si_arso": ("sifra", {"ZALEDJE - F (km2)": "km2", "F (km2)": "km2"}),
     "th_thaiwater": ("station.id", {}),
     "usgs_nwis": ("site_no", {"drain_area_va": "sq mi", "contrib_drain_area_va": "sq mi"}),
     "za_dws": ("Station", {"Catchment Area km**2": "km**2"}),
@@ -163,6 +164,8 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
                 if provider == "dk_vanda"
                 else "maintenance/catalogue/ee_est/official"
                 if provider == "ee_est"
+                else "maintenance/catalogue/si_arso/official/native.parquet"
+                if provider == "si_arso"
                 else f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"
             ),
         )
@@ -187,6 +190,8 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         if provider == "dk_vanda"
         else retained_evidence_root / "maintenance/catalogue/ee_est/official/native.parquet"
         if provider == "ee_est"
+        else retained_evidence_root / "maintenance/catalogue/si_arso/official/native.parquet"
+        if provider == "si_arso"
         else retained_evidence_root / "src/rivretrieve/_internal/providers" / provider / "catalogue/native.parquet"
     )
     native = pl.read_parquet(native_path)
@@ -221,6 +226,32 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         assert set(absent["state"]) == {"no_metadata"}
         native = native.filter(pl.col("in_owf"))
         assert set(projection.filter(pl.col("source_field").is_in(list(fields)))["source_scope"]) == {"owf_stammdaten"}
+    elif provider == "si_arso":
+        native_scoped = native.join(stations, left_on=identity, right_on="station_id", how="semi").sort(identity)
+        no_meta = native_scoped.filter(~pl.col("in_spisek") & ~pl.col("in_q_stats"))[identity]
+        absent = actual.filter(pl.col("station_id").is_in(no_meta.implode()))
+        assert absent.height == 1
+        assert set(absent["state"]) == {"no_metadata"}
+        assert (
+            absent.select("source_field", "source_value", "source_dtype", "source_unit").null_count().row(0)
+            == (absent.height,) * 4
+        )
+        for scope, field, mask in (
+            ("spisek_vodomernih_postaj", "ZALEDJE - F (km2)", pl.col("in_spisek")),
+            ("q_obdobne_stat", "F (km2)", ~pl.col("in_spisek") & pl.col("in_q_stats")),
+        ):
+            subset = native_scoped.filter(mask).sort(identity)
+            rows = actual.filter(pl.col("source_field") == field).sort("station_id")
+            assert set(projection.filter(pl.col("source_field") == field)["source_scope"]) == {scope}
+            decoded = [None if value is None else json.loads(value) for value in rows["source_value"]]
+            restored = pl.DataFrame(
+                {identity: rows["station_id"], field: pl.Series(field, decoded, dtype=native.schema[field])}
+            )
+            assert_frame_equal(restored, subset.select(identity, field))
+            assert set(rows["source_dtype"]) == {str(native.schema[field])}
+            assert set(rows["source_unit"]) == {fields[field]}
+            assert rows["state"].to_list() == ["source_null" if value is None else "value" for value in subset[field]]
+        return
     elif provider == "usgs_nwis":
         modern = pl.read_parquet(retained_evidence_root / "maintenance/catalogue/usgs_nwis/modern-native.parquet")
         # Independently compare exact native scalars under agency-qualified identities.
