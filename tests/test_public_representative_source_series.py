@@ -166,6 +166,7 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
         pytest.param("br_ana", marks=pytest.mark.recorded("tests/recordings/br_ana")),
         pytest.param("at_ehyd", marks=pytest.mark.recorded("maintenance/observations/at_ehyd/retrieval")),
         pytest.param("ar_ina", marks=pytest.mark.recorded("maintenance/observations/ar_ina/retrieval")),
+        pytest.param("be_wal", marks=pytest.mark.recorded("maintenance/observations/be_wal/retrieval")),
         pytest.param("co_ideam", marks=pytest.mark.recorded("maintenance/observations/co_ideam/retrieval")),
     ],
 )
@@ -228,6 +229,22 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             statistic="mean",
         )
         start, end = "2024-01-01T00:00:00", "2024-01-05T00:00:00"
+    elif provider == "be_wal":
+        from tests.test_be_wal_recorded_public import _response_matching_request
+
+        class _BeWalReplay:
+            def send(self, req):
+                return _response_matching_request(retained_evidence_root, "edge-9434-q20-1929", req)
+
+        monkeypatch.setattr(discovery, "HttpClient", _BeWalReplay)
+        selection = rr.find(
+            provider=provider,
+            station="9434",
+            quantity="discharge",
+            frequency="daily",
+            statistic="mean",
+        )
+        start, end = "1929-01-01", "1929-01-10"
     elif provider == "co_ideam":
         from tests.test_co_ideam_recorded_public import _response_matching_request
 
