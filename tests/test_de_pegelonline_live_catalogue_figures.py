@@ -26,14 +26,17 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import polars as pl
+import polars.testing as pl_testing
 import pytest
 
+from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
 from rivretrieve._internal.catalogues.native import read_native_table
 from rivretrieve._internal.providers.de_pegelonline import generate_catalogue
 from rivretrieve._internal.providers.de_pegelonline.origins import STATION_CATALOGUE_ORIGINS
 
 FIXTURE_PATH = Path("tests/test_data/de_pegelonline_stations.json")
-NATIVE_PATH = Path("src/rivretrieve/_internal/providers/de_pegelonline/catalogue/native.parquet")
+CATALOGUE_DIR = Path("src/rivretrieve/_internal/providers/de_pegelonline/catalogue")
+NATIVE_PATH = CATALOGUE_DIR / "native.parquet"
 ATTESTED_RETRIEVED_AT = datetime(2026, 11, 24, 20, 8, 8, tzinfo=UTC)
 ATTESTED_FIXTURE_SHA256 = "441cc00ade408d13f099c908be0fbc374e7ad7248fbecdeaf205e560b5addc67"
 CHECKED_ON = date(2026, 11, 24)
@@ -111,3 +114,29 @@ def test_provider_info_license_matches_the_settled_value(retained_evidence_root)
     assert catalogue.provider_info["license"] == "DL-DE->Zero-2.0"
     assert catalogue.provider_info["citation"] is None
     assert catalogue.provider_info["catalogue_version"] == CHECKED_ON.isoformat()
+
+
+@pytest.mark.derived(str(NATIVE_PATH))
+def test_write_core_catalogue_files_reproduces_the_live_catalogue_from_committed_native(
+    retained_evidence_root, tmp_path: Path
+) -> None:
+    """`write_core_catalogue_files` reproduces this catalogue from the committed native table.
+
+    Nothing beyond `native.parquet` is committed under `catalogue/` for this
+    provider yet: `catalogue/provider.json` existing is this repo's own signal
+    (`tests/test_catalogue_source_series.py`'s provider-autodiscovery test) that
+    a *complete* packaged artifact exists, including `source_series.json` —
+    which needs each product's `SourceIdentity`/`PhysicalFacts`, step 3's job
+    (#1018), not this one's. Shipping only the four core files would silently
+    break that invariant for every other provider's test run. This test instead
+    writes to a scratch directory to prove the four core files are reproducible
+    without committing a partial, invariant-breaking artifact.
+    """
+    catalogue = _catalogue(retained_evidence_root)
+    output = generate_catalogue.write_core_catalogue_files(catalogue, tmp_path)
+
+    assert sorted(path.name for path in output.iterdir()) == sorted(REQUIRED_ARTIFACT_FILES)
+    assert json.loads((output / "provider.json").read_bytes()) == catalogue.provider_info
+    pl_testing.assert_frame_equal(pl.read_parquet(output / "products.parquet"), catalogue.products)
+    pl_testing.assert_frame_equal(pl.read_parquet(output / "stations.parquet"), catalogue.stations)
+    pl_testing.assert_frame_equal(pl.read_parquet(output / "station_products.parquet"), catalogue.station_products)

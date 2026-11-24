@@ -200,7 +200,7 @@ def test_station_native_table_preserves_null_coordinates_together():
 
 
 def test_station_native_table_rejects_duplicate_uuid():
-    duplicated = [*SAMPLE_PAYLOAD, _station(SAMPLE_PAYLOAD[0]["uuid"], "DUPLICATE")]
+    duplicated = [*SAMPLE_PAYLOAD, _station("b475386c-30cc-453a-b3b7-1d17ace13595", "DUPLICATE")]
 
     with pytest.raises(FatalContractError, match="uuid"):
         generate_catalogue.station_native_table(duplicated, retrieved_at=RETRIEVED_AT)
@@ -324,14 +324,15 @@ def test_build_catalogue_is_gated_on_origins():
 
 
 def test_station_metadata_projects_names_and_the_w_vertical_datum_regime():
+    from rivretrieve._internal.catalogue_origins import Field
     from rivretrieve._internal.catalogues.station_metadata import build_station_metadata
     from rivretrieve._internal.providers.de_pegelonline.origins import STATION_METADATA_FIELDS
 
     table = _native_table()
     stations = generate_catalogue.build_stations(table)
-    metadata = build_station_metadata(
-        "de_pegelonline", table, stations, STATION_CATALOGUE_ORIGINS["station_id"], STATION_METADATA_FIELDS
-    )
+    station_origin = STATION_CATALOGUE_ORIGINS["station_id"]
+    assert isinstance(station_origin, Field)
+    metadata = build_station_metadata("de_pegelonline", table, stations, station_origin, STATION_METADATA_FIELDS)
 
     celle = metadata.filter(
         (pl.col("station_id") == "b475386c-30cc-453a-b3b7-1d17ace13595") & (pl.col("attribute_role") == "elevation")

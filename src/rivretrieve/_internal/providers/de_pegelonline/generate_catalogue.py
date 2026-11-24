@@ -17,6 +17,17 @@ silently omits `TRM`/`TRM_WT` from every station's `timeseries` list, still
 `HTTP 200`, no error. Adding it restores `TRM = 120`, `TRM_WT = 2`, exactly
 matching the vision; both products are defined below. See the vision's own
 corrected "Source" section for the confirmed request shape.
+
+Only `catalogue/native.parquet` is committed here, not a packaged artifact
+(`provider.json`, `products.parquet`, etc.): `tests/test_catalogue_source_series.py`
+auto-discovers any `catalogue/provider.json` and requires a *complete* packaged
+artifact for it, including `source_series.json` — which needs every product's
+`SourceIdentity`/`PhysicalFacts` (step 3, #1018). `write_core_catalogue_files`
+below writes the four core tables and is exercised by tests against a scratch
+directory; it is not yet invoked against this committed `catalogue/` directory,
+matching the actual precedent of other providers' own dedicated catalogue-step
+commits under this same evidence architecture (e.g. `dk_vanda`'s Effort #797,
+commit `296cf6db`, which committed no packaged artifact files at all).
 """
 
 from __future__ import annotations
@@ -387,6 +398,24 @@ def _read_live_json(url: str) -> list[object]:
     return cast("list[object]", value)
 
 
+def write_core_catalogue_files(catalogue: GeneratedDePegelonlineCatalogue, out_dir: Path | str) -> Path:
+    """Write the four `REQUIRED_ARTIFACT_FILES` (the minimum packaged catalogue).
+
+    Shared by the CLI's `--out` mode and `write_catalogue`'s fuller publication
+    path, so both ways of invoking this builder write identical core files
+    rather than two independently maintained copies of the same four writes.
+    """
+    output_path = Path(out_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    with (output_path / "provider.json").open("w", encoding="utf-8") as file:
+        json.dump(catalogue.provider_info, file, sort_keys=True, separators=(",", ":"))
+        file.write("\n")
+    catalogue.products.write_parquet(output_path / "products.parquet")
+    catalogue.stations.write_parquet(output_path / "stations.parquet")
+    catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    return output_path
+
+
 def write_catalogue(
     catalogue: GeneratedDePegelonlineCatalogue,
     out_dir: Path | str,
@@ -394,7 +423,15 @@ def write_catalogue(
     build_inputs: CatalogueBuildInputs | None = None,
     native_table: NativeTable | None = None,
 ) -> None:
-    """Write a catalogue using adopted build inputs and its verified native table."""
+    """Write the full packaged catalogue: the four core files plus evidence-bound metadata.
+
+    Requires a reviewed `build_inputs`/`acquisition_provenance` and a source
+    description for every product (`source_series.json`), which in turn
+    requires each product's `SourceIdentity`/`PhysicalFacts` — step 3's job
+    (#1018), not this builder's. This function exists for the step that has
+    those available; it is not invoked by `main()`'s `--out` mode, which calls
+    `write_core_catalogue_files` instead and stops there.
+    """
     from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
     from rivretrieve._internal.catalogues.publication import build_catalogue_metadata
     from rivretrieve._internal.providers.de_pegelonline.origins import (
@@ -408,14 +445,7 @@ def write_catalogue(
     if catalogue.acquisition_provenance is None:
         raise FatalContractError("Catalogue publication requires explicit acquisition provenance")
 
-    output_path = Path(out_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-    with (output_path / "provider.json").open("w", encoding="utf-8") as file:
-        json.dump(catalogue.provider_info, file, sort_keys=True, separators=(",", ":"))
-        file.write("\n")
-    catalogue.products.write_parquet(output_path / "products.parquet")
-    catalogue.stations.write_parquet(output_path / "stations.parquet")
-    catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    output_path = write_core_catalogue_files(catalogue, out_dir)
     metadata = build_catalogue_metadata(
         catalogue.acquisition_provenance,
         (STATION_CATALOGUE_ORIGINS,),
@@ -462,14 +492,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     native_table = read_native_table(args.native)
     catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
-    output_path = Path(args.out)
-    output_path.mkdir(parents=True, exist_ok=True)
-    with (output_path / "provider.json").open("w", encoding="utf-8") as file:
-        json.dump(catalogue.provider_info, file, sort_keys=True, separators=(",", ":"))
-        file.write("\n")
-    catalogue.products.write_parquet(output_path / "products.parquet")
-    catalogue.stations.write_parquet(output_path / "stations.parquet")
-    catalogue.station_products.write_parquet(output_path / "station_products.parquet")
+    write_core_catalogue_files(catalogue, args.out)
     return 0
 
 
