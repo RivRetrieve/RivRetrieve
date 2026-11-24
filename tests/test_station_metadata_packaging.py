@@ -87,6 +87,7 @@ for provider_id in provider_ids:
         "co_ideam",
         "cz_chmi",
         "fr_hubeau",
+        "ie_opw",
         "lt_lhmt",
         "no_nve",
         "usgs_nwis",
@@ -234,6 +235,23 @@ assert cl_dga_null_elev["source_dtype"] == "Int64"
 assert cl_dga_null_elev["source_unit"] == "m"
 assert cl_dga_null_elev["state"] == "source_null"
 assert cl_dga_null_elev["source_datum"] is None
+
+ie_opw_gauge = rr.find(provider="ie_opw", station="01041")
+ie_opw_summary = rr.metadata(ie_opw_gauge).row(0, named=True)
+assert ie_opw_summary["station_name"] == "Sandy Mills"
+assert ie_opw_summary["water_body_name_field"] == ["WTO_OBJECT"]
+assert ie_opw_summary["water_body_name_value"] == ["DEELE"]
+assert ie_opw_summary["drainage_area_field"] == ["CATCHMENT_SIZE"]
+assert ie_opw_summary["drainage_area_value"] == ['"113.00"']
+assert ie_opw_summary["drainage_area_unit"] == ["km²"]
+assert ie_opw_summary["elevation_value"] is None
+ie_opw_source = rr.metadata(ie_opw_gauge, view="source")
+assert dict(ie_opw_source.select("attribute_role", "state").iter_rows()) == {
+    "station_name": "value",
+    "water_body_name": "value",
+    "drainage_area": "value",
+    "elevation": "no_metadata",
+}
 
 empty = rr.pick(rr.pick(selection, quantity="discharge"), quantity="stage")
 assert_frame_equal(rr.metadata(empty, view="source"), pl.DataFrame(schema=schema))
