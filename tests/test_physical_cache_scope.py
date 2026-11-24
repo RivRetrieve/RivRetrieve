@@ -23,7 +23,7 @@ def test_precise_refresh_preserves_same_series_sibling_fact_rows(monkeypatch, tm
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     broad = rr.find(provider="usgs_nwis", station="07374000", quantity="discharge")
     # Select an established daily frequency while leaving statistics unrestricted.
-    broad = rr.pick(broad, frequency="daily")
+    broad = rr.pick(broad, frequency="P1D")
     handle = discovery._provider_lookup("usgs_nwis")
     stages = handle._stages
 

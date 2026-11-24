@@ -159,7 +159,7 @@ def test_public_recorded_planned_windows_stop_extensions_cache_reuse_and_runtime
     assert rr.audit_cache("ar_ina").rows_checked >= len(expected_3307)
 
     # 2. Daily mean discharge on station 8 (series 26605) + pre-record 1900 EMPTY window.
-    sel_8_q = rr.find(provider="ar_ina", station="8", quantity="discharge", frequency="daily", statistic="mean")
+    sel_8_q = rr.find(provider="ar_ina", station="8", quantity="discharge", frequency="P1D", statistic="mean")
     assert [item.identity.published_id for item in sel_8_q.series] == ["26605"]
     q_res = rr.fetch(sel_8_q, start="2024-01-01T00:00:00", end="2024-01-05T00:00:00", cache="reuse", on_issue="raise")
     raw_26605, _ = _load_capture(retained_evidence_root, "retrieval", "a5-obs-26605-var40-planned-20240101-20240105")
@@ -174,7 +174,7 @@ def test_public_recorded_planned_windows_stop_extensions_cache_reuse_and_runtime
     assert [item.status for item in empty_1900.outcomes] == [OutcomeStatus.EMPTY]
 
     # 3. Monthly 31d1h stop_extension (series 24674) and weekly 7d1h stop_extension (series 36030).
-    sel_8_qmm = rr.find(provider="ar_ina", station="8", quantity="discharge", frequency="monthly", statistic="mean")
+    sel_8_qmm = rr.find(provider="ar_ina", station="8", quantity="discharge", frequency="P1M", statistic="mean")
     monthly_res = rr.fetch(
         sel_8_qmm, start="2024-01-01T00:00:00", end="2024-01-02T00:00:00", cache="bypass", on_issue="raise"
     )
@@ -221,12 +221,12 @@ def test_public_recorded_planned_windows_stop_extensions_cache_reuse_and_runtime
     #    while an explicit uncatalogued variant on a witnessed pair resolves through /obs/puntual/series,
     #    never hits /999999999/observaciones, and records NO_MATCH.
     for unknown_sel in (
-        rr.find(provider="ar_ina", station="8", quantity="stage", frequency="hourly", on_issue="ignore"),
+        rr.find(provider="ar_ina", station="8", quantity="stage", frequency="PT1H", on_issue="ignore"),
         rr.find(
             provider="ar_ina",
             station="1",
             quantity="discharge",
-            frequency="monthly",
+            frequency="P1M",
             statistic="mean",
             variant="24667",
             on_issue="ignore",
@@ -241,7 +241,7 @@ def test_public_recorded_planned_windows_stop_extensions_cache_reuse_and_runtime
         provider="ar_ina",
         station="8",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
         variant="999999999",
         on_issue="ignore",

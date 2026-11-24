@@ -88,13 +88,13 @@ def test_precise_mean_filter_does_not_admit_unestablished_imgw_statistics() -> N
         descriptions = rr.series(broad)
         assert descriptions.height == 1
         assert descriptions["admission"].to_list() == ["supported"]
-        precise = rr.pick(broad, frequency="daily", statistic="mean", on_issue="ignore")
+        precise = rr.pick(broad, frequency="P1D", statistic="mean", on_issue="ignore")
         assert not precise.series
         direct = rr.find(
             provider="pl_imgw",
             station="154210010",
             quantity=quantity,
-            frequency="daily",
+            frequency="P1D",
             statistic="mean",
             on_issue="ignore",
         )

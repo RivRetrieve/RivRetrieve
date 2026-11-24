@@ -22,7 +22,7 @@ def test_canada_documentation_snippets_are_valid_current_python():
         compile(snippet, str(PAGE), "exec")
     assert 'product="' not in text
     assert 'station="05OG008"' in snippets[1]
-    assert 'frequency="daily"' in snippets[1]
+    assert 'frequency="P1D"' in snippets[1]
     assert 'statistic="mean"' in snippets[1]
     assert "rr.annotations(result)" in snippets[3]
     assert "result.to_polars(annotations=True)" in snippets[3]
@@ -34,9 +34,7 @@ def test_canada_documentation_snippets_are_valid_current_python():
 
 def test_canada_documentation_selection_matches_packaged_catalogue():
     assert len(rr.find(provider="ca_eccc").locations) == 8057
-    selection = rr.find(
-        provider="ca_eccc", station="05OG008", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="ca_eccc", station="05OG008", quantity="discharge", frequency="P1D", statistic="mean")
     assert rr.series(selection).select("station_id", "quantity", "frequency", "statistic").rows() == [
-        ("05OG008", "discharge", "daily", "mean")
+        ("05OG008", "discharge", "P1D", "mean")
     ]

@@ -66,11 +66,11 @@ def _semantics(frequency: str, native_id: str) -> Daily | Hourly | UnknownTempor
     corresponding semantics type in the engine; UnknownTemporalSupport is the
     only available declaration, same as at_ehyd uses for all of its products.
     """
-    if frequency == "daily":
+    if frequency == "P1D":
         if native_id.endswith(".09HR"):
             return Daily(DayDefinition("09:00"), DailyLabelTime("09:00:00"))
         return Daily(DayDefinition("00:00"), DailyLabelTime("00:00:00"))
-    if frequency == "hourly":
+    if frequency == "PT1H":
         return Hourly(IntervalDefinition("unknown"))
     return UnknownTemporalSupport()
 

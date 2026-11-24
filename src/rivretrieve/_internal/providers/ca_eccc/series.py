@@ -29,7 +29,7 @@ def source_description(product: str) -> SourceDescription:
         quantity=known(quantity, evidence),
         source_unit=known(unit, evidence),
         normalized_unit=unit,
-        frequency=known("daily", evidence),
+        frequency=known("P1D", evidence),
         statistic=known("mean", evidence),
         temporal_support=known("interval", evidence),
         clipping_axis=ClippingAxis.CALENDAR_DATE,

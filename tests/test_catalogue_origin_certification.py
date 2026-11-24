@@ -159,9 +159,9 @@ def _adapter(
             provenance=sources.provenance,
             station_metadata=sources.station_metadata,
         )
-    if provider == "au_bom":
+    if provider in {"au_bom", "fi_syke"}:
         sources = generator.read_catalogue_sources(retained_evidence_root, input_receipt=input_receipt)
-        native_path = retained_evidence_root / "maintenance/catalogue/au_bom/official/native.parquet"
+        native_path = retained_evidence_root / f"maintenance/catalogue/{provider}/official/native.parquet"
         build = partial(
             build, associations=sources.associations, checked_on=sources.checked_on, provenance=sources.provenance
         )
@@ -421,11 +421,12 @@ CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case i
 def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDecorator:
     paths = (
         [f"maintenance/catalogue/{provider}/official"]
-        if provider in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "cl_dga", "co_ideam", "dk_vanda", "pe_senamhi"}
+        if provider
+        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "cl_dga", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi"}
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
-    if provider == "au_bom":
-        paths.append("maintenance/catalogue/au_bom/official/catalogue.json")
+    if provider in {"au_bom", "fi_syke"}:
+        paths.append(f"maintenance/catalogue/{provider}/official/catalogue.json")
     if provider == "usgs_nwis":
         paths = ["maintenance/catalogue/usgs_nwis"]
     if provider == "br_ana":
@@ -455,7 +456,18 @@ def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> Pro
     receipt = (
         request.getfixturevalue("catalogue_input_receipt")
         if request.param
-        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "cl_dga", "co_ideam", "dk_vanda", "pe_senamhi", "usgs_nwis"}
+        in {
+            "ar_ina",
+            "at_ehyd",
+            "au_bom",
+            "ch_foen",
+            "cl_dga",
+            "co_ideam",
+            "dk_vanda",
+            "fi_syke",
+            "pe_senamhi",
+            "usgs_nwis",
+        }
         else None
     )
     return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param], input_receipt=receipt)
@@ -940,6 +952,10 @@ def _assert_reviewed_crs(
     elif adapter.provider_id == ProviderId("au_bom"):
         assert isinstance(origin, Field)
         assert str(origin.native_column) == "station_georefsystem"
+    elif adapter.provider_id == ProviderId("fi_syke"):
+        assert isinstance(origin, Field)
+        assert str(origin.native_column) == "KoordErTmIta"
+        assert stations["crs"].unique().to_list() == ["EPSG:4258"]
     else:
         assert adapter.provider_id == ProviderId("usgs_nwis")
         assert isinstance(origin, Field)
@@ -1025,6 +1041,14 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             marks=pytest.mark.governing(
                 "maintenance/catalogue/au_bom/official",
                 "maintenance/catalogue/au_bom/official/catalogue.json",
+                "maintenance/catalogue/station_metadata/review.json",
+            ),
+        ),
+        pytest.param(
+            "fi_syke",
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/fi_syke/official",
+                "maintenance/catalogue/fi_syke/official/catalogue.json",
                 "maintenance/catalogue/station_metadata/review.json",
             ),
         ),
@@ -1257,6 +1281,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "cl_dga",
         "co_ideam",
         "dk_vanda",
+        "fi_syke",
         "pe_senamhi",
     }:
         output.mkdir(mode=0o700)
@@ -1323,6 +1348,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "cl_dga",
         "co_ideam",
         "dk_vanda",
+        "fi_syke",
         "pe_senamhi",
     }:
         arguments.extend(("--native", str(adapter.native_path)))
@@ -1334,6 +1360,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ch_foen",
         "cl_dga",
         "cz_chmi",
+        "fi_syke",
         "lt_lhmt",
         "no_nve",
         "th_thaiwater",
@@ -1348,6 +1375,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "cl_dga",
         "co_ideam",
         "dk_vanda",
+        "fi_syke",
         "fr_hubeau",
         "pe_senamhi",
     }:

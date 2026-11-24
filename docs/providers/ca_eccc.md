@@ -32,7 +32,7 @@ selection = rr.find(
     provider="ca_eccc",
     station="05OG008",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 
@@ -129,7 +129,7 @@ the latest available edition. Retrieval does not check for a newer archive.
 | `discharge` | `FLOW` in `DLY_FLOWS` | Daily | Mean | m³/s | m³/s |
 | `stage` | `LEVEL` in `DLY_LEVELS` | Daily | Mean | m | m |
 
-Use `frequency="daily"` and `statistic="mean"` for either quantity.
+Use `frequency="P1D"` and `statistic="mean"` for either quantity.
 Stage is water level, not water depth or automatically an elevation above sea
 level. RivRetrieve has not established a vertical reference for these series.
 Other HYDAT contents, including sediment and extremes, are outside this provider's

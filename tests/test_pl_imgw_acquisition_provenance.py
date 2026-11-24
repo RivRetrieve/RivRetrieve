@@ -557,7 +557,7 @@ def test_packaged_poland_provenance_propagates_with_source_series_context(packag
     assert artifact.acquisition_provenance is not None
     assert len(artifact.acquisition_provenance.header.source_records) == 2
     result = CatalogueReader(artifact, ProviderId("pl_imgw")).read_stations(on_issue="raise")
-    selection = rr.find(provider="pl_imgw", station="149180010", quantity="discharge", frequency="daily")
+    selection = rr.find(provider="pl_imgw", station="149180010", quantity="discharge", frequency="P1D")
     assert result.provenance.acquisition_provenance is artifact.acquisition_provenance
     assert len(selection.acquisition_provenance) == 1
     assert_evidence_equal(selection.acquisition_provenance[0], artifact.acquisition_provenance)
@@ -565,7 +565,7 @@ def test_packaged_poland_provenance_propagates_with_source_series_context(packag
     assert frame["series_id"].to_list() == [selection.series[0].series_id]
     assert frame["quantity"].to_list() == ["discharge"]
     assert frame["source_unit"].to_list() == ["m3/s"]
-    assert frame["frequency"].to_list() == ["daily"]
+    assert frame["frequency"].to_list() == ["P1D"]
     assert frame["statistic"].to_list() == [None]
     assert next(location for location in selection.locations if location.station_id == "149180010").crs == "unknown"
 
@@ -575,7 +575,7 @@ def test_poland_observation_result_propagates_two_sources_and_series_context(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
-    selection = rr.find(provider="pl_imgw", station="149180010", quantity="discharge", frequency="daily")
+    selection = rr.find(provider="pl_imgw", station="149180010", quantity="discharge", frequency="P1D")
     result = rr.fetch(selection, start="2024-01-01", end="2024-01-02", on_issue="ignore")
 
     assert result.data.schema == CanonicalRowsSchema.polars_schema

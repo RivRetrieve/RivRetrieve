@@ -226,15 +226,16 @@ def test_unknown_revision_and_overlapping_coverage_refuse_before_parquet(
     path.write_text(json.dumps(doc))
     with pytest.raises(ObservationStoreRefusedError, match="coverage.overlap:"):
         validate_store(StoreRoot(store), _PROVIDER)
-    doc["format_version"] = 99
-    path.write_text(json.dumps(doc))
 
     def forbidden_open(path: Path) -> None:
         pytest.fail(f"opened {path}")
 
     monkeypatch.setattr(validation, "_open_parquet", forbidden_open)
-    with pytest.raises(ObservationStoreRefusedError, match="unsupported format revision 99"):
-        validate_store(StoreRoot(store), _PROVIDER)
+    for version in (9, 99):
+        doc["format_version"] = version
+        path.write_text(json.dumps(doc))
+        with pytest.raises(ObservationStoreRefusedError, match=f"unsupported format revision {version}"):
+            validate_store(StoreRoot(store), _PROVIDER)
 
 
 def test_one_batch_reads_and_writes_affected_partition_once(tmp_path, monkeypatch):

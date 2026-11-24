@@ -55,7 +55,7 @@ const fixture = {
     [2, "C", "Catalogue gauge", null, null, null, []],
     [0, "empty", "No series described", 15, 15, "EPSG:4326", []],
   ],
-  facts: [fact("discharge", "daily"), fact("stage", null)],
+  facts: [fact("discharge", "P1D"), fact("stage", null)],
   series: [
     [0, "series-a", "raw", "published-a", [0]],
     [1, "series-b", null, null, [1]],
@@ -125,6 +125,8 @@ test("inspection and exact-pair selection survive changed filters", async ({
   await page.getByRole("tab", { name: "Filtering", exact: true }).click();
   await page.getByText("More filters", { exact: true }).click();
   await page.getByLabel("Frequency", { exact: true }).fill("daily");
+  await expect(page.locator("#frequency-error")).toContainText(/positive ISO 8601 duration/);
+  await page.getByLabel("Frequency", { exact: true }).fill("P1D");
   await page.getByRole("tab", { name: /Selection/ }).click();
   await expect(
     page.getByText(/frequency is not established in the catalogue/),

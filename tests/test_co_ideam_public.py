@@ -129,10 +129,10 @@ def test_public_all_20_products_units_provenance_and_predicate_selection(
     assert_frame_equal(restored.data, result.data)
     assert restored.outcomes == result.outcomes
 
-    # Physical-predicate filtering withholds CAUDAL_H when frequency="daily", statistic="mean" is requested,
+    # Physical-predicate filtering withholds CAUDAL_H when frequency="P1D", statistic="mean" is requested,
     # while selecting by series_id from rr.series(...) targets CAUDAL_H explicitly.
     daily_mean_q = rr.find(
-        provider="co_ideam", station=station, quantity="discharge", frequency="daily", statistic="mean"
+        provider="co_ideam", station=station, quantity="discharge", frequency="P1D", statistic="mean"
     )
     assert [s.product_id for s in daily_mean_q.series] == ["q_media_d"]
     all_q = rr.find(provider="co_ideam", station=station, quantity="discharge")

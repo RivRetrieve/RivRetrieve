@@ -397,9 +397,7 @@ def test_fr_hubeau_public_fetch_cache_reuse_pick_and_bundle_roundtrip(
     client = _RoutingClient()
     monkeypatch.setattr(discovery, "HttpClient", lambda: client)
 
-    q_sel = rr.find(
-        provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    q_sel = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="P1D", statistic="mean")
     assert rr.annotations(q_sel).is_empty()
 
     q_fresh = rr.fetch(q_sel, start="2025-01-01", end="2025-01-02", cache="reuse", receipts=True, on_issue="raise")

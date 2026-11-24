@@ -159,7 +159,7 @@ import rivretrieve as rr
 
 # Find daily mean streamflow and choose a gauge.
 daily_gauges = rr.find(
-    provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"
+    provider="usgs_nwis", quantity="discharge", frequency="P1D", statistic="mean"
 )
 
 chosen_gauges = rr.pick(daily_gauges, station=["07374000"])
@@ -195,7 +195,7 @@ both or just one. You can inspect and select them without credentials or network
 
 ```python
 brazil = rr.find(
-    provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean"
+    provider="br_ana", station="15400000", quantity="stage", frequency="P1D", statistic="mean"
 )
 
 print(sorted(rr.series(brazil)["variant"].to_list()))

@@ -26,7 +26,7 @@ selection = rr.find(
     provider="no_nve",
     station="2.605.0",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 
@@ -125,7 +125,7 @@ These units require no numerical scaling. Stage is water level; RivRetrieve has
 not established its vertical reference or datum.
 
 HydAPI publishes raw, hourly and daily resolutions. RivRetrieve establishes
-`frequency="hourly"` or `frequency="daily"` from the published resolution.
+`frequency="PT1H"` or `frequency="P1D"` from the published resolution.
 For raw resolution, frequency remains unknown. The source method establishes
 `statistic="mean"` or `statistic="instantaneous"` separately. An hourly or daily
 series can contain instantaneous values; its resolution alone does not establish
@@ -171,7 +171,7 @@ print(rr.series(result).select("station_id", "variant").rows())
 
 other_station = rr.find(
     provider="no_nve", station="109.42.0", quantity="discharge",
-    frequency="daily", statistic="mean",
+    frequency="P1D", statistic="mean",
 )
 print(rr.series(other_station).select("station_id", "variant").sort("variant").rows())
 

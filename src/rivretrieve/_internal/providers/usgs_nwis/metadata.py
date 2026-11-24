@@ -91,7 +91,7 @@ def source_series(
             quantity=known(_QUANTITIES[parameter], EVIDENCE),
             source_unit=known(unit, EVIDENCE),
             normalized_unit=normalized_unit,
-            frequency=known("daily", EVIDENCE) if daily else silent,
+            frequency=known("P1D", EVIDENCE) if daily else silent,
             statistic=known(stat_value, EVIDENCE) if stat_value else silent,
             temporal_support=known("interval", EVIDENCE)
             if daily

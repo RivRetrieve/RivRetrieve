@@ -136,7 +136,7 @@ def test_france_invalid_pagination_preserves_independent_series(
         modified_bodies.append(body)
         return body
 
-    selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily")
+    selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="P1D")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(recordings))
     baseline = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="bypass", on_issue="ignore")
     transport = AlteredResponseTransport(recordings, alter)

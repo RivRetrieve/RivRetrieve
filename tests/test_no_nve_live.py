@@ -156,7 +156,7 @@ def test_response_aggregation_is_not_overridden_by_hourly_product_label(retained
     assert parsed.rows.height > 0
     facts = parsed.series[0].facts[0]
     assert facts.statistic.value == "instantaneous"
-    assert facts.frequency.value == "hourly"
+    assert facts.frequency.value == "PT1H"
     assert facts.temporal_support.value is None
 
 

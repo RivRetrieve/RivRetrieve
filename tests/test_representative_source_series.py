@@ -84,7 +84,7 @@ def test_nve_real_hourly_instantaneous_temperature_is_not_a_mean(retained_eviden
     assert len(parsed.series) == 1
     facts = parsed.series[0].facts[0]
     assert facts.statistic.value == "instantaneous"
-    assert facts.frequency.value == "hourly"
+    assert facts.frequency.value == "PT1H"
     assert facts.temporal_support.value is None
     assert facts.source_unit.value == "°C"
 

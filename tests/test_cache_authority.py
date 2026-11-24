@@ -410,7 +410,7 @@ def test_public_repeated_nve_metadata_origins_have_bounded_explicit_dependencies
     from rivretrieve._internal import discovery
     from rivretrieve._internal.transport import TransportResponse
 
-    selected = rr.find(provider="no_nve", station="1.200.0", quantity="discharge", frequency="daily", statistic="mean")
+    selected = rr.find(provider="no_nve", station="1.200.0", quantity="discharge", frequency="P1D", statistic="mean")
     versions = sorted({int(item.identity.published_id) for item in selected.series})
     stamp = datetime(2026, 9, 20, tzinfo=UTC)
     requests = []

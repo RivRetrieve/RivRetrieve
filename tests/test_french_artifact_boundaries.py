@@ -81,7 +81,7 @@ def test_combined_store_refused_before_values_or_network(operation, tmp_path, mo
                 provider="fr_hubeau",
                 station="1011000101",
                 quantity="discharge",
-                frequency="daily",
+                frequency="P1D",
                 statistic="mean",
             )
             rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache=operation, on_issue="ignore")
@@ -118,20 +118,20 @@ def test_service_specific_daily_store_and_bundles_round_trip(retained_evidence_r
         provider="fr_hubeau",
         station="1011000101",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
     result = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="reuse", on_issue="raise")
     assert result.data.height > 0
     manifest = json.loads((tmp_path / "fr_hubeau/store/manifest.json").read_text())
-    assert manifest["format_version"] == 9
+    assert manifest["format_version"] == 11
     assert manifest["publication_service"] == "hubeau"
     assert rr.cache_status("fr_hubeau").exists
     for value in (selection, result):
         content = rr.to_bundle(value)
         with ZipFile(BytesIO(content)) as archive:
             manifest = json.loads(archive.read("manifest.json"))
-        assert manifest["version"] == 4
+        assert manifest["version"] == 5
         assert manifest["publication_service"] == "hubeau"
         restored = rr.from_bundle(content)
         assert_frame_equal(rr.series(restored), rr.series(value))
@@ -182,7 +182,7 @@ def _current_carrier_bundle_cache():
 
         # Author valid current carriers, not rewritten historical exports.
         selection = rr.find(
-            provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily", statistic="mean"
+            provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="P1D", statistic="mean"
         )
         if carrier == "context-only-selection":
             value = rr.find(station="07374000", quantity="temperature", statistic="max")
@@ -230,7 +230,7 @@ def test_current_bundle_refuses_retired_publication_service_before_values(
     with ZipFile(BytesIO(content)) as archive:
         members = {name: archive.read(name) for name in archive.namelist()}
     manifest = json.loads(members["manifest.json"])
-    assert manifest["version"] == 4
+    assert manifest["version"] == 5
     assert manifest["publication_service"] == "hubeau"
     if service is None:
         del manifest["publication_service"]
@@ -288,7 +288,7 @@ def test_current_store_revision_still_refuses_retired_publication_service(operat
             rr.cache_status("fr_hubeau")
         else:
             selection = rr.find(
-                provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily", statistic="mean"
+                provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="P1D", statistic="mean"
             )
             rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache=operation, on_issue="ignore")
     assert caught.value.refusal.kind is validation.StoreRefusalKind.INCOMPATIBLE

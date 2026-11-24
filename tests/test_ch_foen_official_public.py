@@ -47,7 +47,7 @@ def test_offline_selection_reaches_anonymous_official_retrieval(monkeypatch):
             )
 
     monkeypatch.setattr(discovery, "HttpClient", Transport)
-    selection = rr.find(provider="ch_foen", station="2018", quantity="discharge", frequency="10min", statistic="mean")
+    selection = rr.find(provider="ch_foen", station="2018", quantity="discharge", frequency="PT10M", statistic="mean")
     result = rr.fetch(selection, start="2025-01-01", end="2025-01-01", receipts=True, on_issue="ignore")
     assert result.data.select("time", "source_unit", "unit", "value").rows() == [
         (datetime(2025, 1, 1), "l/s", "m3/s", 1.2)
@@ -71,15 +71,15 @@ def test_offline_selection_reaches_anonymous_official_retrieval(monkeypatch):
 @pytest.mark.parametrize(
     "frequency,statistic,route,stamp",
     [
-        ("10min", "mean", "data_10min_mean", "2025-07-01T00:00:00Z"),
-        ("hourly", "mean", "data_1hour_mean", "2025-07-01T00:00:00Z"),
+        ("PT10M", "mean", "data_10min_mean", "2025-07-01T00:00:00Z"),
+        ("PT1H", "mean", "data_1hour_mean", "2025-07-01T00:00:00Z"),
         *[
             (frequency, statistic, f"data_{period}_{statistic}", "2025-06-30T23:00:00Z")
-            for frequency, period in [("daily", "1day"), ("monthly", "1month")]
+            for frequency, period in [("P1D", "1day"), ("P1M", "1month")]
             for statistic in ("mean", "min", "max")
         ],
         *[
-            ("yearly", statistic, f"data_1year_{statistic}", "2024-12-31T23:00:00Z")
+            ("P1Y", statistic, f"data_1year_{statistic}", "2024-12-31T23:00:00Z")
             for statistic in ("mean", "min", "max")
         ],
     ],
@@ -115,7 +115,7 @@ def test_public_archive_routes_preserve_variants_and_calendar_labels(
 
     monkeypatch.setattr(discovery, "HttpClient", Transport)
     selection = rr.find(provider="ch_foen", station="2018", quantity=quantity, frequency=frequency, statistic=statistic)
-    start, end = ("2025-01-01", "2025-12-31") if frequency == "yearly" else ("2025-07-01", "2025-07-31")
+    start, end = ("2025-01-01", "2025-12-31") if frequency == "P1Y" else ("2025-07-01", "2025-07-31")
     result = rr.fetch(selection, start=start, end=end, on_issue="ignore")
     assert result.data.sort("value", nulls_last=True)["value"].to_list() == [expected, None]
     assert result.data["series_id"].n_unique() == 2
@@ -167,7 +167,7 @@ def test_public_cache_reuse_bypass_and_failed_refresh(monkeypatch):
     transport = Transport()
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     selection = rr.find(
-        provider="ch_foen", station="2018", quantity="discharge", frequency="10min", variant="10MinMittel"
+        provider="ch_foen", station="2018", quantity="discharge", frequency="PT10M", variant="10MinMittel"
     )
 
     def fetch(cache):
@@ -333,7 +333,7 @@ def test_retired_existenz_cache_cannot_satisfy_official_request(monkeypatch, tmp
     )
     calls = _official_replay(monkeypatch)
     selection = rr.find(
-        provider="ch_foen", station="2018", quantity="discharge", frequency="10min", variant="10MinMittel"
+        provider="ch_foen", station="2018", quantity="discharge", frequency="PT10M", variant="10MinMittel"
     )
     result = rr.fetch(selection, start=start, end=end, cache="reuse", on_issue="ignore")
     assert len(calls) == 1
@@ -375,7 +375,7 @@ def test_adjacent_summer_calendar_requests_clip_cached_neighbor(monkeypatch):
         provider="ch_foen",
         station="2018",
         quantity="discharge",
-        frequency="monthly",
+        frequency="P1M",
         statistic="mean",
         variant="Synthetic",
         on_issue="ignore",

@@ -24,7 +24,7 @@ selection = rr.find(
     provider="pe_senamhi",
     station="212600",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
 )
 selection = rr.pick(selection, variant="current")
 
@@ -113,7 +113,7 @@ select an individual series directly with `series_id` from `rr.series(selection)
 Each daily PHISIS response contains three separate published fields: `current`,
 `minimum`, and `maximum`. RivRetrieve preserves each field as a distinct series.
 PHISIS distinguishes daily date coordinates from hourly timestamp coordinates.
-These establish `frequency="daily"` and `frequency="hourly"`, independently of
+These establish `frequency="P1D"` and `frequency="PT1H"`, independently of
 statistic. RivRetrieve has not established whether `current` or hourly `value`
 is a mean or an instantaneous reading, or which period and population the daily
 `minimum` and `maximum` summarize. Their statistics remain unknown.

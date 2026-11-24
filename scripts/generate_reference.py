@@ -31,14 +31,21 @@ def render_tables() -> str:
     parts = [
         "## Supported physical query values\n",
         "These library-wide values apply to `find` and `pick`, including result views. "
-        "Matching is exact and case-sensitive. A supported value need not be available "
-        "at every provider or station.\n",
+        "`quantity` and `statistic` matching is exact and case-sensitive. A supported value "
+        "need not be available at every provider or station.\n",
         "| Filter | Supported values |\n| --- | --- |",
         *(
             f"| `{field}` | {', '.join(f'`{value}`' for value in values)} |"
             for field, values in QUERY_VOCABULARIES.items()
         ),
-        "",
+        "| `frequency` | Positive whole-number ISO 8601 duration in one family, reduced within that family (for example `PT15M`, `PT1H`, `P1D`, `P1W`, `P1M`, `P1Y`) |",
+        "\n`frequency` accepts positive whole-number ISO 8601 durations across three disjoint "
+        "families: elapsed time (`PT...H`/`M`/`S`), calendar weeks and days (`P...W`/`D`), and "
+        "calendar years and months (`P...Y`/`M`). Inputs reduce within their own family to the "
+        "largest exact single unit (`PT60M` becomes `PT1H`, `P7D` becomes `P1W`, `P12M` becomes "
+        "`P1Y`). Family boundaries stay distinct (`P1D` is distinct from `PT24H`, `P1W` from "
+        '`PT168H`, and `P1Y` from `P365D`). Legacy aliases such as `"daily"`, negative or '
+        "fractional durations, zero durations, and cross-family mixed durations raise `ValueError`.\n",
     ]
     parts.extend(
         (

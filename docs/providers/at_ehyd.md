@@ -25,7 +25,7 @@ selection = rr.find(
     provider="at_ehyd",
     station="209486",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 
@@ -113,13 +113,13 @@ eHYD publishes river observations through two separate streams:
 
 | Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
 |---|---|---|---|---|---|
-| `discharge` | `owf_abfl_tagesmittel` (`Q-Tagesmittel`) | Daily | Mean | m³/s | m³/s |
-| `discharge` | `owf_abfl_monatsminima` (`Q-Monatsminima`) | Monthly | Minimum | m³/s | m³/s |
-| `discharge` | `owf_abfl_monatsmaxima` (`Q-Monatsmaxima`) | Monthly | Maximum | m³/s | m³/s |
-| `stage` | `owf_wasserst_tagesmittel` (`W-Tagesmittel`) | Daily | Mean | cm | m |
-| `stage` | `owf_wasserst_monatsminima` (`W-Monatsminima`) | Monthly (Unknown at `207340`) | Minimum | cm | m |
-| `stage` | `owf_wasserst_monatsmaxima` (`W-Monatsmaxima`) | Monthly | Maximum | cm | m |
-| `temperature` | `owf_wassertemp_monatsmittel` (`WT-Monatsmittel`) | Monthly | Mean | °C | °C |
+| `discharge` | `owf_abfl_tagesmittel` (`Q-Tagesmittel`) | `P1D` | Mean | m³/s | m³/s |
+| `discharge` | `owf_abfl_monatsminima` (`Q-Monatsminima`) | `P1M` | Minimum | m³/s | m³/s |
+| `discharge` | `owf_abfl_monatsmaxima` (`Q-Monatsmaxima`) | `P1M` | Maximum | m³/s | m³/s |
+| `stage` | `owf_wasserst_tagesmittel` (`W-Tagesmittel`) | `P1D` | Mean | cm | m |
+| `stage` | `owf_wasserst_monatsminima` (`W-Monatsminima`) | `P1M` (Unknown at `207340`) | Minimum | cm | m |
+| `stage` | `owf_wasserst_monatsmaxima` (`W-Monatsmaxima`) | `P1M` | Maximum | cm | m |
+| `temperature` | `owf_wassertemp_monatsmittel` (`WT-Monatsmittel`) | `P1M` | Mean | °C | °C |
 
 **Operational telemetry (*Pegel Aktuell*):**
 
@@ -127,8 +127,8 @@ eHYD publishes river observations through two separate streams:
 |---|---|---|---|---|---|
 | `discharge` | `data` (sub-hourly telemetry) | Unknown | Unknown | m³/s | m³/s |
 | `stage` | `data` (sub-hourly telemetry) | Unknown | Unknown | cm, m ü.A | m |
-| `discharge` | `current_value` (current-year daily) | Daily | Unknown | m³/s | m³/s |
-| `stage` | `current_value` (current-year daily) | Daily | Unknown | cm, m ü.A | m |
+| `discharge` | `current_value` (current-year daily) | `P1D` | Unknown | m³/s | m³/s |
+| `stage` | `current_value` (current-year daily) | `P1D` | Unknown | cm, m ü.A | m |
 
 A station may publish only a subset of these eleven series. Federal eHYD
 publishes validated river water temperature only as monthly means
@@ -151,7 +151,7 @@ candidates = rr.series(all_discharge)
 metadata = rr.metadata(all_discharge)
 ```
 
-Filtering with `frequency="daily"` and `statistic="mean"` selects only the
+Filtering with `frequency="P1D"` and `statistic="mean"` selects only the
 validated daily-mean archive series (`owf_abfl_tagesmittel`) because the
 current-year daily comparison series (`variant="current_value"`) has no
 established statistic and the sub-hourly telemetry series (`variant="data"`) has
@@ -284,7 +284,7 @@ accordance with the CSV preamble rule (*"Der Intervallwert gilt bis zum
 nächsten Zeitpunkt mit einem Wert oder Lücke"*). At Danube station `207340`
 (Wilhering), the `W-Monatsminima` CSV file declares and contains daily (`T,1`)
 stage minima rather than monthly minima; RivRetrieve withholds
-`frequency="monthly"` on that station's `owf_wasserst_monatsminima` series so
+`frequency="P1M"` on that station's `owf_wasserst_monatsminima` series so
 monthly filters do not return daily rows.
 
 eHYD labels its historical CSV downloads *Geprüfte Daten* (checked data) and

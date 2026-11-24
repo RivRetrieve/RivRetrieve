@@ -177,7 +177,7 @@ def test_public_fetch_annotations_round_trip_through_to_polars_and_catalog(monke
             return TransportResponse(values_bytes, 200, _RETRIEVED_AT, "application/json", request.url, params)
 
     monkeypatch.setattr(discovery, "HttpClient", _Transport)
-    selection = rr.find(provider="au_bom", station=station, quantity="stage", frequency="daily", statistic="mean")
+    selection = rr.find(provider="au_bom", station=station, quantity="stage", frequency="P1D", statistic="mean")
     result = rr.fetch(selection, start="2026-09-01", end="2026-09-01", cache="bypass")
 
     catalog = rr.annotations(result)

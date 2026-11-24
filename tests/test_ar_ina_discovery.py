@@ -74,13 +74,22 @@ def test_ar_ina_offline_discovery_stations_products_and_metadata(monkeypatch: py
     assert descriptor["license"] == "Creative Commons Atribución 4.0 Internacional"
 
     # Step 3 physical predicate filtering and published INA.Alerta5.series_id bundle preservation.
-    daily_q = rr.find(provider="ar_ina", quantity="discharge", frequency="daily", statistic="mean")
+    daily_q = rr.find(provider="ar_ina", quantity="discharge", frequency="P1D", statistic="mean")
     assert len(daily_q.series) == 82
-    hourly_h = rr.find(provider="ar_ina", quantity="stage", frequency="hourly")
+    hourly_h = rr.find(provider="ar_ina", quantity="stage", frequency="PT1H")
     assert len(hourly_h.series) == 3
-    assert len(rr.find(provider="ar_ina", quantity="stage", frequency="hourly", statistic="mean").series) == 0
+    assert len(rr.find(provider="ar_ina", quantity="stage", frequency="PT1H", statistic="mean").series) == 0
 
-    station_8_q = rr.find(provider="ar_ina", station="8", quantity="discharge", frequency="daily", statistic="mean")
+    four_hourly_h = rr.find(provider="ar_ina", quantity="stage", frequency="PT4H")
+    assert len(four_hourly_h.series) == 391
+    assert len(rr.find(provider="ar_ina", quantity="stage", frequency="PT4H", statistic="mean").series) == 0
+
+    weekly_h = rr.find(provider="ar_ina", quantity="stage", frequency="P1W")
+    assert len(weekly_h.series) == 32
+    assert weekly_h.series == rr.find(provider="ar_ina", quantity="stage", frequency="P7D").series
+    assert len(rr.find(provider="ar_ina", quantity="stage", frequency="PT168H").series) == 0
+
+    station_8_q = rr.find(provider="ar_ina", station="8", quantity="discharge", frequency="P1D", statistic="mean")
     restored = rr.from_bundle(rr.to_bundle(station_8_q))
     assert restored.known_series == station_8_q.known_series
     assert [(s.identity.namespace, s.identity.published_id) for s in restored.series] == [

@@ -50,7 +50,7 @@ def test_poland_documentation_selection_matches_packaged_catalogue():
     assert len(rr.find(provider="pl_imgw").locations) == 1301
     selection = rr.find(provider="pl_imgw", station="152140020", quantity="discharge")
     assert rr.series(selection).select("product_id", "quantity", "frequency", "statistic", "unit").rows() == [
-        ("discharge_daily", "discharge", "daily", None, "m3/s")
+        ("discharge_daily", "discharge", "P1D", None, "m3/s")
     ]
     assert rr.series(rr.find(provider="pl_imgw", station="152140020", statistic="mean")).height == 0
     assert "providers/pl_imgw.md" in (ROOT / "docs/README.md").read_text()

@@ -47,14 +47,14 @@ def test_find_rejects_near_miss_station_without_correction() -> None:
 
 
 def test_unlisted_edge_does_not_claim_exhaustive_absence() -> None:
-    selection = rr.find(provider="usgs_nwis", station="01646500", quantity="stage", frequency="daily", statistic="mean")
+    selection = rr.find(provider="usgs_nwis", station="01646500", quantity="stage", frequency="P1D", statistic="mean")
     assert selection.series == ()
     assert selection.empty_reason.code == "unresolved_inventory"
     assert selection.scope.station_ids == ("01646500",)
     assert selection.scope.product_ids == ()
     assert {(item.field, item.value) for item in selection.scope.predicates} == {
         ("quantity", "stage"),
-        ("frequency", "daily"),
+        ("frequency", "P1D"),
         ("statistic", "mean"),
     }
     assert rr.series(selection).is_empty()
@@ -96,7 +96,7 @@ def test_invalid_pick_lists_fail_without_mutating_original(filters, error) -> No
 
 def test_inspection_does_not_mutate_or_supply_scientific_import_evidence() -> None:
     selection = rr.find(
-        provider="usgs_nwis", station="01646500", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="01646500", quantity="discharge", frequency="P1D", statistic="mean"
     )
     first = rr.as_frame(selection)
     second = rr.as_frame(selection)

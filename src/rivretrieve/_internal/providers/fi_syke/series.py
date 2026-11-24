@@ -48,7 +48,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="discharge_reported",
         observed_property="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="unknown",
         canonical_unit="m3/s",
         native_id="Virtaama",
@@ -57,7 +57,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="stage_reported",
         observed_property="stage",
-        frequency="daily",
+        frequency="P1D",
         statistic="unknown",
         canonical_unit="m",
         native_id="Vedenkorkeus",
@@ -66,7 +66,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="water_temperature_reported",
         observed_property="water_temperature",
-        frequency="daily",
+        frequency="P1D",
         statistic="unknown",
         canonical_unit="degC",
         native_id="LampoPintavesi",

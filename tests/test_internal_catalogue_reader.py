@@ -107,9 +107,9 @@ def test_catalogue_reader_product_filters_are_exact_and_case_sensitive(
     reader = _reader(stub_packaged_catalogue_artifact_rich())
 
     water_level = reader.read_products(observed_property="water_level").data
-    daily = reader.read_products(frequency="daily").data
+    daily = reader.read_products(frequency="P1D").data
     mean = reader.read_products(statistic="mean").data
-    combined = reader.read_products(observed_property="water_level", frequency="daily", statistic="mean").data
+    combined = reader.read_products(observed_property="water_level", frequency="P1D", statistic="mean").data
     wrong_case = reader.read_products(observed_property="Water_Level").data
 
     assert water_level["product_id"].to_list() == ["level", "level_hourly", "level_max"]
