@@ -172,7 +172,7 @@ print(
 Output:
 
 ```text
-[('15400000', 'bruto', 'daily', 'mean'), ('15400000', 'consistido', 'daily', 'mean')]
+[('15400000', 'bruto', 'P1D', 'mean'), ('15400000', 'consistido', 'P1D', 'mean')]
 ```
 
 `rr.pick(selection, variant="bruto")` selects the other level. Fetching `selection`

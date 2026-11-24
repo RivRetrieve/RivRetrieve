@@ -672,7 +672,7 @@ def to_bundle(value: _Selection | ObservationResult) -> bytes:
     Returns
     -------
     bytes
-        ZIP archive in bundle format version 4. Write the bytes to a file to
+        ZIP archive in bundle format version 5. Write the bytes to a file to
         keep them. A selection bundle holds its request intent, source-series
         definitions, inventories, issues, station locations, catalogue evidence
         and empty-selection reason. A result bundle also holds the observation
@@ -712,7 +712,7 @@ def from_bundle(content: bytes) -> _Selection | ObservationResult:
     TypeError
         If ``content`` is not ``bytes``.
     ValueError
-        If the bytes are not a bundle, the bundle version is not 4, or its
+        If the bytes are not a bundle, the bundle version is not 5, or its
         contents fail validation. Bundles from other format versions must be
         exported again or re-fetched.
     ObservationDataSchemaError
