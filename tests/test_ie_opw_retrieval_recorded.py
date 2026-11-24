@@ -248,7 +248,7 @@ def test_recorded_1940s_depth_negative_od_unmeasured_slots_empty_and_404(
     req_30061 = ObservationRequest(
         provider_id=ProviderId("ie_opw"),
         stations=("30061",),
-        products=(ProductId("stage_daily_mean"), ProductId("stage_instantaneous")),
+        products=(ProductId("stage_daily_min"), ProductId("stage_instantaneous")),
         window=RequestedWindow(
             WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
             WindowEndpoint.from_datetime(datetime(2026, 11, 23)),
@@ -256,7 +256,7 @@ def test_recorded_1940s_depth_negative_od_unmeasured_slots_empty_and_404(
     )
     res_30061 = drive(req_30061, _IeOpwStages(), provenance=_provenance(req_30061), transport=replay, cache="bypass")
     assert (
-        res_30061.canonical_rows.filter((pl.col("product_id") == "stage_daily_mean") & (pl.col("value") < 0)).height > 0
+        res_30061.canonical_rows.filter((pl.col("product_id") == "stage_daily_min") & (pl.col("value") < 0)).height > 0
     )
     assert (
         res_30061.canonical_rows.filter((pl.col("product_id") == "stage_instantaneous") & (pl.col("value") < 0)).height
@@ -333,7 +333,8 @@ def test_recorded_1940s_depth_negative_od_unmeasured_slots_empty_and_404(
         cache="reuse",
         store=StoreRoot(tmp_path / "store-03055"),
     )
-    assert res_03055.canonical_rows.height == 3943
+    assert res_03055.canonical_rows.height == 3942
+    assert res_03055.annotations.observation_tables[IE_OPW_SERIES_SCHEMA.schema_id].unmeasured_count == 1
 
     req_404 = ObservationRequest(
         provider_id=ProviderId("ie_opw"),
