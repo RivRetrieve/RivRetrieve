@@ -358,3 +358,57 @@ def test_repeated_equal_pages_retain_acquisition_identity_and_call_linkage():
     assert parsed_first.outcomes[0].outcome_id != parsed_second.outcomes[0].outcome_id
     assert parsed_first.outcomes[0].calls == (first.acquisition_id,)
     assert parsed_second.outcomes[0].calls == (second.acquisition_id,)
+
+
+def test_within_page_fact_change_preserves_distinct_row_facts_and_valid_sibling():
+    ft_row = feature("discharge_daily_mean", time="2024-01-01", unit_of_measure="ft^3/s", value="10.0")
+    m3_row = feature("discharge_daily_mean", time="2024-01-02", unit_of_measure="m^3/s", value="2.5")
+    bad_sibling = feature("discharge_daily_mean", time_series_id="bad-series", time="2024-01-01", value="bad")
+    good_sibling = feature("discharge_daily_mean", time_series_id="opaque-series-b", time="2024-01-01", value="5.0")
+
+    result = decode([ft_row, m3_row, bad_sibling, good_sibling])
+    alpha = next(item for item in result.series if item.variant == "opaque-series-a")
+    assert len(alpha.facts) == 2
+    assert result.rows.filter(result.rows["series_id"] == alpha.series_id)["source_unit"].to_list() == [
+        "ft^3/s",
+        "m^3/s",
+    ]
+    assert result.rows.filter(result.rows["series_id"] == alpha.series_id)["facts_id"].n_unique() == 2
+    assert any(
+        item.variant == "opaque-series-b" and item.series_id in set(result.rows["series_id"]) for item in result.series
+    )
+    assert any(o.status == "unsupported" for o in result.outcomes)
+    assert any(o.series_id == alpha.series_id and o.status == "success" for o in result.outcomes)
+
+
+def test_parse_memoizes_series_and_facts_per_page_without_repeating_construction(monkeypatch):
+    import rivretrieve._internal.providers.usgs_nwis.metadata as usgs_metadata
+    import rivretrieve._internal.providers.usgs_nwis.parse as usgs_parse
+
+    source_series_calls = 0
+    real_source_series = usgs_parse.source_series
+
+    def counted_source_series(*args, **kwargs):
+        nonlocal source_series_calls
+        source_series_calls += 1
+        return real_source_series(*args, **kwargs)
+
+    facts_calls = 0
+    real_facts = usgs_metadata.PhysicalFacts
+
+    def counted_facts(*args, **kwargs):
+        nonlocal facts_calls
+        facts_calls += 1
+        return real_facts(*args, **kwargs)
+
+    monkeypatch.setattr(usgs_parse, "source_series", counted_source_series)
+    monkeypatch.setattr(usgs_metadata, "PhysicalFacts", counted_facts)
+
+    features = [feature("discharge_daily_mean", time=f"2024-01-0{day}", value=str(day)) for day in range(1, 6)] + [
+        feature("discharge_daily_mean", time_series_id="opaque-series-b", time=f"2024-01-0{day}", value=str(day))
+        for day in range(1, 6)
+    ]
+    result = decode(features)
+    assert result.rows.height == 10
+    assert source_series_calls == 2
+    assert facts_calls == 1

@@ -16,7 +16,13 @@ from rivretrieve._internal.acquisition_dependencies import validate_acquisition_
 from rivretrieve._internal.assembly import _AssemblyResult, assemble
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.catalogues.schemas import validate_catalogue
-from rivretrieve._internal.conversion import convert, filter_annotations_for_window, validate_native_rows
+from rivretrieve._internal.conversion import (
+    WindowFactPreparation,
+    convert,
+    convert_with_annotations,
+    filter_annotations_for_window,
+    validate_native_rows,
+)
 from rivretrieve._internal.coverage import (
     CoverageInterval,
     RequestedInterval,
@@ -31,6 +37,8 @@ from rivretrieve._internal.engine import (
     FetchWindow,
     Hourly,
     Instant,
+    InterpretationContext,
+    InterpretedPayload,
     ObservationRequest,
     Payload,
     ProductWindowDeclarations,
@@ -56,15 +64,15 @@ from rivretrieve._internal.observations import (
     ReceiptMode,
     Receipts,
 )
-from rivretrieve._internal.physical_window import native_window, native_window_envelope
+from rivretrieve._internal.physical_window import native_window_envelope
 from rivretrieve._internal.primitives import CacheMode, ProductId, ProviderId
 from rivretrieve._internal.source_acquisition import SourceResponseMeaning
 from rivretrieve._internal.source_annotations import (
     AnnotationBundle,
     anti_join_native_with_annotations,
     concat_native_with_annotations,
-    filter_native_with_annotations,
     filter_native_with_annotations_by_expr,
+    filter_native_with_annotations_by_mask,
     merge_series_tables,
     validate_bundle_for_result,
 )
@@ -113,6 +121,7 @@ from rivretrieve._internal.transport import (
 from rivretrieve._internal.window_planning import plan_windows
 
 _FETCH_WINDOW_PADDING = timedelta(days=2)
+_DEFAULT_CONVERT = convert
 
 
 def _require_fetch_window_contains_requested(
@@ -138,13 +147,17 @@ def _require_canonical_rows_within_requested(
     """Validate converted output against admitted facts and the caller's physical window."""
     validate_catalogue(rows, CanonicalRowsSchema, on_issue="raise")
     validate_series_rows(rows, series)
-    facts = {fact.facts_id: fact for definition in series for fact in definition.facts}
-    for row in rows.iter_rows(named=True):
-        fact = facts[row["facts_id"]]
-        decision = admission(fact)
-        if row["quantity"] != fact.quantity.value or row["unit"] != decision.target_unit:
+    if rows.is_empty():
+        return
+    prep = WindowFactPreparation.for_request(requested_window, series)
+    combos = list(rows.select("facts_id", "quantity", "unit").unique().iter_rows())
+    prep.prepare_admissions([fid for fid, _, _ in combos])
+    for fid, quantity, unit in combos:
+        fact = prep.facts_by_id[fid]
+        decision = prep.admissions[fid]
+        if quantity != fact.quantity.value or unit != decision.target_unit:
             raise FatalContractError("Canonical row contradicts its admitted physical facts")
-    if _clip_native(rows, series, requested_window).height != rows.height:
+    if not bool(prep.window_keep_mask(rows, unknown_facts="raise").all()):
         raise FatalContractError("CanonicalRows contain observations outside the RequestedWindow physical axis")
 
 
@@ -222,7 +235,30 @@ def _attempt_call(attempt: TransportAttempt) -> dict[str, object]:
     }
 
 
-def _payload_calls(payload: Payload) -> tuple[dict[str, object], ...]:
+@dataclass(frozen=True, slots=True)
+class _PayloadProvenance:
+    """Payload metadata retained for provenance after body bytes are released."""
+
+    origin: SourceCallOrigin
+    acquisition_id: str
+    prerequisite_acquisition_ids: tuple[str, ...]
+    prerequisite_calls: tuple[SecretCallTrace, ...]
+    attempt_traces: tuple[TransportAttempt, ...]
+    station_products: tuple[tuple[str, ProductId], ...]
+
+    @classmethod
+    def from_payload(cls, payload: Payload) -> _PayloadProvenance:
+        return cls(
+            origin=payload.origin,
+            acquisition_id=payload.acquisition_id,
+            prerequisite_acquisition_ids=payload.prerequisite_acquisition_ids,
+            prerequisite_calls=payload.prerequisite_calls,
+            attempt_traces=payload.attempt_traces,
+            station_products=payload.station_products,
+        )
+
+
+def _payload_calls(payload: Payload | _PayloadProvenance) -> tuple[dict[str, object], ...]:
     if not payload.attempt_traces:
         return (
             {
@@ -247,7 +283,7 @@ def _payload_calls(payload: Payload) -> tuple[dict[str, object], ...]:
 
 def _provenance_with_payload_origins(
     provenance: ObservationProvenance,
-    payloads: tuple[Payload, ...],
+    payloads: tuple[Payload | _PayloadProvenance, ...],
     *,
     source_series_by_payload: tuple[tuple[str, ...], ...] = (),
 ) -> ObservationProvenance:
@@ -439,6 +475,18 @@ class SharedAcquisitionProvider(Protocol):
 
 
 @runtime_checkable
+class SharedParseProvider(Protocol):
+    """Decode a multi-product payload once into per-pair ``ParsedSeries`` results."""
+
+    @staticmethod
+    def parse_group(
+        payload: Payload,
+        pair_payloads: Mapping[tuple[str, ProductId], Payload],
+        config: ProviderConfig,
+    ) -> Mapping[tuple[str, ProductId], ParsedSeries]: ...
+
+
+@runtime_checkable
 class TransportWindowDeclarationProvider(Protocol):
     """Select source window semantics from an engine-supplied transport capability."""
 
@@ -552,30 +600,23 @@ def _narrow_series_tables(bundle: AnnotationBundle, allowed_series_ids: set[str]
 
 
 def _clip_native_with_annotations(
-    rows: Rows, bundle: AnnotationBundle, series: tuple[SourceSeries, ...], window: RequestedWindow
+    rows: Rows,
+    bundle: AnnotationBundle,
+    series: tuple[SourceSeries, ...],
+    window: RequestedWindow,
+    *,
+    preparation: WindowFactPreparation | None = None,
 ) -> tuple[Rows, AnnotationBundle]:
-    facts = {fact.facts_id: fact for item in series for fact in item.facts}
-    start = datetime.fromisoformat(window.start.isoformat())
-    end = datetime.fromisoformat(window.end.isoformat())
-    kept_indices: list[int] = []
-    for idx, row in enumerate(rows.iter_rows(named=True)):
-        fact = facts.get(row["facts_id"])
-        if fact is None:
-            raise FatalContractError("Native clipping references unknown physical facts")
-        timestamp = row["time"]
-        interval = native_window(start, end, fact)
-        if interval.start <= timestamp <= interval.end:
-            kept_indices.append(idx)
-
-    def _keep_unmeasured(record: dict[str, object]) -> bool:
-        fact = facts.get(cast("str", record["facts_id"]))
-        if fact is None:
-            raise FatalContractError("Native clipping references unknown physical facts")
-        timestamp = cast("datetime", record["time"])
-        interval = native_window(start, end, fact)
-        return interval.start <= timestamp <= interval.end
-
-    return filter_native_with_annotations(rows, bundle, kept_indices, unmeasured_predicate=_keep_unmeasured)
+    prep = preparation or WindowFactPreparation.for_request(window, ())
+    prep.register_series(series)
+    allowed_facts = {fact.facts_id for item in series for fact in item.facts}
+    keep_mask = prep.window_keep_mask(rows, allowed_facts=allowed_facts, unknown_facts="raise")
+    return filter_native_with_annotations_by_mask(
+        rows,
+        bundle,
+        keep_mask,
+        unmeasured_mask_fn=lambda df: prep.window_keep_mask(df, allowed_facts=allowed_facts, unknown_facts="raise"),
+    )
 
 
 def _clip_native(rows: Rows, series: tuple[SourceSeries, ...], window: RequestedWindow) -> Rows:
@@ -811,6 +852,8 @@ def _reconcile_acquired_inventories(
             event.window.axis is snapshot_window.axis
             and event.window.start <= snapshot_window.end
             and event.window.end >= snapshot_window.start
+            and (not scope.station_ids or event.series.station_id in scope.station_ids)
+            and (not scope.product_ids or event.series.product_id in scope.product_ids)
             for event in acquired.failed_requests
         ) or any(
             outcome.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
@@ -1654,17 +1697,118 @@ def _authorize_fact_retirement(
     return authorized
 
 
-def _combine_replacements(
-    replacements: list[SuccessfulReplacement],
+@dataclass(frozen=True, slots=True)
+class _BypassContribution:
+    """Outcome, observation-key and lazy split state for ``cache='bypass'`` composition."""
+
+    coverage: CoverageInterval
+    has_rows: bool
+    observation_keys: tuple[tuple[str, datetime, str], ...] = ()
+    source_rows: pl.DataFrame | None = None
+    source_filter: pl.Expr | None = None
+    replaced_facts_ids: tuple[str, ...] = ()
+
+    def materialize_split(self, expr: pl.Expr, *, track_keys: bool) -> _BypassContribution:
+        if self.source_rows is None or self.source_rows.is_empty():
+            return _BypassContribution(
+                coverage=self.coverage,
+                has_rows=False,
+                observation_keys=(),
+                source_rows=None,
+                source_filter=None,
+                replaced_facts_ids=self.replaced_facts_ids,
+            )
+        combined_expr = expr if self.source_filter is None else (self.source_filter & expr)
+        if track_keys:
+            matched = self.source_rows.filter(combined_expr)
+            return _BypassContribution(
+                coverage=self.coverage,
+                has_rows=not matched.is_empty(),
+                observation_keys=tuple(dict.fromkeys(matched.select("facts_id", "time", "time_zone").iter_rows())),
+                source_rows=matched,
+                source_filter=None,
+                replaced_facts_ids=self.replaced_facts_ids,
+            )
+        has_rows = bool(self.source_rows.select(combined_expr.any()).item())
+        return _BypassContribution(
+            coverage=self.coverage,
+            has_rows=has_rows,
+            observation_keys=(),
+            source_rows=self.source_rows if has_rows else None,
+            source_filter=combined_expr if has_rows else None,
+            replaced_facts_ids=self.replaced_facts_ids,
+        )
+
+
+def _split_contribution[T: (SuccessfulReplacement, _BypassContribution)](
+    part: T,
+    *,
+    series_id: str,
+    expr: pl.Expr,
+    interval: RequestedInterval,
+    outcome: RetrievalOutcome,
+    facts_ids: tuple[str, ...],
+) -> T:
+    if isinstance(part, _BypassContribution):
+        split_bypass = part.materialize_split(expr, track_keys=outcome.coverage == "observations")
+        return cast(
+            "T",
+            replace(
+                split_bypass,
+                coverage=replace(
+                    part.coverage,
+                    interval=interval,
+                    outcome_id=outcome.outcome_id,
+                    facts_ids=facts_ids,
+                ),
+                replaced_facts_ids=facts_ids,
+            ),
+        )
+    native, split_ann = filter_native_with_annotations_by_expr(
+        part.rows,
+        part.annotations,
+        expr,
+        allowed_series_ids={series_id},
+    )
+    return cast(
+        "T",
+        replace(
+            part,
+            rows=native,
+            annotations=split_ann,
+            coverage=replace(part.coverage, interval=interval, outcome_id=outcome.outcome_id, facts_ids=facts_ids),
+            replaced_facts_ids=facts_ids,
+        ),
+    )
+
+
+def _contribution_snapshot_keys(
+    part: SuccessfulReplacement | _BypassContribution, series_id: str
+) -> set[tuple[str, str, datetime, str]]:
+    if isinstance(part, _BypassContribution):
+        return {(series_id, *key) for key in part.observation_keys}
+    return {(series_id, *key) for key in part.rows.select("facts_id", "time", "time_zone").iter_rows()}
+
+
+def _contribution_empty(part: SuccessfulReplacement | _BypassContribution) -> bool:
+    if isinstance(part, _BypassContribution):
+        return not part.has_rows
+    return part.rows.is_empty()
+
+
+def _compose_contributions[T: (SuccessfulReplacement, _BypassContribution)](
+    contributions: list[T],
     fresh_outcomes: list[RetrievalOutcome],
     outcomes: list[RetrievalOutcome],
-) -> list[SuccessfulReplacement]:
+    *,
+    persist: bool,
+) -> list[T]:
     """Subtract failed facts and times before composing dependent contributions."""
-    grouped: dict[tuple[str, RequestedInterval, tuple[str, ...]], list[SuccessfulReplacement]] = {}
+    grouped: dict[tuple[str, RequestedInterval, tuple[str, ...]], list[T]] = {}
     by_id = {item.outcome_id: item for item in fresh_outcomes}
     failures = tuple(item for item in fresh_outcomes if item.status not in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY))
     acquisition_axes: dict[tuple[str, str], TimeAxis] = {}
-    for replacement in replacements:
+    for replacement in contributions:
         original = by_id[replacement.coverage.outcome_id]
         fact_intervals: dict[RequestedInterval, list[str]] = {}
         for facts_id in replacement.coverage.facts_ids:
@@ -1692,45 +1836,47 @@ def _combine_replacements(
                     & pl.col("facts_id").is_in(facts_ids)
                     & axis_time_expression(interval.axis).is_between(interval.start, interval.end)
                 )
-                native, split_ann = filter_native_with_annotations_by_expr(
-                    replacement.rows,
-                    replacement.annotations,
-                    split_expr,
-                    allowed_series_ids={replacement.coverage.series_id},
+                temp_id = stable_id(
+                    original.outcome_id, interval.start.isoformat(), interval.end.isoformat(), *facts_ids
                 )
-                outcome = original.model_copy(
+                tentative_outcome = original.model_copy(
                     update={
-                        "outcome_id": stable_id(
-                            original.outcome_id, interval.start.isoformat(), interval.end.isoformat(), *facts_ids
-                        ),
+                        "outcome_id": temp_id,
                         "window": SeriesWindow(start=interval.start, end=interval.end, axis=interval.axis),
                         "facts_ids": facts_ids,
-                        "status": OutcomeStatus.EMPTY if native.is_empty() else OutcomeStatus.SUCCESS,
-                        "observation_keys": tuple(
-                            dict.fromkeys(native.select("facts_id", "time", "time_zone").iter_rows())
-                        )
-                        if original.coverage == "observations"
-                        else (),
+                    }
+                )
+                part = _split_contribution(
+                    replacement,
+                    series_id=replacement.coverage.series_id,
+                    expr=split_expr,
+                    interval=interval,
+                    outcome=tentative_outcome,
+                    facts_ids=facts_ids,
+                )
+                part_empty = _contribution_empty(part)
+                part_keys = (
+                    part.observation_keys
+                    if isinstance(part, _BypassContribution)
+                    else tuple(dict.fromkeys(part.rows.select("facts_id", "time", "time_zone").iter_rows()))
+                    if original.coverage == "observations"
+                    else ()
+                )
+                outcome = tentative_outcome.model_copy(
+                    update={
+                        "status": OutcomeStatus.EMPTY if part_empty else OutcomeStatus.SUCCESS,
+                        "observation_keys": part_keys if original.coverage == "observations" else (),
                     }
                 )
                 outcomes.append(outcome)
                 fresh_outcomes.append(outcome)
                 by_id[outcome.outcome_id] = outcome
-                part = replace(
-                    replacement,
-                    rows=native,
-                    annotations=split_ann,
-                    coverage=replace(
-                        replacement.coverage, interval=interval, outcome_id=outcome.outcome_id, facts_ids=facts_ids
-                    ),
-                    replaced_facts_ids=facts_ids,
-                )
             key = part.coverage.series_id, part.coverage.interval, part.coverage.facts_ids
             grouped.setdefault(key, []).append(part)
     # Partition partially shared fact sets by their actual contributors. This
     # keeps a multi-fact page and a same-window single-fact page composable without
     # making an unrelated fact inherit the second page's evidence.
-    windows: dict[tuple[str, RequestedInterval], list[SuccessfulReplacement]] = {}
+    windows: dict[tuple[str, RequestedInterval], list[T]] = {}
     for (series_id, interval, _), parts in grouped.items():
         windows.setdefault((series_id, interval), []).extend(parts)
     grouped = {}
@@ -1749,87 +1895,134 @@ def _combine_replacements(
                 fragment = part
                 if facts_ids != part.coverage.facts_ids:
                     cohort_expr = (pl.col("series_id") == part.coverage.series_id) & pl.col("facts_id").is_in(facts_ids)
-                    native, cohort_ann = filter_native_with_annotations_by_expr(
-                        part.rows,
-                        part.annotations,
-                        cohort_expr,
-                        allowed_series_ids={part.coverage.series_id},
-                    )
                     original = by_id[part.coverage.outcome_id]
-                    outcome = original.model_copy(
+                    temp_id = stable_id(original.outcome_id, "contributing-facts", *facts_ids)
+                    tentative_outcome = original.model_copy(
                         update={
-                            "outcome_id": stable_id(original.outcome_id, "contributing-facts", *facts_ids),
+                            "outcome_id": temp_id,
                             "facts_ids": facts_ids,
-                            "status": OutcomeStatus.EMPTY if native.is_empty() else OutcomeStatus.SUCCESS,
-                            "observation_keys": tuple(
-                                dict.fromkeys(native.select("facts_id", "time", "time_zone").iter_rows())
-                            )
-                            if original.coverage == "observations"
-                            else (),
+                        }
+                    )
+                    fragment = _split_contribution(
+                        part,
+                        series_id=part.coverage.series_id,
+                        expr=cohort_expr,
+                        interval=part.coverage.interval,
+                        outcome=tentative_outcome,
+                        facts_ids=facts_ids,
+                    )
+                    frag_empty = _contribution_empty(fragment)
+                    frag_keys = (
+                        fragment.observation_keys
+                        if isinstance(fragment, _BypassContribution)
+                        else tuple(dict.fromkeys(fragment.rows.select("facts_id", "time", "time_zone").iter_rows()))
+                        if original.coverage == "observations"
+                        else ()
+                    )
+                    outcome = tentative_outcome.model_copy(
+                        update={
+                            "status": OutcomeStatus.EMPTY if frag_empty else OutcomeStatus.SUCCESS,
+                            "observation_keys": frag_keys if original.coverage == "observations" else (),
                         }
                     )
                     outcomes.append(outcome)
                     fresh_outcomes.append(outcome)
                     by_id[outcome.outcome_id] = outcome
-                    fragment = replace(
-                        part,
-                        rows=native,
-                        annotations=cohort_ann,
-                        coverage=replace(part.coverage, facts_ids=facts_ids, outcome_id=outcome.outcome_id),
-                        replaced_facts_ids=facts_ids,
-                    )
                 grouped.setdefault((series_id, interval, tuple(sorted(facts_ids))), []).append(fragment)
-    combined = []
+    combined: list[T] = []
     snapshot_keys: set[tuple[str, str, datetime, str]] = set()
     for (series_id, interval, _), parts in grouped.items():
         for part in parts:
             if by_id[part.coverage.outcome_id].coverage != "observations":
                 continue
-            keys = {(series_id, *key) for key in part.rows.select("facts_id", "time", "time_zone").iter_rows()}
+            keys = _contribution_snapshot_keys(part, series_id)
             if snapshot_keys.intersection(keys):
                 raise FatalContractError("Independent snapshot acquisitions overlap observation keys")
             snapshot_keys.update(keys)
         if len(parts) == 1:
-            combined.append(parts[0])
+            if persist:
+                combined.append(parts[0])
             continue
         if any(by_id[part.coverage.outcome_id].coverage == "observations" for part in parts):
             if not all(by_id[part.coverage.outcome_id].coverage == "observations" for part in parts):
                 raise FatalContractError("A replacement window mixes interval and observation-only evidence")
-            combined.extend(parts)
+            if persist:
+                combined.extend(parts)
             continue
         # Equal fact windows can be dependent pages of one acquisition. Keep their
         # row multiplicity and established composition; disjoint facts never share
         # this attribution merely because a store writes them in one batch.
         contributors = tuple(by_id[item.coverage.outcome_id] for item in parts)
-        native, combined_part_ann = concat_native_with_annotations(
-            [(item.rows, item.annotations) for item in parts],
-            empty_schema=RowsSchema.polars_schema,
-            series_conflict="prefer_last",
-        )
         instants = tuple(item.retrieved_at for item in contributors if item.retrieved_at is not None)
-        outcome = contributors[0].model_copy(
-            update={
-                "outcome_id": stable_id("combined", *(item.outcome_id for item in contributors)),
-                "status": OutcomeStatus.EMPTY if native.is_empty() else OutcomeStatus.SUCCESS,
-                "retrieved_at": max(instants) if instants else None,
-                "calls": tuple(dict.fromkeys(call for item in contributors for call in item.calls)),
-            }
-        )
-        outcomes.append(outcome)
-        fresh_outcomes.append(outcome)
-        combined.append(
-            SuccessfulReplacement(
-                CoverageInterval(series_id, interval, outcome.retrieved_at, outcome.outcome_id, outcome.facts_ids),
-                native,
-                annotations=combined_part_ann,
-                replaced_facts_ids=tuple(
-                    dict.fromkeys(
-                        fact for part in parts for fact in (part.replaced_facts_ids or part.coverage.facts_ids)
-                    )
-                ),
+        merged_calls = tuple(dict.fromkeys(call for item in contributors for call in item.calls))
+        merged_id = stable_id("combined", *(item.outcome_id for item in contributors))
+        if persist:
+            repl_parts = cast("list[SuccessfulReplacement]", parts)
+            native, combined_part_ann = concat_native_with_annotations(
+                [(item.rows, item.annotations) for item in repl_parts],
+                empty_schema=RowsSchema.polars_schema,
+                series_conflict="prefer_last",
             )
-        )
+            outcome = contributors[0].model_copy(
+                update={
+                    "outcome_id": merged_id,
+                    "status": OutcomeStatus.EMPTY if native.is_empty() else OutcomeStatus.SUCCESS,
+                    "retrieved_at": max(instants) if instants else None,
+                    "calls": merged_calls,
+                }
+            )
+            outcomes.append(outcome)
+            fresh_outcomes.append(outcome)
+            combined.append(
+                cast(
+                    "T",
+                    SuccessfulReplacement(
+                        CoverageInterval(
+                            series_id, interval, outcome.retrieved_at, outcome.outcome_id, outcome.facts_ids
+                        ),
+                        native,
+                        annotations=combined_part_ann,
+                        replaced_facts_ids=tuple(
+                            dict.fromkeys(
+                                fact
+                                for item in repl_parts
+                                for fact in (item.replaced_facts_ids or item.coverage.facts_ids)
+                            )
+                        ),
+                    ),
+                )
+            )
+        else:
+            has_any_rows = any(not _contribution_empty(item) for item in parts)
+            outcome = contributors[0].model_copy(
+                update={
+                    "outcome_id": merged_id,
+                    "status": OutcomeStatus.EMPTY if not has_any_rows else OutcomeStatus.SUCCESS,
+                    "retrieved_at": max(instants) if instants else None,
+                    "calls": merged_calls,
+                }
+            )
+            outcomes.append(outcome)
+            fresh_outcomes.append(outcome)
     return combined
+
+
+def _combine_replacements(
+    replacements: list[SuccessfulReplacement],
+    fresh_outcomes: list[RetrievalOutcome],
+    outcomes: list[RetrievalOutcome],
+) -> list[SuccessfulReplacement]:
+    """Subtract failed facts and times before composing dependent contributions."""
+    return _compose_contributions(replacements, fresh_outcomes, outcomes, persist=True)
+
+
+def _combine_bypass_contributions(
+    contributions: list[_BypassContribution],
+    fresh_outcomes: list[RetrievalOutcome],
+    outcomes: list[RetrievalOutcome],
+) -> None:
+    """Validate axes, snapshot overlaps and outcome composition for ``cache='bypass'``."""
+    _compose_contributions(contributions, fresh_outcomes, outcomes, persist=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1845,6 +2038,155 @@ class _PairRetrieval:
     reuse: _ReusePlan | None
     fetch_window: FetchWindow | None
     rendered: tuple[RenderedWindow, ...]
+
+
+@dataclass(slots=True)
+class _AcquiredGroup:
+    """Acquired payload group releasing each ``Payload`` once all consumers parse it."""
+
+    acquisition: WithIssues[tuple[Payload, ...]]
+    payload_slots: list[Payload | None]
+    interpretation_slots: list[list[InterpretedPayload]]
+    pending_plans: list[list[_PairRetrieval]]
+    remaining_consumers: list[int]
+    payload_acquisition_ids: tuple[str, ...]
+    remaining_plans: int
+    group_scope: SeriesScope
+    group_recorded: bool = False
+
+
+def _effective_pair_payload(received: Payload, plan: _PairRetrieval, group_size: int) -> Payload:
+    if group_size > 1:
+        return replace(
+            received,
+            station_products=((plan.station, plan.product),),
+            scope=plan.scope,
+            known_series=plan.series,
+        )
+    return replace(
+        received,
+        scope=received.scope or plan.scope,
+        known_series=received.known_series or plan.series,
+    )
+
+
+def _all_plans_interpreted(
+    received: Payload,
+    plans: list[_PairRetrieval],
+    slot_interpretations: list[InterpretedPayload],
+    group_size: int,
+) -> bool:
+    if not plans or len(slot_interpretations) < len(plans):
+        return False
+    remaining_entries = list(slot_interpretations)
+    for item in plans:
+        context = InterpretationContext.from_payload(_effective_pair_payload(received, item, group_size))
+        matched_index = next(
+            (idx for idx, entry in enumerate(remaining_entries) if entry.context == context),
+            None,
+        )
+        if matched_index is None:
+            return False
+        remaining_entries.pop(matched_index)
+    return True
+
+
+def _acquire_group(
+    raw_fetched: WithIssues[tuple[Payload, ...]],
+    group: tuple[_PairRetrieval, ...],
+    *,
+    retain_bytes: bool = True,
+    group_scope: SeriesScope | None = None,
+) -> _AcquiredGroup:
+    dependencies: dict[str, tuple[str, ...]] = {}
+    payload_ids_list: list[str] = []
+    for payload in raw_fetched.value:
+        if payload.acquisition_id in dependencies:
+            raise FatalContractError("Duplicate payload acquisition identity")
+        dependencies[payload.acquisition_id] = payload.prerequisite_acquisition_ids
+        payload_ids_list.append(payload.acquisition_id)
+    payload_ids = set(dependencies)
+    if isinstance(raw_fetched, SourceAcquisition):
+        for event in raw_fetched.failed_requests:
+            identity = event.call_id or event.event_id
+            if identity in payload_ids:
+                raise FatalContractError("Failed request shares a successful payload acquisition identity")
+            previous = dependencies.setdefault(identity, event.prerequisite_acquisition_ids)
+            if previous != event.prerequisite_acquisition_ids:
+                raise FatalContractError("Prerequisite declarations conflict for one acquisition")
+        for origin in raw_fetched.calls:
+            if origin.acquisition_id is not None:
+                if origin.acquisition_id in dependencies:
+                    raise FatalContractError("Duplicate auxiliary acquisition identity")
+                dependencies[origin.acquisition_id] = origin.prerequisite_acquisition_ids
+    validate_acquisition_dependencies(dependencies)
+
+    slot_by_acquisition_id: dict[str, int] = {}
+    remaining_consumers: list[int] = []
+    payload_slots: list[Payload | None] = []
+    pending_plans: list[list[_PairRetrieval]] = []
+    group_size = len(group)
+    for slot_index, received in enumerate(raw_fetched.value):
+        slot_by_acquisition_id[received.acquisition_id] = slot_index
+        slot_plans = [
+            item for item in group if group_size == 1 or (item.station, item.product) in received.station_products
+        ]
+        consumers = len(slot_plans)
+        remaining_consumers.append(consumers)
+        pending_plans.append(slot_plans)
+        payload_slots.append(received if consumers > 0 else None)
+
+    interpretation_slots: list[list[InterpretedPayload]] = [[] for _ in payload_slots]
+    if isinstance(raw_fetched, SourceAcquisition):
+        if not isinstance(raw_fetched.interpretations, tuple) or any(
+            not isinstance(item, InterpretedPayload) or not isinstance(item.parsed, ParsedSeries)
+            for item in raw_fetched.interpretations
+        ):
+            raise FatalContractError("SourceAcquisition interpretations must be a tuple of InterpretedPayload values")
+        for entry in raw_fetched.interpretations:
+            slot_index = slot_by_acquisition_id.get(entry.context.acquisition_id)
+            if slot_index is None:
+                raise FatalContractError("Payload interpretation references an unknown acquisition")
+            existing_entries = interpretation_slots[slot_index]
+            if any(existing.context == entry.context for existing in existing_entries):
+                raise FatalContractError("Duplicate payload interpretation for one acquisition context")
+            existing_entries.append(entry)
+        for slot_index, consumers in enumerate(remaining_consumers):
+            if consumers == 0:
+                interpretation_slots[slot_index].clear()
+            elif not retain_bytes:
+                slot_payload = payload_slots[slot_index]
+                if slot_payload is not None and _all_plans_interpreted(
+                    slot_payload, pending_plans[slot_index], interpretation_slots[slot_index], group_size
+                ):
+                    payload_slots[slot_index] = replace(slot_payload, content=b"")
+        cleared_acquisition: WithIssues[tuple[Payload, ...]] = replace(raw_fetched, value=(), interpretations=())
+    else:
+        cleared_acquisition = replace(raw_fetched, value=())
+
+    resolved_group_scope = (
+        group_scope
+        if group_scope is not None
+        else group[0].scope
+        if len(group) == 1
+        else group[0].scope.model_copy(
+            update={
+                "station_ids": tuple(dict.fromkeys(item.station for item in group)),
+                "product_ids": tuple(dict.fromkeys(str(item.product) for item in group)),
+                "series_ids": tuple(dict.fromkeys(key for item in group for key in item.scope.series_ids)),
+            }
+        )
+    )
+    return _AcquiredGroup(
+        acquisition=cleared_acquisition,
+        payload_slots=payload_slots,
+        interpretation_slots=interpretation_slots,
+        pending_plans=pending_plans,
+        remaining_consumers=remaining_consumers,
+        payload_acquisition_ids=tuple(payload_ids_list),
+        remaining_plans=group_size,
+        group_scope=resolved_group_scope,
+    )
 
 
 def _acquisition_groups(
@@ -1913,32 +2255,132 @@ def _public_issues(issues: tuple[Issue, ...]) -> tuple[Issue, ...]:
     return tuple(projected)
 
 
+def _acquisition_issue_scope(
+    issue: Issue,
+    fetched: WithIssues[tuple[Payload, ...]],
+    group: tuple[_PairRetrieval, ...],
+    group_scope: SeriesScope,
+) -> SeriesScope:
+    """Resolve the acquisition scope attributable to one source-acquisition issue."""
+    if len(group) == 1:
+        return group[0].scope
+    pair_scopes = {(item.station, str(item.product)): item.scope for item in group}
+    details = issue.details or {}
+    station_id = details.get("station_id")
+    product_id = details.get("product_id")
+    if isinstance(station_id, str) and isinstance(product_id, str) and (station_id, product_id) in pair_scopes:
+        return pair_scopes[(station_id, product_id)]
+    if isinstance(fetched, SourceAcquisition):
+        outcome_id = details.get("outcome_id")
+        if isinstance(outcome_id, str):
+            for outcome in fetched.outcomes:
+                if outcome.outcome_id == outcome_id:
+                    pair = (outcome.station_id, outcome.product_id)
+                    if pair in pair_scopes:
+                        return pair_scopes[pair]
+                    break
+        series_id = details.get("series_id")
+        if isinstance(series_id, str):
+            for item in group:
+                for known in item.series:
+                    if known.series_id == series_id:
+                        return item.scope
+            for known in fetched.series:
+                if known.series_id == series_id:
+                    pair = (known.station_id, known.product_id)
+                    if pair in pair_scopes:
+                        return pair_scopes[pair]
+    return group_scope
+
+
+def _call_identity(call: Mapping[str, object]) -> object:
+    return call.get("acquisition_id", call.get("call_id"))
+
+
+def _group_dependencies(group: list[dict[str, object]]) -> tuple[str, ...]:
+    dependencies = next(
+        (call["prerequisite_acquisition_ids"] for call in group if "prerequisite_acquisition_ids" in call), ()
+    )
+    assert isinstance(dependencies, tuple)
+    return cast(tuple[str, ...], dependencies)
+
+
+def _insert_dependent_call_groups(
+    calls: list[dict[str, object]],
+    dependent_groups: list[tuple[list[dict[str, object]], tuple[str, ...]]],
+    *,
+    missing_message: str,
+) -> tuple[dict[str, object], ...]:
+    """Place dependent call groups after all of their prerequisite support calls."""
+    pending = list(dependent_groups)
+    while pending:
+        present = {identity for call in calls if (identity := _call_identity(call)) is not None}
+        ready: list[tuple[list[dict[str, object]], tuple[str, ...]]] = []
+        deferred: list[tuple[list[dict[str, object]], tuple[str, ...]]] = []
+        for entry in pending:
+            if all(dep in present for dep in entry[1]):
+                ready.append(entry)
+            else:
+                deferred.append(entry)
+        if not ready:
+            raise FatalContractError(missing_message)
+        # Inserting later siblings first keeps the original order when groups share
+        # the same prerequisite position. Calls within each group stay unchanged.
+        for group, dependencies in reversed(ready):
+            positions = [index for index, call in enumerate(calls) if _call_identity(call) in dependencies]
+            calls[max(positions) + 1 : max(positions) + 1] = group
+        pending = deferred
+    return tuple(calls)
+
+
+def _order_support_calls(
+    non_payload_calls: tuple[dict[str, object], ...],
+    payload_calls: tuple[dict[str, object], ...],
+) -> tuple[dict[str, object], ...]:
+    """Keep independent auxiliary calls ahead of payloads and defer payload-dependent ones."""
+    if not non_payload_calls:
+        return payload_calls
+    groups: dict[object, list[dict[str, object]]] = {}
+    for index, call in enumerate(non_payload_calls):
+        identity = _call_identity(call)
+        groups.setdefault(("id", identity) if identity is not None else ("pos", index), []).append(call)
+    leading: list[dict[str, object]] = []
+    leading_ids: set[object] = set()
+    deferred: list[tuple[list[dict[str, object]], tuple[str, ...]]] = []
+    for group in groups.values():
+        dependencies = _group_dependencies(group)
+        if not dependencies or all(dep in leading_ids for dep in dependencies):
+            leading.extend(group)
+            leading_ids.update(identity for call in group if (identity := _call_identity(call)) is not None)
+        else:
+            deferred.append((group, dependencies))
+    return _insert_dependent_call_groups(
+        [*leading, *payload_calls],
+        deferred,
+        missing_message="Auxiliary acquisition lacks its prerequisite call evidence",
+    )
+
+
 def _calls_with_failed_acquisitions(
     payload_calls: tuple[dict[str, object], ...], failed_calls: tuple[dict[str, object], ...]
 ) -> tuple[dict[str, object], ...]:
     """Place failed acquisitions after their explicit support, preserving call groups."""
     groups: dict[object, list[dict[str, object]]] = {}
     for call in failed_calls:
-        groups.setdefault(call.get("acquisition_id", call.get("call_id")), []).append(call)
-    calls = list(payload_calls)
+        groups.setdefault(_call_identity(call), []).append(call)
     independent: list[dict[str, object]] = []
-    # Inserting later siblings first keeps the original order when groups share
-    # the same prerequisite position. Calls within each group stay unchanged.
-    for group in reversed(groups.values()):
-        dependencies = next(
-            (call["prerequisite_acquisition_ids"] for call in group if "prerequisite_acquisition_ids" in call), ()
-        )
-        assert isinstance(dependencies, tuple)
+    dependent: list[tuple[list[dict[str, object]], tuple[str, ...]]] = []
+    for group in groups.values():
+        dependencies = _group_dependencies(group)
         if not dependencies:
-            independent[0:0] = group
-            continue
-        positions = [
-            index for index, call in enumerate(calls) if call.get("acquisition_id", call.get("call_id")) in dependencies
-        ]
-        if not positions:
-            raise FatalContractError("Failed acquisition lacks its prerequisite call evidence")
-        calls[max(positions) + 1 : max(positions) + 1] = group
-    return (*independent, *calls)
+            independent.extend(group)
+        else:
+            dependent.append((group, dependencies))
+    return _insert_dependent_call_groups(
+        [*independent, *payload_calls],
+        dependent,
+        missing_message="Failed acquisition lacks its prerequisite call evidence",
+    )
 
 
 def _unique_calls(calls: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
@@ -1998,12 +2440,14 @@ def drive(
         (pl.DataFrame(schema=RowsSchema.polars_schema), AnnotationBundle.empty())
     ]
     receipt_entries: list[ReceiptEntry] = []
-    payloads: list[Payload] = []
+    payload_provenance: list[_PayloadProvenance] = []
     source_series_by_payload: list[tuple[str, ...]] = []
     non_payload_calls: list[dict[str, object]] = []
     failed_calls: list[dict[str, object]] = []
     served: list[CoverageInterval] = []
     pending: list[SuccessfulReplacement] = []
+    bypass_pending: list[_BypassContribution] = []
+    request_prep = WindowFactPreparation.for_request(request.window, ())
     fresh_definitions: dict[str, SourceSeries] = {}
     fresh_inventories: list[InventorySnapshot] = list(inventories)
     fresh_outcomes: list[RetrievalOutcome] = []
@@ -2094,7 +2538,7 @@ def drive(
     shared_products = provider.shared_acquisition_products if isinstance(provider, SharedAcquisitionProvider) else ()
     groups = _acquisition_groups(plans, shared_products)
     group_for_pair = {(plan.station, plan.product): index for index, group in enumerate(groups) for plan in group}
-    acquired: dict[int, WithIssues[tuple[Payload, ...]] | TransportFailure | CredentialExchangeError] = {}
+    acquired: dict[int, _AcquiredGroup | TransportFailure | CredentialExchangeError] = {}
     payload_indices: dict[tuple[int, int], int] = {}
     for plan in plans:
         station, product = plan.station, plan.product
@@ -2244,7 +2688,9 @@ def drive(
                 held_series,
                 tuple((item.series_id, item.facts_ids, item.interval) for item in served),
             )
-            held_rows, held_ann = _clip_native_with_annotations(held_rows, held_ann, held_series, request.window)
+            held_rows, held_ann = _clip_native_with_annotations(
+                held_rows, held_ann, held_series, request.window, preparation=request_prep
+            )
             result_parts.append((held_rows, held_ann))
             _merge_definitions(definitions, held_series)
             selected_snapshots = tuple(item for item in manifest.inventories if set(item.members).intersection(ids))
@@ -2275,22 +2721,28 @@ def drive(
         if group_index not in acquired:
             fetch_window = group[0].fetch_window
             assert fetch_window is not None
+            group_series_ids = {key for item in group for key in item.scope.series_ids}
             group_scope = pair_scope.model_copy(
                 update={
                     "product_ids": tuple(item.product for item in group),
-                    "series_ids": tuple(dict.fromkeys(key for item in group for key in item.scope.series_ids)),
+                    "series_ids": tuple(key for key in scope.series_ids if key in group_series_ids),
                 }
             )
             try:
-                acquired[group_index] = provider.fetch(
-                    (station,),
-                    tuple(item.product for item in group),
-                    MappingProxyType({item.product: item.rendered for item in group}),
-                    fetch_window,
-                    config,
-                    _SourceResponseTransport(resolved_transport),
-                    scope=group_scope,
-                    known_series=tuple(series for item in group for series in item.series),
+                acquired[group_index] = _acquire_group(
+                    provider.fetch(
+                        (station,),
+                        tuple(item.product for item in group),
+                        MappingProxyType({item.product: item.rendered for item in group}),
+                        fetch_window,
+                        config,
+                        _SourceResponseTransport(resolved_transport),
+                        scope=group_scope,
+                        known_series=tuple(series for item in group for series in item.series),
+                    ),
+                    group,
+                    retain_bytes=receipts is ReceiptMode.INCLUDE,
+                    group_scope=group_scope,
                 )
             except (TransportFailure, CredentialExchangeError) as failure:
                 acquired[group_index] = failure
@@ -2334,74 +2786,67 @@ def drive(
                 outcomes.append(outcome)
                 fresh_outcomes.append(outcome)
             continue
-        fetched = result
-        dependencies: dict[str, tuple[str, ...]] = {}
-        for payload in fetched.value:
-            if payload.acquisition_id in dependencies:
-                raise FatalContractError("Duplicate payload acquisition identity")
-            dependencies[payload.acquisition_id] = payload.prerequisite_acquisition_ids
-        payload_ids = set(dependencies)
-        if isinstance(fetched, SourceAcquisition):
-            for event in fetched.failed_requests:
-                identity = event.call_id or event.event_id
-                if identity in payload_ids:
-                    raise FatalContractError("Failed request shares a successful payload acquisition identity")
-                previous = dependencies.setdefault(identity, event.prerequisite_acquisition_ids)
-                if previous != event.prerequisite_acquisition_ids:
-                    raise FatalContractError("Prerequisite declarations conflict for one acquisition")
-        if isinstance(fetched, SourceAcquisition):
-            for origin in fetched.calls:
-                if origin.acquisition_id is not None:
-                    if origin.acquisition_id in dependencies:
-                        raise FatalContractError("Duplicate auxiliary acquisition identity")
-                    dependencies[origin.acquisition_id] = origin.prerequisite_acquisition_ids
-        validate_acquisition_dependencies(dependencies)
+        group_state = result
+        if not group_state.group_recorded:
+            group_state.group_recorded = True
+            fetched = group_state.acquisition
+            if isinstance(fetched, SourceAcquisition) and fetched.calls:
+                group_station_products = tuple((item.station, str(item.product)) for item in group)
+                # These origins support this acquired inventory. Give the existing
+                # evidence records content identities so compaction can retain their
+                # dependencies without storing unlimited anonymous call history.
+                auxiliary_calls = tuple(
+                    {
+                        **(record := _origin_call(origin)),
+                        "prerequisite_acquisition_ids": origin.prerequisite_acquisition_ids,
+                        "call_id": origin.acquisition_id
+                        or stable_id(
+                            "source-call-origin",
+                            tuple(snapshot.snapshot_id for snapshot in fetched.inventories)
+                            or tuple(outcome.outcome_id for outcome in fetched.outcomes)
+                            or group_state.payload_acquisition_ids,
+                            json.dumps(encode_source_call(record), sort_keys=True),
+                        ),
+                        "station_products": group_station_products,
+                    }
+                    for origin in fetched.calls
+                )
+                references = tuple(
+                    str(call["call_id"])
+                    for call, origin in zip(auxiliary_calls, fetched.calls, strict=True)
+                    if origin.acquisition_id is None
+                )
+                bound_outcomes, bound_inventories, bound_issues = _bind_acquisition_evidence(
+                    fetched.outcomes, fetched.inventories, fetched.issues, references
+                )
+                fetched = replace(fetched, outcomes=bound_outcomes, inventories=bound_inventories, issues=bound_issues)
+                group_state.acquisition = fetched
+                non_payload_calls.extend(auxiliary_calls)
+            all_issues.extend(
+                issue.model_copy(
+                    update={
+                        "details": {
+                            **(issue.details or {}),
+                            "inventory_scope": _acquisition_issue_scope(
+                                issue, fetched, group, group_state.group_scope
+                            ).model_dump(mode="json"),
+                        }
+                    }
+                )
+                if issue.code in {"source.inventory_unresolved", "source.request_failed"}
+                else issue
+                for issue in fetched.issues
+            )
+            if isinstance(fetched, SourceAcquisition):
+                _merge_definitions(definitions, fetched.series)
+                _merge_definitions(fresh_definitions, fetched.series)
+                inventories.extend(fetched.inventories)
+                fresh_inventories.extend(fetched.inventories)
+                outcomes.extend(fetched.outcomes)
+                fresh_outcomes.extend(fetched.outcomes)
+        fetched = group_state.acquisition
         acquisition_outcome_start = len(fresh_outcomes)
-        auxiliary_calls: tuple[dict[str, object], ...] = ()
-        if isinstance(fetched, SourceAcquisition) and fetched.calls:
-            # These origins support this acquired inventory. Give the existing
-            # evidence records content identities so compaction can retain their
-            # dependencies without storing unlimited anonymous call history.
-            auxiliary_calls = tuple(
-                {
-                    **(record := _origin_call(origin)),
-                    "prerequisite_acquisition_ids": origin.prerequisite_acquisition_ids,
-                    "call_id": origin.acquisition_id
-                    or stable_id(
-                        "source-call-origin",
-                        tuple(snapshot.snapshot_id for snapshot in fetched.inventories)
-                        or tuple(outcome.outcome_id for outcome in fetched.outcomes)
-                        or tuple(payload.acquisition_id for payload in fetched.value),
-                        json.dumps(encode_source_call(record), sort_keys=True),
-                    ),
-                    "station_products": ((station, str(product)),),
-                }
-                for origin in fetched.calls
-            )
-            references = tuple(
-                str(call["call_id"])
-                for call, origin in zip(auxiliary_calls, fetched.calls, strict=True)
-                if origin.acquisition_id is None
-            )
-            bound_outcomes, bound_inventories, bound_issues = _bind_acquisition_evidence(
-                fetched.outcomes, fetched.inventories, fetched.issues, references
-            )
-            fetched = replace(fetched, outcomes=bound_outcomes, inventories=bound_inventories, issues=bound_issues)
-        all_issues.extend(
-            issue.model_copy(
-                update={"details": {**(issue.details or {}), "inventory_scope": pair_scope.model_dump(mode="json")}}
-            )
-            if issue.code in {"source.inventory_unresolved", "source.request_failed"}
-            else issue
-            for issue in fetched.issues
-        )
         if isinstance(fetched, SourceAcquisition):
-            _merge_definitions(definitions, fetched.series)
-            _merge_definitions(fresh_definitions, fetched.series)
-            inventories.extend(fetched.inventories)
-            fresh_inventories.extend(fetched.inventories)
-            outcomes.extend(fetched.outcomes)
-            fresh_outcomes.extend(fetched.outcomes)
             # Transaction-level failures are known before any individual page is
             # assembled. Restore held concrete successes first, so later partial
             # page rows cannot overlap them. Inventory-only unknown failures do
@@ -2462,20 +2907,29 @@ def drive(
                 )
                 outcomes.append(empty_outcome)
                 fresh_outcomes.append(empty_outcome)
-                pending.append(
-                    SuccessfulReplacement(
-                        CoverageInterval(
-                            definition.series_id,
-                            RequestedInterval(start, end, axis=original.window.axis),
-                            empty_outcome.retrieved_at,
-                            empty_outcome.outcome_id,
-                            matching_facts,
-                        ),
-                        pl.DataFrame(schema=RowsSchema.polars_schema),
-                        replaced_facts_ids=matching_facts,
-                    )
+                empty_coverage = CoverageInterval(
+                    definition.series_id,
+                    RequestedInterval(start, end, axis=original.window.axis),
+                    empty_outcome.retrieved_at,
+                    empty_outcome.outcome_id,
+                    matching_facts,
                 )
-            non_payload_calls.extend(auxiliary_calls)
+                if cache == "bypass":
+                    bypass_pending.append(
+                        _BypassContribution(
+                            coverage=empty_coverage,
+                            has_rows=False,
+                            replaced_facts_ids=matching_facts,
+                        )
+                    )
+                else:
+                    pending.append(
+                        SuccessfulReplacement(
+                            empty_coverage,
+                            pl.DataFrame(schema=RowsSchema.polars_schema),
+                            replaced_facts_ids=matching_facts,
+                        )
+                    )
             for event in fetched.failed_requests:
                 target = event.series
                 if len(group) > 1 and (target.station_id, target.product_id) != (station, product):
@@ -2610,7 +3064,7 @@ def drive(
                 )
                 outcomes.append(outcome)
                 fresh_outcomes.append(outcome)
-        if not fetched.value and not (
+        if not group_state.payload_acquisition_ids and not (
             isinstance(fetched, SourceAcquisition) and (fetched.outcomes or fetched.failed_requests)
         ):
             reason = "Source acquisition returned no response; successful coverage is not established"
@@ -2638,37 +3092,93 @@ def drive(
             )
         transaction_parsed: list[ParsedSeries] = []
         parsed_payloads: list[tuple[int, ParsedSeries]] = []
-        for received_index, received in enumerate(fetched.value):
-            if len(group) > 1:
-                if (station, product) not in received.station_products:
-                    continue
-                payload = replace(
-                    received, station_products=((station, product),), scope=pair_scope, known_series=pair_series
-                )
-            else:
-                payload = replace(
-                    received, scope=received.scope or pair_scope, known_series=received.known_series or pair_series
-                )
+        for received_index in range(len(group_state.payload_slots)):
+            received = group_state.payload_slots[received_index]
+            if received is None:
+                continue
+            if len(group) > 1 and (station, product) not in received.station_products:
+                continue
+            payload = _effective_pair_payload(received, plan, len(group))
             # Pair-local parsing must not multiply the acquired bytes or call evidence.
             # Identity is the acquisition and payload position, never URL/content equality.
             payload_key = (group_index, received_index)
             if payload_key not in payload_indices:
-                payload_indices[payload_key] = len(payloads)
-                payloads.append(received)
+                payload_indices[payload_key] = len(payload_provenance)
+                payload_provenance.append(_PayloadProvenance.from_payload(received))
                 source_series_by_payload.append(())
                 if receipts is ReceiptMode.INCLUDE:
                     receipt_entries.append(
                         ReceiptEntry(received.content, received.origin, ReceiptAuthorship.PUBLISHER_PAYLOAD)
                     )
             payload_index = payload_indices[payload_key]
-            parsed = provider.parse(payload, config)
+            acq_id = payload.acquisition_id
+            acq_axis = payload.acquisition_axis
+            fw_start = datetime.fromisoformat(payload.fetch_window.start.isoformat())
+            fw_end = datetime.fromisoformat(payload.fetch_window.end.isoformat())
+            effective_context = InterpretationContext.from_payload(payload)
+            reused_parsed: ParsedSeries | None = None
+            slot_interpretations = group_state.interpretation_slots[received_index]
+            for interp_index, entry in enumerate(slot_interpretations):
+                if entry.context == effective_context:
+                    reused_parsed = slot_interpretations.pop(interp_index).parsed
+                    break
+            slot_pending = group_state.pending_plans[received_index]
+            for pending_index, pending_plan in enumerate(slot_pending):
+                if pending_plan is plan:
+                    slot_pending.pop(pending_index)
+                    break
+            if reused_parsed is not None:
+                parsed = reused_parsed
+            elif isinstance(provider, SharedParseProvider):
+                existing_contexts = [entry.context for entry in slot_interpretations]
+                unparsed_pairs: dict[tuple[str, ProductId], Payload] = {(station, product): payload}
+                for sibling_plan in slot_pending:
+                    sibling_payload = _effective_pair_payload(received, sibling_plan, len(group))
+                    sibling_context = InterpretationContext.from_payload(sibling_payload)
+                    matched_existing = False
+                    for idx, existing_ctx in enumerate(existing_contexts):
+                        if existing_ctx == sibling_context:
+                            existing_contexts.pop(idx)
+                            matched_existing = True
+                            break
+                    if not matched_existing:
+                        unparsed_pairs[(sibling_plan.station, sibling_plan.product)] = sibling_payload
+                if len(unparsed_pairs) >= 2:
+                    grouped_parsed = provider.parse_group(received, MappingProxyType(unparsed_pairs), config)
+                    if not isinstance(grouped_parsed, Mapping):
+                        raise FatalContractError("Provider parse_group must return a mapping")
+                    if set(grouped_parsed.keys()) != set(unparsed_pairs.keys()):
+                        raise FatalContractError("Provider parse_group keys must match its requested pair payloads")
+                    for pair_parsed in grouped_parsed.values():
+                        if not isinstance(pair_parsed, ParsedSeries):
+                            raise FatalContractError("Provider parse_group values must be ParsedSeries")
+                    for pair_key, pair_parsed in grouped_parsed.items():
+                        if pair_key != (station, product):
+                            slot_interpretations.append(
+                                InterpretedPayload.from_payload(unparsed_pairs[pair_key], pair_parsed)
+                            )
+                    parsed = grouped_parsed[(station, product)]
+                else:
+                    parsed = provider.parse(payload, config)
+                if receipts is ReceiptMode.OMIT and _all_plans_interpreted(
+                    received, slot_pending, slot_interpretations, len(group)
+                ):
+                    group_state.payload_slots[received_index] = replace(received, content=b"")
+            else:
+                parsed = provider.parse(payload, config)
+            group_state.remaining_consumers[received_index] -= 1
+            if group_state.remaining_consumers[received_index] == 0:
+                group_state.payload_slots[received_index] = None
+                group_state.interpretation_slots[received_index].clear()
+                group_state.pending_plans[received_index].clear()
+            del payload, received, effective_context, reused_parsed, slot_interpretations, slot_pending
             if not isinstance(parsed, ParsedSeries):
                 raise FatalContractError("Provider parse must return ParsedSeries")
             _validate_parsed_series(parsed)
             # The shared engine knows which immutable payload was parsed even
             # when a provider supplies no separate source-call identifier.
             bound_outcomes, bound_inventories, bound_issues = _bind_acquisition_evidence(
-                parsed.outcomes, parsed.inventories, parsed.issues, (payload.acquisition_id,)
+                parsed.outcomes, parsed.inventories, parsed.issues, (acq_id,)
             )
             parsed = replace(parsed, outcomes=bound_outcomes, inventories=bound_inventories, issues=bound_issues)
             validate_native_rows(parsed.rows, config.products, series=parsed.series)
@@ -2676,11 +3186,7 @@ def drive(
             # A source response may include revised rows owned by another partition.
             # Apply acquisition bounds before combining snapshots; retain duplicates
             # inside the owned interval and leave receipt bytes unchanged.
-            owned_expr = axis_time_expression(payload.acquisition_axis).is_between(
-                datetime.fromisoformat(payload.fetch_window.start.isoformat()),
-                datetime.fromisoformat(payload.fetch_window.end.isoformat()),
-                closed="both",
-            )
+            owned_expr = axis_time_expression(acq_axis).is_between(fw_start, fw_end, closed="both")
             owned_rows, owned_ann = filter_native_with_annotations_by_expr(parsed.rows, parsed.annotations, owned_expr)
             parsed = replace(parsed, rows=owned_rows, annotations=owned_ann)
             transaction_parsed.append(parsed)
@@ -2762,7 +3268,7 @@ def drive(
                 )
             admitted_outcome_ids: dict[str, str] = {}
             native, native_ann = _clip_native_with_annotations(
-                parsed.rows, parsed.annotations, parsed.series, request.window
+                parsed.rows, parsed.annotations, parsed.series, request.window, preparation=request_prep
             )
             selected_ids = {item.series_id for item in parsed.series if pair_scope.matches(item)}
             selected_facts = {
@@ -2775,9 +3281,13 @@ def drive(
             # Coverage/outcome evidence describes the current source page even
             # when reuse serves held values instead of overlapping partial rows.
             if any(item.window.axis is TimeAxis.UTC for item in parsed.outcomes):
-                coverage_native, coverage_ann = filter_native_with_annotations_by_expr(
-                    parsed.rows, parsed.annotations, scope_expr, allowed_series_ids=selected_ids
-                )
+                if cache == "bypass":
+                    coverage_native = parsed.rows.filter(scope_expr.fill_null(False))
+                    coverage_ann = AnnotationBundle.empty()
+                else:
+                    coverage_native, coverage_ann = filter_native_with_annotations_by_expr(
+                        parsed.rows, parsed.annotations, scope_expr, allowed_series_ids=selected_ids
+                    )
             else:
                 coverage_native, coverage_ann = native, native_ann
             failures = (
@@ -2790,7 +3300,7 @@ def drive(
                 item.series_id
                 for item in parsed.outcomes
                 if item.series_id is not None and item.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY)
-            } | set(native["series_id"].to_list())
+            } | set(native["series_id"].unique().to_list())
             # A prerequisite payload (e.g. a series lookup) can identify a series and publish
             # a series-scope annotation for it while carrying no outcome of its own; the child
             # payload that fetches observations owns that outcome. Keep such a payload's own
@@ -2866,23 +3376,6 @@ def drive(
                     )
                     if candidate.select(axis_time_expression(TimeAxis.UTC).is_null().any()).item():
                         raise FatalContractError("UTC acquisition rows require published fixed offsets")
-                if original.series_id:
-                    concrete_expr = (
-                        (pl.col("series_id") == original.series_id)
-                        & pl.col("facts_id").is_in(original.facts_ids)
-                        & axis_time_expression(original.window.axis).is_between(
-                            overlap_start, overlap_end, closed="both"
-                        )
-                    )
-                    concrete, concrete_ann = filter_native_with_annotations_by_expr(
-                        coverage_native,
-                        coverage_ann,
-                        concrete_expr,
-                        allowed_series_ids={original.series_id},
-                    )
-                else:
-                    concrete = pl.DataFrame(schema=RowsSchema.polars_schema)
-                    concrete_ann = AnnotationBundle.empty()
                 updates: dict[str, object] = {
                     "window": observed_window,
                     "outcome_id": stable_id(
@@ -2890,32 +3383,97 @@ def drive(
                     ),
                     "facts_ids": matching_outcome_facts,
                 }
-                if original.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
-                    updates["status"] = OutcomeStatus.EMPTY if concrete.is_empty() else OutcomeStatus.SUCCESS
-                if original.coverage == "observations":
-                    updates["observation_keys"] = tuple(
-                        dict.fromkeys(concrete.select("facts_id", "time", "time_zone").iter_rows())
-                    )
-                outcome = original.model_copy(update=updates)
-                admitted_outcome_ids[original.outcome_id] = outcome.outcome_id
-                outcomes.append(outcome)
-                fresh_outcomes.append(outcome)
-                if outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
-                    assert outcome.series_id is not None
-                    pending.append(
-                        SuccessfulReplacement(
-                            CoverageInterval(
-                                outcome.series_id,
-                                observed_interval,
-                                outcome.retrieved_at,
-                                outcome.outcome_id,
-                                outcome.facts_ids,
-                            ),
-                            concrete,
-                            annotations=concrete_ann,
-                            replaced_facts_ids=outcome.facts_ids,
+                track_keys = original.coverage == "observations"
+                if cache == "bypass":
+                    has_concrete = False
+                    obs_keys: tuple[tuple[str, datetime, str], ...] = ()
+                    concrete_expr: pl.Expr | None = None
+                    if original.series_id and not coverage_native.is_empty():
+                        concrete_expr = (
+                            (pl.col("series_id") == original.series_id)
+                            & pl.col("facts_id").is_in(original.facts_ids)
+                            & axis_time_expression(original.window.axis).is_between(
+                                overlap_start, overlap_end, closed="both"
+                            )
                         )
-                    )
+                        row_mask = coverage_native.select(concrete_expr.alias("_k"))["_k"]
+                        has_concrete = bool(row_mask.any())
+                        if track_keys and has_concrete:
+                            obs_keys = tuple(
+                                dict.fromkeys(
+                                    coverage_native.filter(row_mask).select("facts_id", "time", "time_zone").iter_rows()
+                                )
+                            )
+                    if original.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
+                        updates["status"] = OutcomeStatus.SUCCESS if has_concrete else OutcomeStatus.EMPTY
+                    if track_keys:
+                        updates["observation_keys"] = obs_keys
+                    outcome = original.model_copy(update=updates)
+                    admitted_outcome_ids[original.outcome_id] = outcome.outcome_id
+                    outcomes.append(outcome)
+                    fresh_outcomes.append(outcome)
+                    if outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
+                        assert outcome.series_id is not None
+                        bypass_pending.append(
+                            _BypassContribution(
+                                coverage=CoverageInterval(
+                                    outcome.series_id,
+                                    observed_interval,
+                                    outcome.retrieved_at,
+                                    outcome.outcome_id,
+                                    outcome.facts_ids,
+                                ),
+                                has_rows=has_concrete,
+                                observation_keys=obs_keys,
+                                source_rows=coverage_native if has_concrete else None,
+                                source_filter=concrete_expr if has_concrete else None,
+                                replaced_facts_ids=outcome.facts_ids,
+                            )
+                        )
+                else:
+                    if original.series_id:
+                        concrete_expr = (
+                            (pl.col("series_id") == original.series_id)
+                            & pl.col("facts_id").is_in(original.facts_ids)
+                            & axis_time_expression(original.window.axis).is_between(
+                                overlap_start, overlap_end, closed="both"
+                            )
+                        )
+                        concrete, concrete_ann = filter_native_with_annotations_by_expr(
+                            coverage_native,
+                            coverage_ann,
+                            concrete_expr,
+                            allowed_series_ids={original.series_id},
+                        )
+                    else:
+                        concrete = pl.DataFrame(schema=RowsSchema.polars_schema)
+                        concrete_ann = AnnotationBundle.empty()
+                    if original.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
+                        updates["status"] = OutcomeStatus.EMPTY if concrete.is_empty() else OutcomeStatus.SUCCESS
+                    if track_keys:
+                        updates["observation_keys"] = tuple(
+                            dict.fromkeys(concrete.select("facts_id", "time", "time_zone").iter_rows())
+                        )
+                    outcome = original.model_copy(update=updates)
+                    admitted_outcome_ids[original.outcome_id] = outcome.outcome_id
+                    outcomes.append(outcome)
+                    fresh_outcomes.append(outcome)
+                    if outcome.status in (OutcomeStatus.SUCCESS, OutcomeStatus.EMPTY):
+                        assert outcome.series_id is not None
+                        pending.append(
+                            SuccessfulReplacement(
+                                CoverageInterval(
+                                    outcome.series_id,
+                                    observed_interval,
+                                    outcome.retrieved_at,
+                                    outcome.outcome_id,
+                                    outcome.facts_ids,
+                                ),
+                                concrete,
+                                annotations=concrete_ann,
+                                replaced_facts_ids=outcome.facts_ids,
+                            )
+                        )
             admitted_snapshots = []
             admitted_snapshot_ids = {}
             # Unadmitted source evidence can still justify an inventory. Keep it
@@ -2977,16 +3535,26 @@ def drive(
                     if (issue.details or {}).get("outcome_id") is None:
                         issue_acquisitions[id(issue)] = tuple(
                             dict.fromkeys(
-                                (*issue_acquisitions.get(id(issue), ()), payloads[payload_index].acquisition_id)
+                                (
+                                    *issue_acquisitions.get(id(issue), ()),
+                                    payload_provenance[payload_index].acquisition_id,
+                                )
                             )
                         )
         if isinstance(fetched, SourceAcquisition):
+            pair_fetched_outcomes = (
+                fetched.outcomes
+                if len(group) == 1
+                else tuple(
+                    item for item in fetched.outcomes if (item.station_id, item.product_id) == (station, str(product))
+                )
+            )
             reconciled = _reconcile_acquired_inventories(
                 fetched,
                 tuple(transaction_parsed),
                 pair_scope,
                 window,
-                durable_outcomes=tuple(fresh_outcomes[acquisition_outcome_start:]),
+                durable_outcomes=(*pair_fetched_outcomes, *fresh_outcomes[acquisition_outcome_start:]),
             )
             inventories.extend(reconciled)
             fresh_inventories.extend(reconciled)
@@ -3031,17 +3599,25 @@ def drive(
                     provider_id=request.provider_id,
                 )
             )
+        group_state.remaining_plans -= 1
+        if group_state.remaining_plans == 0:
+            acquired.pop(group_index, None)
+        del group_state
     fresh_outcomes.extend(
         _finite_selector_assessments(
             request.provider_id, finite_assessments, definitions, inventories, outcomes, all_issues
         )
     )
-    pending = _combine_replacements(pending, fresh_outcomes, outcomes)
-    retirement_definitions = {item.series_id: item for item in (manifest.series if manifest is not None else ())}
-    _merge_definitions(retirement_definitions, tuple(definitions.values()))
-    pending = _authorize_fact_retirement(
-        pending, tuple(retirement_definitions.values()), fresh_inventories, fresh_outcomes
-    )
+    if cache == "bypass":
+        _combine_bypass_contributions(bypass_pending, fresh_outcomes, outcomes)
+        bypass_pending.clear()
+    else:
+        pending = _combine_replacements(pending, fresh_outcomes, outcomes)
+        retirement_definitions = {item.series_id: item for item in (manifest.series if manifest is not None else ())}
+        _merge_definitions(retirement_definitions, tuple(definitions.values()))
+        pending = _authorize_fact_retirement(
+            pending, tuple(retirement_definitions.values()), fresh_inventories, fresh_outcomes
+        )
     combined, combined_ann = concat_native_with_annotations(
         result_parts,
         empty_schema=RowsSchema.polars_schema,
@@ -3078,7 +3654,7 @@ def drive(
                 )
             )
             held_rows, held_ann = _clip_native_with_annotations(
-                held_read.rows, held_read.annotations, held_series, request.window
+                held_read.rows, held_read.annotations, held_series, request.window, preparation=request_prep
             )
             held_rows, held_ann = anti_join_native_with_annotations(held_rows, held_ann, combined)
             combined, combined_ann = concat_native_with_annotations(
@@ -3105,19 +3681,34 @@ def drive(
             if receipts is ReceiptMode.INCLUDE and not held_rows.is_empty():
                 receipt_entries.append(encode_store_excerpt(held_read))
     selected, retained_inventories, retained_outcomes = _result_metadata(scope, definitions, inventories, outcomes)
-    converted = convert(combined, config, request.window, series=tuple(definitions.values()))
-    _require_canonical_rows_within_requested(converted.value, tuple(definitions.values()), request.window)
-    filtered_annotations = filter_annotations_for_window(
-        combined,
-        combined_ann,
-        request.window,
-        series=tuple(definitions.values()),
-    )
+    series_defs = tuple(definitions.values())
+    if convert is _DEFAULT_CONVERT:
+        converted, filtered_annotations = convert_with_annotations(
+            combined,
+            combined_ann,
+            config,
+            request.window,
+            series=series_defs,
+            preparation=request_prep,
+        )
+    else:
+        converted = convert(combined, config, request.window, series=series_defs)
+        filtered_annotations = filter_annotations_for_window(
+            combined,
+            combined_ann,
+            request.window,
+            series=series_defs,
+            preparation=request_prep,
+        )
+    _require_canonical_rows_within_requested(converted.value, series_defs, request.window)
     enriched = _provenance_with_payload_origins(
-        provenance, tuple(payloads), source_series_by_payload=tuple(source_series_by_payload)
+        provenance, tuple(payload_provenance), source_series_by_payload=tuple(source_series_by_payload)
     )
     acquired_calls = _unique_calls(
-        (*non_payload_calls, *_calls_with_failed_acquisitions(enriched.calls_made, tuple(failed_calls)))
+        _calls_with_failed_acquisitions(
+            _order_support_calls(tuple(non_payload_calls), enriched.calls_made),
+            tuple(failed_calls),
+        )
     )
     available_definitions = dict(definitions)
     if manifest is not None:
@@ -3334,9 +3925,25 @@ def drive_store(
         native = pl.DataFrame(schema=RowsSchema.polars_schema)
         native_ann = AnnotationBundle.empty()
         receipt_entries = ()
-    converted = convert(native, config, request.window, series=selected)
+    if convert is _DEFAULT_CONVERT:
+        converted, filtered_annotations = convert_with_annotations(
+            native, native_ann, config, request.window, series=selected
+        )
+    else:
+        converted = convert(native, config, request.window, series=selected)
+        filtered_annotations = filter_annotations_for_window(native, native_ann, request.window, series=selected)
     _require_canonical_rows_within_requested(converted.value, selected, request.window)
-    filtered_annotations = filter_annotations_for_window(native, native_ann, request.window, series=selected)
+    present_series_facts = (
+        set(converted.value.select("series_id", "facts_id").unique().iter_rows())
+        if not converted.value.is_empty()
+        else set()
+    )
+    fact_admissions = {
+        fact.facts_id: admission(fact)
+        for definition in selected
+        for fact in definition.facts
+        if scope.matches_facts(fact)
+    }
     # Compilation describes the artifact. These outcomes describe this local
     # query, not a new publisher call or a fresh publisher retrieval instant.
     outcomes: list[RetrievalOutcome] = []
@@ -3347,11 +3954,9 @@ def drive_store(
                 continue
             physical = native_window_envelope(start, end, facts)
             window = SeriesWindow(start=physical.start, end=physical.end)
-            supported = tuple(fact.facts_id for fact in facts if admission(fact).status == "supported")
+            supported = tuple(fact.facts_id for fact in facts if fact_admissions[fact.facts_id].status == "supported")
             if supported:
-                concrete = converted.value.filter(
-                    (pl.col("series_id") == definition.series_id) & pl.col("facts_id").is_in(supported)
-                )
+                has_rows = any((definition.series_id, fid) in present_series_facts for fid in supported)
                 outcomes.append(
                     RetrievalOutcome(
                         outcome_id=stable_id(
@@ -3365,11 +3970,11 @@ def drive_store(
                         station_id=definition.station_id,
                         product_id=definition.product_id,
                         window=window,
-                        status=OutcomeStatus.EMPTY if concrete.is_empty() else OutcomeStatus.SUCCESS,
+                        status=OutcomeStatus.EMPTY if not has_rows else OutcomeStatus.SUCCESS,
                         facts_ids=supported,
                     )
                 )
-            unsupported = tuple(fact for fact in facts if admission(fact).status == "unsupported")
+            unsupported = tuple(fact for fact in facts if fact_admissions[fact.facts_id].status == "unsupported")
             if unsupported:
                 outcomes.append(
                     RetrievalOutcome(
@@ -3388,7 +3993,7 @@ def drive_store(
                         facts_ids=tuple(fact.facts_id for fact in unsupported),
                         reason="; ".join(
                             dict.fromkeys(
-                                admission(fact).reason or "Physical admission is not established"
+                                fact_admissions[fact.facts_id].reason or "Physical admission is not established"
                                 for fact in unsupported
                             )
                         ),

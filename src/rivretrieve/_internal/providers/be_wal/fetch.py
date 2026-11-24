@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from datetime import datetime
 from uuid import uuid4
@@ -10,20 +9,23 @@ from uuid import uuid4
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
+    InterpretedPayload,
     Payload,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
     SourceCallOrigin,
     SourceCoordinates,
-    UnknownOriginFact,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.be_wal.config import (
     BeWalTimeseriesListCoordinates,
     BeWalTimeseriesValuesCoordinates,
+)
+from rivretrieve._internal.providers.be_wal.parse import (
+    interpret_timeseries_list_payload,
+    resolve_timeseries_list,
 )
 from rivretrieve._internal.providers.be_wal.series import (
     KIWIS_NAMESPACE,
@@ -43,7 +45,6 @@ from rivretrieve._internal.source_acquisition import (
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
-    RestrictionKind,
     SeriesScope,
     SeriesWindow,
     SourceSeries,
@@ -55,27 +56,12 @@ from rivretrieve._internal.transport import (
     Transport,
     TransportFailure,
     TransportRequest,
-    TransportResponse,
 )
 
 _JSON_HEADERS = {"Accept": "application/json"}
 _LIST_RETURNFIELDS = "ts_id,ts_name,station_no,stationparameter_name,parametertype_name,ts_unitsymbol"
 _VALUES_RETURNFIELDS = "Timestamp,Value,Quality Code,Quality Code Name"
 _VALUES_MD_RETURNFIELDS = "ts_id,ts_name,station_no,stationparameter_name,parametertype_name,ts_unitsymbol"
-
-
-def _origin(response: TransportResponse) -> SourceCallOrigin:
-    return SourceCallOrigin(
-        url=response.url,
-        request_parameters=response.request_parameters,
-        status_code=response.status_code,
-        retrieved_at=response.retrieved_at,
-        content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
-        source_path=UnknownOriginFact(),
-        query=UnknownOriginFact(),
-        attempts=response.attempts,
-        attempt_traces=response.attempt_traces,
-    )
 
 
 def _request_target(
@@ -118,59 +104,6 @@ def _resolve_from_known(
     published_id = matched[0].identity.published_id
     assert published_id is not None
     return validate_ts_id(published_id)
-
-
-def resolve_timeseries_list(
-    content: bytes,
-    station: str,
-    spec: ProductSpec,
-) -> str | None:
-    """Validate KiWIS ``getTimeseriesList`` JSON and return unique matching ``ts_id``, or ``None``."""
-    try:
-        document = json.loads(content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise UnsupportedSourceStructureError(f"Invalid KiWIS getTimeseriesList JSON: {error}") from error
-
-    if isinstance(document, dict) and document.get("type") == "error":
-        raise UnsupportedSourceStructureError(
-            f"KiWIS getTimeseriesList error ({document.get('code')!r}): {document.get('message')!r}"
-        )
-    if not isinstance(document, list) or not document or not isinstance(document[0], list):
-        raise UnsupportedSourceStructureError("KiWIS getTimeseriesList response must be a JSON header-plus-rows list")
-
-    header = document[0]
-    required = ("ts_id", "ts_name", "station_no", "stationparameter_name", "parametertype_name", "ts_unitsymbol")
-    try:
-        indices = {name: header.index(name) for name in required}
-    except ValueError as error:
-        raise UnsupportedSourceStructureError("KiWIS getTimeseriesList header lacks a required column") from error
-
-    if header[0] == "error":
-        raise UnsupportedSourceStructureError("KiWIS getTimeseriesList returned an error header")
-
-    matches: list[str] = []
-    for row_idx, row in enumerate(document[1:], start=1):
-        if not isinstance(row, list) or len(row) != len(header):
-            raise UnsupportedSourceStructureError(f"KiWIS getTimeseriesList row {row_idx} width does not match header")
-        row_station = str(row[indices["station_no"]])
-        row_name = str(row[indices["ts_name"]])
-        row_param = str(row[indices["stationparameter_name"]])
-        if row_station != station or row_name != spec.native_id or row_param not in spec.stationparameter_names:
-            continue
-        row_unit = str(row[indices["ts_unitsymbol"]])
-        if row_unit != spec.source_unit:
-            raise UnsupportedSourceStructureError(
-                f"KiWIS getTimeseriesList unit {row_unit!r} contradicts expected {spec.source_unit!r} for {station}/{spec.product_id}"
-            )
-        matches.append(validate_ts_id(str(row[indices["ts_id"]])))
-
-    if not matches:
-        return None
-    if len(matches) > 1:
-        raise UnsupportedSourceStructureError(
-            f"KiWIS getTimeseriesList returned multiple matching ts_id values for {station}/{spec.product_id}: {matches!r}"
-        )
-    return matches[0]
 
 
 def fetch(
@@ -216,6 +149,7 @@ def fetch(
         axis=TimeAxis.UTC,
     )
     payloads: list[Payload] = []
+    interpretations: list[InterpretedPayload] = []
     failures: list[FailedSourceRequest] = []
     definitions: dict[str, SourceSeries] = {}
     inventories: list[InventorySnapshot] = []
@@ -233,6 +167,7 @@ def fetch(
 
             ts_id = _resolve_from_known(station, product, pair_scope, known_series)
             prereq_ids: tuple[str, ...] = ()
+            resolved_series: SourceSeries | None = None
 
             if ts_id is None:
                 list_request = TransportRequest(
@@ -268,7 +203,7 @@ def fetch(
                     station_products=((station, product),),
                     fetch_window=fetch_window,
                     content=list_response.content,
-                    origin=_origin(list_response),
+                    origin=SourceCallOrigin.from_response(list_response),
                     prerequisite_calls=list_response.prerequisite_calls,
                     scope=pair_scope,
                     known_series=known_series,
@@ -278,33 +213,24 @@ def fetch(
                 payloads.append(list_payload)
                 prereq_ids = (list_payload.acquisition_id,)
 
-                try:
-                    resolved = resolve_timeseries_list(list_response.content, station, spec)
-                except UnsupportedSourceStructureError:
-                    # parse() classifies the malformed lookup payload cleanly into FAILED.
-                    continue
-                if resolved is None:
-                    # parse() classifies the empty lookup payload cleanly into NO_MATCH.
+                list_interp = interpret_timeseries_list_payload(list_payload, config)
+                interpretations.append(InterpretedPayload.from_payload(list_payload, list_interp.parsed))
+                if not list_interp.scope_matched or list_interp.resolved_ts_id is None:
+                    # Reused list_interp.parsed (or fallback parse) classifies FAILED, NO_MATCH, and scope mismatch.
                     continue
 
-                candidate_series = reused_series(
-                    source_series(station, str(product), ts_id=resolved, origin="response"),
-                    known_series,
-                )
-                definitions[candidate_series.series_id] = candidate_series
-                if not pair_scope.matches(candidate_series) or (
-                    pair_scope.restriction is RestrictionKind.EXPLICIT
-                    and pair_scope.variants
-                    and resolved not in pair_scope.variants
-                ):
-                    # parse() establishes complete scoped inventory while _finite_selector_assessments emits NO_MATCH.
-                    continue
-                ts_id = resolved
+                resolved_series = list_interp.parsed.series[0]
+                definitions[resolved_series.series_id] = resolved_series
+                ts_id = list_interp.resolved_ts_id
 
             obs_coords = BeWalTimeseriesValuesCoordinates(str(product), ts_id=ts_id)
-            target = reused_series(
-                source_series(station, str(product), ts_id=ts_id, origin="mapping"),
-                known_series,
+            target = (
+                resolved_series
+                if resolved_series is not None
+                else reused_series(
+                    source_series(station, str(product), ts_id=ts_id, origin="mapping"),
+                    known_series,
+                )
             )
             pair_payloads: list[Payload] = []
             for window in windows:
@@ -351,7 +277,7 @@ def fetch(
                     station_products=((station, product),),
                     fetch_window=window.bounds,
                     content=attempted.content,
-                    origin=_origin(attempted),
+                    origin=SourceCallOrigin.from_response(attempted),
                     prerequisite_calls=attempted.prerequisite_calls,
                     scope=pair_scope,
                     known_series=known_series,
@@ -398,6 +324,7 @@ def fetch(
         series=tuple(definitions.values()),
         inventories=tuple(inventories),
         failed_requests=tuple(failures),
+        interpretations=tuple(interpretations),
     )
 
 

@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Literal, cast
+from typing import Literal
 from uuid import uuid4
 
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
     FetchWindow,
+    InterpretedPayload,
     Payload,
     ProviderConfig,
     RenderedWindow,
@@ -18,6 +18,7 @@ from rivretrieve._internal.engine import (
     SourceCallOrigin,
     SourceCoordinates,
     UnknownOriginFact,
+    narrow_payload_for_pair,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
@@ -28,7 +29,13 @@ from rivretrieve._internal.providers.at_ehyd.config import (
     AtEhydPegelCoordinates,
     AtEhydPegelEndpointCoordinates,
 )
-from rivretrieve._internal.providers.at_ehyd.series import IN_SCOPE_OWF_FTYPES
+from rivretrieve._internal.providers.at_ehyd.parse import (
+    interpret_info_file_map,
+    interpret_structure_failure,
+)
+from rivretrieve._internal.providers.at_ehyd.parse import (
+    resolve_messstellen_info_files as resolve_messstellen_info_files,
+)
 from rivretrieve._internal.source_acquisition import (
     FailedSourceRequest,
     SourceRequestTarget,
@@ -49,92 +56,6 @@ _PEGEL_URLS: dict[Literal["pegel_bgis", "pegel_longterm"], str] = {
     "pegel_bgis": "https://ehyd.gv.at/services/Diagram/pegelBgis",
     "pegel_longterm": "https://ehyd.gv.at/services/Diagram/pegelLongterm",
 }
-
-_PREFIX_TO_PRODUCT: dict[str, ProductId] = {
-    prefix: ProductId(ftyp) for ftyp, (prefix, _) in IN_SCOPE_OWF_FTYPES.items()
-}
-
-
-def resolve_messstellen_info_files(content: bytes, station: str) -> dict[ProductId, int]:
-    """Resolve in-scope ``owf`` ``fileNr`` indices for ``station`` from ``Messstellen/info``."""
-    try:
-        document = json.loads(content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise UnsupportedSourceStructureError("eHYD Messstellen/info response is not valid JSON") from error
-    if not isinstance(document, list):
-        raise UnsupportedSourceStructureError("eHYD Messstellen/info response must be a JSON array")
-    if document in ([], [[]]):
-        return {}
-
-    matched_station = False
-    file_entries: list[object] = []
-    for section in document:
-        if not isinstance(section, dict) or section.get("caption") != "Messstelle":
-            continue
-        blocks = section.get("data")
-        if not isinstance(blocks, list):
-            raise UnsupportedSourceStructureError("eHYD Messstellen/info Messstelle block must contain a list")
-        for block in blocks:
-            if not isinstance(block, dict):
-                raise UnsupportedSourceStructureError("eHYD Messstellen/info station entry must be an object")
-            info_obj = block.get("info")
-            if not isinstance(info_obj, dict) or not isinstance(info_obj.get("data"), list):
-                raise UnsupportedSourceStructureError("eHYD Messstellen/info station info.data must be a list")
-            for field in cast("list[object]", info_obj["data"]):
-                if not isinstance(field, dict):
-                    raise UnsupportedSourceStructureError("eHYD Messstellen/info field must be an object")
-                field_map = cast("dict[str, object]", field)
-                if field_map.get("caption") == "HZBNR":
-                    raw_hzb = field_map.get("text")
-                    if type(raw_hzb) not in (int, str) or str(raw_hzb).strip() != station:
-                        raise UnsupportedSourceStructureError(
-                            f"eHYD Messstellen/info HZBNR {raw_hzb!r} contradicts requested station {station!r}"
-                        )
-                    matched_station = True
-                if field_map.get("tag") == "dl_mstfiles":
-                    dl_data = field_map.get("data")
-                    if not isinstance(dl_data, dict):
-                        raise UnsupportedSourceStructureError(
-                            "eHYD Messstellen/info dl_mstfiles.data.fileData must be a list"
-                        )
-                    dl_map = cast("dict[str, object]", dl_data)
-                    raw_files = dl_map.get("fileData")
-                    if not isinstance(raw_files, list):
-                        raise UnsupportedSourceStructureError(
-                            "eHYD Messstellen/info dl_mstfiles.data.fileData must be a list"
-                        )
-                    file_entries.extend(cast("list[object]", raw_files))
-
-    if not matched_station:
-        raise UnsupportedSourceStructureError("eHYD Messstellen/info lacks a matching HZBNR station entry")
-
-    resolved: dict[ProductId, int] = {}
-    suffix = f"-{station}.csv"
-    for raw_entry in file_entries:
-        if not isinstance(raw_entry, dict):
-            raise UnsupportedSourceStructureError("eHYD Messstellen/info fileData entry must be an object")
-        entry_map = cast("dict[str, object]", raw_entry)
-        if entry_map.get("msttyp") != "owf":
-            continue
-        entry_hzb = entry_map.get("hzbnr")
-        if type(entry_hzb) not in (int, str) or str(entry_hzb).strip() != station:
-            raise UnsupportedSourceStructureError("eHYD Messstellen/info fileData hzbnr contradicts requested station")
-        file_nr = entry_map.get("fileNr")
-        file_name = entry_map.get("fileName")
-        if type(file_nr) is not int or file_nr < 1 or not isinstance(file_name, str) or not file_name:
-            raise UnsupportedSourceStructureError("eHYD Messstellen/info fileData entry lacks valid fileNr or fileName")
-        if not file_name.endswith(suffix):
-            continue
-        prefix = file_name[: -len(suffix)]
-        product_id = _PREFIX_TO_PRODUCT.get(prefix)
-        if product_id is None:
-            continue
-        if product_id in resolved and resolved[product_id] != file_nr:
-            raise UnsupportedSourceStructureError(
-                f"eHYD Messstellen/info lists conflicting fileNr values for {station} {product_id}"
-            )
-        resolved[product_id] = file_nr
-    return resolved
 
 
 def fetch(
@@ -175,6 +96,7 @@ def fetch(
     )
     payloads: list[Payload] = []
     failures: list[FailedSourceRequest] = []
+    interpretations: list[InterpretedPayload] = []
 
     for station in stations:
         if owf_products:
@@ -211,11 +133,21 @@ def fetch(
                     attempt_traces=info_response.attempt_traces,
                 )
                 payloads.append(info_payload)
+                structure_error: str | None = None
                 try:
                     file_map = resolve_messstellen_info_files(info_response.content, station)
-                except UnsupportedSourceStructureError:
+                except UnsupportedSourceStructureError as error:
                     # Parse retains info_payload and classifies the invalid prerequisite per product.
                     file_map = None
+                    structure_error = str(error)
+                for product, _ in owf_products:
+                    pair_payload = narrow_payload_for_pair(info_payload, station, product)
+                    if file_map is not None:
+                        pair_parsed = interpret_info_file_map(pair_payload, station, product, file_map)
+                    else:
+                        assert structure_error is not None
+                        pair_parsed = interpret_structure_failure(pair_payload, station, product, structure_error)
+                    interpretations.append(InterpretedPayload.from_payload(pair_payload, pair_parsed))
                 if file_map is not None:
                     for product, _ in owf_products:
                         file_nr = file_map.get(product)
@@ -295,7 +227,11 @@ def fetch(
                 )
             )
 
-    return SourceAcquisition(value=tuple(payloads), failed_requests=tuple(failures))
+    return SourceAcquisition(
+        value=tuple(payloads),
+        failed_requests=tuple(failures),
+        interpretations=tuple(interpretations),
+    )
 
 
 def _request_target(

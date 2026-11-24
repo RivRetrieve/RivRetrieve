@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
 from math import isfinite
@@ -23,7 +23,6 @@ from rivretrieve._internal.providers.at_ehyd.config import (
     AtEhydPegelCoordinates,
     AtEhydPegelEndpointCoordinates,
 )
-from rivretrieve._internal.providers.at_ehyd.fetch import resolve_messstellen_info_files
 from rivretrieve._internal.providers.at_ehyd.series import (
     _OWF_ROUTE_SPECS,
     IN_SCOPE_OWF_FTYPES,
@@ -104,6 +103,308 @@ def _series_annotation_bundle(
     return AnnotationBundle(series_tables={AT_EHYD_SERIES_SCHEMA.schema_id: table})
 
 
+_PREFIX_TO_PRODUCT: dict[str, ProductId] = {
+    prefix: ProductId(ftyp) for ftyp, (prefix, _) in IN_SCOPE_OWF_FTYPES.items()
+}
+
+
+def resolve_messstellen_info_files(content: bytes, station: str) -> dict[ProductId, int]:
+    """Resolve in-scope ``owf`` ``fileNr`` indices for ``station`` from ``Messstellen/info``."""
+    try:
+        document = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise UnsupportedSourceStructureError("eHYD Messstellen/info response is not valid JSON") from error
+    if not isinstance(document, list):
+        raise UnsupportedSourceStructureError("eHYD Messstellen/info response must be a JSON array")
+    if document in ([], [[]]):
+        return {}
+
+    matched_station = False
+    file_entries: list[object] = []
+    for section in document:
+        if not isinstance(section, dict) or section.get("caption") != "Messstelle":
+            continue
+        blocks = section.get("data")
+        if not isinstance(blocks, list):
+            raise UnsupportedSourceStructureError("eHYD Messstellen/info Messstelle block must contain a list")
+        for block in blocks:
+            if not isinstance(block, dict):
+                raise UnsupportedSourceStructureError("eHYD Messstellen/info station entry must be an object")
+            info_obj = block.get("info")
+            if not isinstance(info_obj, dict) or not isinstance(info_obj.get("data"), list):
+                raise UnsupportedSourceStructureError("eHYD Messstellen/info station info.data must be a list")
+            for field in cast("list[object]", info_obj["data"]):
+                if not isinstance(field, dict):
+                    raise UnsupportedSourceStructureError("eHYD Messstellen/info field must be an object")
+                field_map = cast("dict[str, object]", field)
+                if field_map.get("caption") == "HZBNR":
+                    raw_hzb = field_map.get("text")
+                    if type(raw_hzb) not in (int, str) or str(raw_hzb).strip() != station:
+                        raise UnsupportedSourceStructureError(
+                            f"eHYD Messstellen/info HZBNR {raw_hzb!r} contradicts requested station {station!r}"
+                        )
+                    matched_station = True
+                if field_map.get("tag") == "dl_mstfiles":
+                    dl_data = field_map.get("data")
+                    if not isinstance(dl_data, dict):
+                        raise UnsupportedSourceStructureError(
+                            "eHYD Messstellen/info dl_mstfiles.data.fileData must be a list"
+                        )
+                    dl_map = cast("dict[str, object]", dl_data)
+                    raw_files = dl_map.get("fileData")
+                    if not isinstance(raw_files, list):
+                        raise UnsupportedSourceStructureError(
+                            "eHYD Messstellen/info dl_mstfiles.data.fileData must be a list"
+                        )
+                    file_entries.extend(cast("list[object]", raw_files))
+
+    if not matched_station:
+        raise UnsupportedSourceStructureError("eHYD Messstellen/info lacks a matching HZBNR station entry")
+
+    resolved: dict[ProductId, int] = {}
+    suffix = f"-{station}.csv"
+    for raw_entry in file_entries:
+        if not isinstance(raw_entry, dict):
+            raise UnsupportedSourceStructureError("eHYD Messstellen/info fileData entry must be an object")
+        entry_map = cast("dict[str, object]", raw_entry)
+        if entry_map.get("msttyp") != "owf":
+            continue
+        entry_hzb = entry_map.get("hzbnr")
+        if type(entry_hzb) not in (int, str) or str(entry_hzb).strip() != station:
+            raise UnsupportedSourceStructureError("eHYD Messstellen/info fileData hzbnr contradicts requested station")
+        file_nr = entry_map.get("fileNr")
+        file_name = entry_map.get("fileName")
+        if type(file_nr) is not int or file_nr < 1 or not isinstance(file_name, str) or not file_name:
+            raise UnsupportedSourceStructureError("eHYD Messstellen/info fileData entry lacks valid fileNr or fileName")
+        if not file_name.endswith(suffix):
+            continue
+        prefix = file_name[: -len(suffix)]
+        product_id = _PREFIX_TO_PRODUCT.get(prefix)
+        if product_id is None:
+            continue
+        if product_id in resolved and resolved[product_id] != file_nr:
+            raise UnsupportedSourceStructureError(
+                f"eHYD Messstellen/info lists conflicting fileNr values for {station} {product_id}"
+            )
+        resolved[product_id] = file_nr
+    return resolved
+
+
+def interpret_structure_failure(
+    payload: Payload,
+    station: str,
+    product: ProductId,
+    reason: str,
+    *,
+    window: SeriesWindow | None = None,
+    retrieved: datetime | None = None,
+) -> ParsedSeries:
+    """Build a bounded failure ``ParsedSeries`` for malformed eHYD source content."""
+    resolved_window = window or SeriesWindow(
+        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+    )
+    resolved_retrieved = (
+        retrieved
+        if retrieved is not None
+        else (payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None)
+    )
+    outcome = RetrievalOutcome(
+        outcome_id=stable_id(payload.acquisition_id, station, str(product), "failed"),
+        series_id=None,
+        station_id=station,
+        product_id=str(product),
+        window=resolved_window,
+        status=OutcomeStatus.FAILED,
+        reason=reason,
+        retrieved_at=resolved_retrieved,
+    )
+    issue = Issue(
+        severity="error",
+        code="source.unsupported_structure",
+        message=reason,
+        details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
+        provider_id=_PROVIDER_ID,
+    )
+    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), (outcome,), (issue,))
+
+
+def interpret_info_file_map(
+    payload: Payload,
+    station: str,
+    product: ProductId,
+    file_map: Mapping[ProductId, int],
+    *,
+    window: SeriesWindow | None = None,
+    retrieved: datetime | None = None,
+    scope: SeriesScope | None = None,
+) -> ParsedSeries:
+    """Interpret a resolved ``Messstellen/info`` file table for one station-product pair."""
+    if product in file_map:
+        # Valid prerequisite lookup; the child CSV payload or FailedSourceRequest owns this pair.
+        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), ())
+
+    resolved_window = window or SeriesWindow(
+        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+    )
+    resolved_retrieved = (
+        retrieved
+        if retrieved is not None
+        else (payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None)
+    )
+    resolved_scope = (
+        scope
+        or payload.scope
+        or SeriesScope(
+            provider_ids=("at_ehyd",),
+            station_ids=(station,),
+            product_ids=(str(product),),
+        )
+    )
+    evidence = f"source-call:{payload.acquisition_id}"
+    reason = f"eHYD Messstellen/info lists no owf file for station {station} product {product}"
+    inventory = InventorySnapshot(
+        snapshot_id=stable_id(payload.acquisition_id, station, str(product), "info-no-match-inventory"),
+        scope=resolved_scope,
+        members=(),
+        completeness=InventoryCompleteness.COMPLETE,
+        access="messstellen_info",
+        origin="response",
+        acquired_at=resolved_retrieved,
+        window=resolved_window,
+        evidence=(evidence,),
+    )
+    outcome = RetrievalOutcome(
+        outcome_id=stable_id(payload.acquisition_id, station, str(product), "info-no-match"),
+        series_id=None,
+        station_id=station,
+        product_id=str(product),
+        window=resolved_window,
+        status=OutcomeStatus.NO_MATCH,
+        reason=reason,
+        retrieved_at=resolved_retrieved,
+    )
+    issue = Issue(
+        severity="warning",
+        code="source.no_match",
+        message=reason,
+        details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
+        provider_id=_PROVIDER_ID,
+    )
+    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (inventory,), (outcome,), (issue,))
+
+
+def parse_group(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    provider_config: ProviderConfig,
+) -> dict[tuple[str, ProductId], ParsedSeries]:
+    """Decode one shared eHYD payload once and project per-pair ``ParsedSeries`` results."""
+    if not pair_payloads:
+        raise FatalContractError("at_ehyd group parse requires at least one pair payload")
+    stations = {station for station, _ in pair_payloads}
+    if len(stations) != 1:
+        raise FatalContractError("at_ehyd payload must identify a single station")
+
+    coords_by_pair: dict[tuple[str, ProductId], AtEhydOwfCoordinates | AtEhydPegelCoordinates] = {}
+    meta_by_pair: dict[tuple[str, ProductId], tuple[Payload, SeriesWindow, datetime | None, SeriesScope]] = {}
+    for key, pair_payload in pair_payloads.items():
+        station, product = key
+        if pair_payload.station_products != ((station, product),):
+            raise FatalContractError("Pair payload station_products does not match its group key")
+        coords_by_pair[key] = _validated_product_coordinates(payload.source_coordinates.value, product, provider_config)
+        window = SeriesWindow(
+            start=datetime.fromisoformat(pair_payload.fetch_window.start.isoformat()),
+            end=datetime.fromisoformat(pair_payload.fetch_window.end.isoformat()),
+        )
+        retrieved = pair_payload.origin.retrieved_at if isinstance(pair_payload.origin.retrieved_at, datetime) else None
+        scope = pair_payload.scope or SeriesScope(
+            provider_ids=("at_ehyd",),
+            station_ids=(station,),
+            product_ids=(str(product),),
+        )
+        meta_by_pair[key] = (pair_payload, window, retrieved, scope)
+
+    only_station = next(iter(stations))
+    if isinstance(payload.source_coordinates.value, AtEhydInfoCoordinates):
+        try:
+            file_map = resolve_messstellen_info_files(payload.content, only_station)
+        except UnsupportedSourceStructureError as error:
+            reason = str(error)
+            return {
+                key: interpret_structure_failure(
+                    pair_payload, key[0], key[1], reason, window=window, retrieved=retrieved
+                )
+                for key, (pair_payload, window, retrieved, _) in meta_by_pair.items()
+            }
+        return {
+            key: interpret_info_file_map(
+                pair_payload, key[0], key[1], file_map, window=window, retrieved=retrieved, scope=scope
+            )
+            for key, (pair_payload, window, retrieved, scope) in meta_by_pair.items()
+        }
+
+    first_coords = next(iter(coords_by_pair.values()))
+    if isinstance(first_coords, AtEhydOwfCoordinates):
+        results: dict[tuple[str, ProductId], ParsedSeries] = {}
+        for key, (pair_payload, window, retrieved, scope) in meta_by_pair.items():
+            product_coords = coords_by_pair[key]
+            assert isinstance(product_coords, AtEhydOwfCoordinates)
+            try:
+                results[key] = _parse_owf_csv(pair_payload, key[0], key[1], product_coords, window, retrieved, scope)
+            except UnsupportedSourceStructureError as error:
+                results[key] = interpret_structure_failure(
+                    pair_payload, key[0], key[1], str(error), window=window, retrieved=retrieved
+                )
+        return results
+
+    assert isinstance(first_coords, AtEhydPegelCoordinates)
+    if payload.content == b"":
+        return {
+            key: _empty_pegel_result(
+                pair_payload,
+                key[0],
+                key[1],
+                cast("AtEhydPegelCoordinates", coords_by_pair[key]),
+                window,
+                retrieved,
+                scope,
+            )
+            for key, (pair_payload, window, retrieved, scope) in meta_by_pair.items()
+        }
+
+    try:
+        document = json.loads(payload.content)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        reason = f"eHYD {first_coords.subsystem} response is not valid JSON"
+        return {
+            key: interpret_structure_failure(pair_payload, key[0], key[1], reason, window=window, retrieved=retrieved)
+            for key, (pair_payload, window, retrieved, _) in meta_by_pair.items()
+        }
+    if not isinstance(document, dict):
+        reason = f"eHYD {first_coords.subsystem} response must be a JSON object"
+        return {
+            key: interpret_structure_failure(pair_payload, key[0], key[1], reason, window=window, retrieved=retrieved)
+            for key, (pair_payload, window, retrieved, _) in meta_by_pair.items()
+        }
+
+    doc_map = cast("dict[str, object]", document)
+    pegel_results: dict[tuple[str, ProductId], ParsedSeries] = {}
+    for key, (pair_payload, window, retrieved, scope) in meta_by_pair.items():
+        product_coords = cast("AtEhydPegelCoordinates", coords_by_pair[key])
+        try:
+            pegel_results[key] = _interpret_pegel_document(
+                pair_payload, doc_map, key[0], key[1], product_coords, window, retrieved, scope
+            )
+        except UnsupportedSourceStructureError as error:
+            pegel_results[key] = interpret_structure_failure(
+                pair_payload, key[0], key[1], str(error), window=window, retrieved=retrieved
+            )
+    del document, doc_map
+    return pegel_results
+
+
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     """Parse one eHYD payload while confining malformed publisher bytes to bounded failures."""
     if not payload.station_products:
@@ -116,95 +417,59 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
     for _, product in payload.station_products:
         _validated_product_coordinates(payload.source_coordinates.value, product, provider_config)
 
-    if len(payload.station_products) > 1:
-        frames: list[pl.DataFrame] = []
-        definitions: dict[str, SourceSeries] = {}
-        inventories: list[InventorySnapshot] = []
-        outcomes: list[RetrievalOutcome] = []
-        issues: list[Issue] = []
-        annotation_bundles: list[AnnotationBundle] = []
-        annotation_offsets: list[int] = []
-        offset = 0
-        for station, product in payload.station_products:
-            pair_scope = (
-                payload.scope.model_copy(update={"station_ids": (station,), "product_ids": (str(product),)})
-                if payload.scope is not None
-                else None
-            )
-            narrowed = replace(payload, station_products=((station, product),), scope=pair_scope)
-            part = _parse_single_pair(narrowed, provider_config)
-            if not part.annotations.is_empty:
-                annotation_bundles.append(part.annotations)
-                annotation_offsets.append(offset)
-            if not part.rows.is_empty():
-                frames.append(part.rows)
-                offset += part.rows.height
-            for item in part.series:
-                definitions[item.series_id] = item
-            inventories.extend(part.inventories)
-            outcomes.extend(part.outcomes)
-            issues.extend(part.issues)
-        combined = pl.concat(frames) if frames else pl.DataFrame(schema=RowsSchema.polars_schema)
-        annotations = (
-            AnnotationBundle.merge_sorted(
-                annotation_bundles,
-                row_offsets=annotation_offsets,
-                old_to_new={i: i for i in range(combined.height)},
-            )
-            if annotation_bundles
-            else AnnotationBundle()
+    if len(payload.station_products) == 1:
+        pair = payload.station_products[0]
+        return parse_group(payload, {pair: payload}, provider_config)[pair]
+
+    pair_payloads: dict[tuple[str, ProductId], Payload] = {}
+    for station, product in payload.station_products:
+        pair_scope = (
+            payload.scope.model_copy(update={"station_ids": (station,), "product_ids": (str(product),)})
+            if payload.scope is not None
+            else None
         )
-        return ParsedSeries(
-            combined,
-            tuple(definitions.values()),
-            tuple(inventories),
-            tuple(outcomes),
-            tuple(issues),
-            annotations=annotations,
+        pair_payloads[(station, product)] = replace(payload, station_products=((station, product),), scope=pair_scope)
+    grouped = parse_group(payload, pair_payloads, provider_config)
+
+    frames: list[pl.DataFrame] = []
+    definitions: dict[str, SourceSeries] = {}
+    inventories: list[InventorySnapshot] = []
+    outcomes: list[RetrievalOutcome] = []
+    issues: list[Issue] = []
+    annotation_bundles: list[AnnotationBundle] = []
+    annotation_offsets: list[int] = []
+    offset = 0
+    for pair in payload.station_products:
+        part = grouped[pair]
+        if not part.annotations.is_empty:
+            annotation_bundles.append(part.annotations)
+            annotation_offsets.append(offset)
+        if not part.rows.is_empty():
+            frames.append(part.rows)
+            offset += part.rows.height
+        for item in part.series:
+            definitions[item.series_id] = item
+        inventories.extend(part.inventories)
+        outcomes.extend(part.outcomes)
+        issues.extend(part.issues)
+    combined = pl.concat(frames) if frames else pl.DataFrame(schema=RowsSchema.polars_schema)
+    annotations = (
+        AnnotationBundle.merge_sorted(
+            annotation_bundles,
+            row_offsets=annotation_offsets,
+            old_to_new={i: i for i in range(combined.height)},
         )
-
-    return _parse_single_pair(payload, provider_config)
-
-
-def _parse_single_pair(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
-    station, product = payload.station_products[0]
-    product_coords = _validated_product_coordinates(payload.source_coordinates.value, product, provider_config)
-    window = SeriesWindow(
-        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+        if annotation_bundles
+        else AnnotationBundle()
     )
-    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
-    scope = payload.scope or SeriesScope(
-        provider_ids=("at_ehyd",),
-        station_ids=(station,),
-        product_ids=(str(product),),
+    return ParsedSeries(
+        combined,
+        tuple(definitions.values()),
+        tuple(inventories),
+        tuple(outcomes),
+        tuple(issues),
+        annotations=annotations,
     )
-    try:
-        if isinstance(payload.source_coordinates.value, AtEhydInfoCoordinates):
-            return _parse_info_prerequisite(payload, station, product, window, retrieved, scope)
-        if isinstance(product_coords, AtEhydOwfCoordinates):
-            return _parse_owf_csv(payload, station, product, product_coords, window, retrieved, scope)
-        return _parse_pegel_json(payload, station, product, product_coords, window, retrieved, scope)
-    except UnsupportedSourceStructureError as error:
-        reason = str(error)
-        outcome = RetrievalOutcome(
-            outcome_id=stable_id(payload.acquisition_id, station, str(product), "failed"),
-            series_id=None,
-            station_id=station,
-            product_id=str(product),
-            window=window,
-            status=OutcomeStatus.FAILED,
-            reason=reason,
-            retrieved_at=retrieved,
-        )
-        issue = Issue(
-            severity="error",
-            code="source.unsupported_structure",
-            message=reason,
-            details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
-            provider_id=_PROVIDER_ID,
-        )
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), (outcome,), (issue,))
 
 
 def _validated_product_coordinates(
@@ -234,52 +499,6 @@ def _validated_product_coordinates(
             raise FatalContractError("at_ehyd Pegel Aktuell endpoint payload contradicts configured subsystem")
         return configured
     raise FatalContractError(f"at_ehyd payload has unsupported coordinate type: {type(payload_coords)!r}")
-
-
-def _parse_info_prerequisite(
-    payload: Payload,
-    station: str,
-    product: ProductId,
-    window: SeriesWindow,
-    retrieved: datetime | None,
-    scope: SeriesScope,
-) -> ParsedSeries:
-    file_map = resolve_messstellen_info_files(payload.content, station)
-    if product in file_map:
-        # Valid prerequisite lookup; the child CSV payload or FailedSourceRequest owns this pair.
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), ())
-
-    evidence = f"source-call:{payload.acquisition_id}"
-    reason = f"eHYD Messstellen/info lists no owf file for station {station} product {product}"
-    inventory = InventorySnapshot(
-        snapshot_id=stable_id(payload.acquisition_id, station, str(product), "info-no-match-inventory"),
-        scope=scope,
-        members=(),
-        completeness=InventoryCompleteness.COMPLETE,
-        access="messstellen_info",
-        origin="response",
-        acquired_at=retrieved,
-        window=window,
-        evidence=(evidence,),
-    )
-    outcome = RetrievalOutcome(
-        outcome_id=stable_id(payload.acquisition_id, station, str(product), "info-no-match"),
-        series_id=None,
-        station_id=station,
-        product_id=str(product),
-        window=window,
-        status=OutcomeStatus.NO_MATCH,
-        reason=reason,
-        retrieved_at=retrieved,
-    )
-    issue = Issue(
-        severity="warning",
-        code="source.no_match",
-        message=reason,
-        details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
-        provider_id=_PROVIDER_ID,
-    )
-    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (inventory,), (outcome,), (issue,))
 
 
 def _parse_owf_csv(
@@ -624,7 +843,7 @@ def _parse_owf_csv(
     )
 
 
-def _parse_pegel_json(
+def _empty_pegel_result(
     payload: Payload,
     station: str,
     product: ProductId,
@@ -634,38 +853,43 @@ def _parse_pegel_json(
     scope: SeriesScope,
 ) -> ParsedSeries:
     evidence = f"source-call:{payload.acquisition_id}"
-    if payload.content == b"":
-        reason = "Empty HTTP 200 Pegel Aktuell response establishes no concrete source-series identity"
-        inventory = InventorySnapshot(
-            snapshot_id=stable_id(payload.acquisition_id, station, str(product), "empty-200-inventory"),
-            scope=scope,
-            members=(),
-            completeness=InventoryCompleteness.INCOMPLETE,
-            access=coords.subsystem,
-            origin="response",
-            acquired_at=retrieved,
-            window=window,
-            evidence=(evidence,),
-            reason=reason,
-        )
-        outcome = RetrievalOutcome(
-            outcome_id=stable_id(payload.acquisition_id, station, str(product), "empty-200"),
-            series_id=None,
-            station_id=station,
-            product_id=str(product),
-            window=window,
-            status=OutcomeStatus.UNRESOLVED,
-            reason=reason,
-            retrieved_at=retrieved,
-        )
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (inventory,), (outcome,))
+    reason = "Empty HTTP 200 Pegel Aktuell response establishes no concrete source-series identity"
+    inventory = InventorySnapshot(
+        snapshot_id=stable_id(payload.acquisition_id, station, str(product), "empty-200-inventory"),
+        scope=scope,
+        members=(),
+        completeness=InventoryCompleteness.INCOMPLETE,
+        access=coords.subsystem,
+        origin="response",
+        acquired_at=retrieved,
+        window=window,
+        evidence=(evidence,),
+        reason=reason,
+    )
+    outcome = RetrievalOutcome(
+        outcome_id=stable_id(payload.acquisition_id, station, str(product), "empty-200"),
+        series_id=None,
+        station_id=station,
+        product_id=str(product),
+        window=window,
+        status=OutcomeStatus.UNRESOLVED,
+        reason=reason,
+        retrieved_at=retrieved,
+    )
+    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (inventory,), (outcome,))
 
-    try:
-        document = json.loads(payload.content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise UnsupportedSourceStructureError(f"eHYD {coords.subsystem} response is not valid JSON") from error
-    if not isinstance(document, dict):
-        raise UnsupportedSourceStructureError(f"eHYD {coords.subsystem} response must be a JSON object")
+
+def _interpret_pegel_document(
+    payload: Payload,
+    document: dict[str, object],
+    station: str,
+    product: ProductId,
+    coords: AtEhydPegelCoordinates,
+    window: SeriesWindow,
+    retrieved: datetime | None,
+    scope: SeriesScope,
+) -> ParsedSeries:
+    evidence = f"source-call:{payload.acquisition_id}"
 
     if (
         coords.subsystem == "pegel_longterm"

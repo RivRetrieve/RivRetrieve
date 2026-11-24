@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime
 from math import isfinite
+from typing import cast
 
 import polars as pl
 
@@ -58,42 +59,47 @@ def _validate_annotation_value(value: object, *, recent: bool) -> str | int | No
     return value
 
 
-def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
+def _validated_route_coordinates(payload: Payload, config: ProviderConfig) -> tuple[OfficialRoute, str, str]:
     coordinates = payload.source_coordinates.value
     if not isinstance(coordinates, OfficialRoute) or len(payload.station_products) != 1:
         raise FatalContractError("Official Swiss payload requires one station and route")
     station, product = payload.station_products[0]
     if product not in config.products or config.products[product].coordinates.value != coordinates:
         raise FatalContractError("Official Swiss payload contradicts configured route coordinates")
-    try:
-        document = json.loads(payload.content)
-        records = document["data"]["water"]["observations"][coordinates.route]
-    except (ValueError, UnicodeDecodeError, KeyError, TypeError) as error:
-        raise UnsupportedSourceStructureError("Official Swiss response envelope is invalid") from error
-    if not isinstance(records, list) or document.get("errors"):
+    return coordinates, station, product
+
+
+def _parse_records(payload: Payload, config: ProviderConfig, records: list[object]) -> ParsedSeries:
+    coordinates, station, product = _validated_route_coordinates(payload, config)
+    if not isinstance(records, list):
         raise UnsupportedSourceStructureError("Official Swiss response does not contain successful rows")
     recent = coordinates.route == "data_live"
     ann_schema = CH_FOEN_RECENT_SCHEMA if recent else CH_FOEN_ARCHIVE_SCHEMA
     ann_field = ann_schema.fields[0].name
     evidence = f"source-call:{payload.acquisition_id}"
     groups = {}
-    for record in records:
-        if not isinstance(record, dict):
+    for item in records:
+        if not isinstance(item, dict):
             raise UnsupportedSourceStructureError("Official Swiss observation must be an object")
+        record = cast("dict[str, object]", item)
         station_record = record.get("station")
-        if not recent and not isinstance(station_record, dict):
-            raise UnsupportedSourceStructureError("Official Swiss archive station must be an object")
-        observed_station = record.get("stationNo") if recent else station_record.get("no")
+        if recent:
+            observed_station = record.get("stationNo")
+        else:
+            if not isinstance(station_record, dict):
+                raise UnsupportedSourceStructureError("Official Swiss archive station must be an object")
+            observed_station = cast("dict[str, object]", station_record).get("no")
         if observed_station != station or record.get("parameterName") != coordinates.parameter:
             raise UnsupportedSourceStructureError("Official Swiss observation contradicts requested coordinates")
         name = None if recent else record.get("tsName")
         if not recent and (not isinstance(name, str) or not name):
             raise UnsupportedSourceStructureError("Official Swiss archive observation lacks its source name")
         groups.setdefault(name, []).append(record)
-    include_annotations = _has_consistent_annotation_field(records, ann_field)
+    typed_records = cast("list[dict[str, object]]", records)
+    include_annotations = _has_consistent_annotation_field(typed_records, ann_field)
     if include_annotations:
-        for record in records:
-            _validate_annotation_value(record[ann_field], recent=recent)
+        for typed_record in typed_records:
+            _validate_annotation_value(typed_record[ann_field], recent=recent)
     definitions = []
     rows = []
     ann_rows = []
@@ -276,23 +282,44 @@ def _parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
     )
 
 
+def _failed_parsed(payload: Payload, reason: str) -> ParsedSeries:
+    station, product = payload.station_products[0]
+    window = SeriesWindow(
+        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+    )
+    outcome = RetrievalOutcome(
+        outcome_id=stable_id(payload.acquisition_id, "unsupported"),
+        series_id=None,
+        station_id=station,
+        product_id=product,
+        window=window,
+        status=OutcomeStatus.FAILED,
+        reason=reason,
+    )
+    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), (outcome,))
+
+
+def parse_records(payload: Payload, config: ProviderConfig, records: list[object]) -> ParsedSeries:
+    """Interpret pre-decoded observation records while preserving bounded failures."""
+    try:
+        return _parse_records(payload, config, records)
+    except UnsupportedSourceStructureError as error:
+        return _failed_parsed(payload, str(error))
+
+
 def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
     """Preserve unsupported source responses as bounded failures, not lost siblings."""
+    coordinates, _, _ = _validated_route_coordinates(payload, config)
     try:
-        return _parse(payload, config)
+        try:
+            document = json.loads(payload.content)
+            records = document["data"]["water"]["observations"][coordinates.route]
+        except (ValueError, UnicodeDecodeError, KeyError, TypeError) as error:
+            raise UnsupportedSourceStructureError("Official Swiss response envelope is invalid") from error
+        if not isinstance(records, list) or document.get("errors"):
+            raise UnsupportedSourceStructureError("Official Swiss response does not contain successful rows")
+        del document
+        return _parse_records(payload, config, records)
     except UnsupportedSourceStructureError as error:
-        station, product = payload.station_products[0]
-        window = SeriesWindow(
-            start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
-            end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
-        )
-        outcome = RetrievalOutcome(
-            outcome_id=stable_id(payload.acquisition_id, "unsupported"),
-            series_id=None,
-            station_id=station,
-            product_id=product,
-            window=window,
-            status=OutcomeStatus.FAILED,
-            reason=str(error),
-        )
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), (outcome,))
+        return _failed_parsed(payload, str(error))

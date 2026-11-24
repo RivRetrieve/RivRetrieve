@@ -8,7 +8,7 @@ from rivretrieve._internal.providers.at_ehyd.config import (
     window_declarations,
 )
 from rivretrieve._internal.providers.at_ehyd.fetch import fetch
-from rivretrieve._internal.providers.at_ehyd.parse import parse
+from rivretrieve._internal.providers.at_ehyd.parse import parse, parse_group
 from rivretrieve._internal.providers.registration import LiveStages, ProviderDeclaration
 
 
@@ -19,6 +19,7 @@ class _Stages:
     shared_acquisition_products = SHARED_ACQUISITION_PRODUCTS
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
+    parse_group = staticmethod(parse_group)
 
 
 declaration = ProviderDeclaration(

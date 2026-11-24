@@ -44,6 +44,7 @@ def test_multiple_real_payloads_preserve_all_native_rows_on_reuse(tmp_path, reta
                 outcomes=first.outcomes + second.outcomes,
                 calls=first.calls + second.calls,
                 failed_requests=first.failed_requests + second.failed_requests,
+                interpretations=first.interpretations + second.interpretations,
             )
 
     request = ObservationRequest(
@@ -90,7 +91,10 @@ def test_partial_success_only_covers_its_reported_interval(tmp_path, retained_ev
     class PartialWindow:
         config = stages.config
         window_declarations = stages.window_declarations
-        fetch = staticmethod(stages.fetch)
+
+        @staticmethod
+        def fetch(*args, **kwargs):
+            return replace(stages.fetch(*args, **kwargs), interpretations=())
 
         @staticmethod
         def parse(payload, config):
@@ -176,6 +180,7 @@ def test_reuse_filters_rows_by_their_actual_fact_segment(tmp_path, retained_evid
             # modern fetch's fact-scoped inventory, not only its parsed rows.
             return replace(
                 acquired,
+                interpretations=(),
                 series=tuple(
                     item.model_copy(
                         update={
@@ -356,7 +361,10 @@ def test_driver_refuses_ambiguous_payload_outcomes_before_any_store_write(
     class AmbiguousPayload:
         config = stages.config
         window_declarations = stages.window_declarations
-        fetch = staticmethod(stages.fetch)
+
+        @staticmethod
+        def fetch(*args, **kwargs):
+            return replace(stages.fetch(*args, **kwargs), interpretations=())
 
         @staticmethod
         def parse(payload, config):
@@ -453,7 +461,10 @@ def test_driver_preserves_independent_rows_and_nonconflicting_payload_outcomes(
     class IndependentPayload:
         config = stages.config
         window_declarations = stages.window_declarations
-        fetch = staticmethod(stages.fetch)
+
+        @staticmethod
+        def fetch(*args, **kwargs):
+            return replace(stages.fetch(*args, **kwargs), interpretations=())
 
         @staticmethod
         def parse(payload, config):

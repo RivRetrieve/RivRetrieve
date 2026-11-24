@@ -38,7 +38,7 @@ from rivretrieve._internal.providers.at_ehyd.config import (
 )
 from rivretrieve._internal.providers.at_ehyd.declaration import declaration
 from rivretrieve._internal.providers.at_ehyd.fetch import fetch, resolve_messstellen_info_files
-from rivretrieve._internal.providers.at_ehyd.parse import parse
+from rivretrieve._internal.providers.at_ehyd.parse import parse, parse_group
 from rivretrieve._internal.providers.at_ehyd.series import OWF_INTERVAL_RULE_TEXT, source_series
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.source_series import (
@@ -73,6 +73,7 @@ class _AtEhydStages:
     shared_acquisition_products: tuple[frozenset[ProductId], ...] = SHARED_ACQUISITION_PRODUCTS
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
+    parse_group = staticmethod(parse_group)
 
 
 def _origin(url: str = "https://ehyd.gv.at/services/test", params: dict[str, str] | None = None) -> SourceCallOrigin:
