@@ -11,6 +11,7 @@ Use one parser for known provider frequencies and public frequency predicates. B
 | Elapsed hours, minutes, seconds | `PT60M`, `PT1H` | `PT1H` |
 | Elapsed hours, minutes, seconds | `PT1H30M`, `PT90M` | `PT90M` |
 | Calendar weeks and days | `P7D`, `P1W` | `P1W` |
+| Calendar weeks and days | `P1W2D`, `P9D` | `P9D` |
 | Calendar years and months | `P12M`, `P1Y` | `P1Y` |
 | Calendar years and months | `P1Y6M`, `P18M` | `P18M` |
 
