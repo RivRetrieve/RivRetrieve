@@ -233,6 +233,7 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("ch_foen"),
         ProviderId("co_ideam"),
         ProviderId("cz_chmi"),
+        ProviderId("de_pegelonline"),
         ProviderId("dk_vanda"),
         ProviderId("fi_syke"),
         ProviderId("fr_hubeau"),

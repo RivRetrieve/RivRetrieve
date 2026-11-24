@@ -282,6 +282,7 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
             ProviderId("ch_foen"),
             ProviderId("co_ideam"),
             ProviderId("cz_chmi"),
+            ProviderId("de_pegelonline"),
             ProviderId("dk_vanda"),
             ProviderId("fi_syke"),
             ProviderId("fr_hubeau"),
@@ -298,7 +299,11 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
     registered = frozenset(map(ProviderId, rr.providers().get_column("provider_id").to_list()))
 
     assert expected == ORIGIN_GATE_ENROLLED_PROVIDERS
-    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
+    # de_pegelonline is origin-gate-enrolled from its catalogue step (#1017) but
+    # not yet registered as a provider (#1020's job), the same temporary state
+    # za_dws and (earlier) dk_vanda were in; see
+    # test_catalogue_origin_certification.py's matching comment.
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws"), ProviderId("de_pegelonline")}
 
 
 @pytest.mark.derived("src/rivretrieve/_internal/providers/pl_imgw/catalogue/native.parquet")
