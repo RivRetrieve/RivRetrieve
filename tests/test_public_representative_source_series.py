@@ -255,7 +255,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             provider=provider,
             station="SJA8821000",
             quantity="discharge",
-            frequency="daily",
+            frequency="P1D",
             statistic="mean",
         )
         start, end = "2026-01-01", "2026-01-10"

@@ -94,7 +94,7 @@ def test_ee_est_page_selection_discovery_and_catalogue_claims_are_offline(
         "unit",
         "time_zone",
     ).rows() == [
-        ("SJA8821000", "discharge_daily_mean", "SJA8821000:Q:MEAN", "discharge", "daily", "mean", "m3/s", "m3/s", None)
+        ("SJA8821000", "discharge_daily_mean", "SJA8821000:Q:MEAN", "discharge", "P1D", "mean", "m3/s", "m3/s", None)
     ]
 
     candidates = namespace["candidates"]
@@ -112,7 +112,7 @@ def test_ee_est_page_selection_discovery_and_catalogue_claims_are_offline(
     hourly_series = rr.series(namespace["hourly_mean"])  # type: ignore[arg-type]
     assert hourly_series.select(
         "station_id", "product_id", "published_id", "frequency", "statistic", "time_zone"
-    ).rows() == [("SJA8821000", "discharge_hourly_mean", "41061:Äravool avg", "hourly", "mean", "+00:00")]
+    ).rows() == [("SJA8821000", "discharge_hourly_mean", "41061:Äravool avg", "PT1H", "mean", "+00:00")]
 
     metadata = namespace["metadata"].row(0, named=True)  # type: ignore[attr-defined]
     assert metadata["station_name"] == "Ahja HJ"
@@ -143,7 +143,7 @@ def test_ee_est_page_selection_discovery_and_catalogue_claims_are_offline(
     )
     assert len(table_rows) == 18
 
-    freq_map = {"Daily": "daily", "Hourly": "hourly"}
+    freq_map = {"`P1D`": "P1D", "`PT1H`": "PT1H"}
     stat_map = {"Mean": "mean", "Minimum": "min", "Maximum": "max"}
     unit_map = {"m³/s": "m3/s", "cm": "cm", "m": "m", "°C": "degC"}
     covered_native_suffixes: set[str] = set()
@@ -160,8 +160,8 @@ def test_ee_est_page_selection_discovery_and_catalogue_claims_are_offline(
         assert set(sub["variant"].to_list()) == {None}
     assert len(covered_native_suffixes) == 18
 
-    daily_series = all_series.filter(all_series["frequency"] == "daily")
-    hourly_all = all_series.filter(all_series["frequency"] == "hourly")
+    daily_series = all_series.filter(all_series["frequency"] == "P1D")
+    hourly_all = all_series.filter(all_series["frequency"] == "PT1H")
     assert set(daily_series["time_zone"].to_list()) == {None}
     assert set(hourly_all["time_zone"].to_list()) == {"+00:00"}
     assert set(all_series["temporal_support"].to_list()) == {"interval"}

@@ -58,14 +58,14 @@ def test_all_18_products_establish_physical_meaning_and_dimensional_admission() 
 
         if spec.source_api == "estmodel":
             assert mapping.namespace == ESTMODEL_NAMESPACE
-            assert facts.frequency.value == "daily"
+            assert facts.frequency.value == "P1D"
             assert facts.time_zone.state is EvidenceState.NOT_ESTABLISHED
             assert facts.time_zone.value is None
             assert facts.clipping_axis is ClippingAxis.CALENDAR_DATE
             assert facts.label_time == "00:00"
         else:
             assert mapping.namespace == FH_NAMESPACE
-            assert facts.frequency.value == "hourly"
+            assert facts.frequency.value == "PT1H"
             assert facts.time_zone.state is EvidenceState.KNOWN
             assert facts.time_zone.value == "+00:00"
             assert facts.clipping_axis is ClippingAxis.SOURCE_TIMESTAMP

@@ -66,7 +66,7 @@ def test_ee_est_offline_discovery_stations_products_metadata_and_predicates(
     assert ahja_row["elevation_value"] is None
 
     # Physical predicate filtering and vertical reference / time_zone facts.
-    daily_stage = rr.find(provider="ee_est", quantity="stage", frequency="daily", statistic="mean")
+    daily_stage = rr.find(provider="ee_est", quantity="stage", frequency="P1D", statistic="mean")
     assert len(daily_stage.series) == 59
     daily_series_df = rr.series(daily_stage)
     assert daily_series_df["time_zone"].unique().to_list() == [None]
@@ -74,17 +74,22 @@ def test_ee_est_offline_discovery_stations_products_metadata_and_predicates(
     assert daily_series_df["vertical_reference"].unique().to_list() == ["gauge_zero"]
     assert daily_series_df["vertical_datum"].null_count() == 59
 
-    hourly_stage = rr.find(provider="ee_est", quantity="stage", frequency="hourly", statistic="mean")
+    hourly_stage = rr.find(provider="ee_est", quantity="stage", frequency="PT1H", statistic="mean")
     assert len(hourly_stage.series) == 56
     hourly_series_df = rr.series(hourly_stage)
     assert hourly_series_df["time_zone"].unique().to_list() == ["+00:00"]
     assert hourly_series_df["source_unit"].unique().to_list() == ["cm"]
     assert hourly_series_df["unit"].unique().to_list() == ["m"]
 
+    # Equivalent elapsed ISO 8601 durations canonicalize to PT1H, while legacy spellings reject.
+    equivalent_hourly = rr.find(provider="ee_est", quantity="stage", frequency="PT60M", statistic="mean")
+    assert equivalent_hourly.series == hourly_stage.series
+    for legacy_freq in ("daily", "hourly"):
+        with pytest.raises(ValueError, match="Unsupported frequency"):
+            rr.find(provider="ee_est", frequency=legacy_freq)
+
     # Dual-code Rannu-Jõesuu HJ (SJA5524000) carries active jaam_kood 41022 in catalogue identity.
-    sja5524000 = rr.find(
-        provider="ee_est", station="SJA5524000", quantity="stage", frequency="hourly", statistic="mean"
-    )
+    sja5524000 = rr.find(provider="ee_est", station="SJA5524000", quantity="stage", frequency="PT1H", statistic="mean")
     sja5524000_restored = rr.from_bundle(rr.to_bundle(sja5524000))
     assert sja5524000_restored.known_series == sja5524000.known_series
     assert [(s.identity.namespace, s.identity.published_id) for s in sja5524000_restored.series] == [
