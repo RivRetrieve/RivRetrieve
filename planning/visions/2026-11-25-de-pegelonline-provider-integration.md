@@ -46,12 +46,13 @@ only exception, purely because step 4 didn't need the standalone `parse`
 stage yet. Split it now to match the universal convention, not to be the
 one outlier:
 
-- Move `_parse_records`, `_failed_parsed`, `_numeric_or_none`, and the
-  `DE_PEGELONLINE_TRM_SCHEMA`/`_TRM_PRODUCTS` decoding logic from `fetch.py`
-  into a new `parse.py`. `fetch.py` keeps request construction
-  (`_local_offset_isoformat`, the `_acquire`/`fetch` loop) and imports the
-  decoding functions from `parse.py`, matching `ch_foen/official_fetch.py`
-  importing from `ch_foen/official_parse.py`.
+- Move `_parse_records`, `_failed_parsed`, `_numeric_or_none`, and
+  `_TRM_PRODUCTS` from `fetch.py` into a new `parse.py` (`DE_PEGELONLINE_TRM_SCHEMA`
+  itself is already defined in `annotations.py`; `parse.py` just imports it,
+  the same way `fetch.py` currently does). `fetch.py` keeps request
+  construction (`_local_offset_isoformat`, the `_acquire`/`fetch` loop) and
+  imports the decoding functions from `parse.py`, matching
+  `ch_foen/official_fetch.py` importing from `ch_foen/official_parse.py`.
 - Add the standalone `parse(payload: Payload, config: ProviderConfig) ->
   ParsedSeries` entry point `parse.py` must expose for the shared engine's
   `ProviderStages` protocol (`driver.py`'s `provider.parse(payload, config)`
@@ -95,8 +96,25 @@ actually call it and commit the result:
 
 ## Register the provider
 
+**Ordering dependency, not optional sequencing:** `register_manifest`
+(`providers/registration.py`) loads every declared provider's packaged
+catalogue artifact *before registering any of them*, by design (its own
+docstring: "a missing or corrupt catalogue refuse[s] the manifest rather
+than exposing a partial catalogue"). `tests/conftest.py`'s
+`packaged_catalogue_inputs` fixture does the same for every
+`ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS` entry. This means adding
+`"de_pegelonline"` to either list **before** the full packaged catalogue
+(the previous section) is actually committed and loadable breaks
+registration/discovery and that fixture for **every** built-in provider,
+not just this one. The catalogue commit must land, and be verified loadable
+(`load_packaged_catalogue_artifact`), before or atomically with — in the
+same merged change as — these two additions; do not split them across
+separately-landing PRs in a way that leaves either list pointing at a
+provider whose catalogue isn't fully committed yet.
+
 - Add `"de_pegelonline"` to `provider_manifest.py`'s `BUILTIN_PROVIDER_IDS`
-  (alphabetically, between `"dk_vanda"` and `"fi_syke"`).
+  (alphabetically, between `"cz_chmi"` and `"dk_vanda"` — `"de_..."` sorts
+  before `"dk_..."`).
 - Add `"de_pegelonline"` to `catalogues/artifact.py`'s
   `ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS` — a different list than the one
   step 2 already added it to (`catalogue_origins.py`'s
