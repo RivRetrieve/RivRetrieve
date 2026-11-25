@@ -73,10 +73,11 @@ PEGELONLINE states `equidistance` (an integer, in minutes) directly on each
 station's `timeseries` entry in `stations.json` — confirmed present in the
 committed fixture (`tests/test_data/de_pegelonline_stations.json`:
 `"equidistance": 15` on a sample `W` entry). This is a genuine per-station,
-per-series source fact, not something to infer: map it straight through
-`canonicalize_frequency()`
-(`src/rivretrieve/_internal/frequency.py`) — `1`→`PT1M`, `5`→`PT5M`,
-`10`→`PT10M`, `15`→`PT15M`, `60`→`PT1H` (canonicalizes automatically).
+per-series source fact, not something to infer: build the ISO duration
+string (`"PT{n}M"`) and pass it through `canonicalize_frequency()`
+(`src/rivretrieve/_internal/frequency.py`, which takes a string, not the
+raw int) — `1`→`PT1M`, `5`→`PT5M`, `10`→`PT10M`, `15`→`PT15M`, `60`→`PT1H`
+(canonicalizes automatically).
 
 Per #874's live tabulation (2026-11-17), this genuinely varies by station
 for the same product — e.g. `W`: `15 min` (502), `1 min` (225), `10 min`
