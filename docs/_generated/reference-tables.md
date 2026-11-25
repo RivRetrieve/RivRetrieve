@@ -169,6 +169,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `cl_dga` | bulk store | none | 784 | 1568 | 0 | 0 |
 | `co_ideam` | live | none | 1372 | 19690 | 0 | 7750 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
+| `de_pegelonline` | live | none | 787 | 1098 | 2837 | 0 |
 | `dk_vanda` | live | none | 1565 | 1733 | 2962 | 0 |
 | `fi_syke` | live | none | 2543 | 2543 | 5086 | 0 |
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
@@ -302,6 +303,11 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `cz_chmi` | `stage_daily_mean` | `m` |
 | `cz_chmi` | `stage_hourly_mean` | `m` |
 | `cz_chmi` | `water_temperature_daily_mean` | `degC` |
+| `de_pegelonline` | `Q` | `m3/s` |
+| `de_pegelonline` | `TRM` | `cm` |
+| `de_pegelonline` | `TRM_WT` | `degC` |
+| `de_pegelonline` | `W` | `unknown` |
+| `de_pegelonline` | `WT` | `degC` |
 | `dk_vanda` | `discharge` | `l/s` |
 | `dk_vanda` | `stage` | `cm` |
 | `dk_vanda` | `temperature` | `degC` |

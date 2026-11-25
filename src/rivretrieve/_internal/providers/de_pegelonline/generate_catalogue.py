@@ -18,28 +18,19 @@ silently omits `TRM`/`TRM_WT` from every station's `timeseries` list, still
 matching the vision; both products are defined below. See the vision's own
 corrected "Source" section for the confirmed request shape.
 
-Only `catalogue/native.parquet` is committed here, not a packaged artifact
-(`provider.json`, `products.parquet`, etc.): `tests/test_catalogue_source_series.py`
-auto-discovers any `catalogue/provider.json` and requires a *complete* packaged
-artifact for it, including `source_series.json` and a `provenance.json` whose
-native-table and terms-recording inputs are each an adopted, reviewed
-`verification-evidence` archive member (`RetainedInputUse`/
-`ArchiveMemberReference`). `describe_station_products`, `build_catalogue` and
-`write_catalogue` below are complete and exercised end-to-end against this
-module's real native data (see `tests/test_de_pegelonline_catalogue_publication.py`
-and a manual `rivretrieve.fetch()` check against the live PEGELONLINE API,
-#1020's own PR description) using placeholder archive identifiers; the actual
-`catalogue/` commit still needs a genuine archive registration for
-`native.parquet` and the terms-of-use recording before `write_catalogue()` can
-be run for real and `de_pegelonline` added to `provider_manifest.py`'s
-`BUILTIN_PROVIDER_IDS` / `catalogues/artifact.py`'s
-`ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS` — that registration is outside
-this change's repository scope. `write_core_catalogue_files` below writes the
-four core tables and is exercised by tests against a scratch directory; it is
-not yet invoked against this committed `catalogue/` directory, matching the
-actual precedent of other providers' own dedicated catalogue-step commits
-under this same evidence architecture (e.g. `dk_vanda`'s Effort #797, commit
-`296cf6db`, which committed no packaged artifact files at all).
+The full packaged artifact (`provider.json`, `products.parquet`, `stations.parquet`,
+`station_products.parquet`, `source_series.json`, `provenance.json`, ...) is
+committed under `catalogue/`, built by `write_catalogue()` against the real
+`de_pegelonline-2026-11-25-v1` archive collection in
+`RivRetrieve/verification-evidence` (native table and terms-of-use recording,
+registered via that repository's own intake/publish tooling). `de_pegelonline`
+is a built-in provider: see `provider_manifest.py`'s `BUILTIN_PROVIDER_IDS` and
+`catalogues/artifact.py`'s `ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS`.
+`build_catalogue()` requires real `acquisition_provenance` unconditionally
+(matching `at_ehyd`/`ch_foen`'s precedent for a bespoke-builder enrolled
+provider); `main()`'s `--out` CLI mode assembles the four core tables directly
+instead, since it predates that requirement and is not part of the
+packaged-artifact contract.
 """
 
 from __future__ import annotations
@@ -402,7 +393,7 @@ def build_catalogue(
     native_table: NativeTable,
     origins: OriginDeclarations,
     *,
-    acquisition_provenance: AcquisitionProvenance | None = None,
+    acquisition_provenance: AcquisitionProvenance,
     station_metadata: pl.DataFrame | None = None,
 ) -> GeneratedDePegelonlineCatalogue:
     """Assemble the four catalogue tables from one retained native snapshot.
@@ -411,9 +402,19 @@ def build_catalogue(
     `last_catalogue_check`) is derived from the native table's own
     `retrieved_at` column, matching `lt_lhmt`'s pattern, rather than taken as a
     separate argument that could drift from what was actually fetched.
+
+    `acquisition_provenance` is required (matching `at_ehyd`/`ch_foen`'s own
+    bespoke-builder precedent): `de_pegelonline` is enrolled in
+    `ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS`, so any packaged catalogue
+    built for it, including this function's own self-check, must carry real
+    provenance. `main()`'s `--out` CLI mode builds the four core tables
+    directly instead of calling this function, since it predates provenance
+    being available and is not part of the packaged-artifact contract.
     """
     if native_table.data.is_empty():
         raise FatalContractError("de_pegelonline native table must not be empty")
+    if acquisition_provenance is None or acquisition_provenance.provider_id != str(PROVIDER_ID):
+        raise FatalContractError("de_pegelonline catalogue requires its selected acquisition provenance")
     maximum_retrieved_at = native_table.data["retrieved_at"].max()
     if not isinstance(maximum_retrieved_at, datetime):
         raise FatalContractError("de_pegelonline native table has no valid retrieved_at values")
@@ -425,7 +426,7 @@ def build_catalogue(
     provider_info = build_provider_info(checked_on)
     source_descriptions = describe_station_products(native_table)
 
-    validate_generated_catalogue(provider_info, products, stations, station_products)
+    validate_generated_catalogue(provider_info, products, stations, station_products, acquisition_provenance)
     return GeneratedDePegelonlineCatalogue(
         provider_info=provider_info,
         products=products,
@@ -442,13 +443,21 @@ def validate_generated_catalogue(
     products: ProductCatalog,
     stations: StationCatalog,
     station_products: StationProductCatalog,
+    acquisition_provenance: AcquisitionProvenance,
 ) -> None:
     provider_info_df = pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema)
     validate_catalogue(provider_info_df, PROVIDER_INFO_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
     validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
-    packaged_catalogue_artifact_from_components(provider_info, products, stations, station_products, on_issue="raise")
+    packaged_catalogue_artifact_from_components(
+        provider_info,
+        products,
+        stations,
+        station_products,
+        acquisition_provenance=acquisition_provenance,
+        on_issue="raise",
+    )
 
 
 def refresh_native_table_from_live(*, retrieved_at: RetrievedAt) -> NativeTable:
@@ -581,7 +590,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     from rivretrieve._internal.providers.de_pegelonline.origins import STATION_CATALOGUE_ORIGINS
 
     native_table = read_native_table(args.native)
-    catalogue = build_catalogue(native_table, STATION_CATALOGUE_ORIGINS)
+    if native_table.data.is_empty():
+        parser.error("native table must not be empty")
+    maximum_retrieved_at = native_table.data["retrieved_at"].max()
+    if not isinstance(maximum_retrieved_at, datetime):
+        parser.error("native table has no valid retrieved_at values")
+    checked_on = maximum_retrieved_at.date()
+    products = build_products()
+    stations = build_stations(native_table)
+    enforce_catalogue_origins(PROVIDER_ID, STATION_CATALOGUE_ORIGINS, native_table, stations)
+    station_products = build_station_products(native_table, checked_on)
+    provider_info = build_provider_info(checked_on)
+    source_descriptions = describe_station_products(native_table)
+    validate_catalogue(
+        pl.DataFrame([provider_info], schema=PROVIDER_INFO_CATALOG_SCHEMA.polars_schema),
+        PROVIDER_INFO_CATALOG_SCHEMA,
+        on_issue="raise",
+    )
+    validate_catalogue(products, PRODUCT_CATALOG_SCHEMA, on_issue="raise")
+    validate_catalogue(stations, STATION_CATALOG_SCHEMA, on_issue="raise")
+    validate_catalogue(station_products, STATION_PRODUCT_CATALOG_SCHEMA, on_issue="raise")
+    catalogue = GeneratedDePegelonlineCatalogue(
+        provider_info=provider_info,
+        products=products,
+        stations=stations,
+        station_products=station_products,
+        source_descriptions=source_descriptions,
+    )
     write_core_catalogue_files(catalogue, args.out)
     return 0
 

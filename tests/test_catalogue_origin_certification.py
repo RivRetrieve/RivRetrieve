@@ -694,10 +694,10 @@ def test_provider_declarations_preserve_reviewed_identity_and_coordinate_fields(
     # deliberately absent from BUILTIN_PROVIDER_IDS. dk_vanda was in that same
     # state during Effort #800, step 5, until its real catalogue was built and
     # it was registered as a LiveStages provider (see declaration.py).
-    # de_pegelonline is in that same state during Effort #1017, step 2 (this
-    # catalogue step): its origin declarations and packaged catalogue exist, but
-    # provider registration/integration is #1020's job, not this one's.
-    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws"), ProviderId("de_pegelonline")}
+    # de_pegelonline went through that same transition at #1020: its origin
+    # declarations and packaged catalogue existed from Effort #1017, step 2, and
+    # it is now registered as a LiveStages provider too.
+    assert registered == ORIGIN_GATE_ENROLLED_PROVIDERS - {ProviderId("za_dws")}
     assert {(provider, case.identity): case.declarations for provider, case in CASES} == _expected_declarations()
     assert all(tuple(case.declarations) == SCHEMA_COLUMNS for _, case in CASES)
 

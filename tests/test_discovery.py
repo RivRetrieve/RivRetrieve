@@ -167,6 +167,13 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
         "stage_hourly_mean",
         "water_temperature_daily_mean",
     ],
+    "de_pegelonline": [
+        "Q",
+        "TRM",
+        "TRM_WT",
+        "W",
+        "WT",
+    ],
     "dk_vanda": [
         "discharge",
         "stage",
@@ -240,6 +247,7 @@ EXPECTED_PRODUCT_IDS = sorted(
     set(EXPECTED_PRODUCT_IDS)
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["ar_ina"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["at_ehyd"])
+    | set(EXPECTED_PRODUCTS_BY_PROVIDER["de_pegelonline"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["ch_foen"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["co_ideam"])
     | set(EXPECTED_PRODUCTS_BY_PROVIDER["pe_senamhi"])
@@ -284,6 +292,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "cl_dga",
         "co_ideam",
         "cz_chmi",
+        "de_pegelonline",
         "dk_vanda",
         "fi_syke",
         "fr_hubeau",

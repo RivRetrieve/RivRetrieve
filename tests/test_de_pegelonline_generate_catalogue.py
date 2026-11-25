@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 import polars as pl
 import pytest
 
+from rivretrieve._internal.acquisition_provenance import NativeTableIdentity, RecordingReference
 from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt
 from rivretrieve._internal.catalogues.schemas import (
     PRODUCT_CATALOG_SCHEMA,
@@ -24,9 +25,38 @@ from rivretrieve._internal.catalogues.schemas import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.providers.de_pegelonline import generate_catalogue
-from rivretrieve._internal.providers.de_pegelonline.origins import STATION_CATALOGUE_ORIGINS
+from rivretrieve._internal.providers.de_pegelonline.origins import STATION_CATALOGUE_ORIGINS, build_acquisition_provenance
 
 RETRIEVED_AT = RetrievedAt(datetime(2026, 11, 24, 17, 20, 15, tzinfo=UTC))
+
+
+def _provenance():
+    """A well-formed but placeholder de_pegelonline provenance for schema-only tests.
+
+    These tests check table shapes against hand-built synthetic payloads, not
+    the real committed native table, so the archive identity below need not
+    match any real registered collection; only `build_catalogue`'s own
+    provider_id/fact-universe self-check (now mandatory once de_pegelonline is
+    enrolled in `ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS`) needs satisfying.
+    """
+    return build_acquisition_provenance(
+        stations_retrieved_at=RETRIEVED_AT.value,
+        native_identity=NativeTableIdentity(
+            repository_path="src/rivretrieve/_internal/providers/de_pegelonline/catalogue/native.parquet",
+            revision="0" * 40,
+            sha256="0" * 64,
+            byte_size=1,
+        ),
+        terms_recording=RecordingReference(
+            recording_id="de_pegelonline-terms",
+            repository_path="tests/test_data/de_pegelonline_terms.html",
+            source_url="https://pegelonline.wsv.de/gast/nutzungsbedingungen",
+            retrieved_at=RETRIEVED_AT.value,
+            media_type="text/html; charset=utf-8",
+            sha256="1" * 64,
+        ),
+        license_exact_text="placeholder licence text for schema-only tests",
+    )
 
 
 def _station(
@@ -251,7 +281,9 @@ def test_station_native_table_keeps_neustadt_shortname_collision_as_two_uuids():
 
 
 def _catalogue():
-    return generate_catalogue.build_catalogue(_native_table(), STATION_CATALOGUE_ORIGINS)
+    return generate_catalogue.build_catalogue(
+        _native_table(), STATION_CATALOGUE_ORIGINS, acquisition_provenance=_provenance()
+    )
 
 
 def test_build_products_returns_all_five_product_ids_with_distinct_observed_properties():
@@ -339,7 +371,7 @@ def test_build_catalogue_is_gated_on_origins():
     with pytest.raises(
         FatalContractError, match=r"de_pegelonline\.longitude: canonical column has no origin declaration"
     ):
-        generate_catalogue.build_catalogue(_native_table(), broken)
+        generate_catalogue.build_catalogue(_native_table(), broken, acquisition_provenance=_provenance())
 
 
 # --- describe_station_products (source_series.json) --------------------------

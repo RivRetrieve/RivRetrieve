@@ -276,6 +276,7 @@ def build_acquisition_provenance(
 
 
 CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
     ("src/rivretrieve/_internal/providers/de_pegelonline/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/de_pegelonline/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/de_pegelonline/origins.py", "STATION_METADATA_NOTICE"),

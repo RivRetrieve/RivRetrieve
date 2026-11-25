@@ -38,6 +38,7 @@ PROVIDER_COUNTRY = {
     "cl_dga": "CHL",
     "co_ideam": "COL",
     "cz_chmi": "CZE",
+    "de_pegelonline": "DEU",
     "dk_vanda": "DNK",
     "fi_syke": "FIN",
     "fr_hubeau": "FRA",
@@ -51,7 +52,6 @@ PROVIDER_COUNTRY = {
 }
 PLANNED_COUNTRY = {
     "BEL": "Belgium (Flanders, Wallonia)",
-    "DEU": "Germany (federal waterways, Bavaria, Baden-Württemberg, Berlin, NRW)",
     "ESP": "Spain",
     "EST": "Estonia",
     "GBR": "United Kingdom (EA, NRFA, SEPA)",

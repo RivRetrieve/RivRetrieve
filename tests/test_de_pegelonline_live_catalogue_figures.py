@@ -29,10 +29,11 @@ import polars as pl
 import polars.testing as pl_testing
 import pytest
 
+from rivretrieve._internal.acquisition_provenance import NativeTableIdentity, RecordingReference
 from rivretrieve._internal.catalogues.artifact import REQUIRED_ARTIFACT_FILES
 from rivretrieve._internal.catalogues.native import read_native_table
 from rivretrieve._internal.providers.de_pegelonline import generate_catalogue
-from rivretrieve._internal.providers.de_pegelonline.origins import STATION_CATALOGUE_ORIGINS
+from rivretrieve._internal.providers.de_pegelonline.origins import STATION_CATALOGUE_ORIGINS, build_acquisition_provenance
 
 FIXTURE_PATH = Path("tests/test_data/de_pegelonline_stations.json")
 CATALOGUE_DIR = Path("src/rivretrieve/_internal/providers/de_pegelonline/catalogue")
@@ -40,6 +41,25 @@ NATIVE_PATH = CATALOGUE_DIR / "native.parquet"
 ATTESTED_RETRIEVED_AT = datetime(2026, 11, 24, 20, 8, 8, tzinfo=UTC)
 ATTESTED_FIXTURE_SHA256 = "441cc00ade408d13f099c908be0fbc374e7ad7248fbecdeaf205e560b5addc67"
 CHECKED_ON = date(2026, 11, 24)
+
+
+def _provenance() -> object:
+    """A well-formed placeholder provenance; these tests check figures, not provenance."""
+    return build_acquisition_provenance(
+        stations_retrieved_at=ATTESTED_RETRIEVED_AT,
+        native_identity=NativeTableIdentity(
+            repository_path=str(NATIVE_PATH), revision="0" * 40, sha256="0" * 64, byte_size=1
+        ),
+        terms_recording=RecordingReference(
+            recording_id="de_pegelonline-terms",
+            repository_path="tests/test_data/de_pegelonline_terms.html",
+            source_url="https://pegelonline.wsv.de/gast/nutzungsbedingungen",
+            retrieved_at=ATTESTED_RETRIEVED_AT,
+            media_type="text/html; charset=utf-8",
+            sha256="1" * 64,
+        ),
+        license_exact_text="placeholder licence text for figure checks",
+    )
 
 
 @pytest.mark.recorded(str(FIXTURE_PATH))
@@ -53,7 +73,7 @@ def test_live_fixture_matches_attested_digest(retained_evidence_root) -> None:
 
 def _catalogue(retained_evidence_root):
     native = read_native_table(retained_evidence_root / NATIVE_PATH)
-    return generate_catalogue.build_catalogue(native, STATION_CATALOGUE_ORIGINS)
+    return generate_catalogue.build_catalogue(native, STATION_CATALOGUE_ORIGINS, acquisition_provenance=_provenance())
 
 
 @pytest.mark.derived(str(NATIVE_PATH))
@@ -122,15 +142,11 @@ def test_write_core_catalogue_files_reproduces_the_live_catalogue_from_committed
 ) -> None:
     """`write_core_catalogue_files` reproduces this catalogue from the committed native table.
 
-    Nothing beyond `native.parquet` is committed under `catalogue/` for this
-    provider yet: `catalogue/provider.json` existing is this repo's own signal
-    (`tests/test_catalogue_source_series.py`'s provider-autodiscovery test) that
-    a *complete* packaged artifact exists, including `source_series.json` —
-    which needs each product's `SourceIdentity`/`PhysicalFacts`, step 3's job
-    (#1018), not this one's. Shipping only the four core files would silently
-    break that invariant for every other provider's test run. This test instead
-    writes to a scratch directory to prove the four core files are reproducible
-    without committing a partial, invariant-breaking artifact.
+    The full packaged artifact (including `source_series.json` and
+    `provenance.json`) is committed under `catalogue/` via `write_catalogue()`;
+    this test only exercises the four-core-file subset in isolation, writing to
+    a scratch directory rather than re-deriving the committed evidence-bound
+    files.
     """
     catalogue = _catalogue(retained_evidence_root)
     output = generate_catalogue.write_core_catalogue_files(catalogue, tmp_path)
