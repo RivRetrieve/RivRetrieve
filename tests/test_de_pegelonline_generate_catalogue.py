@@ -161,7 +161,28 @@ def test_station_native_table_parses_core_fields_and_flattens_water():
     assert row["water_longname"] == "ALLER"
     assert row["w_unit"] == "cm"
     assert row["w_gauge_zero_value"] == pytest.approx(31.82)
+    assert row["w_gauge_zero_unit"] == "m. ü. NN"
     assert {entry["shortname"] for entry in row["timeseries"]} == {"W", "WT", "TRM", "TRM_WT"}
+
+
+def test_station_native_table_captures_per_timeseries_equidistance():
+    table = _native_table()
+    row = table.data.filter(pl.col("uuid") == "b475386c-30cc-453a-b3b7-1d17ace13595").row(0, named=True)
+    by_shortname = {entry["shortname"]: entry["equidistance"] for entry in row["timeseries"]}
+
+    assert by_shortname["W"] == 15
+    assert by_shortname["WT"] == 15
+    # TRM/TRM_WT never publish an equidistance (they are scheduled products).
+    assert by_shortname["TRM"] is None
+    assert by_shortname["TRM_WT"] is None
+
+
+def test_station_native_table_keeps_gauge_zero_unit_distinct_from_timeseries_unit():
+    table = _native_table()
+    row = table.data.filter(pl.col("uuid") == "5cdc6555-87d7-4fcd-834d-cbbe24c9d08b").row(0, named=True)
+
+    assert row["w_unit"] == "m+PNP"
+    assert row["w_gauge_zero_unit"] == "m. ü. NN"
 
 
 def test_station_native_table_keeps_blank_remark_distinct_from_absent_remark():
@@ -181,6 +202,7 @@ def test_station_native_table_records_m_nn_series_without_gauge_zero():
 
     assert row["w_unit"] == "m+NN"
     assert row["w_gauge_zero_value"] is None
+    assert row["w_gauge_zero_unit"] is None
 
 
 def test_station_native_table_keeps_m_pnp_gauge_zero_distinct_from_m_nn():
@@ -318,6 +340,58 @@ def test_build_catalogue_is_gated_on_origins():
         FatalContractError, match=r"de_pegelonline\.longitude: canonical column has no origin declaration"
     ):
         generate_catalogue.build_catalogue(_native_table(), broken)
+
+
+# --- describe_station_products (source_series.json) --------------------------
+
+
+def test_describe_station_products_groups_stations_sharing_identical_facts():
+    """CELLE, ACHLEITEN and NEUSTADT(LEINE) all publish `W` as `cm` with the
+    same shared `gaugeZero.unit` text, so they must collapse into one
+    description rather than being repeated per station."""
+    descriptions = generate_catalogue.describe_station_products(_native_table())
+    w_cm = next(d for d in descriptions.descriptions if d.product_id == "W" and d.facts[0].source_unit.value == "cm")
+
+    assert set(w_cm.station_ids) == {
+        "b475386c-30cc-453a-b3b7-1d17ace13595",  # CELLE
+        "c389c9e2-a5d8-4104-a4cf-510ade44f143",  # ACHLEITEN
+        "dda39817-d01d-467f-a6a3-7487011a45d1",  # NEUSTADT (LEINE)
+    }
+
+
+def test_describe_station_products_keeps_m_nn_and_m_pnp_regimes_distinct_from_cm():
+    descriptions = generate_catalogue.describe_station_products(_native_table())
+    w_descriptions = [d for d in descriptions.descriptions if d.product_id == "W"]
+    units = {d.facts[0].source_unit.value for d in w_descriptions}
+
+    assert units == {"cm", "m+NN", "m+PNP"}
+    m_nn = next(d for d in w_descriptions if d.facts[0].source_unit.value == "m+NN")
+    assert m_nn.station_ids == ("2813f196-3404-4ac2-92be-e288fe1607af",)  # AHSEN
+
+
+def test_describe_station_products_trm_inherits_w_gauge_zero_unit_text():
+    """TRM never carries its own `gaugeZero`; it must inherit CELLE's `W`
+    vertical-datum text rather than leaving its vertical datum source-silent."""
+    descriptions = generate_catalogue.describe_station_products(_native_table())
+    trm = next(d for d in descriptions.descriptions if d.product_id == "TRM")
+
+    assert trm.facts[0].vertical_datum.value == "m. ü. NN"
+    assert trm.station_ids == ("b475386c-30cc-453a-b3b7-1d17ace13595",)  # CELLE
+
+
+def test_describe_station_products_covers_every_product_and_excludes_empty_stations():
+    descriptions = generate_catalogue.describe_station_products(_native_table())
+
+    assert {d.product_id for d in descriptions.descriptions} == {"W", "WT", "TRM", "TRM_WT", "Q"}
+    all_station_ids = {station_id for d in descriptions.descriptions for station_id in d.station_ids}
+    # NEUSTADT (OSTSEE) publishes no timeseries at all.
+    assert "3f0b6b74-80a9-4576-a3cb-ea967dfc349f" not in all_station_ids
+
+
+def test_describe_station_products_is_provider_scoped():
+    descriptions = generate_catalogue.describe_station_products(_native_table())
+
+    assert descriptions.provider_id == "de_pegelonline"
 
 
 # --- station metadata ---------------------------------------------------------

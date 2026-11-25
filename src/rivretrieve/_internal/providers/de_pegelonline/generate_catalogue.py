@@ -21,13 +21,25 @@ corrected "Source" section for the confirmed request shape.
 Only `catalogue/native.parquet` is committed here, not a packaged artifact
 (`provider.json`, `products.parquet`, etc.): `tests/test_catalogue_source_series.py`
 auto-discovers any `catalogue/provider.json` and requires a *complete* packaged
-artifact for it, including `source_series.json` — which needs every product's
-`SourceIdentity`/`PhysicalFacts` (step 3, #1018). `write_core_catalogue_files`
-below writes the four core tables and is exercised by tests against a scratch
-directory; it is not yet invoked against this committed `catalogue/` directory,
-matching the actual precedent of other providers' own dedicated catalogue-step
-commits under this same evidence architecture (e.g. `dk_vanda`'s Effort #797,
-commit `296cf6db`, which committed no packaged artifact files at all).
+artifact for it, including `source_series.json` and a `provenance.json` whose
+native-table and terms-recording inputs are each an adopted, reviewed
+`verification-evidence` archive member (`RetainedInputUse`/
+`ArchiveMemberReference`). `describe_station_products`, `build_catalogue` and
+`write_catalogue` below are complete and exercised end-to-end against this
+module's real native data (see `tests/test_de_pegelonline_catalogue_publication.py`
+and a manual `rivretrieve.fetch()` check against the live PEGELONLINE API,
+#1020's own PR description) using placeholder archive identifiers; the actual
+`catalogue/` commit still needs a genuine archive registration for
+`native.parquet` and the terms-of-use recording before `write_catalogue()` can
+be run for real and `de_pegelonline` added to `provider_manifest.py`'s
+`BUILTIN_PROVIDER_IDS` / `catalogues/artifact.py`'s
+`ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS` — that registration is outside
+this change's repository scope. `write_core_catalogue_files` below writes the
+four core tables and is exercised by tests against a scratch directory; it is
+not yet invoked against this committed `catalogue/` directory, matching the
+actual precedent of other providers' own dedicated catalogue-step commits
+under this same evidence architecture (e.g. `dk_vanda`'s Effort #797, commit
+`296cf6db`, which committed no packaged artifact files at all).
 """
 
 from __future__ import annotations
@@ -64,6 +76,7 @@ from rivretrieve._internal.catalogues.schemas import (
     StationProductCatalog,
     validate_catalogue,
 )
+from rivretrieve._internal.catalogues.source_series import SourceDescriptions
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.de_pegelonline.origins import STATIONS_URL
@@ -94,7 +107,7 @@ PRODUCTS: dict[str, str] = {
 # such ambiguity applies to them.
 PRODUCT_UNITS: dict[str, str] = {"W": "unknown", "Q": "m3/s", "WT": "degC", "TRM": "cm", "TRM_WT": "degC"}
 
-TIMESERIES_STRUCT = pl.Struct({"shortname": pl.String, "unit": pl.String})
+TIMESERIES_STRUCT = pl.Struct({"shortname": pl.String, "unit": pl.String, "equidistance": pl.Int64})
 NATIVE_SCHEMA = pl.Schema(
     {
         "uuid": pl.String,
@@ -110,6 +123,11 @@ NATIVE_SCHEMA = pl.Schema(
         "water_longname": pl.String,
         "w_unit": pl.String,
         "w_gauge_zero_value": pl.Float64,
+        # `gaugeZero.unit` text (e.g. "m. ü. NN"), distinct from `w_unit` (the
+        # W timeseries' own native unit, cm/m+NN/m+PNP): step 5's `describe_*`
+        # catalogue builder needs this as `series.source_series()`'s
+        # `gauge_zero_unit` argument (series.py's cm/m+PNP vertical-datum text).
+        "w_gauge_zero_unit": pl.String,
         "timeseries": pl.List(TIMESERIES_STRUCT),
     }
 )
@@ -137,16 +155,25 @@ def _optional_float(source: dict[str, object], field: str, *, context: str = "st
     return float(value)
 
 
+def _optional_int(source: dict[str, object], field: str, *, context: str = "station") -> int | None:
+    value = source.get(field)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise FatalContractError(f"PEGELONLINE {context} field '{field}' must be an integer or absent")
+    return value
+
+
 def station_native_table(payload: object, *, retrieved_at: RetrievedAt) -> NativeTable:
     """Flatten PEGELONLINE's station catalogue into one row per station.
 
     Preserves every station-level native field verbatim (including all timeseries
-    shortnames and units, not only the three in scope) plus the `W` timeseries'
-    own native unit (`cm`/`m+NN`/`m+PNP`) and `gaugeZero.value`, flattened into
-    top-level scalar columns so the shared station-metadata mechanism can expose
-    them. A station publishes at most one `W` timeseries (checked below); this
-    does not hold generally for other shortnames, which stay in the nested
-    `timeseries` list unflattened.
+    shortnames, units and equidistance minute counts, not only the three products
+    in scope) plus the `W` timeseries' own native unit (`cm`/`m+NN`/`m+PNP`) and
+    `gaugeZero.value`/`gaugeZero.unit`, flattened into top-level scalar columns so
+    the shared station-metadata mechanism can expose them. A station publishes at
+    most one `W` timeseries (checked below); this does not hold generally for
+    other shortnames, which stay in the nested `timeseries` list unflattened.
     """
     rows = _rows(payload)
     parsed: list[dict[str, object]] = []
@@ -180,31 +207,33 @@ def station_native_table(payload: object, *, retrieved_at: RetrievedAt) -> Nativ
         timeseries_raw = row.get("timeseries")
         if not isinstance(timeseries_raw, list):
             raise FatalContractError("PEGELONLINE station requires a 'timeseries' list")
-        timeseries: list[dict[str, str]] = []
+        timeseries: list[dict[str, object]] = []
         seen_shortnames: set[str] = set()
         w_unit: str | None = None
         w_gauge_zero_value: float | None = None
+        w_gauge_zero_unit: str | None = None
         for entry in timeseries_raw:
             if not isinstance(entry, dict):
                 raise FatalContractError("PEGELONLINE timeseries entry must be an object")
             entry = cast("dict[str, object]", entry)
             ts_shortname = _required_str(entry, "shortname", context="timeseries")
             ts_unit = _required_str(entry, "unit", context="timeseries")
+            ts_equidistance = _optional_int(entry, "equidistance", context="timeseries")
             if ts_shortname in seen_shortnames:
                 raise FatalContractError("PEGELONLINE station has duplicate timeseries shortnames")
             seen_shortnames.add(ts_shortname)
-            timeseries.append({"shortname": ts_shortname, "unit": ts_unit})
+            timeseries.append({"shortname": ts_shortname, "unit": ts_unit, "equidistance": ts_equidistance})
             if ts_shortname == "W":
                 w_unit = ts_unit
                 gauge_zero = entry.get("gaugeZero")
                 if gauge_zero is not None:
                     if not isinstance(gauge_zero, dict):
                         raise FatalContractError("PEGELONLINE gaugeZero must be an object or null")
-                    w_gauge_zero_value = _optional_float(
-                        cast("dict[str, object]", gauge_zero), "value", context="gaugeZero"
-                    )
+                    gauge_zero = cast("dict[str, object]", gauge_zero)
+                    w_gauge_zero_value = _optional_float(gauge_zero, "value", context="gaugeZero")
                     if w_gauge_zero_value is None:
                         raise FatalContractError("PEGELONLINE gaugeZero requires a numeric 'value' when present")
+                    w_gauge_zero_unit = _required_str(gauge_zero, "unit", context="gaugeZero")
 
         parsed.append(
             {
@@ -221,6 +250,7 @@ def station_native_table(payload: object, *, retrieved_at: RetrievedAt) -> Nativ
                 "water_longname": water_longname,
                 "w_unit": w_unit,
                 "w_gauge_zero_value": w_gauge_zero_value,
+                "w_gauge_zero_unit": w_gauge_zero_unit,
                 "timeseries": timeseries,
             }
         )
@@ -287,6 +317,62 @@ def build_station_products(native_table: NativeTable, checked_on: date) -> Stati
     )
 
 
+def describe_station_products(native_table: NativeTable) -> SourceDescriptions:
+    """Describe every witnessed de_pegelonline source identity and its established facts.
+
+    Matches `at_ehyd/generate_catalogue.py`'s `describe_associations`, the
+    established precedent for a bespoke-builder provider whose physical facts
+    genuinely vary per station (here: `W`/`TRM`'s vertical-datum regime and
+    every regular product's reporting interval). Iterates every station x
+    product row actually published in the native table's own `timeseries`
+    lists and calls `series.source_series(...)` with that station's native
+    `unit` and `equidistance` for the exact timeseries entry, plus the
+    station's own `W` `gaugeZero.unit` text. `gauge_zero_unit` is only
+    consulted for the two stage products, `W` and `TRM` (which share one
+    vertical-datum regime per `series.py`'s own note, and never publishes its
+    own `gaugeZero`); passing it for `Q`/`WT`/`TRM_WT` is harmless since
+    `source_series()` ignores it for every other product. Witnessed stations
+    that share one identical identity and physical-fact segment are grouped
+    under one description rather than repeated per station.
+    """
+    from rivretrieve._internal.catalogues.source_series import SourceDescription
+    from rivretrieve._internal.providers.de_pegelonline.series import QUANTITIES, source_series
+    from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity
+
+    grouped: dict[tuple[str, SourceIdentity, tuple[PhysicalFacts, ...]], list[str]] = {}
+    for row in native_table.data.iter_rows(named=True):
+        station_id = row["uuid"]
+        gauge_zero_unit = row["w_gauge_zero_unit"]
+        for entry in row["timeseries"]:
+            product_id = entry["shortname"]
+            if product_id not in QUANTITIES:
+                continue
+            series = source_series(
+                station_id,
+                product_id,
+                unit=entry["unit"],
+                equidistance=entry["equidistance"],
+                gauge_zero_unit=gauge_zero_unit,
+                origin="catalogue",
+            )
+            grouped.setdefault((product_id, series.identity, series.facts), []).append(station_id)
+
+    descriptions = [
+        SourceDescription(
+            product_id=product_id,
+            station_ids=tuple(sorted(station_list)),
+            identity_key=(identity.namespace, identity.published_id),
+            native_coordinate=product_id,
+            identity=identity,
+            facts=facts,
+        )
+        for (product_id, identity, facts), station_list in sorted(
+            grouped.items(), key=lambda item: (item[0][0], item[0][1].namespace, item[0][1].published_id or "")
+        )
+    ]
+    return SourceDescriptions(provider_id=str(PROVIDER_ID), descriptions=tuple(descriptions))
+
+
 def build_provider_info(checked_on: date) -> dict[str, object]:
     return {
         "provider_id": str(PROVIDER_ID),
@@ -307,6 +393,7 @@ class GeneratedDePegelonlineCatalogue:
     products: ProductCatalog
     stations: StationCatalog
     station_products: StationProductCatalog
+    source_descriptions: SourceDescriptions
     acquisition_provenance: AcquisitionProvenance | None = None
     station_metadata: pl.DataFrame | None = None
 
@@ -336,6 +423,7 @@ def build_catalogue(
     enforce_catalogue_origins(PROVIDER_ID, origins, native_table, stations)
     station_products = build_station_products(native_table, checked_on)
     provider_info = build_provider_info(checked_on)
+    source_descriptions = describe_station_products(native_table)
 
     validate_generated_catalogue(provider_info, products, stations, station_products)
     return GeneratedDePegelonlineCatalogue(
@@ -343,6 +431,7 @@ def build_catalogue(
         products=products,
         stations=stations,
         station_products=station_products,
+        source_descriptions=source_descriptions,
         acquisition_provenance=acquisition_provenance,
         station_metadata=station_metadata,
     )
@@ -454,6 +543,7 @@ def write_catalogue(
         native_table=native_table,
         metadata_fields=STATION_METADATA_FIELDS,
         station_metadata_notice=STATION_METADATA_NOTICE,
+        source_descriptions=catalogue.source_descriptions,
     )
     for name, content in metadata.items():
         (output_path / name).write_bytes(content)
