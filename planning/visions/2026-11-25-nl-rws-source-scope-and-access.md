@@ -11,23 +11,28 @@ vision alone does not.
 
 The port's coordination issue is
 [#355](https://github.com/RivRetrieve/RivRetrieve/issues/355), tracked in
-[#870](https://github.com/RivRetrieve/RivRetrieve/issues/870). Follow
-[provider-port step 1](../../docs/maintenance/provider-ports.md) and the
-[evidence guide](../../docs/maintenance/evidence.md). Keep all provider port
-work on the dedicated `port/nl-rws` branch (and matching `port/nl-rws` branch
-in `verification-evidence`) until the full port is complete and explicitly
-approved in final review
+[#870](https://github.com/RivRetrieve/RivRetrieve/issues/870) (already marked
+`🚧` on `port/nl-rws`; update `#870` only if Step 1 pauses on a blocker).
+Follow [provider-port step 1](../../docs/maintenance/provider-ports.md) and the
+[evidence guide](../../docs/maintenance/evidence.md). Branch `port/nl-rws`
+already exists in `RivRetrieve`; Step 1 itself produces no `RivRetrieve` code
+changes (its deliverables are the continuing private research record and
+retained Step 1 evidence in `verification-evidence`, following that
+repository's own branch and intake conventions, plus the public handoff comment
+on `#1048`). Keep all downstream `RivRetrieve` port work on `port/nl-rws` until
+the full port is complete and explicitly approved in final review
 [#1055](https://github.com/RivRetrieve/RivRetrieve/issues/1055). Never merge
 into `main` before `#1055` is approved.
 
 ## Settled scope
 
-- **Provider identity and access kind:** `nl_rws` (Rijkswaterstaat,
-  Netherlands), using `LiveStages` against unauthenticated HTTP `POST` JSON
+- **Provider identity and working access model:** `nl_rws` (Rijkswaterstaat,
+  Netherlands), targeting `LiveStages` against unauthenticated HTTP `POST` JSON
   endpoints on DDAPI 2.0
   (`https://ddapi20-waterwebservices.rijkswaterstaat.nl`), specifically
-  `/METADATASERVICES/OphalenCatalogus` for station/product discovery and
-  `/ONLINEWAARNEMINGENSERVICES/OphalenWaarnemingen` for observations.
+  `/METADATASERVICES/OphalenCatalogus` and
+  `/ONLINEWAARNEMINGENSERVICES/OphalenWaarnemingen` (working assumptions to
+  confirm against live responses in Step 1).
 - **Station / water-body scope:** Keep **all** surface-water
   (`Compartiment = OW`, *Oppervlaktewater*) locations that publish in-scope
   measured quantities. Rijkswaterstaat's `OW` network spans rivers, canals,
@@ -67,8 +72,10 @@ into `main` before `#1055` is approved.
   `AnnotationSchema` definitions with verified official descriptions and
   official `http`/`https` `reference_url` links.
 - **Out of scope:** Non-surface-water compartments (e.g. groundwater, air,
-  bottom sediment), regional Dutch *Waterschappen* (separate agencies), and
-  silent fallback to deprecated legacy DDL v1 endpoints.
+  bottom sediment), other `Compartiment = OW` quantities outside `Q`, `WATHTE`,
+  and `T` (such as water quality, chemistry, or waves), regional Dutch
+  *Waterschappen* (separate agencies), and silent fallback to deprecated legacy
+  DDL v1 endpoints.
 - **Leads, not authority:** Treat legacy PR
   [`kratzert/RivRetrieve-Python#98`](https://github.com/kratzert/RivRetrieve-Python/pull/98)
   and `hydrodownloadR`'s `adapter_NL_RWS.R` strictly as leads to recheck against
@@ -97,11 +104,13 @@ live check):
 An implementing agent completes `#1048` by establishing and recording the
 following against genuine live DDAPI 2.0 responses and official documentation:
 
-1. **Publisher, terms, licence, and attribution:** Verify Rijkswaterstaat's
-   official terms of use, licence (expected CC0 1.0, must be confirmed directly
-   from Rijkswaterstaat's official portal or data catalogue), and citation
-   wording. If a terms page requires JavaScript or cannot be read by automated
-   tools, ask the maintainer to open it directly before drafting any external
+1. **Publisher, terms, licence, and attribution (gates retention):** Verify
+   Rijkswaterstaat's official terms of use, licence (expected CC0 1.0, must be
+   confirmed directly from Rijkswaterstaat's official portal or data
+   catalogue), and citation wording before retaining source responses in item
+   5. If a terms page requires JavaScript or cannot be read by automated tools,
+   ask the maintainer to open it directly before drafting any external
+   correspondence; obtain maintainer authorization before sending any external
    correspondence.
 2. **Access conditions and operational boundaries:** Confirm current DDAPI 2.0
    endpoint paths, authentication requirements (none expected), any published
@@ -109,27 +118,33 @@ following against genuine live DDAPI 2.0 responses and official documentation:
    transport spacing suffices or a `ProviderRateLimit` is needed), request
    window/response limits, empty-response shapes, and error responses.
 3. **Catalogue and coordinate inventory:** Capture a fresh genuine
-   `OphalenCatalogus` response and inventory all `OW` (`ProcesType = "meting"`)
+   `OphalenCatalogus` response and inventory all in-scope `OW`
+   (`ProcesType = "meting"`, quantities `Q`, `WATHTE`, and `T` only)
    combinations of `Grootheid`, `Eenheid`, `Hoedanigheid`,
    `WaardeBewerkingsMethode`, and `WaardeBepalingsMethode`, along with all
    `Coordinatenstelsel` values and whether `Lat`/`Lon` are directly WGS84 or
    require reprojection.
-4. **Representative observation evidence and semantics:** Retain small genuine
+4. **Representative observation evidence:** Retain small genuine
    `OphalenWaarnemingen` responses covering:
    - Discharge `Q` in `m3/s` (including parallel `F216`/`F230` 10-minute series
      and `GEM24H` daily means, plus a historical `GEM24H`-only window such as
      March 1990) and `Q` in `m3/d`.
    - Stage `WATHTE` across `NAP`, `MSL`, `TAW`, and `PLAATSLR`.
    - Water temperature `T` in `oC`.
-   - Verification of `ProcesType = "meting"` filtering, sentinel missing-value
-     encodings, timestamp offset/DST behavior, `GEM24H` day-end timestamp
-     semantics, and official definitions + `reference_url` links for
-     `Statuswaarde`, `Kwaliteitswaardecode`, and the four vertical references.
-5. **Continuing private research record and retained collection:** Retain the
-   genuine Step 1 responses in `verification-evidence` under the established
-   evidence intake process and document all dated findings, references, and
-   explicitly unresolved unknowns in `research/nl-rws-source-access.md` on
-   branch `port/nl-rws` in `verification-evidence`.
+   - Direct confirmation of `ProcesType = "meting"` filtering.
+   Record any readily verified facts on sentinel missing values, timestamp
+   offset/DST behavior, `GEM24H` day-end timestamp semantics, and official
+   definitions + `reference_url` links for `Statuswaarde`,
+   `Kwaliteitswaardecode`, and the four vertical references; deeper exhaustive
+   semantics that remain unresolved do not block `#1048` and should be handed
+   off explicitly to `#1050`/`#1051`.
+5. **Continuing private research record and retained collection:** Once item 1
+   confirms permission to retain, check for any existing `nl_rws` record in
+   `verification-evidence` before creating a new one, then follow
+   `verification-evidence`'s intake and branch conventions to retain the
+   genuine Step 1 responses and document dated findings, supporting references,
+   and unresolved unknowns (stating which implementation or user claim each
+   material unknown affects) in `research/nl-rws-source-access.md`.
 6. **Public handoff on `#1048`:** Post a concise, safe summary on `#1048`
    linking the retained evidence collection and research record (keeping
    private material out of public code, issues, and artifacts).
