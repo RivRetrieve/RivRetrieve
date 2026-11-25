@@ -320,6 +320,8 @@ def test_manifest_declarations_define_every_observation_product_obligation() -> 
         (ProviderId("ch_foen"), ProductId("water_temperature_1year_mean")),
         (ProviderId("ch_foen"), ProductId("water_temperature_1year_min")),
         (ProviderId("ch_foen"), ProductId("water_temperature_recent")),
+        (ProviderId("cl_dga"), ProductId("discharge_daily")),
+        (ProviderId("cl_dga"), ProductId("discharge_monthly_mean")),
         (ProviderId("co_ideam"), ProductId("caudal_h")),
         (ProviderId("co_ideam"), ProductId("nivel_h")),
         (ProviderId("co_ideam"), ProductId("nv_media_a")),

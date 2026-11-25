@@ -1865,9 +1865,9 @@ def download(provider: str):
     Parameters
     ----------
     provider : str
-        Registered bulk provider identifier, currently ``"ca_eccc"`` or
-        ``"pl_imgw"``. Calling this function is consent to transfer the
-        publisher artifacts and compile them locally.
+        Registered bulk provider identifier, currently ``"ca_eccc"``,
+        ``"cl_dga"``, or ``"pl_imgw"``. Calling this function is consent to
+        transfer the publisher artifacts and compile them locally.
 
     Returns
     -------
@@ -1918,15 +1918,18 @@ def download(provider: str):
     clear_cache only when deleting all owned state is intended.
     Transport failures can also propagate rather than becoming result issues.
 
-    Canada's disk estimate requires ``SQLITE_TMPDIR`` and ``TMPDIR`` to be set
-    before Python starts and unchanged for the process lifetime. SQLite can cache
-    those settings. If they changed after startup, restart Python with the intended
-    environment before downloading Canada; admission cannot recover the old state.
+    SQLite-backed disk estimates (for ``"ca_eccc"`` or unsorted ``"cl_dga"``
+    inputs) require ``SQLITE_TMPDIR`` and ``TMPDIR`` to be set before Python
+    starts and unchanged for the process lifetime. SQLite can cache those
+    settings. If they changed after startup, restart Python with the intended
+    environment before downloading; admission cannot recover the old state.
 
-    An existing compiled store that passes validation supplies its source
-    vintage, so the provider can refuse a download whose published history
-    would regress. An existing store that fails validation does not block the
-    call, because ``download`` is how such a store is rebuilt.
+    When a provider establishes a ``source_vintage``, an existing compiled
+    store that passes validation supplies it so the provider can refuse a
+    download whose published history would regress; undated bulk providers (such
+    as ``"cl_dga"``) preserve ``source_vintage`` as ``None``. An existing store
+    that fails validation does not block the call, because ``download`` is how
+    such a store is rebuilt.
 
     The store is written under ``RIVRETRIEVE_CACHE_DIR`` when that variable is
     set in the environment or the working directory ``.env`` file, otherwise

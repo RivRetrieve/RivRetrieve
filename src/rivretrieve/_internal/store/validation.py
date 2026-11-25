@@ -100,13 +100,15 @@ class StoreManifest:
         Software version used to compile the store.
     built_at : datetime
         UTC build instant.
-    source_vintage : datetime.date
+    source_vintage : datetime.date or None
         Identifies the source publication state the store was compiled from.
         Its derivation depends on the provider: for example, the date of a
         dated publisher release, or the last date covered by the latest
-        published period. It is not a freshness verdict. ``download`` passes
-        it to the provider, which can refuse a new download whose published
-        history would end earlier.
+        published period. ``None`` when the publisher supplies no established
+        publication or coverage-end date (retrieval time, HTTP modification
+        time, archive entry timestamps, and observed dates never substitute).
+        It is not a freshness verdict. ``download`` passes it to the provider,
+        which can refuse a new download whose published history would end earlier.
     publisher_artifact : PublisherArtifact
         First publisher artifact identity, retained for single-artifact access.
     publisher_artifacts : tuple[PublisherArtifact, ...]
@@ -129,7 +131,7 @@ class StoreManifest:
     provider_id: ProviderId
     compiler_version: str
     built_at: datetime
-    source_vintage: date
+    source_vintage: date | None
     publisher_artifact: PublisherArtifact
     publisher_artifacts: tuple[PublisherArtifact, ...]
     source_schema: SourceSchema
@@ -878,7 +880,7 @@ def _parse_manifest(
         provider_id=ProviderId(raw["provider_id"]),
         compiler_version=raw["compiler_version"],
         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
-        source_vintage=date.fromisoformat(raw["source_vintage"]),
+        source_vintage=date.fromisoformat(raw["source_vintage"]) if raw["source_vintage"] is not None else None,
         publisher_artifact=(
             PublisherArtifact(raw["publisher_artifact"]["url"], ArtifactChecksum(raw["publisher_artifact"]["sha256"]))
             if "publisher_artifact" in raw

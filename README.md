@@ -19,7 +19,7 @@ From floods to droughts: understanding and modelling rivers is a central environ
 RivRetrieve helps close this gap. It lets you find gauges, choose the physical observations you need, and retrieve them
 without learning a different Python interface for each agency. The map below shows countries where
 providers are already implemented and countries where data are coming soon. Currently, RivRetrieve retrieves observations
-from nineteen different providers in eighteen countries.
+from twenty different providers in nineteen countries.
 
 ![Countries with implemented providers in solid green and countries coming soon in orange stripes; implemented providers are listed in the table below.](https://rivretrieve.github.io/assets/coverage-map.png)
 
@@ -43,6 +43,7 @@ for how to supply them.
 | Bosnia and Herzegovina | Agencija za vodno područje rijeke Save (AVP Sava) | `ba_fhmzbih` | 60 | Open |
 | Brazil | Agência Nacional de Águas e Saneamento Básico (ANA) | `br_ana` | 17,914 | Credentials required |
 | Canada | Environment and Climate Change Canada (ECCC) | `ca_eccc` | 8,057 | Bulk download |
+| Chile | Dirección General de Aguas (DGA), Ministerio de Obras Públicas (MOP) | `cl_dga` | 784 | Bulk download |
 | Colombia | Instituto de Hidrología, Meteorología y Estudios Ambientales (IDEAM) | `co_ideam` | 1,372 | Open |
 | Czechia | Czech Hydrometeorological Institute (CHMI) | `cz_chmi` | 831 | Open |
 | Denmark | Miljøstyrelsen (Danish Environmental Protection Agency) / Danmarks Miljøportal (VandA) | `dk_vanda` | 1,388 | Open |
@@ -69,8 +70,7 @@ A station can appear under both French services; their series remain separate.
 <details>
 <summary>Countries coming soon</summary>
 
-Afghanistan, Armenia, Belgium, Benin, Bulgaria, Burkina Faso, Cameroon, Chad, Chile,
-Estonia, Germany, Greece, Guinea, Indonesia, Ireland, Israel, Italy, Ivory Coast, Malaysia,
+Afghanistan, Armenia, Belgium, Benin, Bulgaria, Burkina Faso, Cameroon, Chad, Estonia, Germany, Greece, Guinea, Indonesia, Ireland, Israel, Italy, Ivory Coast, Malaysia,
 Mali, Mexico, Netherlands, New Zealand, Niger, Nigeria, Portugal, Rwanda, Slovenia, South Africa,
 South Korea, Spain, Sri Lanka, Sweden, Taiwan and the United Kingdom.
 

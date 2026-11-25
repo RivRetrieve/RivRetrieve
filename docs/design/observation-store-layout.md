@@ -165,7 +165,7 @@ property spelling. It MUST require exactly one value for each semantic field bel
 | Provider identity | The exact non-empty provider id whose declared bulk configuration and unit conversion may read the store. Validation MUST refuse a different requested provider before reading rows. |
 | Compiler version | A non-empty PEP 440 version string identifying the RivRetrieve compiler that produced the store. |
 | UTC build time | An RFC 3339 UTC instant in `YYYY-MM-DDTHH:MM:SS.ffffffZ` form, recording completion of the staged build before publication. |
-| Source vintage | A source-dated release or coverage-end date in `YYYY-MM-DD` form, according to the provider declaration. It is derived from an exact publisher label, never from retrieval time, build time, freshness judgement, or filesystem timestamp. |
+| Source vintage | A source-dated release or coverage-end date in `YYYY-MM-DD` form, according to the provider declaration, or `null` when the publisher provides no established publication or coverage-end date. Never substituted from retrieval time, HTTP `Last-Modified`, build time, freshness judgement, filesystem or archive timestamps, or observed observation dates. |
 | Publisher-artifact URLs | Each absolute `https` URL actually used to retrieve an artifact, retained in deterministic download order without semantic rewriting. A single-artifact store uses `publisher_artifact`; a multi-artifact store uses `publisher_artifacts`. |
 | Publisher-artifact checksums | For every URL, `sha256:` followed by exactly 64 lowercase hexadecimal digits for those complete artifact bytes. |
 | Source-schema fingerprint | `sha256:` followed by exactly 64 lowercase hexadecimal digits for the compiler's deterministic canonical encoding of the declared ordered source schema, including source column names and source data types. |
@@ -194,7 +194,7 @@ The artifact checksum makes provenance identifiable: it proves which downloaded 
 were compiled. It does not make provenance reproducible, retain the artifact, prove the
 publisher will continue serving it, or allow reconstruction from the checksum. The
 artifact and intermediates are deleted only after certified compilation succeeds;
-only URL, publisher-dated vintage, checksum, and schema fingerprint survive in
+only URL, optional publisher-dated vintage (or `null` when unlabelled), checksum, and schema fingerprint survive in
 the manifest.
 
 ## Source identity and evidence
@@ -256,7 +256,7 @@ value/state combination, extra partition, or missing partition. Refusal means no
 interpretation, no in-place repair and no download. The error MUST identify the
 store as incompatible or malformed and name the explicit rebuild operation. Compiler
 version identifies the writer; it does not grant compatibility. Source vintage is
-reported as a dated fact and MUST NOT be converted into stale/fresh status.
+reported as a dated fact (or `null` when unlabelled) and MUST NOT be converted into stale/fresh status.
 
 ## Predicate-pushdown contract
 

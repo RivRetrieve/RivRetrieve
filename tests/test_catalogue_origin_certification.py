@@ -46,6 +46,7 @@ from rivretrieve._internal.catalogues.native import NativeTable, RetrievedAt, re
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.providers.cl_dga.origins import ChileUnsignedDmsConversion
 from rivretrieve._internal.providers.dk_vanda.origins import Utm32EtrsToWgs84Conversion
 from rivretrieve._internal.providers.fi_syke.origins import ConstantCrsConversion
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
@@ -144,6 +145,19 @@ def _adapter(
             checked_on=sources.checked_on,
             provenance=sources.provenance,
             **extra,
+        )
+    if provider == "cl_dga":
+        sources = generator.read_catalogue_sources(
+            retained_evidence_root,
+            selection_path="maintenance/catalogue/cl_dga/official/selection.json",
+            input_receipt=input_receipt,
+        )
+        native_path = retained_evidence_root / "maintenance/catalogue/cl_dga/official/native.parquet"
+        build = partial(
+            build,
+            checked_on=sources.checked_on,
+            provenance=sources.provenance,
+            station_metadata=sources.station_metadata,
         )
     if provider in {"au_bom", "fi_syke"}:
         sources = generator.read_catalogue_sources(retained_evidence_root, input_receipt=input_receipt)
@@ -372,6 +386,7 @@ DECLARATIONS = {
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "cl_dga",
         "co_ideam",
         "cz_chmi",
         "dk_vanda",
@@ -406,7 +421,8 @@ CASES = [(provider, case) for provider, cases in DECLARATIONS.items() for case i
 def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDecorator:
     paths = (
         [f"maintenance/catalogue/{provider}/official"]
-        if provider in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi"}
+        if provider
+        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "cl_dga", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi"}
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
     if provider in {"au_bom", "fi_syke"}:
@@ -440,7 +456,18 @@ def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> Pro
     receipt = (
         request.getfixturevalue("catalogue_input_receipt")
         if request.param
-        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi", "usgs_nwis"}
+        in {
+            "ar_ina",
+            "at_ehyd",
+            "au_bom",
+            "ch_foen",
+            "cl_dga",
+            "co_ideam",
+            "dk_vanda",
+            "fi_syke",
+            "pe_senamhi",
+            "usgs_nwis",
+        }
         else None
     )
     return _adapter(retained_evidence_root, request.param, DECLARATIONS[request.param], input_receipt=receipt)
@@ -541,6 +568,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "latitude": field("latitude"),
             "longitude": field("longitude"),
             "crs": documented("https://data.bafu.admin.ch/dataproduct-water-observations"),
+        },
+        (ProviderId("cl_dga"), "stations"): {
+            "provider_id": authored("cl_dga"),
+            "station_id": field("CODIGO ESTACION"),
+            "latitude": field("LAT", ChileUnsignedDmsConversion()),
+            "longitude": field("LONG", ChileUnsignedDmsConversion()),
+            "crs": withheld(),
         },
         (ProviderId("co_ideam"), "stations"): {
             "provider_id": authored("co_ideam"),
@@ -907,6 +941,7 @@ def _assert_reviewed_crs(
         assert adapter.provider_id in {
             ProviderId("pl_imgw"),
             ProviderId("br_ana"),
+            ProviderId("cl_dga"),
             ProviderId("co_ideam"),
             ProviderId("pe_senamhi"),
         }
@@ -1081,6 +1116,13 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             ),
         ),
         pytest.param(
+            "cl_dga",
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/cl_dga/official",
+                "maintenance/catalogue/station_metadata/review.json",
+            ),
+        ),
+        pytest.param(
             "co_ideam",
             marks=pytest.mark.governing(
                 "maintenance/catalogue/co_ideam/official",
@@ -1236,6 +1278,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "at_ehyd",
         "au_bom",
         "ch_foen",
+        "cl_dga",
         "co_ideam",
         "dk_vanda",
         "fi_syke",
@@ -1246,7 +1289,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
 
         *_, provenance, generated = read_catalogue_inputs(retained_evidence_root)
-    elif adapter.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "pe_senamhi"}:
+    elif adapter.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "cl_dga", "co_ideam", "dk_vanda", "pe_senamhi"}:
         generated = _build(adapter)
         provenance = generated.acquisition_provenance
         source_inputs_before = {
@@ -1302,6 +1345,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "at_ehyd",
         "au_bom",
         "ch_foen",
+        "cl_dga",
         "co_ideam",
         "dk_vanda",
         "fi_syke",
@@ -1314,6 +1358,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ba_fhmzbih",
         "ca_eccc",
         "ch_foen",
+        "cl_dga",
         "cz_chmi",
         "fi_syke",
         "lt_lhmt",
@@ -1327,6 +1372,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "at_ehyd",
         "au_bom",
         "ch_foen",
+        "cl_dga",
         "co_ideam",
         "dk_vanda",
         "fi_syke",

@@ -37,6 +37,7 @@ _PROVENANCE_PROVIDER_IDS = {
     "br_ana",
     "ca_eccc",
     "ch_foen",
+    "cl_dga",
     "co_ideam",
     "cz_chmi",
     "dk_vanda",

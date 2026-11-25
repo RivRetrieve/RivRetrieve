@@ -540,3 +540,40 @@ def test_fingerprint_refuses_changed_declared_type_with_old_digest(tmp_path: Pat
     manifest["source_schema"]["columns"][-1]["type"] = "integer"
     _write_manifest(store, manifest)
     _assert_refusal(store, "source_schema.fingerprint")
+
+
+def test_null_source_vintage_is_valid_when_explicitly_unknown(tmp_path: Path) -> None:
+    store = _copy_fixture(tmp_path)
+    manifest = _manifest(store)
+    manifest["source_vintage"] = None
+    _write_manifest(store, manifest)
+    validated = validate_store(StoreRoot(store), PROVIDER_ID)
+    assert isinstance(validated.manifest, StoreManifest)
+    assert validated.manifest.source_vintage is None
+
+
+def test_missing_source_vintage_is_still_refused(tmp_path: Path) -> None:
+    store = _copy_fixture(tmp_path)
+    manifest = _manifest(store)
+    del manifest["source_vintage"]
+    _write_manifest(store, manifest)
+    _assert_refusal(store, "manifest.required:source_vintage")
+
+
+@pytest.mark.parametrize(
+    ("raw_vintage", "expected_defect"),
+    [
+        ("", "manifest.format:source_vintage"),
+        ("unknown", "manifest.format:source_vintage"),
+        ("2024-02-30", "manifest.format:source_vintage"),
+        ("2024-1-2", "manifest.format:source_vintage"),
+        (123, "manifest.type:source_vintage"),
+        (True, "manifest.type:source_vintage"),
+    ],
+)
+def test_invalid_non_null_source_vintage_is_refused(tmp_path: Path, raw_vintage: object, expected_defect: str) -> None:
+    store = _copy_fixture(tmp_path)
+    manifest = _manifest(store)
+    manifest["source_vintage"] = raw_vintage
+    _write_manifest(store, manifest)
+    _assert_refusal(store, expected_defect)

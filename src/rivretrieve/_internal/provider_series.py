@@ -57,6 +57,7 @@ class SeriesMapping:
     vertical_reference: str | None = field(default=None, kw_only=True)
     vertical_datum: str | None = field(default=None, kw_only=True)
     label_time: str | None = field(default=None, kw_only=True)
+    clipping_axis: ClippingAxis | None = field(default=None, kw_only=True)
 
     def physical_facts(self) -> PhysicalFacts:
         """Use the same publisher-backed facts in discovery and observation parsing."""
@@ -89,7 +90,13 @@ class SeriesMapping:
             vertical_reference=fact(self.vertical_reference),
             vertical_datum=fact(self.vertical_datum),
             clipping_axis=(
-                ClippingAxis.CALENDAR_DATE if canonical_frequency == DAILY.canonical else ClippingAxis.SOURCE_TIMESTAMP
+                self.clipping_axis
+                if self.clipping_axis is not None
+                else (
+                    ClippingAxis.CALENDAR_DATE
+                    if canonical_frequency == DAILY.canonical
+                    else ClippingAxis.SOURCE_TIMESTAMP
+                )
             ),
             label_time=self.label_time,
         )

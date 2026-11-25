@@ -623,3 +623,45 @@ def test_rolling_snapshot_held_read_preserves_calendar_month_carrier(tmp_path):
         store=store,
     )
     assert sorted(refreshed.canonical_rows["time"].to_list()) == [datetime(2025, 1, 1), datetime(2025, 2, 1)]
+
+
+def test_series_mapping_clipping_axis_opt_in_preserves_monthly_default_and_rejects_daily_mismatch() -> None:
+    from pydantic import ValidationError
+
+    from rivretrieve._internal.provider_series import SeriesMapping
+    from rivretrieve._internal.source_series import ClippingAxis
+
+    explicit_month = SeriesMapping(
+        namespace="test.monthly",
+        quantity="discharge",
+        source_unit="m3/s",
+        normalized_unit="m3/s",
+        frequency="P1M",
+        statistic="mean",
+        evidence=("test:monthly",),
+        clipping_axis=ClippingAxis.CALENDAR_MONTH,
+    )
+    assert explicit_month.physical_facts().clipping_axis is ClippingAxis.CALENDAR_MONTH
+
+    default_month = SeriesMapping(
+        namespace="test.monthly.timestamp",
+        quantity="discharge",
+        source_unit="m3/s",
+        normalized_unit="m3/s",
+        frequency="P1M",
+        statistic="mean",
+        evidence=("test:monthly",),
+    )
+    assert default_month.physical_facts().clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
+
+    invalid_daily = SeriesMapping(
+        namespace="test.daily.bad",
+        quantity="discharge",
+        source_unit="m3/s",
+        normalized_unit="m3/s",
+        frequency="P1D",
+        evidence=("test:daily",),
+        clipping_axis=ClippingAxis.CALENDAR_MONTH,
+    )
+    with pytest.raises(ValidationError, match="P1M"):
+        invalid_daily.physical_facts()
