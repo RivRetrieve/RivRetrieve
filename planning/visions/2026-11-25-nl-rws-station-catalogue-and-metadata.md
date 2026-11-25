@@ -22,12 +22,16 @@ and the continuing private research record
 ## Outcome
 
 A reproducible catalogue builder (`src/rivretrieve/_internal/providers/nl_rws/generate_catalogue.py`
-or equivalent) plus provenance/metadata declarations (`origins.py` /
-`station_metadata.py` or equivalent) and packaged catalogue artifacts under
+exporting `build_catalogue`) plus provenance/metadata declarations
+(`src/rivretrieve/_internal/providers/nl_rws/origins.py` exporting
+`build_acquisition_provenance` and `STATION_METADATA_FIELDS`) and packaged
+catalogue artifacts under
 `src/rivretrieve/_internal/providers/nl_rws/catalogue/` that populate, via
 RivRetrieve's shared
 [catalogue schemas](../../src/rivretrieve/_internal/catalogues/schemas.py) and
-[publication path](../../src/rivretrieve/_internal/catalogues/publication.py):
+[publication path](../../src/rivretrieve/_internal/catalogues/publication.py)
+(including its required `build_inputs`, `native_table`, `metadata_fields`, and
+`source_descriptions` inputs):
 
 - `StationCatalog`
 - `ProductCatalog`
@@ -100,15 +104,17 @@ and `WaardeBewerkingsMethode` in `{"NVT", "GEM24H"}` across `Q`, `WATHTE`, and
 - **Keep the four `WATHTE` vertical references distinct:** `NAP`, `PLAATSLR`,
   `MSL`, and `TAW` are separate products; never collapse or fall back across
   vertical references.
-- **Canonical frequency and honest unknowns:** Align `ProductCatalog`
-  `frequency`, `statistic`, `period_type`, and `period_anchor` with
-  RivRetrieve's canonical ISO 8601 frequency schema (`#1032`). For `GEM24H`,
-  daily mean (`P1D`, `mean`) is established by Aquo's *Etmaalgemiddelde*
-  definition while `period_anchor` remains honest `unknown` until `#1050`
-  establishes day-boundary semantics. For `NVT` (unaggregated), keep
-  `frequency`, `statistic`, `period_type`, and `period_anchor` honest where
-  `OphalenCatalogus` itself does not declare a single fixed cadence across all
-  stations (e.g. 10-minute vs daily `m3/d`).
+- **Canonical units, frequencies, and honest unknowns:** Store RivRetrieve's
+  canonical target units in `ProductCatalog.unit` (`m3/s`, `m`, `degC`; the
+  table above shows native source units). Align `ProductCatalog` `frequency`,
+  `statistic`, `period_type`, and `period_anchor` with RivRetrieve's canonical
+  ISO 8601 frequency schema (`#1032`). For `GEM24H`, daily mean (`P1D`, `mean`)
+  is established by Aquo's *Etmaalgemiddelde* definition while `period_anchor`
+  remains `"unknown"` until `#1050` establishes day-boundary semantics. For
+  `NVT` (unaggregated), keep unestablished temporal fields (`frequency`,
+  `statistic`, `period_type`, `period_anchor`) as `"unknown"` until `#1050`
+  establishes them from genuine observation payloads, since `OphalenCatalogus`
+  does not declare a single fixed cadence across all stations.
 
 ### Explicit exclusions / deferrals
 
@@ -123,13 +129,16 @@ and `WaardeBewerkingsMethode` in `{"NVT", "GEM24H"}` across `Q`, `WATHTE`, and
 
 ### Station metadata and provider info
 
-- **`SOURCE_METADATA_SCHEMA`:**
-  - `Naam` (100% non-blank across all 2,494 locations) → `station_name`.
+- **`SOURCE_METADATA_SCHEMA` and `NativeTable`:**
+  - Map `Naam` (100% non-blank across all 2,494 locations) → `station_name` in
+    `SOURCE_METADATA_SCHEMA` (via `STATION_METADATA_FIELDS`).
   - Preserve `Omschrijving` (distinct from `Naam` at 396 locations, carrying
-    site/structure descriptions) and `Locatie_MessageID` in the source-view
-    metadata table.
-  - Do not fabricate `water_body`, `drainage_area`, or `elevation` — DDAPI 2.0
-    `OphalenCatalogus` does not publish them.
+    site/structure descriptions) and `Locatie_MessageID` in the **`NativeTable`**
+    rather than `SOURCE_METADATA_SCHEMA` (whose `attribute_role` enum is
+    restricted to `station_name`, `water_body_name`, `drainage_area`, and
+    `elevation`).
+  - Do not fabricate `water_body_name`, `drainage_area`, or `elevation` —
+    DDAPI 2.0 `OphalenCatalogus` does not publish them.
 - **`ProviderInfoCatalog`:**
   - `provider_id`: `"nl_rws"`
   - `name`: `"Rijkswaterstaat"`
@@ -139,9 +148,11 @@ and `WaardeBewerkingsMethode` in `{"NVT", "GEM24H"}` across `Q`, `WATHTE`, and
     `live_station_products = False`, `bulk_observations = "none"` (offline
     packaged catalogue + `LiveStages` observation retrieval).
 - **`StationProductCatalog`:**
-  - Mark catalogue-linked pairs `availability = "available"` with
-    `published_record_start_date = null` and `published_record_end_date = null`
-    (never infer temporal coverage from `OphalenCatalogus`).
+  - Mark `AquoMetadataLocatieLijst`-linked pairs `availability = "available"`
+    (explicit source-declared station–metadata association, not inferred from a
+    bare station list) with `published_record_start_date = null` and
+    `published_record_end_date = null` (never infer temporal coverage or active
+    date spans from `OphalenCatalogus`).
 
 ## Evidence of completion
 
@@ -149,10 +160,10 @@ and `WaardeBewerkingsMethode` in `{"NVT", "GEM24H"}` across `Q`, `WATHTE`, and
    `src/rivretrieve/_internal/providers/nl_rws/` on `port/nl-rws` (passing
    `uv run ruff check`, `uv run ruff format --check`, and `uv run ty check src`).
 2. Approved packaged catalogue artifacts generated from genuine retained
-   `01b_catalogus_extended.json` (and any corresponding `verification-evidence`
-   catalogue declaration / native-input intake if required by the shared
-   catalogue provenance pipeline) and validated against all `CatalogueSchema`
-   contracts and `SOURCE_METADATA_SCHEMA`.
+   `01b_catalogus_extended.json` (with the required `verification-evidence`
+   catalogue declaration / native-input intake for the shared `publication.py`
+   pipeline) and validated against all `CatalogueSchema` contracts and
+   `SOURCE_METADATA_SCHEMA`.
 3. Focused source-independent tests (synthetic `OphalenCatalogus` fixtures)
    verifying:
    - `ProcesType = "meting"` and `Groepering = ""` filtering (excluding
@@ -162,8 +173,8 @@ and `WaardeBewerkingsMethode` in `{"NVT", "GEM24H"}` across `Q`, `WATHTE`, and
      vertical references,
    - Deduplication of multiple `WaardeBepalingsMethode` links per station into
      a single `(station_id, product_id)` row,
-   - `Naam` → `station_name` and `Omschrijving` / `Locatie_MessageID` source
-     metadata preservation,
+   - `Naam` → `station_name` in `SOURCE_METADATA_SCHEMA` and `Omschrijving` /
+     `Locatie_MessageID` preserved in `NativeTable`,
    - ETRS89 CRS preservation and null record start/end dates.
 4. `uv run pytest --logic-only` passes on `port/nl-rws` with no regressions.
 5. Independent review completed, PR merged into `port/nl-rws` (never `main`),
