@@ -22,18 +22,26 @@ that evidence beyond what's needed to act.
 
 ## Outcome
 
-Give `de_pegelonline` a `fetch.py` (and the supporting `config.py` /
-`declaration.py` this step needs to exercise it) that builds correct,
-explicit bounded requests to PEGELONLINE's REST API v2
-`measurements.json` endpoint per station × product × rendered window, and
-maps every response — real data, rolling-retention-expired emptiness, and
-genuine failure — to the right outcome without silently losing or
-corrupting data. Register `de_pegelonline` as a `LiveStages` provider
-(`src/rivretrieve/_internal/providers/registration.py`), matching
-`ch_foen`'s declaration shape
-(`src/rivretrieve/_internal/providers/ch_foen/declaration.py`) — a rolling,
-live-only data source with no fixed historical record, not a cache-backed
-compiled store.
+Give `de_pegelonline` a `fetch.py` and the supporting `config.py`
+(`ProviderConfig`/`ProductConfig`/`SourceCoordinates`, following
+`ch_foen/official_config.py`'s shape) it needs to be independently
+testable — tests can call `fetch(...)` directly with a `ProviderConfig`
+built in the test, the way this codebase already tests retrieval logic
+ahead of full provider wiring. This builds correct, explicit bounded
+requests to PEGELONLINE's REST API v2 `measurements.json` endpoint per
+station × product × rendered window, and maps every response — real data,
+rolling-retention-expired emptiness, and genuine failure — to the right
+outcome without silently losing or corrupting data.
+
+**Assembling `declaration.py` (the `LiveStages` `ProviderDeclaration`) is
+explicitly out of scope here — leave it entirely to #1020.** Per
+`docs/maintenance/provider-ports.md`'s own step 4/step 5 boundary and
+issue #1020's own body (which lists declaring `LiveStages` as its work),
+and matching the precedent in this exact codebase (`au_bom`'s
+`declaration.py` was created at its catalogue step as `CatalogueOnly` and
+only flipped to `LiveStages` in a later, separate step-5 commit): this
+step produces `fetch.py`/`config.py` for #1020 to wire into a
+`ProviderDeclaration` later, not the declaration itself.
 
 Everything below resolves to already-settled facts from steps 1-3 or to
 direct engine/precedent mechanics; this step is routine engineering, not a
@@ -64,9 +72,11 @@ design decision, and the vision below is deliberately short.
   for declarative/validation purposes, but no shared engine mechanism
   renders a localized offset string anywhere in `window_planning.py` /
   `window_acquisition.py` — every existing provider's `ProviderConfig.zone`
-  is either `"+00:00"` (`ch_foen`, `lt_lhmt`) or `"unknown"` (`at_ehyd`).
-  `de_pegelonline` would be the first provider to need genuine DST-aware
-  local-offset construction; do it in `fetch.py` itself, the same way
+  is a fixed value: `"+00:00"` (`ch_foen`, `lt_lhmt`, and others),
+  `"unknown"` (`at_ehyd`, and others), or a fixed non-UTC offset
+  (`au_bom`'s `"+10:00"`) — never a real IANA zone name that would need
+  DST-aware rendering. `de_pegelonline` would be the first provider to need
+  genuine DST-aware local-offset construction; do it in `fetch.py` itself, the same way
   `ch_foen/official_fetch.py`'s `_acquire` reads `window.bounds` directly
   rather than relying on the generic ISO-`Z` rendering — there is no
   existing helper to reuse, only the pattern of reading raw bounds
@@ -105,8 +115,9 @@ no row cap at all (unlike `ch_foen`'s GraphQL endpoint, which caps at
 PEGELONLINE's own documentation states no API key, no registration, and no
 hard server-side rate cap (confirmed live by #874). There is also no
 `ProviderRateLimit`-style declaration mechanism anywhere in the engine yet
-for any provider to use (the only related effort, #698, is still an open,
-unmerged PR on its own branch) — so there is nothing to declare here,
+for any provider to use (the only related effort is issue #698; its
+implementation, PR #923, is still open and unmerged on its own branch) —
+so there is nothing to declare here,
 consistent with every existing provider. Pass no `cache: CacheConfig` in
 `config()` (`None`, matching `ch_foen`'s default) — `de_pegelonline` is a
 rolling live source with no compiled store, and standard engine-level
@@ -134,12 +145,13 @@ all; let `4xx`/`5xx` responses fail normally.
 
 ## Explicitly out of scope / excluded
 
-- Provider registration into the engine's provider table / CLI discovery
-  and any user-facing documentation are
+- Assembling `declaration.py` (the `LiveStages` `ProviderDeclaration`),
+  registering `de_pegelonline` into `provider_manifest.py`'s
+  `BUILTIN_PROVIDER_IDS`, and any user-facing documentation are all
   [#1020](https://github.com/RivRetrieve/RivRetrieve/issues/1020)'s job, not
-  this vision's — this step only needs `de_pegelonline` locally
-  constructible and testable (e.g. via a direct `declaration.fetch(...)`
-  call in tests), not wired into the public provider list.
+  this vision's — this step only needs `fetch()`/`config()` locally
+  constructible and testable by calling them directly in tests, not wired
+  into a `ProviderDeclaration` or the public provider list.
 - The undocumented `/gast/download/prepare` async ZIP archive
   (`2000-01-01+` historical `W`/`Q`) stays out of scope, as already decided
   in step 1 — this vision targets REST API v2 only.
