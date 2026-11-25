@@ -352,7 +352,7 @@ def test_metadata_projection_and_source_descriptions_preserve_units_and_null_cor
     }
     assert nv_facts.vertical_reference.value == "gauge_zero"
     assert nv_facts.vertical_datum.value is None
-    assert nv_facts.frequency.value == "daily"
+    assert nv_facts.frequency.value == "P1D"
     assert nv_facts.statistic.value == "mean"
     assert descriptions["caudal_h"].facts[0].frequency.value is None
     assert descriptions["caudal_h"].facts[0].statistic.value is None

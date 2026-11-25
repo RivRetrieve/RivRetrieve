@@ -25,7 +25,7 @@ def test_usgs_fetch_receipt_is_untouched_publisher_payload(
         provider="usgs_nwis",
         station="07374000",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
     result = rr.fetch(

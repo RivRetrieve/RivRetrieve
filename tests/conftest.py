@@ -172,7 +172,7 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
             "provider_id": provider_id,
             "product_id": "level",
             "observed_property": "water_level",
-            "frequency": "daily",
+            "frequency": "P1D",
             "statistic": "mean",
             "period_type": "calendar_day",
             "period_anchor": "UTC",
@@ -187,7 +187,7 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "provider_id": provider_id,
                     "product_id": "flow",
                     "observed_property": "discharge",
-                    "frequency": "daily",
+                    "frequency": "P1D",
                     "statistic": "mean",
                     "period_type": "calendar_day",
                     "period_anchor": "UTC",
@@ -198,7 +198,7 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "provider_id": provider_id,
                     "product_id": "level_hourly",
                     "observed_property": "water_level",
-                    "frequency": "hourly",
+                    "frequency": "PT1H",
                     "statistic": "instantaneous",
                     "period_type": "instant",
                     "period_anchor": "UTC",
@@ -209,7 +209,7 @@ def _products(provider_id: str, *, rich: bool = False) -> pl.DataFrame:
                     "provider_id": provider_id,
                     "product_id": "level_max",
                     "observed_property": "water_level",
-                    "frequency": "daily",
+                    "frequency": "P1D",
                     "statistic": "max",
                     "period_type": "calendar_day",
                     "period_anchor": "UTC",
@@ -576,7 +576,7 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
             if provenance.provider_id == "usgs_nwis"
             else origins.NATIVE_TABLE_ACQUISITION_IDS
         )
-        if provenance.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "pe_senamhi"}:
+        if provenance.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "cl_dga", "co_ideam", "pe_senamhi"}:
             import json
 
             generator = importlib.import_module(
@@ -584,7 +584,7 @@ def catalogue_build_inputs(retained_evidence_root: Path, catalogue_input_receipt
             )
             selection_path = f"maintenance/catalogue/{provenance.provider_id}/official/selection.json"
             if selection_path not in {item.consumer_path for item in receipt.declaration_inputs}:
-                raise ValueError("Build support requires the selected authored declaration")
+                raise ValueError(f"{provenance.provider_id} build support requires the selected authored declaration")
             selection = json.loads((retained_evidence_root / selection_path).read_bytes())
             supporting_inputs.update(generator.selected_supporting_inputs(provenance, selection))
         result = select_catalogue_build_inputs(

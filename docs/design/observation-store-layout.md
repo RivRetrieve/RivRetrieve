@@ -10,8 +10,8 @@ intentionally invalid conformance stores are rooted at
 contract. Refusal fixtures also include unsupported formats. Runtime validation checks
 the typed source-series records and their references.
 
-The revision-10 contract below applies to stores produced by compiling a publisher
-artifact. The accumulated-store revision-9 section specifies live-provider parse output
+The revision-12 contract below applies to stores produced by compiling a publisher
+artifact. The accumulated-store revision-11 section specifies live-provider parse output
 and names its separately addressable manifest schema.
 
 This contract specifies data at rest. It does not specify or implement a store reader,
@@ -106,7 +106,7 @@ closure mechanically.
 
 Provider-native columns retain the source's vocabulary and values. When a native name
 collides with an engine-facing column or cannot be represented faithfully as a Parquet
-field name, revision `10` compilation MUST refuse the source schema. It MUST NOT silently
+field name, revision `12` compilation MUST refuse the source schema. It MUST NOT silently
 rename, overwrite, or drop the column.
 
 ### Source-annotation partitions
@@ -161,11 +161,11 @@ property spelling. It MUST require exactly one value for each semantic field bel
 
 | Semantic field | Canonical form and meaning |
 |---|---|
-| Format version | The positive integer format revision. Compiled stores use revision `10`; accumulated stores use revision `9`. An implementation recognises only revisions it explicitly supports and refuses older revisions with `download` or `clear_cache` recovery guidance. |
+| Format version | The positive integer format revision. Compiled stores use revision `12`; accumulated stores use revision `11`. An implementation recognises only revisions it explicitly supports and refuses older revisions with `download` or `clear_cache` recovery guidance. |
 | Provider identity | The exact non-empty provider id whose declared bulk configuration and unit conversion may read the store. Validation MUST refuse a different requested provider before reading rows. |
 | Compiler version | A non-empty PEP 440 version string identifying the RivRetrieve compiler that produced the store. |
 | UTC build time | An RFC 3339 UTC instant in `YYYY-MM-DDTHH:MM:SS.ffffffZ` form, recording completion of the staged build before publication. |
-| Source vintage | A source-dated release or coverage-end date in `YYYY-MM-DD` form, according to the provider declaration. It is derived from an exact publisher label, never from retrieval time, build time, freshness judgement, or filesystem timestamp. |
+| Source vintage | A source-dated release or coverage-end date in `YYYY-MM-DD` form, according to the provider declaration, or `null` when the publisher provides no established publication or coverage-end date. Never substituted from retrieval time, HTTP `Last-Modified`, build time, freshness judgement, filesystem or archive timestamps, or observed observation dates. |
 | Publisher-artifact URLs | Each absolute `https` URL actually used to retrieve an artifact, retained in deterministic download order without semantic rewriting. A single-artifact store uses `publisher_artifact`; a multi-artifact store uses `publisher_artifacts`. |
 | Publisher-artifact checksums | For every URL, `sha256:` followed by exactly 64 lowercase hexadecimal digits for those complete artifact bytes. |
 | Source-schema fingerprint | `sha256:` followed by exactly 64 lowercase hexadecimal digits for the compiler's deterministic canonical encoding of the declared ordered source schema, including source column names and source data types. |
@@ -176,7 +176,7 @@ property spelling. It MUST require exactly one value for each semantic field bel
 The source-schema fingerprint MUST cover both the ordered source column names and the
 source data types; hashing column names alone is nonconforming.
 
-Revision `10` fixes that canonical encoding: the ordered `columns` list is serialised as
+Revision `12` fixes that canonical encoding: the ordered `columns` list is serialised as
 JSON with object keys sorted, no insignificant whitespace, and non-ASCII characters left
 unescaped, then encoded as UTF-8 and hashed with SHA-256; the manifest records the digest
 with the `sha256:` prefix. A reader MUST recompute the fingerprint under this encoding and
@@ -194,7 +194,7 @@ The artifact checksum makes provenance identifiable: it proves which downloaded 
 were compiled. It does not make provenance reproducible, retain the artifact, prove the
 publisher will continue serving it, or allow reconstruction from the checksum. The
 artifact and intermediates are deleted only after certified compilation succeeds;
-only URL, publisher-dated vintage, checksum, and schema fingerprint survive in
+only URL, optional publisher-dated vintage (or `null` when unlabelled), checksum, and schema fingerprint survive in
 the manifest.
 
 ## Source identity and evidence
@@ -256,7 +256,7 @@ value/state combination, extra partition, or missing partition. Refusal means no
 interpretation, no in-place repair and no download. The error MUST identify the
 store as incompatible or malformed and name the explicit rebuild operation. Compiler
 version identifies the writer; it does not grant compatibility. Source vintage is
-reported as a dated fact and MUST NOT be converted into stale/fresh status.
+reported as a dated fact (or `null` when unlabelled) and MUST NOT be converted into stale/fresh status.
 
 ## Predicate-pushdown contract
 
@@ -306,16 +306,16 @@ contract: their rows are compiled into the one file for that product/year partit
 
 ### IMGW partition finalisation
 
-Revision `10` compilation of an ordered IMGW archive set uses two passes. The first pass establishes
+Revision `12` compilation of an ordered IMGW archive set uses two passes. The first pass establishes
 every archive contribution and the final row count for each calendar `product`/`year` partition. The
 second pass streams contributing rows into the single file for that partition. A compiler MUST NOT
 finalise a partition file or its manifest count while an unread adjacent archive can still contribute.
 The partition remains a calendar product/year partition.
 
-### Accumulated-store format revision 9
+### Accumulated-store format revision 11
 
-Compiled stores use revision `10`. Accumulated live-provider parse output uses revision
-`9`, described by `manifest.schema.json#accumulated`. Readers MUST check the revision
+Compiled stores use revision `12`. Accumulated live-provider parse output uses revision
+`11`, described by `manifest.schema.json#accumulated`. Readers MUST check the revision
 before opening any Parquet file. Unsupported revisions are refused with the store path
 and an explicit operation: `download` for a compiled store or `clear_cache` for an
 accumulated store.
@@ -334,7 +334,7 @@ prerequisite. Stores missing this declaration are incompatible. Both reuse and
 refresh MUST refuse them before transport or mutation. Run `clear_cache("jp_mlit")`
 and retrieve the required series again. This creates new acquisition history;
 it does not reconstruct an original HTML request that an older cache discarded.
-Other providers’ revision-9 stores remain readable without this field.
+Other providers’ revision-11 stores remain readable without this field.
 
 Each coverage record contains exactly `series_id`, `start`, `end`, `retrieved_at`,
 `outcome_id`, `facts_ids`, and `axis`. Endpoints are closed, timezone-naive timestamps

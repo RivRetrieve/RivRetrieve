@@ -208,7 +208,7 @@ def test_public_owf_shared_acquisition_units_provenance_and_bounded_cache(monkey
 
     # Query extending into unpublished 2024 via predicate-based rr.find reuses accumulated store
     # without ObservationStoreRefusedError and records post-yearbook UNRESOLVED without raising on_issue="raise".
-    q_only = rr.find(provider="at_ehyd", station=station, quantity="discharge", frequency="daily", statistic="mean")
+    q_only = rr.find(provider="at_ehyd", station=station, quantity="discharge", frequency="P1D", statistic="mean")
     post_gap = rr.fetch(q_only, start="2020-01-04", end="2024-01-02T23:59:59", cache="reuse", on_issue="raise")
     assert len(replay.requests) == 8
     assert post_gap.data["value"].to_list() == [pytest.approx(6.25)]
@@ -286,7 +286,7 @@ def test_public_all_11_products_route_isolation_and_temperature(monkeypatch: pyt
     assert all("pegel" not in url for url in seen_urls)
 
     # 2. All 4 monthly extrema owf products on 209486 share 1 Messstellen/info call, select via standard M,1
-    #    frequency="monthly" predicates, and convert stage cm -> m while keeping discharge in m3/s.
+    #    frequency="P1M" predicates, and convert stage cm -> m while keeping discharge in m3/s.
     extrema_files = [
         (3, "W-Monatsminima"),
         (4, "W-Monatsmaxima"),
@@ -348,7 +348,7 @@ def test_public_all_11_products_route_isolation_and_temperature(monkeypatch: pyt
 
     monkeypatch.setattr(discovery, "HttpClient", _ExtremaReplay)
     monthly_stage_min = rr.find(
-        provider="at_ehyd", station="209486", quantity="stage", frequency="monthly", statistic="min"
+        provider="at_ehyd", station="209486", quantity="stage", frequency="P1M", statistic="min"
     )
     assert [item.product_id for item in monthly_stage_min.series] == ["owf_wasserst_monatsminima"]
     extrema_sel = _select_products(
@@ -475,7 +475,7 @@ def test_public_physical_predicates_207340_exception_and_sibling_failure_surviva
         provider="at_ehyd",
         station="209486",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
     assert [item.product_id for item in daily_mean_sel.series] == ["owf_abfl_tagesmittel"]
@@ -484,7 +484,7 @@ def test_public_physical_predicates_207340_exception_and_sibling_failure_surviva
     broad_sel = rr.find(provider="at_ehyd", station="209486", quantity="discharge")
     assert len(broad_sel.series) == 5
 
-    # 2. Station 207340 W-Monatsminima (T,1) is refused under frequency="monthly" without starting network calls,
+    # 2. Station 207340 W-Monatsminima (T,1) is refused under frequency="P1M" without starting network calls,
     #    and retrieved cleanly under statistic="min".
     def _forbid_http():
         pytest.fail("Empty selection must not construct HttpClient")
@@ -494,7 +494,7 @@ def test_public_physical_predicates_207340_exception_and_sibling_failure_surviva
         provider="at_ehyd",
         station="207340",
         quantity="stage",
-        frequency="monthly",
+        frequency="P1M",
         statistic="min",
     )
     with pytest.raises(EmptySelectionError, match="at_ehyd"):

@@ -34,7 +34,7 @@ from rivretrieve._internal.source_series import (
 )
 
 EXPECTED_PRODUCT_TABLE_PROJECTION: dict[str, tuple[str, str, str, str, str, str, str]] = {
-    "discharge_daily_mean": ("discharge", "daily", "mean", "calendar_day", "start", "m3/s", "var_id=40;proc_id=1"),
+    "discharge_daily_mean": ("discharge", "P1D", "mean", "calendar_day", "start", "m3/s", "var_id=40;proc_id=1"),
     "discharge_instantaneous": (
         "discharge",
         "unknown",
@@ -46,7 +46,7 @@ EXPECTED_PRODUCT_TABLE_PROJECTION: dict[str, tuple[str, str, str, str, str, str,
     ),
     "discharge_monthly_mean": (
         "discharge",
-        "monthly",
+        "P1M",
         "mean",
         "calendar_month",
         "start",
@@ -55,7 +55,7 @@ EXPECTED_PRODUCT_TABLE_PROJECTION: dict[str, tuple[str, str, str, str, str, str,
     ),
     "discharge_monthly_min": (
         "discharge",
-        "monthly",
+        "P1M",
         "min",
         "calendar_month",
         "start",
@@ -64,14 +64,14 @@ EXPECTED_PRODUCT_TABLE_PROJECTION: dict[str, tuple[str, str, str, str, str, str,
     ),
     "discharge_monthly_max": (
         "discharge",
-        "monthly",
+        "P1M",
         "max",
         "calendar_month",
         "start",
         "m3/s",
         "var_id=52;proc_id=1",
     ),
-    "stage_daily_mean": ("stage", "daily", "mean", "calendar_day", "start", "m", "var_id=39;proc_id=1"),
+    "stage_daily_mean": ("stage", "P1D", "mean", "calendar_day", "start", "m", "var_id=39;proc_id=1"),
     "stage_instantaneous": (
         "stage",
         "unknown",
@@ -81,12 +81,12 @@ EXPECTED_PRODUCT_TABLE_PROJECTION: dict[str, tuple[str, str, str, str, str, str,
         "m",
         "var_id=2;proc_id=1",
     ),
-    "stage_hourly": ("stage", "hourly", "unknown", "unknown", "start", "m", "var_id=85;proc_id=1"),
-    "stage_4hourly": ("stage", "unknown", "unknown", "unknown", "start", "m", "var_id=101;proc_id=1"),
-    "stage_weekly_mean": ("stage", "unknown", "mean", "interval", "start", "m", "var_id=67;proc_id=1"),
-    "stage_monthly_mean": ("stage", "monthly", "mean", "calendar_month", "start", "m", "var_id=33;proc_id=1"),
-    "stage_monthly_min": ("stage", "monthly", "min", "calendar_month", "start", "m", "var_id=49;proc_id=1"),
-    "stage_monthly_max": ("stage", "monthly", "max", "calendar_month", "start", "m", "var_id=50;proc_id=1"),
+    "stage_hourly": ("stage", "PT1H", "unknown", "unknown", "start", "m", "var_id=85;proc_id=1"),
+    "stage_4hourly": ("stage", "PT4H", "unknown", "unknown", "start", "m", "var_id=101;proc_id=1"),
+    "stage_weekly_mean": ("stage", "P1W", "mean", "interval", "start", "m", "var_id=67;proc_id=1"),
+    "stage_monthly_mean": ("stage", "P1M", "mean", "calendar_month", "start", "m", "var_id=33;proc_id=1"),
+    "stage_monthly_min": ("stage", "P1M", "min", "calendar_month", "start", "m", "var_id=49;proc_id=1"),
+    "stage_monthly_max": ("stage", "P1M", "max", "calendar_month", "start", "m", "var_id=50;proc_id=1"),
 }
 
 
@@ -150,7 +150,7 @@ def test_source_series_identity_stability_and_predicate_honesty() -> None:
     utc_daily_mean_scope = SeriesScope(
         predicates=(
             PhysicalPredicate(field="quantity", value="discharge"),
-            PhysicalPredicate(field="frequency", value="daily"),
+            PhysicalPredicate(field="frequency", value="P1D"),
             PhysicalPredicate(field="statistic", value="mean"),
             PhysicalPredicate(field="temporal_support", value="calendar_day"),
             PhysicalPredicate(field="time_zone", value="UTC"),
@@ -171,14 +171,35 @@ def test_source_series_identity_stability_and_predicate_honesty() -> None:
             slotted
         )
         assert not SeriesScope(predicates=(PhysicalPredicate(field="vertical_datum", value="IGN"),)).matches(slotted)
-    assert SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="hourly"),)).matches(h1h)
-    assert not SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="hourly"),)).matches(hm4h)
+    assert SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="PT1H"),)).matches(h1h)
+    assert not SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="PT1H"),)).matches(hm4h)
+    assert SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="PT4H"),)).matches(hm4h)
+    assert SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="PT240M"),)).matches(hm4h)
+
+    # Weekly mean stage matches P1W / P7D, not PT168H, and retains mean statistic.
+    hms = source_series("151", "stage_weekly_mean", published_series_id=36030)
+    assert SeriesScope(
+        predicates=(
+            PhysicalPredicate(field="frequency", value="P1W"),
+            PhysicalPredicate(field="statistic", value="mean"),
+        )
+    ).matches(hms)
+    assert SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="P7D"),)).matches(hms)
+    assert not SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="PT168H"),)).matches(hms)
+
+    # Variable-interval instantaneous series retain not_established frequency and never match frequency predicates.
+    qi = source_series("8", "discharge_instantaneous", published_series_id=857)
+    hi = source_series("8", "stage_instantaneous", published_series_id=26200)
+    for inst in (qi, hi):
+        assert inst.facts[0].frequency.state == "not_established"
+        assert inst.facts[0].frequency.value is None
+        assert not SeriesScope(predicates=(PhysicalPredicate(field="frequency", value="PT1H"),)).matches(inst)
 
     # Monthly extrema match calendar_month support and min/max statistics.
     hmmin = source_series("52", "stage_monthly_min", published_series_id=25638)
     assert SeriesScope(
         predicates=(
-            PhysicalPredicate(field="frequency", value="monthly"),
+            PhysicalPredicate(field="frequency", value="P1M"),
             PhysicalPredicate(field="statistic", value="min"),
             PhysicalPredicate(field="temporal_support", value="calendar_month"),
         )

@@ -783,7 +783,7 @@ def test_usage_remote_cache_example(monkeypatch, tmp_path, s3_server):
 
     monkeypatch.chdir(tmp_path)
     s3_server.configure_env(monkeypatch, bucket="hydro-archive", prefix="rivretrieve")
-    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge", frequency="daily", statistic="mean")
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge", frequency="P1D", statistic="mean")
     selected = rr.pick(selected, series_id=selected.series[0].series_id)
     transport = Transport(page(feature(selected.series[0].identity.published_id, day="2023-01-15")))
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)

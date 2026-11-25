@@ -134,6 +134,10 @@ EXPECTED_PRODUCTS_BY_PROVIDER = {
             "recent",
         )
     ],
+    "cl_dga": [
+        "discharge_daily",
+        "discharge_monthly_mean",
+    ],
     "co_ideam": [
         "caudal_h",
         "nivel_h",
@@ -277,6 +281,7 @@ def test_providers_empty_registry_returns_default_providers() -> None:
         "br_ana",
         "ca_eccc",
         "ch_foen",
+        "cl_dga",
         "co_ideam",
         "cz_chmi",
         "dk_vanda",

@@ -34,7 +34,7 @@ def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, 
 
     monkeypatch.setattr(discovery, "HttpClient", lambda: Counting())
     selection = rr.find(
-        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     restored_selection = rr.from_bundle(rr.to_bundle(selection))
     assert restored_selection.scope == selection.scope
@@ -106,7 +106,7 @@ def test_authored_unknown_explicit_series_remains_unresolved_not_successful_empt
 
     monkeypatch.setattr(discovery, "HttpClient", AuthoredEmpty)
     selection = rr.pick(
-        rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"),
         variant="authored-unknown-series",
         on_issue="ignore",
     )
@@ -131,7 +131,7 @@ def test_narrowed_public_request_does_not_persist_unrelated_catalogue_claims(
             provider="usgs_nwis",
             station=["07374000", "02196000"],
             quantity="discharge",
-            frequency="daily",
+            frequency="P1D",
             statistic="mean",
         ),
         station="07374000",
@@ -162,7 +162,7 @@ def test_known_explicit_series_across_access_routes_reuse_independently(
     monkeypatch.setattr(
         discovery, "HttpClient", lambda: ModernReplay(*recordings, evidence_root=retained_evidence_root)
     )
-    selection = rr.find(provider="usgs_nwis", station="07374000", frequency="daily", statistic="mean")
+    selection = rr.find(provider="usgs_nwis", station="07374000", frequency="P1D", statistic="mean")
     broad = rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="refresh", on_issue="raise")
     assert broad.data["series_id"].n_unique() == 2
     explicit = rr.pick(selection, series_id=tuple(broad.data["series_id"].unique()), on_issue="ignore")
@@ -189,7 +189,7 @@ def test_usgs_subset_cache_cannot_satisfy_all_and_refresh_preserves_peer(
 
     monkeypatch.setattr(discovery, "HttpClient", Counting)
     selection = rr.find(
-        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     assert {s.variant for s in selection.series} == {CURRENT, ENDED}
     explicit = rr.pick(selection, variant=CURRENT)
@@ -227,7 +227,7 @@ def test_recorded_ended_series_successful_empty_is_reusable(monkeypatch, tmp_pat
     content = body(name, evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(name, evidence_root=retained_evidence_root))
     selection = rr.pick(
-        rr.find(provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="usgs_nwis", station="02196000", quantity="discharge", frequency="P1D", statistic="mean"),
         variant=ENDED,
     )
     result = rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="refresh", receipts=True, on_issue="raise")
@@ -259,9 +259,7 @@ def test_nve_cached_explicit_subset_does_not_freeze_later_all_known_versions(
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     replay = ReplayTransport(recordings)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    selection = rr.find(
-        provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean")
     explicit = rr.pick(selection, variant="2")
     narrow = rr.fetch(explicit, start="2024-01-02", end="2024-01-02", cache="reuse", on_issue="ignore")
     assert narrow.data["series_id"].n_unique() == 1
@@ -304,9 +302,7 @@ def test_nve_explicit_versions_reuse_independent_acquired_inventories(
             return replay.send(request)
 
     monkeypatch.setattr(discovery, "HttpClient", FailedMetadata)
-    selection = rr.find(
-        provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean")
     initial = rr.fetch(selection, start="2024-01-02", end="2024-01-02", cache="refresh", on_issue="ignore")
     explicit = rr.pick(selection, variant=variants)
     attempted = []
@@ -357,7 +353,7 @@ def test_cached_success_does_not_inherit_failure_for_an_unrequested_window(
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selection = rr.pick(
-        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean"),
         variant="2",
     )
     healthy = rr.fetch(selection, start="2024-01-02", end="2024-01-02", cache="reuse", on_issue="raise")
@@ -384,7 +380,7 @@ def test_public_authenticated_source_provenance_excludes_request_headers(
     monkeypatch.chdir(tmp_path)
     _authenticated_replay(retained_evidence_root, monkeypatch, "stage_daily_mean_consistido")
     selection = rr.pick(
-        rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean"),
+        rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="P1D", statistic="mean"),
         variant="consistido",
     )
     result = rr.fetch(selection, start="2020-01-10", end="2020-01-20", receipts=True, on_issue="ignore")
@@ -410,7 +406,7 @@ def test_mixed_nve_finite_variant_cannot_silently_drop_unknown_selector(
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selection = rr.pick(
-        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean"),
         variant=("2", "unresolved-selector"),
         on_issue="ignore",
     )

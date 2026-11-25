@@ -28,7 +28,7 @@ def describe_series(
 ) -> SourceSeries:
     quantity, prefix = PARAMETERS[parameter]
     statistic = {"Mean": "mean", "Instantaneous": "instantaneous"}.get(method or "")
-    frequency = {60: "hourly", 1440: "daily"}.get(resolution)
+    frequency = {60: "PT1H", 1440: "P1D"}.get(resolution)
     # Product is an access coordinate, not authority for statistic or conversion.
     product = prefix + ("_instantaneous" if resolution == 0 else "_hourly_mean" if resolution == 60 else "_daily_mean")
     identity = stable_id("no_nve", station, "HydAPI.version", str(parameter), str(version), str(resolution))

@@ -405,7 +405,7 @@ def test_source_descriptions_admit_cm_with_gauge_zero_and_group_stations():
     assert facts.source_unit.value == "cm"
     assert facts.normalized_unit == "cm"
     assert facts.vertical_reference.value == "gauge_zero"
-    assert facts.frequency.value == "daily"
+    assert facts.frequency.value == "P1D"
     assert facts.statistic.value == "mean"
     assert facts.timestamp_anchor.value == "start"
     assert facts.temporal_support.value is None
@@ -415,7 +415,7 @@ def test_source_descriptions_admit_cm_with_gauge_zero_and_group_stations():
     assert decision.target_unit == "m"
     assert decision.factor == 0.01
 
-    assert by_stations[("owf_wasserst_monatsminima", ("209486",))].facts[0].frequency.value == "monthly"
+    assert by_stations[("owf_wasserst_monatsminima", ("209486",))].facts[0].frequency.value == "P1M"
     assert by_stations[("owf_wasserst_monatsminima", ("207340",))].facts[0].frequency.value is None
 
 
@@ -657,17 +657,17 @@ def test_selected_inputs_publish_deterministic_catalogue(
         assert products.height == 11
         assert set(products["observed_property"].to_list()) == {"discharge", "stage", "water_temperature"}
         products_by_id = {row["product_id"]: row for row in products.iter_rows(named=True)}
-        assert products_by_id["owf_abfl_tagesmittel"]["frequency"] == "daily"
+        assert products_by_id["owf_abfl_tagesmittel"]["frequency"] == "P1D"
         assert products_by_id["owf_abfl_tagesmittel"]["statistic"] == "mean"
         assert products_by_id["owf_abfl_tagesmittel"]["period_anchor"] == "start"
         assert products_by_id["owf_abfl_tagesmittel"]["period_type"] == "unknown"
         assert products_by_id["owf_wasserst_monatsminima"]["frequency"] == "unknown"
         assert products_by_id["owf_wasserst_monatsminima"]["statistic"] == "min"
         assert products_by_id["owf_wasserst_monatsminima"]["period_type"] == "unknown"
-        assert products_by_id["owf_wasserst_monatsmaxima"]["frequency"] == "monthly"
+        assert products_by_id["owf_wasserst_monatsmaxima"]["frequency"] == "P1M"
         assert products_by_id["owf_wasserst_monatsmaxima"]["period_type"] == "calendar_month"
         assert products_by_id["pegel_bgis_abfluss"]["frequency"] == "unknown"
-        assert products_by_id["pegel_longterm_abfluss"]["frequency"] == "daily"
+        assert products_by_id["pegel_longterm_abfluss"]["frequency"] == "P1D"
         pairs = pl.read_parquet(output / "station_products.parquet")
         assert pairs.height == 746 * 11
         assert pairs.filter(pl.col("availability") == "available").height == 4837

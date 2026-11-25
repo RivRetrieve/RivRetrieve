@@ -1296,9 +1296,9 @@ def test_committed_catalogue_preserves_source_controls_and_catalogue_consistency
     # Physical labels follow the retained API definitions, not a second generator declaration.
     expected_products = pl.DataFrame(
         [
-            ("fr_hubeau", "discharge_daily_mean", "discharge", "daily", "mean", "interval", "unknown", "m3/s", "QmnJ"),
-            ("fr_hubeau", "discharge_daily_max", "discharge", "daily", "max", "unknown", "unknown", "m3/s", "QIXnJ"),
-            ("fr_hubeau", "stage_daily_max", "stage", "daily", "max", "unknown", "unknown", "m", "HIXnJ"),
+            ("fr_hubeau", "discharge_daily_mean", "discharge", "P1D", "mean", "interval", "unknown", "m3/s", "QmnJ"),
+            ("fr_hubeau", "discharge_daily_max", "discharge", "P1D", "max", "unknown", "unknown", "m3/s", "QIXnJ"),
+            ("fr_hubeau", "stage_daily_max", "stage", "P1D", "max", "unknown", "unknown", "m", "HIXnJ"),
             (
                 "fr_hubeau",
                 "water_temperature_reported",

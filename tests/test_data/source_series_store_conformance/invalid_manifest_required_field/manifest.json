@@ -1,6 +1,6 @@
 {
   "compiler_version": "0.1.49",
-  "format_version": 10,
+  "format_version": 12,
   "partition_row_counts": {
     "product=level/year=2024": 1
   },

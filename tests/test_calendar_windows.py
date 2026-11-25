@@ -122,7 +122,7 @@ def test_calendar_cache_reuse_reads_previous_year_and_failed_refresh_retains_it(
     original = stages.definition
     fact = original.facts[0].model_copy(
         update={
-            "frequency": known("daily", "synthetic calendar"),
+            "frequency": known("P1D", "synthetic calendar"),
             "temporal_support": known("calendar_day", "synthetic calendar"),
             "day_definition": known("UTC+01:00", "synthetic calendar"),
             "timestamp_anchor": known("start", "synthetic calendar"),
@@ -215,7 +215,7 @@ def test_calendar_month_clipping_axis_validation():
         quantity=known("discharge", "synthetic"),
         source_unit=known("m3/s", "synthetic"),
         normalized_unit="m3/s",
-        frequency=known("monthly", "synthetic"),
+        frequency=known("P1M", "synthetic"),
         clipping_axis=ClippingAxis.CALENDAR_MONTH,
     )
     assert monthly.clipping_axis is ClippingAxis.CALENDAR_MONTH
@@ -224,16 +224,16 @@ def test_calendar_month_clipping_axis_validation():
     assert monthly.timestamp_anchor.state is EvidenceState.NOT_ESTABLISHED
     assert monthly.day_definition.state is EvidenceState.NOT_ESTABLISHED
 
-    with pytest.raises(ValueError, match="monthly"):
+    with pytest.raises(ValueError, match="P1M"):
         PhysicalFacts(
             facts_id="unknown-freq",
             clipping_axis=ClippingAxis.CALENDAR_MONTH,
         )
 
-    with pytest.raises(ValueError, match="monthly"):
+    with pytest.raises(ValueError, match="P1M"):
         PhysicalFacts(
             facts_id="daily-freq",
-            frequency=known("daily", "synthetic"),
+            frequency=known("P1D", "synthetic"),
             clipping_axis=ClippingAxis.CALENDAR_MONTH,
         )
 
@@ -254,7 +254,7 @@ def test_native_window_expands_calendar_month_bounds(start, end, expected_start,
 
     facts = PhysicalFacts(
         facts_id="monthly-labels",
-        frequency=known("monthly", "synthetic"),
+        frequency=known("P1M", "synthetic"),
         clipping_axis=ClippingAxis.CALENDAR_MONTH,
     )
     assert native_window(datetime.fromisoformat(start), datetime.fromisoformat(end), facts) == RequestedInterval(
@@ -269,7 +269,7 @@ def test_native_window_calendar_month_applies_established_offset_after_expansion
 
     facts = PhysicalFacts(
         facts_id="monthly-offset",
-        frequency=known("monthly", "synthetic"),
+        frequency=known("P1M", "synthetic"),
         temporal_support=known("calendar_month", "synthetic"),
         day_definition=known("UTC+01:00", "synthetic"),
         timestamp_anchor=known("start", "synthetic"),
@@ -315,7 +315,7 @@ def test_drive_store_calendar_month_selection_annotations_and_outcomes(tmp_path)
         quantity=known("discharge", "synthetic"),
         source_unit=known("m3/s", "synthetic"),
         normalized_unit="m3/s",
-        frequency=known("monthly", "synthetic"),
+        frequency=known("P1M", "synthetic"),
         clipping_axis=ClippingAxis.CALENDAR_MONTH,
     )
     ts_facts = PhysicalFacts(
@@ -323,7 +323,7 @@ def test_drive_store_calendar_month_selection_annotations_and_outcomes(tmp_path)
         quantity=known("discharge", "synthetic"),
         source_unit=known("m3/s", "synthetic"),
         normalized_unit="m3/s",
-        frequency=known("monthly", "synthetic"),
+        frequency=known("P1M", "synthetic"),
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     )
     month_series = SourceSeries(
@@ -521,7 +521,7 @@ def test_exclude_native_intervals_matches_calendar_month_range():
         quantity=known("discharge", "synthetic"),
         source_unit=known("m3/s", "synthetic"),
         normalized_unit="m3/s",
-        frequency=known("monthly", "synthetic"),
+        frequency=known("P1M", "synthetic"),
         clipping_axis=ClippingAxis.CALENDAR_MONTH,
     )
     ts_fact = PhysicalFacts(
@@ -529,7 +529,7 @@ def test_exclude_native_intervals_matches_calendar_month_range():
         quantity=known("discharge", "synthetic"),
         source_unit=known("m3/s", "synthetic"),
         normalized_unit="m3/s",
-        frequency=known("monthly", "synthetic"),
+        frequency=known("P1M", "synthetic"),
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     )
     series = SourceSeries(
@@ -588,7 +588,7 @@ def test_rolling_snapshot_held_read_preserves_calendar_month_carrier(tmp_path):
     original = stages.definition
     fact = original.facts[0].model_copy(
         update={
-            "frequency": known("monthly", "synthetic"),
+            "frequency": known("P1M", "synthetic"),
             "clipping_axis": ClippingAxis.CALENDAR_MONTH,
         }
     )
@@ -623,3 +623,45 @@ def test_rolling_snapshot_held_read_preserves_calendar_month_carrier(tmp_path):
         store=store,
     )
     assert sorted(refreshed.canonical_rows["time"].to_list()) == [datetime(2025, 1, 1), datetime(2025, 2, 1)]
+
+
+def test_series_mapping_clipping_axis_opt_in_preserves_monthly_default_and_rejects_daily_mismatch() -> None:
+    from pydantic import ValidationError
+
+    from rivretrieve._internal.provider_series import SeriesMapping
+    from rivretrieve._internal.source_series import ClippingAxis
+
+    explicit_month = SeriesMapping(
+        namespace="test.monthly",
+        quantity="discharge",
+        source_unit="m3/s",
+        normalized_unit="m3/s",
+        frequency="P1M",
+        statistic="mean",
+        evidence=("test:monthly",),
+        clipping_axis=ClippingAxis.CALENDAR_MONTH,
+    )
+    assert explicit_month.physical_facts().clipping_axis is ClippingAxis.CALENDAR_MONTH
+
+    default_month = SeriesMapping(
+        namespace="test.monthly.timestamp",
+        quantity="discharge",
+        source_unit="m3/s",
+        normalized_unit="m3/s",
+        frequency="P1M",
+        statistic="mean",
+        evidence=("test:monthly",),
+    )
+    assert default_month.physical_facts().clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
+
+    invalid_daily = SeriesMapping(
+        namespace="test.daily.bad",
+        quantity="discharge",
+        source_unit="m3/s",
+        normalized_unit="m3/s",
+        frequency="P1D",
+        evidence=("test:daily",),
+        clipping_axis=ClippingAxis.CALENDAR_MONTH,
+    )
+    with pytest.raises(ValidationError, match="P1M"):
+        invalid_daily.physical_facts()

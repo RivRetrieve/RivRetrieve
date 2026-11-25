@@ -22,10 +22,10 @@ RECORDING = DATA / "fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recordin
 
 def _selection():
     selection = rr.find(
-        provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily", statistic="mean"
+        provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="P1D", statistic="mean"
     )
     assert selection.series
-    assert all(facts.frequency.value == "daily" for series in selection.series for facts in series.facts)
+    assert all(facts.frequency.value == "P1D" for series in selection.series for facts in series.facts)
     return rr.pick(selection, series_id=[series.series_id for series in selection.series])
 
 
@@ -101,14 +101,14 @@ def test_explicit_bypass_and_cleanup_refetch_produce_only_current_facts(retained
     selection = _selection()
     bypassed = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="bypass", on_issue="ignore")
     assert bypassed.data.height == 1
-    assert all(facts.frequency.value == "daily" for series in bypassed.source_series for facts in series.facts)
+    assert all(facts.frequency.value == "P1D" for series in bypassed.source_series for facts in series.facts)
     assert _snapshot(path) == before
     rr.clear_cache("fr_hubeau")
     refreshed = rr.fetch(selection, start="2025-01-03", end="2025-01-03", cache="refresh", on_issue="ignore")
-    assert all(facts.frequency.value == "daily" for series in refreshed.source_series for facts in series.facts)
-    assert json.loads((path / "manifest.json").read_text())["format_version"] == 9
+    assert all(facts.frequency.value == "P1D" for series in refreshed.source_series for facts in series.facts)
+    assert json.loads((path / "manifest.json").read_text())["format_version"] == 11
     exported = rr.to_bundle(refreshed)
     with ZipFile(BytesIO(exported)) as archive:
-        assert json.loads(archive.read("manifest.json"))["version"] == 4
+        assert json.loads(archive.read("manifest.json"))["version"] == 5
     restored = rr.from_bundle(exported)
     assert restored.source_series == refreshed.source_series

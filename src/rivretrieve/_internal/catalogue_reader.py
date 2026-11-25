@@ -12,6 +12,7 @@ from rivretrieve._internal.catalogues.schemas import (
     STATION_PRODUCT_CATALOG_SCHEMA,
     validate_catalogue,
 )
+from rivretrieve._internal.frequency import canonicalize_frequency
 from rivretrieve._internal.issues import (
     FatalContractError,
 )
@@ -35,6 +36,8 @@ class CatalogueReader:
         _ensure_filter_value("observed_property", observed_property)
         _ensure_filter_value("frequency", frequency)
         _ensure_filter_value("statistic", statistic)
+        if frequency is not None and frequency != "unknown":
+            frequency = canonicalize_frequency(frequency)
 
         data = self.artifact.products
         for column_name, value in (

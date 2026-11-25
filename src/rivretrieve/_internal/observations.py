@@ -133,7 +133,8 @@ class ObservationProvenance(BaseModel):
         Source vintage of the compiled store that served the rows, as
         described for ``StoreManifest.source_vintage``. Its derivation depends
         on the provider, and it is not a freshness verdict. None when no
-        compiled store was read.
+        compiled store was read, or when the publisher provides no established
+        publication or coverage-end date.
     publisher_artifact_checksum : str or None
         Checksum of the first publisher artifact for compiled-store provenance.
     publisher_artifact_checksums, publisher_artifact_urls : tuple[str, ...]
@@ -219,10 +220,12 @@ class StoreExcerptReceipt(ReceiptEntry):
     executed_query : ExecutedStoreQuery
         Product, year, station and closed wall-clock predicates used by the scan.
     format_version : int
-        Store layout revision, 10 for compiled or 9 for accumulated stores.
+        Store layout revision, 12 for compiled or 11 for accumulated stores.
     source_vintage : datetime.date or None
         Source vintage of the compiled store, as described for
-        ``StoreManifest.source_vintage``. None for an accumulated store.
+        ``StoreManifest.source_vintage``. None for an accumulated store, or
+        when the publisher provides no established publication or coverage-end
+        date.
     """
 
     store_path: StoreRoot
@@ -240,7 +243,9 @@ class StoreExcerptReceipt(ReceiptEntry):
             raise TypeError("store excerpt executed query must be ExecutedStoreQuery")
         if type(self.format_version) is not int:
             raise TypeError("store excerpt format version must be an integer")
-        if self.source_vintage is not None and not isinstance(self.source_vintage, date):
+        if self.source_vintage is not None and (
+            not isinstance(self.source_vintage, date) or isinstance(self.source_vintage, datetime)
+        ):
             raise TypeError("store excerpt source vintage must be a date")
 
 

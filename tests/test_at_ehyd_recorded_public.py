@@ -164,7 +164,7 @@ def test_public_recorded_owf_209486_all_six_series_clipping_units_and_cache(
         provider="at_ehyd",
         station="209486",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
     assert [item.product_id for item in q_only.series] == ["owf_abfl_tagesmittel"]
@@ -327,7 +327,7 @@ def test_public_recorded_verification_supplement_routes_and_owf_source_boundarie
     wt_201350 = _WaterTemp201350()
     monkeypatch.setattr(discovery, "HttpClient", lambda: wt_201350)
     sel_wt_201350 = rr.find(
-        provider="at_ehyd", station="201350", quantity="temperature", frequency="monthly", statistic="mean"
+        provider="at_ehyd", station="201350", quantity="temperature", frequency="P1M", statistic="mean"
     )
     assert [item.product_id for item in sel_wt_201350.series] == ["owf_wassertemp_monatsmittel"]
     wt_start, wt_end = "2018-01-01", "2023-12-31T23:59:59"
@@ -392,7 +392,7 @@ def test_public_recorded_verification_supplement_routes_and_owf_source_boundarie
         )(),
     )
     sel_wt_200352 = rr.find(
-        provider="at_ehyd", station="200352", quantity="temperature", frequency="monthly", statistic="mean"
+        provider="at_ehyd", station="200352", quantity="temperature", frequency="P1M", statistic="mean"
     )
     res_wt_200352 = rr.fetch(sel_wt_200352, start="1970-01-01", end="2023-12-31T23:59:59", cache="bypass")
     assert res_wt_200352.data["unit"].unique().to_list() == ["degC"]
@@ -427,7 +427,7 @@ def test_public_recorded_verification_supplement_routes_and_owf_source_boundarie
             },
         )(),
     )
-    sel_207068 = rr.find(provider="at_ehyd", station="207068", quantity="stage", frequency="monthly", statistic="min")
+    sel_207068 = rr.find(provider="at_ehyd", station="207068", quantity="stage", frequency="P1M", statistic="min")
     res_207068 = rr.fetch(sel_207068, start="1901-01-01", end="2023-12-31T23:59:59", cache="bypass")
     assert res_207068.data["source_unit"].unique().to_list() == ["cm"]
     assert res_207068.data["unit"].unique().to_list() == ["m"]
@@ -462,7 +462,7 @@ def test_public_recorded_verification_supplement_routes_and_owf_source_boundarie
             },
         )(),
     )
-    sel_201806 = rr.find(provider="at_ehyd", station="201806", quantity="stage", frequency="daily", statistic="mean")
+    sel_201806 = rr.find(provider="at_ehyd", station="201806", quantity="stage", frequency="P1D", statistic="mean")
     res_201806 = rr.fetch(sel_201806, start="1975-01-01", end="2023-12-31T23:59:59", cache="bypass", on_issue="raise")
     assert res_201806.data["value"].null_count() == 0
     _assert_owf_slice_equal(
@@ -492,9 +492,7 @@ def test_public_recorded_verification_supplement_routes_and_owf_source_boundarie
 
     werfen = _Werfen204032()
     monkeypatch.setattr(discovery, "HttpClient", lambda: werfen)
-    sel_204032 = rr.find(
-        provider="at_ehyd", station="204032", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    sel_204032 = rr.find(provider="at_ehyd", station="204032", quantity="discharge", frequency="P1D", statistic="mean")
     res_204032 = rr.fetch(sel_204032, start="1995-01-01", end="1995-01-10T23:59:59", cache="reuse")
     assert werfen.calls == 2
     assert res_204032.data.sort("time")["time"][0] == datetime(1995, 1, 1, 0, 0)
@@ -518,8 +516,8 @@ def test_public_recorded_verification_supplement_routes_and_owf_source_boundarie
         scale=1.0,
     )
 
-    # 5. Station 207340 W-Monatsminima (T,1 daily step): withheld from frequency="monthly", selectable by statistic="min".
-    monthly_207340 = rr.find(provider="at_ehyd", station="207340", frequency="monthly")
+    # 5. Station 207340 W-Monatsminima (T,1 daily step): withheld from frequency="P1M", selectable by statistic="min".
+    monthly_207340 = rr.find(provider="at_ehyd", station="207340", frequency="P1M")
     assert [item.product_id for item in monthly_207340.series] == ["owf_wasserst_monatsmaxima"]
     min_207340 = rr.find(provider="at_ehyd", station="207340", statistic="min")
     assert [item.product_id for item in min_207340.series] == ["owf_wasserst_monatsminima"]

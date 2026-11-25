@@ -54,7 +54,7 @@ from rivretrieve._internal.source_series import (
 )
 
 _FORMAT = "rivretrieve-source-series"
-_VERSION = 4
+_VERSION = 5
 _PROVENANCE_VALUES = ("request", "calls_made", "time_windows", "query")
 _EMPTY_REASON_ADAPTER = TypeAdapter(_EmptyReason)
 _STATION_LOCATION_ADAPTER = TypeAdapter(StationLocation)

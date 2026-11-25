@@ -26,7 +26,7 @@ selection = rr.find(
     provider="cz_chmi",
     station="0-203-1-180100",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 
@@ -89,7 +89,7 @@ VD České Údolí. RivRetrieve keeps these source identifiers unchanged.
 | `discharge` | QH | Hourly | Mean | m³/s | m³/s |
 | `stage` | HH | Hourly | Mean | cm | m |
 
-Select `frequency="daily"` or `frequency="hourly"`, with `statistic="mean"`.
+Select `frequency="P1D"` or `frequency="PT1H"`, with `statistic="mean"`.
 CHMI's [dataset description](https://opendata.chmi.cz/hydrology/read_me/Popis_datovych_sad_historical.pdf)
 defines these as mean daily values (*průměrné denní hodnoty*) and mean hourly
 values (*průměrné hodinové hodnoty*). RivRetrieve converts stage from centimetres

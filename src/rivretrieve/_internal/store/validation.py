@@ -93,20 +93,22 @@ class StoreManifest:
     Attributes
     ----------
     format_version : int
-        Compiled layout revision, 10.
+        Compiled layout revision, 12.
     provider_id : ProviderId
         Provider whose native observations are stored.
     compiler_version : str
         Software version used to compile the store.
     built_at : datetime
         UTC build instant.
-    source_vintage : datetime.date
+    source_vintage : datetime.date or None
         Identifies the source publication state the store was compiled from.
         Its derivation depends on the provider: for example, the date of a
         dated publisher release, or the last date covered by the latest
-        published period. It is not a freshness verdict. ``download`` passes
-        it to the provider, which can refuse a new download whose published
-        history would end earlier.
+        published period. ``None`` when the publisher supplies no established
+        publication or coverage-end date (retrieval time, HTTP modification
+        time, archive entry timestamps, and observed dates never substitute).
+        It is not a freshness verdict. ``download`` passes it to the provider,
+        which can refuse a new download whose published history would end earlier.
     publisher_artifact : PublisherArtifact
         First publisher artifact identity, retained for single-artifact access.
     publisher_artifacts : tuple[PublisherArtifact, ...]
@@ -125,11 +127,11 @@ class StoreManifest:
         Non-identity source-series annotation tables keyed by ``series_id``.
     """
 
-    format_version: Literal[10]
+    format_version: Literal[12]
     provider_id: ProviderId
     compiler_version: str
     built_at: datetime
-    source_vintage: date
+    source_vintage: date | None
     publisher_artifact: PublisherArtifact
     publisher_artifacts: tuple[PublisherArtifact, ...]
     source_schema: SourceSchema
@@ -164,7 +166,7 @@ class AccumulatedStoreManifest:
     Attributes
     ----------
     format_version : int
-        Accumulated layout revision, 9.
+        Accumulated layout revision, 11.
     provider_id : ProviderId
         Provider whose native observations are stored.
     built_at : datetime
@@ -181,7 +183,7 @@ class AccumulatedStoreManifest:
         Non-identity source-series annotation tables keyed by ``series_id``.
     """
 
-    format_version: Literal[9]
+    format_version: Literal[11]
     provider_id: ProviderId
     built_at: datetime
     coverage: tuple[CoverageInterval, ...]
@@ -361,7 +363,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
     version = raw["format_version"]
     if type(version) is not int:
         _refuse(StoreRefusalKind.MALFORMED, store, provider_id, "manifest.type:format_version")
-    if version not in (9, 10):
+    if version not in (11, 12):
         _refuse(
             StoreRefusalKind.INCOMPATIBLE,
             store,
@@ -369,7 +371,7 @@ def _check_revision(raw: dict[str, Any], store: StoreRoot, provider_id: Provider
             f"unsupported format revision {version!r}",
         )
     if (
-        version == 9
+        version == 11
         and isinstance(raw.get("source_calls"), list)
         and any(
             isinstance(call, dict) and "call_id" in call and field not in call
@@ -406,7 +408,7 @@ def _schema_error_path(error: Any, raw: dict[str, Any]) -> str:
 def _validate_manifest_schema(raw: dict[str, Any], store: StoreRoot, provider_id: ProviderId) -> None:
     schema_resource = resources.files(__package__).joinpath("manifest.schema.json")
     schema = json.loads(schema_resource.read_text(encoding="utf-8"))
-    if raw["format_version"] == 9:
+    if raw["format_version"] == 11:
         schema = schema["$defs"]["accumulated"]
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
@@ -874,11 +876,11 @@ def _parse_manifest(
 ) -> StoreManifest:
     source_schema = raw["source_schema"]
     return StoreManifest(
-        format_version=10,
+        format_version=12,
         provider_id=ProviderId(raw["provider_id"]),
         compiler_version=raw["compiler_version"],
         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
-        source_vintage=date.fromisoformat(raw["source_vintage"]),
+        source_vintage=date.fromisoformat(raw["source_vintage"]) if raw["source_vintage"] is not None else None,
         publisher_artifact=(
             PublisherArtifact(raw["publisher_artifact"]["url"], ArtifactChecksum(raw["publisher_artifact"]["sha256"]))
             if "publisher_artifact" in raw
@@ -949,7 +951,7 @@ def _validate_contents(
     definitions = {item.series_id: item for item in _metadata(raw)["series"]}
     ann_schemas, ann_counts, ser_tables = _parse_annotations_metadata(raw, store, provider_id, definitions)
     schemas_by_id = {item.schema_id: item for item in ann_schemas}
-    if raw["format_version"] == 9:
+    if raw["format_version"] == 11:
         return _validate_accumulated(
             raw,
             store,
@@ -1118,7 +1120,7 @@ def _validate_accumulated(
         observed_keys=observed_keys,
     )
     manifest = AccumulatedStoreManifest(
-        format_version=9,
+        format_version=11,
         provider_id=provider_id,
         built_at=datetime.fromisoformat(raw["built_at"].removesuffix("Z") + "+00:00"),
         coverage=tuple(coverage),

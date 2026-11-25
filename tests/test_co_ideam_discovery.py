@@ -61,7 +61,7 @@ def test_discovery_and_metadata_remain_offline(policy, monkeypatch):
         provider="co_ideam",
         station="0011017010",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
         on_issue=policy,
     )

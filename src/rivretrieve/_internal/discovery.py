@@ -163,12 +163,16 @@ def find(
         strings so leading zeros survive. Without ``provider``, the station is
         searched in every provider that lists it.
     quantity, frequency, statistic, temporal_support, day_definition, timestamp_anchor, time_zone, vertical_reference, vertical_datum : str or None, default None
-        Exact, case-sensitive filters on established physical facts. Quantity,
-        frequency and statistic must use the supported query values listed in
-        the API reference's "Supported physical query values" table. Unsupported
-        values raise ValueError; aliases and spelling corrections are not applied.
-        A fact that is unknown never matches an explicit filter. Supported values
-        with no known matches return an empty selection.
+        Exact, case-sensitive filters on established physical facts. Quantity
+        and statistic must use the supported query values listed in the API
+        reference's "Supported physical query values" table. Frequency accepts
+        ISO 8601 duration strings in the three supported families
+        (elapsed ``PT...H/M/S``, calendar ``P...W/D``, and calendar ``P...Y/M``),
+        canonicalizing equivalent spellings within a family such as ``PT60M``
+        to ``PT1H`` or ``P7D`` to ``P1W``. Unsupported values raise ValueError;
+        legacy aliases such as ``"daily"`` and cross-family conversions are
+        rejected. A fact that is unknown never matches an explicit filter.
+        Supported values with no known matches return an empty selection.
     variant, series_id : str or None, default None
         Explicit source restriction. ``variant`` matches the source's variant
         name or its published identifier. ``series_id`` matches RivRetrieve's
@@ -270,8 +274,9 @@ def pick(
         as in ``find``.
     quantity, frequency, statistic, temporal_support, day_definition, timestamp_anchor, time_zone, vertical_reference, vertical_datum : str or None, default None
         Exact, case-sensitive filters on established physical facts, as in ``find``.
-        Quantity, frequency and statistic use the same library-wide supported
-        values, including when filtering a fetched result.
+        Quantity, frequency and statistic follow the same library-wide rules
+        and ISO 8601 duration canonicalization, including when filtering a
+        fetched result.
     on_issue : {"warn", "raise", "ignore"}, default "warn"
         Handling of warning and error issues relevant to the narrowed selection
         or view. See ``fetch`` for the meaning of each policy.
@@ -667,7 +672,7 @@ def to_bundle(value: _Selection | ObservationResult) -> bytes:
     Returns
     -------
     bytes
-        ZIP archive in bundle format version 4. Write the bytes to a file to
+        ZIP archive in bundle format version 5. Write the bytes to a file to
         keep them. A selection bundle holds its request intent, source-series
         definitions, inventories, issues, station locations, catalogue evidence
         and empty-selection reason. A result bundle also holds the observation
@@ -707,7 +712,7 @@ def from_bundle(content: bytes) -> _Selection | ObservationResult:
     TypeError
         If ``content`` is not ``bytes``.
     ValueError
-        If the bytes are not a bundle, the bundle version is not 4, or its
+        If the bytes are not a bundle, the bundle version is not 5, or its
         contents fail validation. Bundles from other format versions must be
         exported again or re-fetched.
     ObservationDataSchemaError
@@ -1063,7 +1068,7 @@ def fetch(
     >>> import rivretrieve as rr
     >>> gauge = rr.find(
     ...     provider="usgs_nwis", station="07374000",
-    ...     quantity="discharge", frequency="daily", statistic="mean",
+    ...     quantity="discharge", frequency="P1D", statistic="mean",
     ... )
     >>> result = rr.fetch(gauge, start="2023-01-01", end="2023-01-01")  # doctest: +SKIP
     >>> result.data.select("time", "time_zone", "source_unit", "unit", "value").rows()  # doctest: +SKIP
@@ -1860,9 +1865,9 @@ def download(provider: str):
     Parameters
     ----------
     provider : str
-        Registered bulk provider identifier, currently ``"ca_eccc"`` or
-        ``"pl_imgw"``. Calling this function is consent to transfer the
-        publisher artifacts and compile them locally.
+        Registered bulk provider identifier, currently ``"ca_eccc"``,
+        ``"cl_dga"``, or ``"pl_imgw"``. Calling this function is consent to
+        transfer the publisher artifacts and compile them locally.
 
     Returns
     -------
@@ -1913,15 +1918,18 @@ def download(provider: str):
     clear_cache only when deleting all owned state is intended.
     Transport failures can also propagate rather than becoming result issues.
 
-    Canada's disk estimate requires ``SQLITE_TMPDIR`` and ``TMPDIR`` to be set
-    before Python starts and unchanged for the process lifetime. SQLite can cache
-    those settings. If they changed after startup, restart Python with the intended
-    environment before downloading Canada; admission cannot recover the old state.
+    SQLite-backed disk estimates (for ``"ca_eccc"`` or unsorted ``"cl_dga"``
+    inputs) require ``SQLITE_TMPDIR`` and ``TMPDIR`` to be set before Python
+    starts and unchanged for the process lifetime. SQLite can cache those
+    settings. If they changed after startup, restart Python with the intended
+    environment before downloading; admission cannot recover the old state.
 
-    An existing compiled store that passes validation supplies its source
-    vintage, so the provider can refuse a download whose published history
-    would regress. An existing store that fails validation does not block the
-    call, because ``download`` is how such a store is rebuilt.
+    When a provider establishes a ``source_vintage``, an existing compiled
+    store that passes validation supplies it so the provider can refuse a
+    download whose published history would regress; undated bulk providers (such
+    as ``"cl_dga"``) preserve ``source_vintage`` as ``None``. An existing store
+    that fails validation does not block the call, because ``download`` is how
+    such a store is rebuilt.
 
     The store is written under ``RIVRETRIEVE_CACHE_DIR`` when that variable is
     set in the environment or the working directory ``.env`` file, otherwise

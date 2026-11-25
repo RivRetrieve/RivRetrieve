@@ -68,7 +68,7 @@ def _counted_replay(monkeypatch, recordings):
 
 def test_offline_mixed_explicit_members_preserve_each_unresolved_selector():
     selected = rr.pick(
-        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean"),
         variant=("2", "unresolved-selector", "another-unresolved-selector"),
         on_issue="ignore",
     )
@@ -92,7 +92,7 @@ def test_public_mixed_nve_member_is_not_silently_omitted(monkeypatch, tmp_path, 
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     calls = _counted_replay(monkeypatch, (recording,))
     selected = rr.pick(
-        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean"),
         variant=("2", "unresolved-selector"),
         on_issue="ignore",
     )
@@ -145,7 +145,7 @@ def test_narrowed_result_policy_ignores_excluded_failure_but_preserves_history(
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(recordings))
     selected = rr.pick(
-        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily"),
+        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D"),
         variant=("1", "99999"),
         on_issue="ignore",
     )
@@ -198,7 +198,7 @@ def test_public_mixed_missing_member_survives_inspection_bundle_and_narrowing(
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
     selected = rr.pick(
-        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean"),
         variant=("2", "unresolved-selector"),
         on_issue="ignore",
     )
@@ -255,7 +255,7 @@ def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(discovery, "HttpClient", UnknownSelectorControl)
     selected = rr.pick(
-        rr.find(provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="usgs_nwis", station="02196000", quantity="discharge", frequency="P1D", statistic="mean"),
         variant=(current, "not-published"),
         on_issue="ignore",
     )
@@ -286,7 +286,7 @@ def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(
 def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     calls = _official_replay(monkeypatch)
-    broad = rr.find(provider="ch_foen", station="2018", frequency="10min")
+    broad = rr.find(provider="ch_foen", station="2018", frequency="PT10M")
     identities = tuple(item.series_id for item in broad.series)
     assert len(identities) == 3
     selected = rr.pick(broad, series_id=identities, on_issue="raise")
@@ -354,7 +354,7 @@ def test_response_discovered_global_ids_are_settled_across_station_results(
         provider="usgs_nwis",
         station=("07374000", "01010000"),
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
     )
     discovered = rr.fetch(broad, start="2023-01-01", end="2023-01-01", on_issue="ignore")
@@ -398,7 +398,7 @@ def test_finite_view_does_not_report_original_all_inventory_uncertainty(
     # current Series response now settles inventory, so it cannot test uncertainty.
     metadata = replace(metadata, status_code=503, content=b"Service unavailable", content_type="text/plain")
     calls = _counted_replay(monkeypatch, (*recordings, metadata))
-    broad = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean")
+    broad = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean")
     result = rr.fetch(broad, start="2024-01-02", end="2024-01-02", receipts=True, on_issue="ignore")
     assert [call.url.rsplit("/", 1)[-1] for call in calls] == ["Series", "Observations", "Observations", "Observations"]
     assert [call.params["VersionNumber"] for call in calls[1:]] == [1, 2, 3]
@@ -489,7 +489,7 @@ def test_global_id_view_excludes_other_inventory_search_coordinates(monkeypatch,
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(declaration.observations.stages, "fetch", staticmethod(acquire))
     result = rr.fetch(
-        rr.find(provider="ch_foen", station="2018", frequency="10min"),
+        rr.find(provider="ch_foen", station="2018", frequency="PT10M"),
         start="2025-01-01T00:00:00",
         end="2025-01-01T00:30:00",
         on_issue="ignore",
@@ -526,7 +526,7 @@ def test_current_empty_result_view_diagnostics_follow_policy(
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     calls = _counted_replay(monkeypatch, (recording,))
     selected = rr.pick(
-        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean"),
         variant="2",
         on_issue="raise",
     )

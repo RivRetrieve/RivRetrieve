@@ -27,7 +27,7 @@ def test_offline_discovery_exposes_both_siblings_and_exact_descriptions(monkeypa
         ("02196000", {"0df18b246e8f48ec8e6547a92070e94a", "4d186669708e4dc18f84d271efb953a1"}),
     ):
         selection = rr.find(
-            provider="usgs_nwis", station=station, quantity="discharge", frequency="daily", statistic="mean"
+            provider="usgs_nwis", station=station, quantity="discharge", frequency="P1D", statistic="mean"
         )
         assert {item.variant for item in selection.series} == expected
         assert all(item.identity.description is None for item in selection.series)
@@ -54,7 +54,7 @@ def test_v1_pagination_keeps_exact_pages_clips_and_reuses_all(monkeypatch, tmp_p
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     selection = rr.find(
-        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     result = rr.fetch(selection, start="2000-01-01", end="2000-01-07", receipts=True, cache="reuse", on_issue="raise")
     assert result.data.height == 14
@@ -146,7 +146,7 @@ def test_unrestricted_snapshot_does_not_hide_newly_encountered_real_identity(
     from dataclasses import replace
 
     complete = rr.find(
-        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     retained = tuple(item for item in complete.known_series if item.variant == "0df18b246e8f48ec8e6547a92070e94a")
     snapshot = replace(
@@ -197,7 +197,7 @@ def test_public_daily_access_preserves_unknown_station_coordinates(monkeypatch, 
         "usgs_nwis",
         replace(record, artifact=artifact, handle=replace(handle, _artifact=artifact)),
     )
-    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge", frequency="daily", statistic="mean")
+    selected = rr.find(provider="usgs_nwis", station=STATION, quantity="discharge", frequency="P1D", statistic="mean")
     assert [(loc.latitude, loc.longitude, loc.crs) for loc in selected.locations] == [(None, None, "unknown")]
     series = selected.series[0]
     selected = rr.pick(selected, series_id=series.series_id)

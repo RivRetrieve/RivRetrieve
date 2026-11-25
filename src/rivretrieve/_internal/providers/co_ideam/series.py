@@ -88,7 +88,7 @@ class IdeamSeriesSpec:
     source_unit: Literal["m3/s", "cm"]
     normalized_unit: Literal["m3/s", "cm"]
     target_unit: Literal["m3/s", "m"]
-    frequency: Literal["daily", "monthly", "yearly"] | None
+    frequency: Literal["P1D", "P1M", "P1Y"] | None
     statistic: Literal["mean", "max", "min"] | None
     clipping_axis: ClippingAxis
 
@@ -121,7 +121,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="m3/s",
         normalized_unit="m3/s",
         target_unit="m3/s",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
         clipping_axis=ClippingAxis.CALENDAR_DATE,
     ),
@@ -136,7 +136,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="m3/s",
         normalized_unit="m3/s",
         target_unit="m3/s",
-        frequency="daily",
+        frequency="P1D",
         statistic="max",
         clipping_axis=ClippingAxis.CALENDAR_DATE,
     ),
@@ -151,7 +151,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="m3/s",
         normalized_unit="m3/s",
         target_unit="m3/s",
-        frequency="daily",
+        frequency="P1D",
         statistic="min",
         clipping_axis=ClippingAxis.CALENDAR_DATE,
     ),
@@ -166,7 +166,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="m3/s",
         normalized_unit="m3/s",
         target_unit="m3/s",
-        frequency="monthly",
+        frequency="P1M",
         statistic="mean",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -181,7 +181,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="m3/s",
         normalized_unit="m3/s",
         target_unit="m3/s",
-        frequency="monthly",
+        frequency="P1M",
         statistic="max",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -196,7 +196,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="m3/s",
         normalized_unit="m3/s",
         target_unit="m3/s",
-        frequency="monthly",
+        frequency="P1M",
         statistic="min",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -211,7 +211,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="m3/s",
         normalized_unit="m3/s",
         target_unit="m3/s",
-        frequency="yearly",
+        frequency="P1Y",
         statistic="mean",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -226,7 +226,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="m3/s",
         normalized_unit="m3/s",
         target_unit="m3/s",
-        frequency="yearly",
+        frequency="P1Y",
         statistic="max",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -241,7 +241,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="m3/s",
         normalized_unit="m3/s",
         target_unit="m3/s",
-        frequency="yearly",
+        frequency="P1Y",
         statistic="min",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -272,7 +272,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="cm",
         normalized_unit="cm",
         target_unit="m",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
         clipping_axis=ClippingAxis.CALENDAR_DATE,
     ),
@@ -287,7 +287,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="cm",
         normalized_unit="cm",
         target_unit="m",
-        frequency="daily",
+        frequency="P1D",
         statistic="max",
         clipping_axis=ClippingAxis.CALENDAR_DATE,
     ),
@@ -302,7 +302,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="cm",
         normalized_unit="cm",
         target_unit="m",
-        frequency="daily",
+        frequency="P1D",
         statistic="min",
         clipping_axis=ClippingAxis.CALENDAR_DATE,
     ),
@@ -317,7 +317,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="cm",
         normalized_unit="cm",
         target_unit="m",
-        frequency="monthly",
+        frequency="P1M",
         statistic="mean",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -332,7 +332,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="cm",
         normalized_unit="cm",
         target_unit="m",
-        frequency="monthly",
+        frequency="P1M",
         statistic="max",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -347,7 +347,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="cm",
         normalized_unit="cm",
         target_unit="m",
-        frequency="monthly",
+        frequency="P1M",
         statistic="min",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -362,7 +362,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="cm",
         normalized_unit="cm",
         target_unit="m",
-        frequency="yearly",
+        frequency="P1Y",
         statistic="mean",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -377,7 +377,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="cm",
         normalized_unit="cm",
         target_unit="m",
-        frequency="yearly",
+        frequency="P1Y",
         statistic="max",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -392,7 +392,7 @@ SERIES_SPECS: tuple[IdeamSeriesSpec, ...] = (
         source_unit="cm",
         normalized_unit="cm",
         target_unit="m",
-        frequency="yearly",
+        frequency="P1Y",
         statistic="min",
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     ),
@@ -638,11 +638,11 @@ def validate_s3_observation_csv_bytes(
             raise FatalContractError(
                 f"IDEAM S3 {etiqueta} CSV line {line_no} timestamp {ts_raw!r} decreases from {prev_ts!r}"
             )
-        if spec.frequency == "monthly" and ts.day != 1:
+        if spec.frequency == "P1M" and ts.day != 1:
             raise FatalContractError(
                 f"IDEAM S3 monthly {etiqueta} CSV line {line_no} timestamp {ts_raw!r} is not first-of-month"
             )
-        if spec.frequency == "yearly" and (ts.month != 1 or ts.day != 1):
+        if spec.frequency == "P1Y" and (ts.month != 1 or ts.day != 1):
             raise FatalContractError(f"IDEAM S3 yearly {etiqueta} CSV line {line_no} timestamp {ts_raw!r} is not Jan 1")
         val_clean = val_raw.strip()
         if not val_clean:

@@ -51,7 +51,7 @@ The request returned seven daily values in m³/s, one for each date from January
 to 7. The preview shows the first three. The empty tuple `()` means retrieval
 reported no issues; it does not establish the quality of the values. `time_zone`
 is `unknown` because Syke's timestamps carry no UTC offset. All three `fi_syke`
-series have `frequency="daily"`, and the request did not restrict by `statistic`
+series have `frequency="P1D"`, and the request did not restrict by `statistic`
 because Syke's service does not state whether a daily value is a mean, an
 instantaneous reading, or another statistic.
 
@@ -91,7 +91,7 @@ The source field is the Hydrologiarajapinta OData entity-set name, where each
 row's numeric reading is published in `Arvo`. Each quantity has one daily
 series per station, so `variant` stays unset (`variant=None`). RivRetrieve
 converts stage from centimetres to metres; discharge and surface water
-temperature need no unit conversion. All three series have `frequency="daily"`,
+temperature need no unit conversion. All three series have `frequency="P1D"`,
 whereas `statistic` is `unknown` because Syke's documentation and metadata
 tables do not state whether a published daily value is a mean, an instantaneous
 reading, or another aggregation. Do not filter by `statistic="mean"` when

@@ -111,9 +111,7 @@ def test_public_repeated_identity_never_certifies_cache_and_preserves_receipts(
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-key")
     monkeypatch.setattr(discovery, "HttpClient", Repeated)
-    selection = rr.find(
-        provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean")
     ambiguous_id = next(item.series_id for item in selection.series if item.variant == "2")
     for cache in ("refresh", "reuse"):
         result = rr.fetch(
@@ -177,9 +175,7 @@ def test_public_supported_nonmatching_facts_are_not_retained_as_failures(retaine
 
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-key")
     monkeypatch.setattr(discovery, "HttpClient", DifferentStatistic)
-    selection = rr.find(
-        provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean")
     excluded = next(item.series_id for item in selection.series if item.variant == "2")
     result = rr.fetch(selection, start="2024-01-02", end="2024-01-02", cache="bypass", on_issue="ignore")
     assert result.data.height == 2

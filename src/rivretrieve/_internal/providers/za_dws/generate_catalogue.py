@@ -226,7 +226,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="discharge_daily_mean",
         observed_property="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
         period_type="interval",
         period_anchor="unknown",

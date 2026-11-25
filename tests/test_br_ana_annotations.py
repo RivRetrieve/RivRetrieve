@@ -448,7 +448,7 @@ def test_br_ana_public_fetch_cache_reuse_refresh_and_bundle_roundtrip(
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
 
     sel = rr.pick(
-        rr.find(provider="br_ana", station=_STATION, quantity="stage", frequency="daily", statistic="mean"),
+        rr.find(provider="br_ana", station=_STATION, quantity="stage", frequency="P1D", statistic="mean"),
         variant="bruto",
     )
     assert rr.annotations(sel).is_empty()
@@ -539,7 +539,7 @@ def test_br_ana_recorded_daily_replay_emits_annotations(
 
     stage_res = rr.fetch(
         rr.pick(
-            rr.find(provider="br_ana", station=_STATION, quantity="stage", frequency="daily", statistic="mean"),
+            rr.find(provider="br_ana", station=_STATION, quantity="stage", frequency="P1D", statistic="mean"),
             variant="bruto",
         ),
         start="2020-01-10",
@@ -552,7 +552,7 @@ def test_br_ana_recorded_daily_replay_emits_annotations(
 
     flow_res = rr.fetch(
         rr.pick(
-            rr.find(provider="br_ana", station=_STATION, quantity="discharge", frequency="daily", statistic="mean"),
+            rr.find(provider="br_ana", station=_STATION, quantity="discharge", frequency="P1D", statistic="mean"),
             variant="consistido",
         ),
         start="2020-01-10",
@@ -565,7 +565,7 @@ def test_br_ana_recorded_daily_replay_emits_annotations(
 
     flow_bruto = rr.fetch(
         rr.pick(
-            rr.find(provider="br_ana", station=_STATION, quantity="discharge", frequency="daily", statistic="mean"),
+            rr.find(provider="br_ana", station=_STATION, quantity="discharge", frequency="P1D", statistic="mean"),
             variant="bruto",
         ),
         start="2024-01-15",

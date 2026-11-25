@@ -117,7 +117,7 @@ def test_daily_response_label_does_not_establish_filterable_timestamp_anchor(mon
         lambda: ModernReplay("daily-07374000-discharge-mean", evidence_root=retained_evidence_root),
     )
     selection = rr.find(
-        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     result = rr.fetch(selection, start="2024-01-01", end="2024-01-07", on_issue="raise")
     assert result.data.height == 7
@@ -134,7 +134,7 @@ def test_daily_response_label_does_not_establish_filterable_timestamp_anchor(mon
 
 def test_daily_catalogue_does_not_promote_label_representation_to_anchor():
     selection = rr.find(
-        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     assert selection.series
     assert all(f.timestamp_anchor.value is None for s in selection.series for f in s.facts)
@@ -178,7 +178,7 @@ def test_authored_non_date_daily_series_is_unsupported_with_peer_preserved(monke
 
     monkeypatch.setattr(discovery, "HttpClient", AuthoredTransport)
     selection = rr.find(
-        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     result = rr.fetch(selection, start="2024-01-01", end="2024-01-07", receipts=True, on_issue="ignore")
     assert result.data.height == 7
@@ -246,7 +246,7 @@ def test_new_daily_stations_preserve_original_values_receipts_and_reuse(
     monkeypatch.setattr(discovery, "HttpClient", Replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     selection = rr.pick(
-        rr.find(provider="usgs_nwis", station=station, quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="usgs_nwis", station=station, quantity="discharge", frequency="P1D", statistic="mean"),
         variant=variant,
     )
     result = rr.fetch(selection, start=start, end=end, cache="reuse", receipts=True, on_issue="raise")

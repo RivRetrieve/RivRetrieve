@@ -7,6 +7,8 @@ import {
   stationKey,
   selectionConflicts,
   generateRequest,
+  canonicalizeFrequency,
+  frequencyError,
   physicalFields,
   dateErrors,
   type Station,
@@ -38,7 +40,7 @@ describe("catalogue discovery", () => {
       matchesStation(gauge, { quantity: "discharge", variant: "published" }),
     ).toBe(true);
     expect(matchesStation(gauge, { quantity: "Discharge" })).toBe(false);
-    expect(matchesStation(gauge, { frequency: "daily" })).toBe(false);
+    expect(matchesStation(gauge, { frequency: "P1D" })).toBe(false);
   });
 });
 
@@ -54,7 +56,7 @@ it("preserves provider-qualified selection and never clears selection with filte
     '["beta","001"]',
   ]);
   expect(
-    selectionConflicts(selected, { frequency: "daily" })[0].reasons[0],
+    selectionConflicts(selected, { frequency: "P1D" })[0].reasons[0],
   ).toContain("not established");
   expect(selected).toHaveLength(2);
   expect(
@@ -105,16 +107,16 @@ it("requires all filters on one supported fact segment", () => {
     ...gauge,
     series: [
       gauge.series[0],
-      { ...gauge.series[0], quantity: "stage", frequency: "daily" },
+      { ...gauge.series[0], quantity: "stage", frequency: "P1D" },
     ],
   };
   expect(
-    matchesStation(split, { quantity: "discharge", frequency: "daily" }),
+    matchesStation(split, { quantity: "discharge", frequency: "P1D" }),
   ).toBe(false);
   expect(
     selectionConflicts([split], {
       quantity: "discharge",
-      frequency: "daily",
+      frequency: "P1D",
     })[0].reasons[0],
   ).toContain("combination");
   expect(
@@ -143,7 +145,7 @@ it("blocks empty, conflicting, missing-date, invalid-date and catalogue-only out
   expect(
     generateRequest(
       [gauge],
-      { frequency: "daily" },
+      { frequency: "P1D" },
       dates,
       providers,
     ).blockingReasons.join(),
@@ -383,19 +385,22 @@ it("distinguishes a known literal unknown from an unestablished fact and interse
 it.each(physicalFields)(
   "matches %s as an exact scalar on established facts",
   (field) => {
+    const valid = field === "frequency" ? "P1D" : "source value";
+    const partial = field === "frequency" ? "P1" : "source";
+    const wrongCase = field === "frequency" ? "p1d" : "SOURCE VALUE";
     const station: Station = {
       ...gauge,
       series: [
         {
           ...gauge.series[0],
-          [field]: "source value",
+          [field]: valid,
           [`${field}_state`]: "known",
         },
       ],
     };
-    expect(matchesStation(station, { [field]: "source value" })).toBe(true);
-    expect(matchesStation(station, { [field]: "source" })).toBe(false);
-    expect(matchesStation(station, { [field]: "SOURCE VALUE" })).toBe(false);
+    expect(matchesStation(station, { [field]: valid })).toBe(true);
+    expect(matchesStation(station, { [field]: partial })).toBe(false);
+    expect(matchesStation(station, { [field]: wrongCase })).toBe(false);
     expect(
       matchesStation(
         {
@@ -408,7 +413,7 @@ it.each(physicalFields)(
             },
           ],
         },
-        { [field]: "source value" },
+        { [field]: valid },
       ),
     ).toBe(false);
   },
@@ -572,10 +577,94 @@ it("limits a single-provider display and keeps blocked previews inert", () => {
   expect(preview.code).toContain('"0010"');
   const blocked = generateRequest(
     selected,
+    { frequency: "P1D" },
+    dates,
+    providers,
+  );
+  expect(
+    blocked.previewCode
+      .split("\n")
+      .every((line) => !line || line.startsWith("#")),
+  ).toBe(true);
+});
+
+it("canonicalizes ISO 8601 frequencies, keeps families disjoint, and blocks invalid frequency filters", () => {
+  expect(canonicalizeFrequency("PT60M")).toBe("PT1H");
+  expect(canonicalizeFrequency("PT240M")).toBe("PT4H");
+  expect(canonicalizeFrequency("P7D")).toBe("P1W");
+  expect(canonicalizeFrequency("P1W3D")).toBe("P10D");
+  expect(canonicalizeFrequency("P12M")).toBe("P1Y");
+  expect(canonicalizeFrequency("PT36000000000000000000S")).toBe(
+    "PT10000000000000000H",
+  );
+  expect(canonicalizeFrequency("PT24H")).toBe("PT24H");
+  expect(canonicalizeFrequency("PT168H")).toBe("PT168H");
+  expect(canonicalizeFrequency("P365D")).toBe("P365D");
+  for (const invalid of [
+    "daily",
+    "hourly",
+    "P",
+    "PT",
+    "P0D",
+    "PT0S",
+    "P1DT1H",
+    "-P1D",
+    "p1d",
+    " P1D",
+    "PT1.5H",
+  ]) {
+    expect(canonicalizeFrequency(invalid)).toBeNull();
+    expect(frequencyError(invalid)).toContain("ISO 8601");
+  }
+  expect(frequencyError(undefined)).toBeNull();
+  expect(frequencyError("")).toBeNull();
+
+  const station: Station = {
+    ...gauge,
+    series: [
+      {
+        ...gauge.series[0],
+        series_id: "s-4h",
+        frequency: "PT4H",
+        frequency_state: "known",
+      },
+      {
+        ...gauge.series[0],
+        series_id: "s-1w",
+        frequency: "P1W",
+        frequency_state: "known",
+      },
+      {
+        ...gauge.series[0],
+        series_id: "s-1y",
+        frequency: "P1Y",
+        frequency_state: "known",
+      },
+    ],
+  };
+  expect(matchesStation(station, { frequency: "PT240M" })).toBe(true);
+  expect(matchesStation(station, { frequency: "P7D" })).toBe(true);
+  expect(matchesStation(station, { frequency: "P12M" })).toBe(true);
+  expect(matchesStation(station, { frequency: "PT168H" })).toBe(false);
+  expect(matchesStation(station, { frequency: "P365D" })).toBe(false);
+  expect(matchesStation(station, { frequency: "daily" })).toBe(false);
+
+  const valid = generateRequest(
+    [station],
+    { quantity: "discharge", frequency: "PT240M" },
+    dates,
+    providers,
+  );
+  expect(valid.blockingReasons).toEqual([]);
+  expect(valid.code).toContain('frequency="PT4H"');
+
+  const blocked = generateRequest(
+    [station],
     { frequency: "daily" },
     dates,
     providers,
   );
+  expect(blocked.blockingReasons.some((r) => r.includes("ISO 8601"))).toBe(true);
   expect(
     blocked.previewCode
       .split("\n")

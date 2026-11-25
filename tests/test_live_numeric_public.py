@@ -63,7 +63,7 @@ def test_public_numeric_representation_preserves_sibling_receipts_and_coverage(
     )
     replay = NumericReplay(recordings, mutation)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
-    selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="daily")
+    selection = rr.find(provider="fr_hubeau", station="1011000101", quantity="discharge", frequency="P1D")
     ids = {series.facts[0].statistic.value: series.series_id for series in selection.series}
     bad = mutation in BAD
 

@@ -18,6 +18,7 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
 
+from rivretrieve._internal.frequency import DAILY, MONTHLY, canonicalize_frequency
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.source_annotations import AnnotationBundle
 from rivretrieve._internal.time_axis import TimeAxis
@@ -136,10 +137,20 @@ class PhysicalFacts(BaseModel):
         )
         if defect is not None:
             raise ValueError(defect)
-        if self.clipping_axis is ClippingAxis.CALENDAR_DATE and self.frequency.value != "daily":
-            raise ValueError("Calendar-date clipping requires established daily frequency")
-        if self.clipping_axis is ClippingAxis.CALENDAR_MONTH and self.frequency.value != "monthly":
-            raise ValueError("Calendar-month clipping requires established monthly frequency")
+        if self.frequency.state is EvidenceState.KNOWN:
+            if self.frequency.value is None:  # pragma: no cover - rejected by EvidenceFact
+                raise ValueError("Known frequency requires a value")
+            canonical = canonicalize_frequency(self.frequency.value)
+            if canonical != self.frequency.value:
+                object.__setattr__(
+                    self,
+                    "frequency",
+                    EvidenceFact(value=canonical, state=EvidenceState.KNOWN, evidence=self.frequency.evidence),
+                )
+        if self.clipping_axis is ClippingAxis.CALENDAR_DATE and self.frequency.value != DAILY.canonical:
+            raise ValueError(f"Calendar-date clipping requires established {DAILY.canonical} frequency")
+        if self.clipping_axis is ClippingAxis.CALENDAR_MONTH and self.frequency.value != MONTHLY.canonical:
+            raise ValueError(f"Calendar-month clipping requires established {MONTHLY.canonical} frequency")
         return self
 
 
@@ -334,6 +345,14 @@ class PhysicalPredicate(BaseModel):
         "vertical_datum",
     ]
     value: str
+
+    @model_validator(mode="after")
+    def check(self) -> PhysicalPredicate:
+        if self.field == "frequency":
+            canonical = canonicalize_frequency(self.value)
+            if canonical != self.value:
+                object.__setattr__(self, "value", canonical)
+        return self
 
 
 class RestrictionKind(StrEnum):

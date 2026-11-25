@@ -86,7 +86,7 @@ def test_public_recorded_bundle_import_refuses_scale_changed_facts(monkeypatch, 
         discovery, "HttpClient", lambda: ModernReplay("daily-07374000-docs-2023", evidence_root=retained_evidence_root)
     )
     selection = rr.find(
-        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", receipts=True, cache="reuse")
     output = BytesIO()
@@ -171,7 +171,7 @@ def test_public_recorded_conversion_rejects_internal_scale_change_under_every_po
     monkeypatch.setattr(discovery, "_provider_lookup", registry.get)
     monkeypatch.setattr(discovery, "_ensure_default_providers_registered", lambda: None)
     selection = rr.find(
-        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     with pytest.raises(FatalContractError, match="admitted|normaliz") as raised:
         result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="bypass", on_issue=policy)
