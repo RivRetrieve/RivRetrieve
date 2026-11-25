@@ -90,14 +90,14 @@ def test_subdaily_vs_aggregate_frequencies_statistics_and_clipping_axes():
             continue
         facts = series_physical_facts(etiqueta)
         if etiqueta.endswith("_D"):
-            assert facts.frequency.value == "daily"
+            assert facts.frequency.value == "P1D"
             assert facts.clipping_axis is ClippingAxis.CALENDAR_DATE
         elif etiqueta.endswith("_M"):
-            assert facts.frequency.value == "monthly"
+            assert facts.frequency.value == "P1M"
             assert facts.clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
         else:
             assert etiqueta.endswith("_A")
-            assert facts.frequency.value == "yearly"
+            assert facts.frequency.value == "P1Y"
             assert facts.clipping_axis is ClippingAxis.SOURCE_TIMESTAMP
         if "_MEDIA_" in etiqueta:
             assert facts.statistic.value == "mean"
@@ -238,11 +238,11 @@ def test_packaged_co_ideam_discovery_honors_established_facts_and_rejects_unesta
     import rivretrieve as rr
 
     daily_q = rr.series(
-        rr.find(provider="co_ideam", quantity="discharge", frequency="daily", statistic="mean", on_issue="raise")
+        rr.find(provider="co_ideam", quantity="discharge", frequency="P1D", statistic="mean", on_issue="raise")
     )
     assert daily_q.height == 943
     assert daily_q["product_id"].unique().to_list() == ["q_media_d"]
-    assert daily_q["frequency"].unique().to_list() == ["daily"]
+    assert daily_q["frequency"].unique().to_list() == ["P1D"]
     assert daily_q["statistic"].unique().to_list() == ["mean"]
 
     gauge_stage = rr.series(
@@ -258,7 +258,7 @@ def test_packaged_co_ideam_discovery_honors_established_facts_and_rejects_unesta
         rr.find(
             provider="co_ideam",
             quantity="stage",
-            frequency="monthly",
+            frequency="P1M",
             statistic="max",
             vertical_reference="gauge_zero",
             on_issue="raise",
@@ -267,8 +267,8 @@ def test_packaged_co_ideam_discovery_honors_established_facts_and_rejects_unesta
     assert monthly_max_stage.height == 1_232
     assert monthly_max_stage["product_id"].unique().to_list() == ["nv_mx_m"]
 
-    # Mixed conventional/automatic sub-daily series never guess frequency="hourly" or statistic="instantaneous"
-    assert rr.series(rr.find(provider="co_ideam", frequency="hourly", on_issue="raise")).is_empty()
+    # Mixed conventional/automatic sub-daily series never guess frequency="PT1H" or statistic="instantaneous"
+    assert rr.series(rr.find(provider="co_ideam", frequency="PT1H", on_issue="raise")).is_empty()
     assert rr.series(rr.find(provider="co_ideam", statistic="instantaneous", on_issue="raise")).is_empty()
 
     # Unestablished temporal support, time zone, day definition, and vertical datum reject rather than guess

@@ -305,11 +305,11 @@ def _parse_s3_csv(
     if ts.len() > 1 and bool((ts.diff().drop_nulls() < timedelta(0)).any()):
         raise UnsupportedSourceStructureError(f"IDEAM S3 {coords.etiqueta} CSV contains decreasing timestamps")
 
-    if spec.frequency == "monthly" and bool((ts.dt.day() != 1).any()):
+    if spec.frequency == "P1M" and bool((ts.dt.day() != 1).any()):
         raise UnsupportedSourceStructureError(
             f"IDEAM S3 monthly {coords.etiqueta} CSV contains non-first-of-month timestamp"
         )
-    if spec.frequency == "yearly" and bool(((ts.dt.month() != 1) | (ts.dt.day() != 1)).any()):
+    if spec.frequency == "P1Y" and bool(((ts.dt.month() != 1) | (ts.dt.day() != 1)).any()):
         raise UnsupportedSourceStructureError(f"IDEAM S3 yearly {coords.etiqueta} CSV contains non-Jan-1 timestamp")
 
     vals = raw_df["valorObservado"].str.strip_chars().cast(pl.Float64, strict=False)

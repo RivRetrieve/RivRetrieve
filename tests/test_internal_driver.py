@@ -85,7 +85,7 @@ def _parsed(rows: Rows, payload: Payload, config: ProviderConfig, issues: tuple[
             quantity=known("stage", "test source definition"),
             source_unit=known(product.unit.value, "test source definition"),
             normalized_unit=product.unit.value,
-            frequency=known("daily" if daily else "instantaneous", "test source definition"),
+            frequency=known("P1D" if daily else "PT15M", "test source definition"),
             clipping_axis=ClippingAxis.CALENDAR_DATE if daily else ClippingAxis.SOURCE_TIMESTAMP,
             label_time=product.semantics.label_time.value if daily else None,
         )
@@ -2045,7 +2045,7 @@ def test_require_canonical_rows_within_requested_is_independent_and_deduped(
         quantity=known("discharge", "test"),
         source_unit=known("ft3/s", "test"),
         normalized_unit="ft3/s",
-        frequency=known("instantaneous", "test"),
+        frequency=known("PT15M", "test"),
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     )
     facts_cms = PhysicalFacts(
@@ -2053,7 +2053,7 @@ def test_require_canonical_rows_within_requested_is_independent_and_deduped(
         quantity=known("discharge", "test"),
         source_unit=known("m3/s", "test"),
         normalized_unit="m3/s",
-        frequency=known("daily", "test"),
+        frequency=known("P1D", "test"),
         clipping_axis=ClippingAxis.CALENDAR_DATE,
         label_time="00:00",
     )
@@ -2322,7 +2322,7 @@ def test_drive_releases_payload_bodies_after_consumers_and_preserves_provenance_
                 quantity=known(qty, "test"),
                 source_unit=known(unit_str, "test"),
                 normalized_unit=unit_str,
-                frequency=known("instantaneous", "test"),
+                frequency=known("PT15M", "test"),
             )
             s_def = SourceSeries(
                 series_id=f"{station}:{product}",
@@ -2440,7 +2440,7 @@ def test_drive_releases_payload_bodies_after_consumers_and_preserves_provenance_
                 quantity=known("discharge", "test"),
                 source_unit=known("m3/s", "test"),
                 normalized_unit="m3/s",
-                frequency=known("instantaneous", "test"),
+                frequency=known("PT15M", "test"),
             )
             s_def = SourceSeries(
                 series_id="station-1:flow",

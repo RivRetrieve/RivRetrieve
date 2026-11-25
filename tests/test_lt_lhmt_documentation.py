@@ -33,7 +33,7 @@ def test_lithuania_page_examples_match_recorded_responses(retained_evidence_root
     assert result.data.height == 7
     assert result.data["value"].null_count() == 0
     assert [call["url"].rsplit("/", 1)[-1] for call in result.provenance.calls_made] == ["2019-12", "2020-01"]
-    stage = rr.find(provider="lt_lhmt", station="nemajunu-vms", quantity="stage", frequency="daily", statistic="mean")
+    stage = rr.find(provider="lt_lhmt", station="nemajunu-vms", quantity="stage", frequency="P1D", statistic="mean")
     stage_rows = rr.fetch(stage, start="2020-01-01", end="2020-01-07", cache="bypass").data
     assert stage_rows.select("value", "source_unit", "unit").head(3).rows() == [
         (0.45, "cm", "m"),
@@ -45,7 +45,7 @@ def test_lithuania_page_examples_match_recorded_responses(retained_evidence_root
 @pytest.mark.usefixtures("reuse_packaged_catalogues")
 def test_lithuania_page_catalogue_count_units_and_index():
     assert len(rr.find(provider="lt_lhmt").locations) == 97
-    candidates = rr.series(rr.find(provider="lt_lhmt", station="nemajunu-vms", frequency="daily", statistic="mean"))
+    candidates = rr.series(rr.find(provider="lt_lhmt", station="nemajunu-vms", frequency="P1D", statistic="mean"))
     assert candidates.select("quantity", "statistic", "source_unit", "unit", "time_zone").sort("quantity").rows() == [
         ("discharge", "mean", "m3/s", "m3/s", "+00:00"),
         ("stage", "mean", "cm", "m", "+00:00"),

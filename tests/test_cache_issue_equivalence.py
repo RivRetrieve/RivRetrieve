@@ -16,7 +16,7 @@ pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 @pytest.fixture
 def authored_cache(monkeypatch, tmp_path):
-    selected = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean")
+    selected = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean")
     versions = sorted({int(item.identity.published_id) for item in selected.series})
 
     class AuthoredHydAPI:

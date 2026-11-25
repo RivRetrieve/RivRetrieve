@@ -30,12 +30,15 @@ def _compile(request: BulkCompileRequest) -> ValidatedStore:
     """Adapt the shared compile request to the publisher's request type."""
     if len(request.publisher_artifacts) != 1:
         raise ValueError("HYDAT compilation requires exactly one publisher artifact")
+    vintage = request.publisher_artifacts[0].source_vintage
+    if vintage is None:
+        raise ValueError("HYDAT compilation requires a publisher-dated source_vintage")
     return bulk.compile_hydat(
         bulk.HydatCompileRequest(
             publisher_artifact=request.publisher_artifacts[0].path,
             destination=request.destination,
             publisher_url=request.publisher_artifacts[0].url,
-            source_vintage=request.publisher_artifacts[0].source_vintage,
+            source_vintage=vintage,
             built_at=request.built_at,
             compiler_version=request.compiler_version,
             transaction=request.transaction,

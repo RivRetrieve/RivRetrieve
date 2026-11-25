@@ -190,6 +190,10 @@ class HydatCompileRequest:
     transaction: StoreTransaction | None = None
     free_space_probe: FreeSpaceProbe = available_bytes
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.source_vintage, date) or isinstance(self.source_vintage, datetime):
+            raise ValueError("HYDAT compilation requires publisher-dated source_vintage values")
+
 
 @dataclass(frozen=True, slots=True)
 class _HydatSchema:

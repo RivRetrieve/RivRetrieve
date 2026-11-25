@@ -83,7 +83,7 @@ def test_independent_publisher_definitions_do_not_infer_from_unknown_product_cel
     for description in descriptions.descriptions:
         facts = description.facts[0]
         assert facts == SERIES_MAPPINGS[description.product_id].physical_facts()
-        assert facts.frequency.value == "daily"
+        assert facts.frequency.value == "P1D"
         assert facts.statistic.value == "mean"
         assert facts.timestamp_anchor.value is None
         assert any("lt_lhmt_terms_licence.html" in ref for ref in facts.statistic.evidence)

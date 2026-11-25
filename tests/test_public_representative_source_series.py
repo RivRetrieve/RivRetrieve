@@ -36,9 +36,7 @@ def test_public_nve_all_versions_include_null_series_without_upstream_selection(
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     metadata = read_recording(retained_evidence_root / "tests/test_data" / "no_nve_109.42.0_1001_series.recording.json")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((*recordings, metadata)))
-    selection = rr.find(
-        provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean")
     result = rr.fetch(selection, start="2024-01-02", end="2024-01-02", receipts=True, on_issue="ignore")
     assert result.data.height == 3
     assert result.data["series_id"].n_unique() == 3
@@ -86,7 +84,7 @@ def test_public_ana_physical_daily_scope_returns_both_consistencies_and_narrows(
 
     monkeypatch.chdir(tmp_path)
     transport = _authenticated_replay(retained_evidence_root, monkeypatch, "stage_daily_mean_bruto")
-    selection = rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="daily", statistic="mean")
+    selection = rr.find(provider="br_ana", station="15400000", quantity="stage", frequency="P1D", statistic="mean")
     assert {item.variant for item in selection.series} == {"bruto", "consistido"}
     result = rr.fetch(selection, start="2020-01-10", end="2020-01-20", receipts=True, on_issue="ignore")
     assert result.data.height == 22
@@ -107,7 +105,7 @@ def test_public_explicit_swiss_variant_does_not_diagnose_unrequested_sibling(mon
     monkeypatch.chdir(tmp_path)
     _official_replay(monkeypatch, variants=("10MinMittel", "Unrequested"))
     selection = rr.pick(
-        rr.find(provider="ch_foen", station="2018", quantity="discharge", frequency="10min"),
+        rr.find(provider="ch_foen", station="2018", quantity="discharge", frequency="PT10M"),
         variant="10MinMittel",
     )
     result = rr.fetch(selection, start="2025-01-01T00:00:00", end="2025-01-01T00:30:00", on_issue="raise")
@@ -137,7 +135,7 @@ def test_public_nve_failed_explicit_version_survives_physical_predicate(
         rr.find(provider="no_nve", station="109.42.0", quantity="discharge"), variant=("1", "99999"), on_issue="ignore"
     )
     # Narrow the documented daily access coordinate without inventing failed-version facts.
-    selection = rr.pick(selection, frequency="daily", on_issue="ignore")
+    selection = rr.pick(selection, frequency="P1D", on_issue="ignore")
     result = rr.fetch(selection, start="2024-01-02", end="2024-01-02", on_issue="ignore")
     assert result.data.height == 1
     failed = [outcome for outcome in result.outcomes if outcome.status.value == "failed"]
@@ -181,7 +179,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
 
         _authenticated_replay(retained_evidence_root, monkeypatch, "stage_daily_mean_consistido")
         selection = rr.pick(
-            rr.find(provider=provider, station="15400000", quantity="stage", frequency="daily", statistic="mean"),
+            rr.find(provider=provider, station="15400000", quantity="stage", frequency="P1D", statistic="mean"),
             variant="consistido",
         )
         start, end = "2020-01-10", "2020-01-20"
@@ -202,7 +200,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             provider=provider,
             station="209486",
             quantity="discharge",
-            frequency="daily",
+            frequency="P1D",
             statistic="mean",
         )
         start, end = "2023-01-01", "2023-01-10"
@@ -224,7 +222,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             provider=provider,
             station="8",
             quantity="discharge",
-            frequency="daily",
+            frequency="P1D",
             statistic="mean",
         )
         start, end = "2024-01-01T00:00:00", "2024-01-05T00:00:00"
@@ -240,7 +238,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
             provider=provider,
             station="0011017010",
             quantity="discharge",
-            frequency="daily",
+            frequency="P1D",
             statistic="mean",
         )
         start, end = "2023-05-01", "2023-05-10"
@@ -249,7 +247,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
 
         _official_replay(monkeypatch)
         selection = rr.pick(
-            rr.find(provider=provider, station="2018", quantity="discharge", frequency="10min"),
+            rr.find(provider=provider, station="2018", quantity="discharge", frequency="PT10M"),
             variant="10MinMittel",
         )
         start, end = "2025-01-01T00:00:00", "2025-01-01T00:30:00"
@@ -262,7 +260,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
         monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
         monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport((recording,)))
         selection = rr.pick(
-            rr.find(provider=provider, station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"),
+            rr.find(provider=provider, station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean"),
             variant="2",
         )
         start = end = "2024-01-02"
@@ -284,7 +282,7 @@ def test_public_explicit_series_cache_and_bundle_preserve_identity(provider, mon
 
 
 def test_public_nve_daily_mean_excludes_published_instantaneous_version():
-    broad = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="daily")
+    broad = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="P1D")
     assert {item.variant for item in broad.series} == {"1", "2"}
     means = rr.pick(broad, statistic="mean")
     assert {item.variant for item in means.series} == {"1"}

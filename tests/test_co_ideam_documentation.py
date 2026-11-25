@@ -93,7 +93,7 @@ def test_co_ideam_page_selection_discovery_and_catalogue_claims_are_offline(
         "source_unit",
         "unit",
         "time_zone",
-    ).rows() == [("0011017010", "q_media_d", "Q_MEDIA_D", "discharge", "daily", "mean", "m3/s", "m3/s", None)]
+    ).rows() == [("0011017010", "q_media_d", "Q_MEDIA_D", "discharge", "P1D", "mean", "m3/s", "m3/s", None)]
 
     candidates = namespace["candidates"]
     assert sorted(candidates["published_id"].to_list()) == sorted(  # type: ignore[index]
@@ -145,7 +145,7 @@ def test_co_ideam_page_selection_discovery_and_catalogue_claims_are_offline(
     )
     assert len(table_rows) == 20
 
-    freq_map = {"Daily": "daily", "Monthly": "monthly", "Yearly": "yearly", "Unknown": None}
+    freq_map = {"`P1D`": "P1D", "`P1M`": "P1M", "`P1Y`": "P1Y", "Unknown": None}
     stat_map = {"Mean": "mean", "Minimum": "min", "Maximum": "max", "Unknown": None}
     unit_map = {"m³/s": "m3/s", "cm": "cm", "m": "m"}
     covered_published_ids: set[str] = set()

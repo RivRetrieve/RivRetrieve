@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
+from rivretrieve._internal.frequency import DAILY, canonicalize_frequency
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.provider_series import SeriesMapping
 from rivretrieve._internal.source_series import (
@@ -94,7 +95,11 @@ def generic_source_descriptions(
         # The catalogue uses the established water_temperature quantity spelling.
         quantity = "temperature" if quantity == "water_temperature" else quantity
         frequency = fact(row["frequency"], "product.frequency")
-        daily = frequency.value == "daily"
+        if frequency.state is EvidenceState.KNOWN and frequency.value is not None:
+            canonical = canonicalize_frequency(frequency.value)
+            if canonical != frequency.value:
+                frequency = EvidenceFact(value=canonical, state=EvidenceState.KNOWN, evidence=frequency.evidence)
+        daily = frequency.value == DAILY.canonical
         day = EvidenceFact()
         label = None
         if declared is not None and isinstance(declared.semantics, Daily):

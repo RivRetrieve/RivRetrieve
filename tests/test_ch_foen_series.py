@@ -55,11 +55,11 @@ def test_response_and_catalogue_preserve_coordinates_and_unit_segments():
 @pytest.mark.parametrize(
     "route,frequency,support,statistic",
     [
-        ("data_10min_mean", "10min", "10_minutes", "mean"),
-        ("data_1hour_mean", "hourly", "1_hour", "mean"),
-        ("data_1day_min", "daily", "calendar_day", "min"),
-        ("data_1month_max", "monthly", "calendar_month", "max"),
-        ("data_1year_mean", "yearly", "calendar_year", "mean"),
+        ("data_10min_mean", "PT10M", "10_minutes", "mean"),
+        ("data_1hour_mean", "PT1H", "1_hour", "mean"),
+        ("data_1day_min", "P1D", "calendar_day", "min"),
+        ("data_1month_max", "P1M", "calendar_month", "max"),
+        ("data_1year_mean", "P1Y", "calendar_year", "mean"),
     ],
 )
 def test_archive_support_keeps_utc_labels_separate_from_aggregation_calendar(route, frequency, support, statistic):

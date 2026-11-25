@@ -63,6 +63,7 @@ of the source view.
 | [`br_ana`](providers/br_ana.md) | `Estacao_Nome` | `Rio_Nome` | `Area_Drenagem` | `Altitude` |
 | [`ca_eccc`](providers/ca_eccc.md) | `STATION_NAME` | — | `DRAINAGE_AREA_EFFECT`, `DRAINAGE_AREA_GROSS` (km2) | — |
 | [`ch_foen`](providers/ch_foen.md) | `data-name`, `name` | `data-hydro-body`, `riverName` | `Catchment size` (km2) | `Station altitude` (m) |
+| [`cl_dga`](providers/cl_dga.md) | `NOMBRE ESTACION` | — | — | `ALTITUD` (m) |
 | [`co_ideam`](providers/co_ideam.md) | `Nombre` | `Corriente` | — | `Altitud` |
 | [`cz_chmi`](providers/cz_chmi.md) | `STATION_NAME` | `STREAM_NAME` | `PLO_STA` (km²) | — |
 | [`dk_vanda`](providers/dk_vanda.md) | `name` | — | `catchmentAreaKm2` (km2) | — |
@@ -380,6 +381,10 @@ the [provider pages](README.md#providers). `rr.describe(provider)` reads the
 packaged catalogue descriptor offline; metadata notices appear in its
 `station_metadata` record set.
 
+- [DGA/MOP's terms](providers/cl_dga.md#terms-and-citation) authorize non-commercial
+  reproduction with clear source attribution, require written permission for
+  promotional materials or other media, and leave dataset-specific open
+  licensing unestablished.
 - [IDEAM's terms](providers/co_ideam.md#terms-and-citation) require source attribution
   to IDEAM and apply CC BY-SA 4.0. Adaptations must follow the licence's share-alike conditions.
 - [LHMT's terms](providers/lt_lhmt.md#terms-and-citation) require source attribution

@@ -281,14 +281,14 @@ class ProductDefinition:
 # Product IDs route source requests. Method belongs to each published version;
 # neither resolution nor an access name establishes temporal support or anchor.
 PRODUCT_DEFINITIONS = (
-    ProductDefinition("stage_daily_mean", "stage", "daily", "m", 1000, 1440),
-    ProductDefinition("stage_hourly_mean", "stage", "hourly", "m", 1000, 60),
+    ProductDefinition("stage_daily_mean", "stage", "P1D", "m", 1000, 1440),
+    ProductDefinition("stage_hourly_mean", "stage", "PT1H", "m", 1000, 60),
     ProductDefinition("stage_instantaneous", "stage", "unknown", "m", 1000, 0),
-    ProductDefinition("discharge_daily_mean", "discharge", "daily", "m3/s", 1001, 1440),
-    ProductDefinition("discharge_hourly_mean", "discharge", "hourly", "m3/s", 1001, 60),
+    ProductDefinition("discharge_daily_mean", "discharge", "P1D", "m3/s", 1001, 1440),
+    ProductDefinition("discharge_hourly_mean", "discharge", "PT1H", "m3/s", 1001, 60),
     ProductDefinition("discharge_instantaneous", "discharge", "unknown", "m3/s", 1001, 0),
-    ProductDefinition("water_temperature_daily_mean", "water_temperature", "daily", "degC", 1003, 1440),
-    ProductDefinition("water_temperature_hourly_mean", "water_temperature", "hourly", "degC", 1003, 60),
+    ProductDefinition("water_temperature_daily_mean", "water_temperature", "P1D", "degC", 1003, 1440),
+    ProductDefinition("water_temperature_hourly_mean", "water_temperature", "PT1H", "degC", 1003, 60),
     ProductDefinition("water_temperature_instantaneous", "water_temperature", "unknown", "degC", 1003, 0),
 )
 EXPECTED_PRODUCT_IDS = frozenset(item.product_id for item in PRODUCT_DEFINITIONS)

@@ -12,10 +12,23 @@ from rivretrieve._internal.issues import IssuePolicyError
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
-@pytest.mark.parametrize("provider,station", [("ca_eccc", "02GA010"), ("pl_imgw", "154210010")])
+@pytest.mark.parametrize(
+    "provider,station,quantity,frequency",
+    [
+        ("ca_eccc", "02GA010", "stage", "P1D"),
+        ("pl_imgw", "154210010", "stage", "P1D"),
+        ("cl_dga", "01001002", "discharge", "P1D"),
+    ],
+)
 @pytest.mark.parametrize("policy", ["raise", "warn", "ignore"])
 def test_missing_bulk_store_reports_concrete_outcome_without_acquisition(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, provider: str, station: str, policy: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    station: str,
+    quantity: str,
+    frequency: str,
+    policy: str,
 ):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
 
@@ -24,7 +37,7 @@ def test_missing_bulk_store_reports_concrete_outcome_without_acquisition(
             pytest.fail("Missing local bulk stores must not trigger a source request or download")
 
     monkeypatch.setattr(discovery, "HttpClient", NoNetwork)
-    selection = rr.find(provider=provider, station=station, quantity="stage")
+    selection = rr.find(provider=provider, station=station, quantity=quantity, frequency=frequency)
     assert len(selection.series) == 1
     assert list(tmp_path.iterdir()) == []
 

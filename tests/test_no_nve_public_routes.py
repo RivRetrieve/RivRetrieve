@@ -21,7 +21,7 @@ _DATA = Path("tests/test_data")
 @pytest.mark.parametrize("parameter,quantity", [(1000, "stage"), (1001, "discharge"), (1003, "temperature")])
 @pytest.mark.parametrize(
     "resolution,frequency,statistic",
-    [(0, None, "instantaneous"), (60, "hourly", "mean"), (1440, "daily", "mean")],
+    [(0, None, "instantaneous"), (60, "PT1H", "mean"), (1440, "P1D", "mean")],
 )
 @pytest.mark.recorded(
     "tests/test_data/no_nve_observations_1.200.0_1000_0_v1_engine_2025-07-10.recording.json",
@@ -137,7 +137,7 @@ def test_current_version_specific_method_obeys_original_physical_predicate(
             return replay.send(request)
 
     monkeypatch.setattr(discovery, "HttpClient", Observed)
-    selection = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="daily", statistic="mean")
+    selection = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="P1D", statistic="mean")
     result = rr.fetch(selection, start="2024-10-01", end="2024-10-01", on_issue="raise")
     assert {
         dict(call["request_parameters"])["VersionNumber"]
@@ -145,7 +145,7 @@ def test_current_version_specific_method_obeys_original_physical_predicate(
         if call["url"].endswith("/Observations")
     } == {1}
     assert result.data.height == 1
-    broad = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="daily")
+    broad = rr.find(provider="no_nve", station="1.46.0", quantity="stage", frequency="P1D")
     both = rr.fetch(broad, start="2024-10-01", end="2024-10-01", on_issue="raise")
     assert {item.identity.published_id for item in both.source_series} == {"1", "2"}
     assert {facts.statistic.value for item in both.source_series for facts in item.facts} == {"mean", "instantaneous"}
@@ -180,7 +180,7 @@ def test_failed_current_inventory_retains_known_results_and_cannot_satisfy_all_c
             return replay.send(request)
 
     monkeypatch.setattr(discovery, "HttpClient", FailedMetadata)
-    selected = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean")
+    selected = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean")
 
     def fetch():
         return rr.fetch(selected, start="2024-01-02", end="2024-01-02", cache="reuse", receipts=True, on_issue="ignore")
@@ -227,9 +227,7 @@ def test_subset_cannot_satisfy_all_current_versions_and_refresh_keeps_siblings(
             return replay.send(request)
 
     monkeypatch.setattr(discovery, "HttpClient", Observed)
-    all_series = rr.find(
-        provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    all_series = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean")
     two = rr.pick(all_series, variant="2")
 
     def fetch(selection, mode):
@@ -289,9 +287,7 @@ def test_failed_version_refresh_retains_old_success_without_fresh_all_coverage(
             return replace(response, retrieved_at=response.retrieved_at + timedelta(days=1)) if fail else response
 
     monkeypatch.setattr(discovery, "HttpClient", Observed)
-    selection = rr.find(
-        provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily", statistic="mean"
-    )
+    selection = rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D", statistic="mean")
 
     def fetch(mode):
         return rr.fetch(selection, start="2024-01-02", end="2024-01-02", cache=mode, on_issue="ignore")

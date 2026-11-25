@@ -75,7 +75,7 @@ def test_public_healthy_subset_reuse_excludes_unrelated_stored_failure_and_sourc
 
     monkeypatch.setattr(discovery, "HttpClient", lambda: CountedReplay())
     selection = rr.find(
-        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     first = rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", on_issue="ignore")
     store = StoreRoot(next(tmp_path.rglob("manifest.json")).parent)

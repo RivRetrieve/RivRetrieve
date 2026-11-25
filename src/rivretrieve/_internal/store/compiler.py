@@ -81,7 +81,7 @@ class StoreCompileRequest:
     provider_id: ProviderId
     compiler_version: str
     built_at: datetime
-    source_vintage: date
+    source_vintage: date | None
     publisher_artifact: PublisherArtifact
     source_columns: tuple[SourceColumn, ...]
     source_column_dispositions: tuple[SourceColumnDisposition, ...]
@@ -273,6 +273,10 @@ def _check_request(request: StoreCompileRequest, root: Path) -> None:
         raise ValueError("store build time must be timezone-aware")
     if offset.total_seconds() != 0:
         raise ValueError("store build time must be UTC")
+    if request.source_vintage is not None and (
+        not isinstance(request.source_vintage, date) or isinstance(request.source_vintage, datetime)
+    ):
+        raise TypeError("store source vintage must be a datetime.date or None")
     if not request.source_columns:
         raise ValueError("source schema must contain at least one column")
 
@@ -402,11 +406,11 @@ def _write_manifest(
         dispositions.append(record)
     built_at = request.built_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     manifest: dict[str, object] = {
-        "format_version": 10,
+        "format_version": 12,
         "provider_id": str(request.provider_id),
         "compiler_version": request.compiler_version,
         "built_at": built_at,
-        "source_vintage": request.source_vintage.isoformat(),
+        "source_vintage": request.source_vintage.isoformat() if request.source_vintage is not None else None,
         **(
             {"publisher_artifact": {"url": request.publisher_artifact.url, "sha256": request.publisher_artifact.sha256}}
             if not request.publisher_artifacts

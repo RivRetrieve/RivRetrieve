@@ -26,7 +26,7 @@ def _result(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(
-        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     result = rr.fetch(selection, start="2023-01-01", end="2023-01-01", receipts=True, on_issue="ignore")
     return result, body(_RECORDING, evidence_root=retained_evidence_root)
@@ -82,10 +82,13 @@ def test_selection_bundle_preserves_unknown_station_coordinates():
     assert restored.locations == selected.locations
 
 
-def test_bundle_refuses_unknown_format_before_scientific_decode():
+@pytest.mark.parametrize("retired_version", [4, 999])
+def test_bundle_refuses_unknown_format_before_scientific_decode(retired_version):
     output = BytesIO()
     with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
-        archive.writestr("manifest.json", json.dumps({"format": "rivretrieve-source-series", "version": 999}))
+        archive.writestr(
+            "manifest.json", json.dumps({"format": "rivretrieve-source-series", "version": retired_version})
+        )
         archive.writestr("observations.parquet", b"not a parquet file")
     with pytest.raises(ValueError, match="format version"):
         rr.from_bundle(output.getvalue())
@@ -99,7 +102,7 @@ def test_catalogue_known_explicit_restriction_reuses_without_stale_policy_failur
     replay = ModernReplay(_RECORDING, evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: replay)
     selection = rr.find(
-        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="07374000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     rr.fetch(selection, start="2023-01-01", end="2023-01-01", cache="reuse", on_issue="raise")
     pending = rr.pick(selection, variant=_KNOWN, on_issue="raise")
@@ -144,7 +147,7 @@ def test_before_fetch_restriction_bundle_retains_acquired_scoped_inventory(
 
     monkeypatch.setattr(discovery, "HttpClient", UnknownSelectorControl)
     selection = rr.find(
-        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     restricted = rr.from_bundle(rr.to_bundle(rr.pick(selection, variant=variant, on_issue="ignore")))
     result = rr.fetch(restricted, start="2000-01-01", end="2000-01-07", receipts=True, on_issue="ignore")
@@ -173,7 +176,7 @@ def test_recorded_ended_empty_result_bundle_retains_inventory_definition(
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(discovery, "HttpClient", lambda: ModernReplay(name, evidence_root=retained_evidence_root))
     selection = rr.find(
-        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="daily", statistic="mean"
+        provider="usgs_nwis", station="02196000", quantity="discharge", frequency="P1D", statistic="mean"
     )
     restricted = rr.pick(selection, variant=ended, on_issue="raise")
     result = rr.fetch(restricted, start="2024-01-01", end="2024-01-07", on_issue="raise")
@@ -242,7 +245,7 @@ def test_failed_explicit_identity_remains_inspectable_without_claiming_unknown_p
     monkeypatch.setenv("NVE_API_KEY", "protocol-only-nve-key")
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport(recordings))
     selection = rr.pick(
-        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="daily"),
+        rr.find(provider="no_nve", station="109.42.0", quantity="discharge", frequency="P1D"),
         variant=("1", "99999"),
         on_issue="ignore",
     )

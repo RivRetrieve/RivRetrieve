@@ -1,12 +1,14 @@
 ## Supported physical query values
 
-These library-wide values apply to `find` and `pick`, including result views. Matching is exact and case-sensitive. A supported value need not be available at every provider or station.
+These library-wide values apply to `find` and `pick`, including result views. `quantity` and `statistic` matching is exact and case-sensitive. A supported value need not be available at every provider or station.
 
 | Filter | Supported values |
 | --- | --- |
 | `quantity` | `discharge`, `stage`, `temperature` |
-| `frequency` | `10min`, `hourly`, `daily`, `monthly`, `yearly` |
 | `statistic` | `mean`, `min`, `max`, `instantaneous` |
+| `frequency` | Positive whole-number ISO 8601 duration in one family, reduced within that family (for example `PT15M`, `PT1H`, `P1D`, `P1W`, `P1M`, `P1Y`) |
+
+`frequency` accepts positive whole-number ISO 8601 durations across three disjoint families: elapsed time (`PT...H`/`M`/`S`), calendar weeks and days (`P...W`/`D`), and calendar years and months (`P...Y`/`M`). Inputs reduce within their own family to the largest exact single unit (`PT60M` becomes `PT1H`, `P7D` becomes `P1W`, `P12M` becomes `P1Y`). Family boundaries stay distinct (`P1D` is distinct from `PT24H`, `P1W` from `PT168H`, and `P1Y` from `P365D`). Legacy aliases such as `"daily"`, negative or fractional durations, zero durations, and cross-family mixed durations raise `ValueError`.
 
 ## Frame schemas
 
@@ -164,6 +166,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `br_ana` | live | `ANA_IDENTIFICADOR`, `ANA_SENHA` | 17914 | 6 | 107478 | 0 |
 | `ca_eccc` | bulk store | none | 8057 | 0 | 16114 | 0 |
 | `ch_foen` | live | none | 1341 | 7008 | 41268 | 0 |
+| `cl_dga` | bulk store | none | 784 | 1568 | 0 | 0 |
 | `co_ideam` | live | none | 1372 | 19690 | 0 | 7750 |
 | `cz_chmi` | live | none | 831 | 0 | 4155 | 0 |
 | `dk_vanda` | live | none | 1565 | 1733 | 2962 | 0 |
@@ -272,6 +275,8 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `ch_foen` | `water_temperature_1year_mean` | `degC` |
 | `ch_foen` | `water_temperature_1year_min` | `degC` |
 | `ch_foen` | `water_temperature_recent` | `degC` |
+| `cl_dga` | `discharge_daily` | `m3/s` |
+| `cl_dga` | `discharge_monthly_mean` | `m3/s` |
 | `co_ideam` | `caudal_h` | `m3/s` |
 | `co_ideam` | `nivel_h` | `m` |
 | `co_ideam` | `nv_media_a` | `m` |

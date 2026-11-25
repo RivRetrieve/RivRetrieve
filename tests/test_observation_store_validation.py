@@ -141,7 +141,7 @@ def test_discovered_fixture_inventory_exercises_the_production_seam() -> None:
         assert isinstance(result, ValidatedStore)
         assert result.root == StoreRoot(resolved)
         assert isinstance(result.manifest, StoreManifest)
-        assert result.manifest.format_version == 10
+        assert result.manifest.format_version == 12
         assert result.manifest.built_at.utcoffset() is not None
         assert result.manifest.publisher_artifact.url.startswith("https://")
         expected_keys = {PartitionIdentifier(key) for key in _manifest(path)["partition_row_counts"]}
@@ -182,10 +182,11 @@ def test_compiler_version_does_not_grant_compatibility(tmp_path: Path) -> None:
     _write_manifest(store, manifest)
     assert isinstance(validate_store(StoreRoot(store), PROVIDER_ID), ValidatedStore)
 
-    manifest["compiler_version"] = "1.0"
-    manifest["format_version"] = 72
-    _write_manifest(store, manifest)
-    _assert_refusal(store, "unsupported format revision 72", StoreRefusalKind.INCOMPATIBLE)
+    for retired_or_unknown in (10, 72):
+        manifest["compiler_version"] = "1.0"
+        manifest["format_version"] = retired_or_unknown
+        _write_manifest(store, manifest)
+        _assert_refusal(store, f"unsupported format revision {retired_or_unknown}", StoreRefusalKind.INCOMPATIBLE)
 
 
 @pytest.mark.parametrize(
@@ -209,7 +210,7 @@ def test_missing_manifest_and_duplicate_json_member_are_refused(tmp_path: Path) 
 
     duplicate = _copy_fixture(tmp_path / "duplicate")
     text = (duplicate / "manifest.json").read_text(encoding="utf-8")
-    text = text.replace('  "format_version": 10,', '  "format_version": 10,\n  "format_version": 10,', 1)
+    text = text.replace('  "format_version": 12,', '  "format_version": 12,\n  "format_version": 12,', 1)
     (duplicate / "manifest.json").write_text(text, encoding="utf-8")
     _assert_refusal(duplicate, "manifest.json:duplicate:format_version")
 
@@ -405,7 +406,7 @@ def test_unknown_revision_precedes_the_single_parquet_open_boundary(
     _assert_refusal(store, "unsupported format revision 99", StoreRefusalKind.INCOMPATIBLE)
     assert opened == []
 
-    manifest["format_version"] = 10
+    manifest["format_version"] = 12
     _write_manifest(store, manifest)
     _assert_refusal(store, "partition.parquet:product=level/year=2024")
     assert opened == expected_paths
@@ -539,3 +540,40 @@ def test_fingerprint_refuses_changed_declared_type_with_old_digest(tmp_path: Pat
     manifest["source_schema"]["columns"][-1]["type"] = "integer"
     _write_manifest(store, manifest)
     _assert_refusal(store, "source_schema.fingerprint")
+
+
+def test_null_source_vintage_is_valid_when_explicitly_unknown(tmp_path: Path) -> None:
+    store = _copy_fixture(tmp_path)
+    manifest = _manifest(store)
+    manifest["source_vintage"] = None
+    _write_manifest(store, manifest)
+    validated = validate_store(StoreRoot(store), PROVIDER_ID)
+    assert isinstance(validated.manifest, StoreManifest)
+    assert validated.manifest.source_vintage is None
+
+
+def test_missing_source_vintage_is_still_refused(tmp_path: Path) -> None:
+    store = _copy_fixture(tmp_path)
+    manifest = _manifest(store)
+    del manifest["source_vintage"]
+    _write_manifest(store, manifest)
+    _assert_refusal(store, "manifest.required:source_vintage")
+
+
+@pytest.mark.parametrize(
+    ("raw_vintage", "expected_defect"),
+    [
+        ("", "manifest.format:source_vintage"),
+        ("unknown", "manifest.format:source_vintage"),
+        ("2024-02-30", "manifest.format:source_vintage"),
+        ("2024-1-2", "manifest.format:source_vintage"),
+        (123, "manifest.type:source_vintage"),
+        (True, "manifest.type:source_vintage"),
+    ],
+)
+def test_invalid_non_null_source_vintage_is_refused(tmp_path: Path, raw_vintage: object, expected_defect: str) -> None:
+    store = _copy_fixture(tmp_path)
+    manifest = _manifest(store)
+    manifest["source_vintage"] = raw_vintage
+    _write_manifest(store, manifest)
+    _assert_refusal(store, expected_defect)

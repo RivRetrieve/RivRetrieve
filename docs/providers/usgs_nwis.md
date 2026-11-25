@@ -31,7 +31,7 @@ selection = rr.find(
     provider="usgs_nwis",
     station="07374000",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 
@@ -94,7 +94,7 @@ to metres. Source values already in m³/s or m are also supported and retain tho
 units. Stage is USGS gage height; it must not be treated as elevation above sea
 level without an established reference.
 
-For daily values, use `frequency="daily"` and `statistic="mean"`, `"max"` or
+For daily values, use `frequency="P1D"` and `statistic="mean"`, `"max"` or
 `"min"` as applicable. For established instantaneous observations, use
 `statistic="instantaneous"` without a frequency filter. Continuous publication
 does not establish a fixed sampling interval. Some continuous series have unknown
@@ -147,7 +147,7 @@ alternatives = rr.find(
     provider="usgs_nwis",
     station="02196000",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 

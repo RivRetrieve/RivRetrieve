@@ -37,7 +37,7 @@ def test_public_discovery_keeps_overlapping_station_identity_separate():
     assert {item.series_id for item in hubeau.series}.isdisjoint(item.series_id for item in hydroportail.series)
     assert rr.series(rr.pick(hydroportail, quantity="discharge")).height == 4
     assert rr.series(rr.find(provider="fr_hubeau", statistic="instantaneous")).is_empty()
-    assert rr.series(rr.find(provider="fr_hydroportail", frequency="daily")).is_empty()
+    assert rr.series(rr.find(provider="fr_hydroportail", frequency="P1D")).is_empty()
 
 
 @pytest.mark.parametrize(
@@ -46,7 +46,7 @@ def test_public_discovery_keeps_overlapping_station_identity_separate():
         (
             "fr_hubeau",
             "1011000101",
-            {"quantity": "discharge", "frequency": "daily", "statistic": "mean"},
+            {"quantity": "discharge", "frequency": "P1D", "statistic": "mean"},
             "2025-01-03",
             "2025-01-03",
             "fr_hubeau_size2500/fr_hubeau_1011000101_QmnJ_padded.recording.json",

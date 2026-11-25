@@ -119,7 +119,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="discharge_daily",
         observed_property="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="unknown",
         period_type="unknown",
         period_anchor="unknown",
@@ -129,7 +129,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="stage_daily",
         observed_property="stage",
-        frequency="daily",
+        frequency="P1D",
         statistic="unknown",
         period_type="unknown",
         period_anchor="unknown",
@@ -139,7 +139,7 @@ PRODUCT_DEFINITIONS: tuple[ProductDefinition, ...] = (
     ProductDefinition(
         product_id="water_temperature_daily",
         observed_property="water_temperature",
-        frequency="daily",
+        frequency="P1D",
         statistic="unknown",
         period_type="unknown",
         period_anchor="unknown",

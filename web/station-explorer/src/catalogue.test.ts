@@ -40,7 +40,7 @@ function catalogue(): WireCatalogue {
       {
         ...first,
         quantity: { value: "stage", state: "known" },
-        frequency: { value: "daily", state: "known" },
+        frequency: { value: "P1D", state: "known" },
       },
     ],
     series: [[0, "exact-id", "original", "published", [0, 1]]],
@@ -87,19 +87,19 @@ describe("compact catalogue decoding", () => {
     expect(result.stations[0].series[1]).toMatchObject({
       series_id: "exact-id",
       quantity: "stage",
-      frequency: "daily",
+      frequency: "P1D",
       frequency_state: "known",
     });
     expect(
       matchesStation(result.stations[0], {
         quantity: "discharge",
-        frequency: "daily",
+        frequency: "P1D",
       }),
     ).toBe(false);
     expect(
       matchesStation(result.stations[0], {
         quantity: "stage",
-        frequency: "daily",
+        frequency: "P1D",
       }),
     ).toBe(true);
   });

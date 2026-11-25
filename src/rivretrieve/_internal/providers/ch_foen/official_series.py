@@ -67,11 +67,11 @@ RELEASE_STATUS_MEANINGS = {
 # Calendar periods are not fixed elapsed durations. These declarations do not
 # implement request bounds or clipping.
 _PERIODS = {
-    "10min": ("10min", "10_minutes"),
-    "1hour": ("hourly", "1_hour"),
-    "1day": ("daily", "calendar_day"),
-    "1month": ("monthly", "calendar_month"),
-    "1year": ("yearly", "calendar_year"),
+    "10min": ("PT10M", "10_minutes"),
+    "1hour": ("PT1H", "1_hour"),
+    "1day": ("P1D", "calendar_day"),
+    "1month": ("P1M", "calendar_month"),
+    "1year": ("P1Y", "calendar_year"),
 }
 
 

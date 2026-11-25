@@ -156,8 +156,12 @@ class StoreStatus:
         Current successful accumulated-store coverage, otherwise empty.
     partition_row_counts : Mapping[PartitionIdentifier, int]
         Property exposing physical row counts, empty when absent.
-    format_version, compiler_version, built_at, source_vintage
+    format_version, compiler_version, built_at
         Properties exposing applicable manifest fields, otherwise None.
+    source_vintage : datetime.date or None
+        Source publication or coverage-end date when established by a compiled
+        store; otherwise None (including when absent, accumulated, or compiled
+        from an unlabelled static publisher archive).
     publisher_artifact_url, publisher_artifact_checksum, source_schema_fingerprint
         Compiled-store identity properties, otherwise None.
     publisher_artifact_urls, publisher_artifact_checksums : tuple

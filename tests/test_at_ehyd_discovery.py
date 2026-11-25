@@ -50,7 +50,7 @@ def test_discovery_and_metadata_remain_offline(policy, monkeypatch):
         provider="at_ehyd",
         station="209486",
         quantity="discharge",
-        frequency="daily",
+        frequency="P1D",
         statistic="mean",
         on_issue=policy,
     )
@@ -69,7 +69,7 @@ def test_discovery_and_metadata_remain_offline(policy, monkeypatch):
     assert by_product["pegel_bgis_abfluss"].identity.published_id == "data"
     assert by_product["pegel_bgis_abfluss"].facts[0].time_zone.value == "UTC+01:00"
     assert by_product["pegel_longterm_abfluss"].identity.published_id == "current_value"
-    assert by_product["pegel_longterm_abfluss"].facts[0].frequency.value == "daily"
+    assert by_product["pegel_longterm_abfluss"].facts[0].frequency.value == "P1D"
     assert by_product["pegel_longterm_abfluss"].facts[0].statistic.value is None
 
     # 207340 Wilhering retains stage minimum identity while withholding monthly frequency
@@ -88,7 +88,7 @@ def test_discovery_and_metadata_remain_offline(policy, monkeypatch):
         provider="at_ehyd",
         station="207340",
         quantity="stage",
-        frequency="monthly",
+        frequency="P1M",
         statistic="min",
         on_issue=policy,
     )

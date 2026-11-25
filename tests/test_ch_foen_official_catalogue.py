@@ -110,9 +110,7 @@ def test_descriptions_scope_variants_and_unit_segments_with_documented_support()
     assert first.identity_key == ("data_1day_mean", "Q", "Unresolved")
     assert variant.identity_key == ("data_1day_mean", "Q", "Unresolved.1")
     assert {fact.source_unit.value for fact in first.facts} == {"m³/s", "l/s"}
-    assert all(
-        fact.frequency.value == "daily" and fact.temporal_support.value == "calendar_day" for fact in first.facts
-    )
+    assert all(fact.frequency.value == "P1D" and fact.temporal_support.value == "calendar_day" for fact in first.facts)
     assert all(fact.quantity.value == "discharge" for fact in first.facts)
 
 
@@ -230,7 +228,7 @@ def test_public_discovery_uses_series_facts_and_keeps_unobserved_intent(monkeypa
     monkeypatch.setattr(discovery, "_ensure_default_providers_registered", lambda: None)
     broad = rr.find(provider="ch_foen", station="0085", quantity="discharge", on_issue="ignore")
     assert len(broad.series) == 1
-    assert len(rr.find(provider="ch_foen", station="0085", frequency="daily", on_issue="ignore").series) == 1
+    assert len(rr.find(provider="ch_foen", station="0085", frequency="P1D", on_issue="ignore").series) == 1
     assert len(rr.find(provider="ch_foen", station="0085", statistic="mean", on_issue="ignore").series) == 1
     unresolved = rr.find(provider="ch_foen", station="1234", on_issue="ignore")
     assert not unresolved.known_series

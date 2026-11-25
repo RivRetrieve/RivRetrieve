@@ -15,6 +15,7 @@ import polars as pl
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.evidence import CatalogueEvidence
 from rivretrieve._internal.catalogues.schemas import STATION_CATALOG_SCHEMA, StationCatalog
+from rivretrieve._internal.frequency import canonicalize_frequency
 from rivretrieve._internal.issues import FatalContractError, Issue, apply_on_issue
 from rivretrieve._internal.primitives import OnIssue, ProviderId
 from rivretrieve._internal.registry import UnknownProviderError
@@ -145,7 +146,6 @@ class _Selection:
 # Supported query meanings, separate from open-ended publisher evidence.
 QUERY_VOCABULARIES = {
     "quantity": ("discharge", "stage", "temperature"),
-    "frequency": ("10min", "hourly", "daily", "monthly", "yearly"),
     "statistic": ("mean", "min", "max", "instantaneous"),
 }
 
@@ -173,11 +173,20 @@ def _normalize(value: str | Sequence[str] | None) -> tuple[str, ...]:
 
 
 def _predicates(values: dict[str, str | None]) -> tuple[PhysicalPredicate, ...]:
-    predicates = tuple(
-        PhysicalPredicate.model_validate({"field": field, "value": value})
-        for field, value in values.items()
-        if value is not None
-    )
+    validated: list[PhysicalPredicate] = []
+    for field, value in values.items():
+        if value is None:
+            continue
+        if field == "frequency":
+            try:
+                value = canonicalize_frequency(value)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Unsupported frequency filter {value!r}. Use a positive ISO 8601 duration in one family, "
+                    "such as 'PT15M', 'PT1H', 'P1D', 'P1W', 'P1M', or 'P1Y'."
+                ) from exc
+        validated.append(PhysicalPredicate.model_validate({"field": field, "value": value}))
+    predicates = tuple(validated)
     for predicate in predicates:
         supported = QUERY_VOCABULARIES.get(predicate.field)
         if supported is not None and predicate.value not in supported:

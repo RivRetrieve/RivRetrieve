@@ -46,6 +46,7 @@ SOURCE_FIELDS = {
     "br_ana": ("codigoestacao", {"Area_Drenagem": None}),
     "ca_eccc": ("STATION_NUMBER", {"DRAINAGE_AREA_GROSS": "km2", "DRAINAGE_AREA_EFFECT": "km2"}),
     "ch_foen": ("name", {}),
+    "cl_dga": ("CODIGO ESTACION", {}),
     "co_ideam": ("Codigo", {}),
     "cz_chmi": ("objID", {"PLO_STA": "km²"}),
     "dk_vanda": ("stationId", {"catchmentAreaKm2": "km2"}),
@@ -69,7 +70,7 @@ SOURCE_FIELDS = {
 
 
 def test_canadian_example_and_product_deduplication() -> None:
-    gauges = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean")
+    gauges = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="P1D", statistic="mean")
     gauge = rr.pick(gauges, station="02GA010")
     expected = pl.DataFrame(
         [
@@ -130,7 +131,7 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
     # Same station strings in different providers must not collapse.
     overlapping = before.select(keys).unique().group_by("station_id").len().filter(pl.col("len") > 1)
     assert overlapping.height > 0
-    for provider in ("ar_ina", "co_ideam", "lt_lhmt", "pe_senamhi", "th_thaiwater"):
+    for provider in ("ar_ina", "cl_dga", "co_ideam", "lt_lhmt", "pe_senamhi", "th_thaiwater"):
         absent = result.filter(pl.col("provider_id") == provider)
         assert set(absent["state"]) == {"no_metadata"}
         assert (
@@ -153,6 +154,8 @@ def test_all_selected_gauges_remain_visible_offline(monkeypatch: pytest.MonkeyPa
                 if provider == "at_ehyd"
                 else "maintenance/catalogue/usgs_nwis"
                 if provider == "usgs_nwis"
+                else "maintenance/catalogue/cl_dga/official/native.parquet"
+                if provider == "cl_dga"
                 else "maintenance/catalogue/co_ideam/official/native.parquet"
                 if provider == "co_ideam"
                 else "maintenance/catalogue/dk_vanda/official"
@@ -173,6 +176,8 @@ def test_projection_preserves_every_native_scalar(provider: str, retained_eviden
         if provider == "usgs_nwis"
         else retained_evidence_root / "maintenance/catalogue/ar_ina/official/native.parquet"
         if provider == "ar_ina"
+        else retained_evidence_root / "maintenance/catalogue/cl_dga/official/native.parquet"
+        if provider == "cl_dga"
         else retained_evidence_root / "maintenance/catalogue/co_ideam/official/native.parquet"
         if provider == "co_ideam"
         else retained_evidence_root / "maintenance/catalogue/dk_vanda/official/native.parquet"
@@ -365,7 +370,7 @@ def test_station_metadata_does_not_require_numeric_source_unit_admission(registe
 def test_station_metadata_is_independent_of_retained_map_coordinates() -> None:
     from dataclasses import replace
 
-    selected = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="daily", statistic="mean")
+    selected = rr.find(provider="ca_eccc", station="02GA010", quantity="discharge", frequency="P1D", statistic="mean")
     expected = _areas(selected)
     assert expected.height == 2
     summary = rr.metadata(selected)

@@ -25,7 +25,7 @@ selection = rr.find(
     provider="ar_ina",
     station="8",
     quantity="discharge",
-    frequency="daily",
+    frequency="P1D",
     statistic="mean",
 )
 
@@ -136,19 +136,19 @@ observational river stage series types:
 
 | Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
 |---|---|---|---|---|---|
-| `discharge` | `Qmd` (*Caudal medio diario*; per-series ID in `variant`) | Daily | Mean | m^3/s | m³/s |
+| `discharge` | `Qmd` (*Caudal medio diario*; per-series ID in `variant`) | `P1D` | Mean | m^3/s | m³/s |
 | `discharge` | `Q` (*Caudal*; per-series ID in `variant`) | Unknown | Instantaneous | m^3/s | m³/s |
-| `discharge` | `Qmm` (*Caudal medio mensual*; per-series ID in `variant`) | Monthly | Mean | m^3/s | m³/s |
-| `discharge` | `Qmmin` (*Caudal mínimo mensual*; per-series ID in `variant`) | Monthly | Minimum | m^3/s | m³/s |
-| `discharge` | `Qmmax` (*Caudal máximo mensual*; per-series ID in `variant`) | Monthly | Maximum | m^3/s | m³/s |
-| `stage` | `Hmd` (*Altura hidrométrica media diaria*; per-series ID in `variant`) | Daily | Mean | m | m |
+| `discharge` | `Qmm` (*Caudal medio mensual*; per-series ID in `variant`) | `P1M` | Mean | m^3/s | m³/s |
+| `discharge` | `Qmmin` (*Caudal mínimo mensual*; per-series ID in `variant`) | `P1M` | Minimum | m^3/s | m³/s |
+| `discharge` | `Qmmax` (*Caudal máximo mensual*; per-series ID in `variant`) | `P1M` | Maximum | m^3/s | m³/s |
+| `stage` | `Hmd` (*Altura hidrométrica media diaria*; per-series ID in `variant`) | `P1D` | Mean | m | m |
 | `stage` | `H` (*Altura hidrométrica*; per-series ID in `variant`) | Unknown | Instantaneous | m | m |
-| `stage` | `H1h` (*Altura hidrométrica horaria*; per-series ID in `variant`) | Hourly | Unknown | m | m |
-| `stage` | `Hm4h` (*Altura hidrométrica 4-horaria*; per-series ID in `variant`) | Unknown | Unknown | m | m |
-| `stage` | `Hms` (*Altura hidrométrica media semanal*; per-series ID in `variant`) | Unknown | Mean | m | m |
-| `stage` | `Hmm` (*Altura hidrométrica media mensual*; per-series ID in `variant`) | Monthly | Mean | m | m |
-| `stage` | `Hmmin` (*Altura hidrométrica mínima mensual*; per-series ID in `variant`) | Monthly | Minimum | m | m |
-| `stage` | `Hmmax` (*Altura hidrométrica máxima mensual*; per-series ID in `variant`) | Monthly | Maximum | m | m |
+| `stage` | `H1h` (*Altura hidrométrica horaria*; per-series ID in `variant`) | `PT1H` | Unknown | m | m |
+| `stage` | `Hm4h` (*Altura hidrométrica 4-horaria*; per-series ID in `variant`) | `PT4H` | Unknown | m | m |
+| `stage` | `Hms` (*Altura hidrométrica media semanal*; per-series ID in `variant`) | `P1W` | Mean | m | m |
+| `stage` | `Hmm` (*Altura hidrométrica media mensual*; per-series ID in `variant`) | `P1M` | Mean | m | m |
+| `stage` | `Hmmin` (*Altura hidrométrica mínima mensual*; per-series ID in `variant`) | `P1M` | Minimum | m | m |
+| `stage` | `Hmmax` (*Altura hidrométrica máxima mensual*; per-series ID in `variant`) | `P1M` | Maximum | m | m |
 
 Discharge in `m^3/s` and stage in `m` require no numerical scaling; RivRetrieve
 normalises the discharge unit label to `m3/s` while keeping `"m^3/s"` in
@@ -171,31 +171,32 @@ these numeric IDs belong to individual station series rather than forming a
 provider-wide menu. Within the packaged river catalogue, each station has at
 most one observational series per row in the table above.
 
-Several stage series have `Unknown` in `Frequency` or `Statistic`:
+Several stage and instantaneous series leave `Frequency` or `Statistic` unknown:
 
 - **Hourly (`H1h`) and 4-hourly (`Hm4h`) stage:** Alerta5 declares `1`-hour and
   `4`-hour time steps with a `Continuous` data type rather than `Average`.
   Comparing overlapping observations shows that these series place a single
   stage reading onto each 1-hour or 4-hour slot rather than averaging readings
-  across the slot. RivRetrieve sets `frequency="hourly"` on `H1h`, leaves
-  `frequency` unknown on `Hm4h` (4-hourly is not a named filter in
-  RivRetrieve's frequency vocabulary), and leaves `statistic` unknown on both so
+  across the slot. RivRetrieve sets `frequency="PT1H"` on `H1h` and
+  `frequency="PT4H"` on `Hm4h`, and leaves `statistic` unknown on both so
   mean and instantaneous filters do not select them by mistake.
 - **Weekly mean stage (`Hms`):** Summarises 7-day Monday-to-Monday intervals
-  with `statistic="mean"`. Because RivRetrieve's frequency filter vocabulary has
-  `daily` and `monthly` rather than `weekly`, `frequency` remains unknown.
+  with `frequency="P1W"` (also selectable with `"P7D"`, distinct from elapsed
+  `"PT168H"`) and `statistic="mean"`.
 - **Instantaneous discharge (`Q`) and stage (`H`):** Match
   `statistic="instantaneous"` without a `frequency` filter because telemetry and
   staff-gauge reporting intervals vary across stations and periods (from
   10- or 15-minute automatic transmissions to daily or sub-daily manual
-  readings).
+  readings); observed timestamps do not establish a regular cadence.
 - **Monthly minimum and maximum series (`Qmmin`, `Qmmax`, `Hmmin`, `Hmmax`):**
-  Report the minimum or maximum of the station's underlying observations within
-  each calendar month, stamped at the start of the month.
+  Match `frequency="P1M"` and report the minimum or maximum of the station's
+  underlying observations within each calendar month, stamped at the start of
+  the month.
 
 Inspect all candidate series and station metadata at a gauge offline before
-fetching, and use `rr.pick(..., variant=...)` (or `frequency="hourly"` for
-`H1h`) when targeting a series whose frequency or statistic is unknown:
+fetching, and use canonical frequency filters such as `frequency="PT1H"`,
+`frequency="PT4H"`, or `frequency="P1W"`, or `rr.pick(..., variant=...)` when
+targeting a specific variant:
 
 ```python
 station_52 = rr.find(provider="ar_ina", station="52", quantity="stage")

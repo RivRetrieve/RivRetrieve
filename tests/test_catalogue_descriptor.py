@@ -444,6 +444,7 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
                 {
                     "usgs_nwis": "maintenance/catalogue/usgs_nwis",
                     "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
+                    "cl_dga": "maintenance/catalogue/cl_dga/official/native.parquet",
                     "co_ideam": "maintenance/catalogue/co_ideam/official/native.parquet",
                     "dk_vanda": "maintenance/catalogue/dk_vanda/official/native.parquet",
                 }.get(provider, f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet")
@@ -491,13 +492,18 @@ def test_retained_catalogue_tests_select_bound_consumer_scopes():
     scopes = {
         "usgs_nwis": "maintenance/catalogue/usgs_nwis",
         "ch_foen": "maintenance/catalogue/ch_foen/official/native.parquet",
+        "cl_dga": "maintenance/catalogue/cl_dga/official/native.parquet",
         "co_ideam": "maintenance/catalogue/co_ideam/official/native.parquet",
     }
     for test, providers in (
         (test_native_material_identity_matches_committed_provenance_and_bytes, scopes),
         (
             test_projection_preserves_every_native_scalar,
-            {"usgs_nwis": scopes["usgs_nwis"], "co_ideam": scopes["co_ideam"]},
+            {
+                "usgs_nwis": scopes["usgs_nwis"],
+                "cl_dga": scopes["cl_dga"],
+                "co_ideam": scopes["co_ideam"],
+            },
         ),
     ):
         cases = next(mark.args[1] for mark in test.pytestmark if mark.name == "parametrize")

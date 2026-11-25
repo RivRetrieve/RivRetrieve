@@ -14,7 +14,7 @@ NAMES = {
     "01030500": "Mattawamkeag River near Mattawamkeag",
 }
 
-gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean")
+gauges = rr.find(provider="usgs_nwis", quantity="discharge", frequency="P1D", statistic="mean")
 camels = rr.pick(gauges, station=list(NAMES))
 result = rr.fetch(camels, start="2015-01-01", end="2026-09-30")
 

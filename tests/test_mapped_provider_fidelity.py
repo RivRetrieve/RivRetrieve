@@ -62,7 +62,7 @@ def test_thaiwater_published_sea_level_reference_is_not_a_named_datum():
 
 def test_daily_means_retain_support_without_inventing_interval_anchor():
     for provider, station in (("cz_chmi", "0-203-1-000400"), ("lt_lhmt", "anyksciu-vms")):
-        selection = rr.find(provider=provider, station=station, frequency="daily", statistic="mean")
+        selection = rr.find(provider=provider, station=station, frequency="P1D", statistic="mean")
         assert selection.series
         for series in selection.series:
             for facts in series.facts:

@@ -151,7 +151,7 @@ def _series_def(station: str = "station-1", product: str = "level") -> SourceSer
                 quantity=known("stage", "synthetic fixture"),
                 source_unit=known("m", "synthetic fixture"),
                 normalized_unit="m",
-                frequency=known("daily", "synthetic fixture"),
+                frequency=known("P1D", "synthetic fixture"),
                 temporal_support=known("instantaneous", "synthetic fixture"),
                 time_zone=known("UTC", "synthetic fixture"),
             ),
@@ -430,7 +430,7 @@ def test_drive_accumulated_store_v9_partitioned_parquet_reuse_refresh_and_select
     assert rr.series(res_fresh, annotations="gauge_note")["gauge_note"].to_list() == ["site-alpha"]
 
     manifest_raw = json.loads((store / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest_raw["format_version"] == 9
+    assert manifest_raw["format_version"] == 11
     assert "annotation_schemas" in manifest_raw
     assert "annotation_partition_row_counts" in manifest_raw
     assert "series_annotations" in manifest_raw
@@ -604,7 +604,7 @@ def test_compiled_store_v10_with_and_without_annotations(tmp_path: Path) -> None
     (tmp_path / "plain").mkdir()
     artifact_plain, req_plain = artifact_and_request(tmp_path / "plain")
     certified_plain = certify_store(req_plain, artifact_plain, lambda _p: complete(cert_rows(value=4.0)))
-    assert certified_plain.manifest.format_version == 10
+    assert certified_plain.manifest.format_version == 12
     assert audit_store(req_plain.destination, req_plain.provider_id).rows_checked == 1
 
     # 2. With observation rows, unmeasured-only year, and series annotations via certify_store and drive_store
@@ -663,7 +663,7 @@ def test_compiled_store_v10_with_and_without_annotations(tmp_path: Path) -> None
     artifact_ann, req_ann = artifact_and_request(tmp_path / "ann")
     mat = complete(cert_rows(year=1998, value=12.4))
     certified_ann = certify_store(req_ann, artifact_ann, lambda _p: replace(mat, annotations=bundle))
-    assert certified_ann.manifest.format_version == 10
+    assert certified_ann.manifest.format_version == 12
     assert (req_ann.destination / "product=discharge/year=1998/annotations=fixture_bulk.obs/rows.parquet").is_file()
     assert not (req_ann.destination / "product=discharge/year=1999/part-0.parquet").exists()
     assert (req_ann.destination / "product=discharge/year=1999/annotations=fixture_bulk.obs/rows.parquet").is_file()
@@ -736,7 +736,7 @@ def test_compiled_store_v10_with_and_without_annotations(tmp_path: Path) -> None
             series_annotations=(bundle.series_tables["fixture_bulk.meta"],),
         ),
     )
-    assert certified_stream.manifest.format_version == 10
+    assert certified_stream.manifest.format_version == 12
     assert audit_store(req_stream.destination, req_stream.provider_id).rows_checked == 2
 
 

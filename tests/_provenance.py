@@ -221,6 +221,7 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
         "maintenance/catalogue/fr_hubeau/inventory/governing_evidence.json.xz": "declarations/fr_hubeau/governing_evidence.json.xz",
         "maintenance/catalogue/fr_hubeau/inventory/native_capture.json": "declarations/fr_hubeau/native_capture.json",
         "maintenance/catalogue/station_metadata/review.json": "declarations/station_metadata/review.json",
+        "maintenance/catalogue/cl_dga/official/selection.json": "declarations/cl_dga/catalogue.json",
         "maintenance/catalogue/th_thaiwater/inventory/governing_station_product_evidence.csv": "declarations/th_thaiwater/governing_station_product_evidence.csv",
         "maintenance/catalogue/fi_syke/official/catalogue.json": "maintenance/catalogue/fi_syke/official/catalogue.json",
     }
@@ -338,7 +339,7 @@ def historical_source_provenance(provenance, metadata, *, declaration_locations=
             assert transform.external_inputs == inputs_for(field, datum=is_datum)
             expected_location = (
                 (f"src/rivretrieve/_internal/providers/{provider}/station_metadata.py", "project_station_metadata")
-                if provider in {"ch_foen", "fr_hubeau", "usgs_nwis"}
+                if provider in {"ch_foen", "cl_dga", "fr_hubeau", "usgs_nwis"}
                 else ("src/rivretrieve/_internal/catalogues/station_metadata.py", "build_station_metadata")
             )
             if provider == "usgs_nwis" and declaration_locations == origins.CATALOGUE_BUILD_DECLARATIONS:

@@ -166,7 +166,7 @@ def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
     transport = CountedReplay(_DAILY, retained_evidence_root=retained_evidence_root)
     monkeypatch.setattr(discovery, "HttpClient", lambda: transport)
     selection = rr.pick(
-        rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"), station="07374000"
+        rr.find(provider="usgs_nwis", quantity="discharge", frequency="P1D", statistic="mean"), station="07374000"
     )
     first = rr.fetch(selection, start="2024-01-01", end="2024-01-07", cache="reuse", receipts=True)
     assert len(transport.calls) == 1
@@ -385,7 +385,7 @@ def test_successful_series_is_written_before_public_issue_policy_raises(
         discovery, "HttpClient", lambda: OneSeriesFails(_DAILY, retained_evidence_root=retained_evidence_root)
     )
     selection = rr.pick(
-        rr.find(provider="usgs_nwis", quantity="discharge", frequency="daily", statistic="mean"),
+        rr.find(provider="usgs_nwis", quantity="discharge", frequency="P1D", statistic="mean"),
         station=["07374000", "09380000"],
     )
     with pytest.raises(IssuePolicyError):

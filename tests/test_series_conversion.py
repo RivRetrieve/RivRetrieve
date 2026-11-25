@@ -191,7 +191,7 @@ def test_convert_mid_series_fact_unit_change_duplicate_timestamps_and_work_count
         quantity=known("discharge", "source"),
         source_unit=known("ft3/s", "source"),
         normalized_unit="ft3/s",
-        frequency=known("instantaneous", "source"),
+        frequency=known("PT15M", "source"),
         clipping_axis=ClippingAxis.SOURCE_TIMESTAMP,
     )
     facts_cms = PhysicalFacts(
@@ -199,7 +199,7 @@ def test_convert_mid_series_fact_unit_change_duplicate_timestamps_and_work_count
         quantity=known("discharge", "source"),
         source_unit=known("m3/s", "source"),
         normalized_unit="m3/s",
-        frequency=known("daily", "source"),
+        frequency=known("P1D", "source"),
         clipping_axis=ClippingAxis.CALENDAR_DATE,
         label_time="00:00",
     )

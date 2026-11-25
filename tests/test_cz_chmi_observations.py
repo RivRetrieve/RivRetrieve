@@ -277,9 +277,7 @@ def test_parse_rejects_non_utc_and_does_not_invent_quality(retained_evidence_roo
 @pytest.mark.recorded("tests/test_data/cz_chmi_0-203-1-000400_HQ_2023.recording.json")
 def test_public_selection_routes_to_czech_live_engine(retained_evidence_root, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(discovery, "HttpClient", lambda: ReplayTransport([(retained_evidence_root / _HQ)]))
-    selection = rr.find(
-        provider="cz_chmi", station=_STATION, quantity="discharge", frequency="hourly", statistic="mean"
-    )
+    selection = rr.find(provider="cz_chmi", station=_STATION, quantity="discharge", frequency="PT1H", statistic="mean")
     assert rr.as_frame(selection).select("provider_id", "station_id", "product_id").row(0) == (
         "cz_chmi",
         _STATION,
