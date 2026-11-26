@@ -14,7 +14,14 @@ import polars as pl
 from rivretrieve._internal.catalogue_reader import CatalogueReader
 from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact
 from rivretrieve._internal.catalogues.terms import verified_catalogue_terms
-from rivretrieve._internal.driver import ProviderStages, _finite_selector_assessments, drive, drive_store
+from rivretrieve._internal.driver import (
+    DriverStages,
+    PlannedAcquisitionProvider,
+    ProviderStages,
+    _finite_selector_assessments,
+    drive,
+    drive_store,
+)
 from rivretrieve._internal.engine import CanonicalRowsSchema, ProductWindowDeclarations, ProviderConfig, RequestedWindow
 from rivretrieve._internal.engine import ObservationRequest as EngineObservationRequest
 from rivretrieve._internal.issues import (
@@ -59,9 +66,17 @@ if TYPE_CHECKING:
 _PROVIDER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-class EngineProviderModule(ProviderStages, Protocol):
+class _LegacyProviderModule(ProviderStages, Protocol):
     window_declarations: ProductWindowDeclarations
     observation_source: str
+
+
+class _PlannedProviderModule(PlannedAcquisitionProvider, Protocol):
+    window_declarations: ProductWindowDeclarations
+    observation_source: str
+
+
+type EngineProviderModule = _LegacyProviderModule | _PlannedProviderModule
 
 
 class UnknownProviderError(FatalContractError):
@@ -92,7 +107,7 @@ class _ProviderHandle:
     provider_id: ProviderId
     _artifact: PackagedCatalogArtifact
     _module: ProviderModule | None = None
-    _stages: ProviderStages | None = None
+    _stages: DriverStages | None = None
     _observation_source: str | None = None
     _store_config: ProviderConfig | None = None
     _store_root: StoreRoot | None = None
@@ -161,6 +176,7 @@ class _ProviderHandle:
         scope: SeriesScope | None = None,
         known_series: tuple[SourceSeries, ...] = (),
         inventories: tuple[InventorySnapshot, ...] = (),
+        station_products: tuple[tuple[str, str], ...] | None = None,
     ) -> ObservationResult:
         if self._stages is None and self._store_config is None:
             if self._module is not None:
@@ -187,6 +203,7 @@ class _ProviderHandle:
                 scope=scope,
                 known_series=known_series,
                 inventories=inventories,
+                station_products=station_products,
             )
         elif self._store_config is not None and self._store_root is not None:
             if cache == "refresh":
@@ -202,6 +219,7 @@ class _ProviderHandle:
                 scope=scope,
                 known_series=known_series,
                 inventories=inventories,
+                station_products=station_products,
             )
         else:
             raise ObservationsUnavailableError(f"Provider {self.provider_id} has no observation stages registered")
@@ -211,7 +229,7 @@ class _ProviderHandle:
     def _drive_engine(
         self,
         request: LegacyObservationRequest,
-        stages: ProviderStages,
+        stages: DriverStages,
         observation_source: str,
         *,
         receipts: ReceiptMode = ReceiptMode.OMIT,
@@ -221,6 +239,7 @@ class _ProviderHandle:
         scope: SeriesScope | None = None,
         known_series: tuple[SourceSeries, ...] = (),
         inventories: tuple[InventorySnapshot, ...] = (),
+        station_products: tuple[tuple[str, str], ...] | None = None,
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
@@ -233,6 +252,11 @@ class _ProviderHandle:
             scope=scope,
             known_series=known_series,
             inventories=inventories,
+            station_products=(
+                None
+                if station_products is None
+                else tuple((station, ProductId(product_id)) for station, product_id in station_products)
+            ),
         )
         requested_at = datetime.now(UTC)
         provider_info = self.info()
@@ -287,6 +311,7 @@ class _ProviderHandle:
         scope: SeriesScope | None = None,
         known_series: tuple[SourceSeries, ...] = (),
         inventories: tuple[InventorySnapshot, ...] = (),
+        station_products: tuple[tuple[str, str], ...] | None = None,
     ) -> ObservationResult:
         engine_request = EngineObservationRequest(
             provider_id=self.provider_id,
@@ -296,6 +321,11 @@ class _ProviderHandle:
             scope=scope,
             known_series=known_series,
             inventories=inventories,
+            station_products=(
+                None
+                if station_products is None
+                else tuple((station, ProductId(product_id)) for station, product_id in station_products)
+            ),
         )
         requested_at = datetime.now(UTC)
         provider_info = self.info()
@@ -329,56 +359,56 @@ class _ProviderHandle:
                 issue,
                 *_unestablished_terms_issues(self.provider_id, provider_info.license, provider_info.citation),
             ]
-            for station in request.stations:
-                for product in request.products:
-                    assessments.append(
-                        (
-                            requested_scope.model_copy(
-                                update={
-                                    "provider_ids": (str(self.provider_id),),
-                                    "station_ids": (station,),
-                                    "product_ids": (product,),
-                                }
+            for station, product_id in engine_request.pairs:
+                product = str(product_id)
+                assessments.append(
+                    (
+                        requested_scope.model_copy(
+                            update={
+                                "provider_ids": (str(self.provider_id),),
+                                "station_ids": (station,),
+                                "product_ids": (product,),
+                            }
+                        ),
+                        window,
+                    )
+                )
+                members = tuple(
+                    definition
+                    for definition in known_series
+                    if definition.station_id == station
+                    and definition.product_id == product
+                    and requested_scope.matches(definition)
+                )
+                # Explicit missing members are accounted for by the shared
+                # finite-selector assessment, not an anonymous duplicate.
+                targets = members or ((None,) if requested_scope.restriction is RestrictionKind.ALL else ())
+                for definition in targets:
+                    series_id = definition.series_id if definition is not None else None
+                    outcomes.append(
+                        RetrievalOutcome(
+                            outcome_id=stable_id(
+                                str(self.provider_id),
+                                station,
+                                product,
+                                series_id,
+                                window.model_dump_json(),
+                                requested_at.isoformat(),
+                                issue.code,
                             ),
-                            window,
-                        )
-                    )
-                    members = tuple(
-                        definition
-                        for definition in known_series
-                        if definition.station_id == station
-                        and definition.product_id == product
-                        and requested_scope.matches(definition)
-                    )
-                    # Explicit missing members are accounted for by the shared
-                    # finite-selector assessment, not an anonymous duplicate.
-                    targets = members or ((None,) if requested_scope.restriction is RestrictionKind.ALL else ())
-                    for definition in targets:
-                        series_id = definition.series_id if definition is not None else None
-                        outcomes.append(
-                            RetrievalOutcome(
-                                outcome_id=stable_id(
-                                    str(self.provider_id),
-                                    station,
-                                    product,
-                                    series_id,
-                                    window.model_dump_json(),
-                                    requested_at.isoformat(),
-                                    issue.code,
-                                ),
-                                series_id=series_id,
-                                station_id=station,
-                                product_id=product,
-                                window=window,
-                                status=OutcomeStatus.UNRESOLVED,
-                                facts_ids=tuple(
-                                    facts.facts_id for facts in definition.facts if requested_scope.matches_facts(facts)
-                                )
-                                if definition is not None
-                                else (),
-                                reason=issue.message,
+                            series_id=series_id,
+                            station_id=station,
+                            product_id=product,
+                            window=window,
+                            status=OutcomeStatus.UNRESOLVED,
+                            facts_ids=tuple(
+                                facts.facts_id for facts in definition.facts if requested_scope.matches_facts(facts)
                             )
+                            if definition is not None
+                            else (),
+                            reason=issue.message,
                         )
+                    )
             _finite_selector_assessments(
                 self.provider_id,
                 assessments,
@@ -522,7 +552,7 @@ class ProviderRegistry:
 
         typed_provider_id = ProviderId(provider_id)
         registered_module: ProviderModule | None
-        stages: ProviderStages | None
+        stages: DriverStages | None
         observation_source: str | None
         if engine_provider_module is not None:
             registered_module = None

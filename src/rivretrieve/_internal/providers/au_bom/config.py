@@ -53,6 +53,17 @@ class AuBomTimeseriesValuesCoordinates:
     parametertype_name: str
 
 
+@dataclass(frozen=True, slots=True)
+class AuBomTimeseriesValuesBatchCoordinates:
+    """Batched ``getTimeseriesValues`` route spanning multiple ``(station, product, ts_ids)`` consumers."""
+
+    items: tuple[tuple[str, ProductId, tuple[str, ...]], ...]
+
+    def __post_init__(self) -> None:
+        if not self.items:
+            raise ValueError("au_bom values batch requires at least one item")
+
+
 def _semantics(frequency: str) -> Hourly | UnknownTemporalSupport:
     """Product-level temporal semantics for au_bom.
 
@@ -99,12 +110,6 @@ _WINDOW = WindowDeclaration(
     stop_convention=StopConvention.INCLUSIVE,
 )
 _WINDOW_DECLARATIONS = ProductWindowDeclarations(dict.fromkeys(_CONFIG.products, _WINDOW))
-
-# One getTimeseriesList call per station resolves every admitted product's
-# live ts_id at once (confirmed live: a station-scoped list call with no
-# parametertype_name filter returns all of that station's series in one
-# response); sharing all 18 products avoids repeating it per product.
-SHARED_ACQUISITION_PRODUCTS: tuple[frozenset[ProductId], ...] = (frozenset(_CONFIG.products),)
 
 
 def config() -> ProviderConfig:

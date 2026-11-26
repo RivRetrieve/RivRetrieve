@@ -27,6 +27,26 @@ from rivretrieve._internal.primitives import ProductId
 
 
 @dataclass(frozen=True, slots=True)
+class BrAnaSharedTelemetryCoordinates:
+    """Adopted telemetry endpoint shared across stage and discharge products."""
+
+
+@dataclass(frozen=True, slots=True)
+class BrAnaSharedDailyCoordinates:
+    """Daily Hidro endpoint shared across Bruto and Consistido consistency variants."""
+
+    endpoint: Literal["HidroSerieCotas", "HidroSerieVazao"]
+    field_prefix: Literal["Cota", "Vazao"]
+
+    def __post_init__(self) -> None:
+        if (self.endpoint, self.field_prefix) not in (
+            ("HidroSerieCotas", "Cota"),
+            ("HidroSerieVazao", "Vazao"),
+        ):
+            raise ValueError("ANA shared daily endpoint and day-slot field must correspond")
+
+
+@dataclass(frozen=True, slots=True)
 class BrAnaSourceCoordinates:
     """The adopted telemetry field published by ANA, not a quality classification."""
 

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping
+from collections.abc import Set as AbstractSet
 from datetime import datetime, timedelta
+from typing import cast
 
 import polars as pl
 
@@ -16,6 +19,7 @@ from rivretrieve._internal.providers.au_bom.annotations import AU_BOM_QUALITY_SC
 from rivretrieve._internal.providers.au_bom.config import (
     NATIVE_UNIT_SYMBOLS,
     AuBomTimeseriesListCoordinates,
+    AuBomTimeseriesValuesBatchCoordinates,
     AuBomTimeseriesValuesCoordinates,
 )
 from rivretrieve._internal.providers.au_bom.series import (
@@ -84,6 +88,85 @@ def resolve_timeseries_list(content: bytes, station: str) -> dict[tuple[str, str
         key = (str(row[name_index]), str(row[parameter_index]))
         resolved.setdefault(key, []).append((str(row[id_index]), str(row[unit_index])))
     return {key: tuple(pairs) for key, pairs in resolved.items()}
+
+
+def resolve_timeseries_list_multi(
+    content: bytes,
+    requested_stations: AbstractSet[str],
+) -> dict[str, dict[tuple[str, str], tuple[tuple[str, str], ...]]]:
+    """Decode one ``getTimeseriesList`` response covering one or more requested stations."""
+    if len(requested_stations) == 1:
+        station = next(iter(requested_stations))
+        return {station: resolve_timeseries_list(content, station)}
+    try:
+        document = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise UnsupportedSourceStructureError("BoM getTimeseriesList response is not valid JSON") from error
+    if not isinstance(document, list) or not document or not isinstance(document[0], list):
+        raise UnsupportedSourceStructureError("BoM getTimeseriesList response must be a JSON array of arrays")
+    header = document[0]
+    try:
+        name_index = header.index("ts_name")
+        parameter_index = header.index("parametertype_name")
+        id_index = header.index("ts_id")
+        unit_index = header.index("ts_unitsymbol")
+        station_index = header.index("station_no")
+    except ValueError as error:
+        raise UnsupportedSourceStructureError("BoM getTimeseriesList header lacks a required column") from error
+
+    resolved_by_station: dict[str, dict[tuple[str, str], list[tuple[str, str]]]] = {}
+    for row in document[1:]:
+        if not isinstance(row, list) or len(row) != len(header):
+            raise UnsupportedSourceStructureError("BoM getTimeseriesList row does not match its header width")
+        row_station = str(row[station_index])
+        if row_station not in requested_stations:
+            raise UnsupportedSourceStructureError(
+                f"BoM getTimeseriesList row station_no {row[station_index]!r} contradicts requested stations"
+            )
+        key = (str(row[name_index]), str(row[parameter_index]))
+        resolved_by_station.setdefault(row_station, {}).setdefault(key, []).append(
+            (str(row[id_index]), str(row[unit_index]))
+        )
+    del document
+    return {
+        st: {key: tuple(pairs) for key, pairs in station_map.items()} for st, station_map in resolved_by_station.items()
+    }
+
+
+def resolve_timeseries_list_group(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    provider_config: ProviderConfig,
+) -> tuple[dict[tuple[str, ProductId], tuple[str, ...]], dict[tuple[str, ProductId], ParsedSeries]]:
+    """Decode a single- or multi-station ``getTimeseriesList`` response once for all consumers."""
+    requested_stations = {station for station, _ in pair_payloads}
+    try:
+        multi_map = resolve_timeseries_list_multi(payload.content, requested_stations)
+    except UnsupportedSourceStructureError as error:
+        reason = str(error)
+        return (
+            {},
+            {
+                key: interpret_timeseries_list_failure(pair_payload, reason)
+                for key, pair_payload in pair_payloads.items()
+            },
+        )
+
+    valid_ids_by_pair: dict[tuple[str, ProductId], tuple[str, ...]] = {}
+    grouped: dict[tuple[str, ProductId], ParsedSeries] = {}
+    for pair_key, pair_payload in pair_payloads.items():
+        station, product = pair_key
+        coords = provider_config.products[product].coordinates.value
+        if not isinstance(coords, AuBomTimeseriesValuesCoordinates):
+            raise FatalContractError(f"au_bom product has invalid source coordinates: {product}")
+        station_ts_map = multi_map.get(station, {})
+        expected_unit = NATIVE_UNIT_SYMBOLS[_QUANTITY_BY_PRODUCT_ID[str(product)]]
+        pairs = station_ts_map.get((coords.native_id, coords.parametertype_name), ())
+        valid_ts_ids = tuple(ts_id for ts_id, unit in pairs if unit == expected_unit)
+        if valid_ts_ids:
+            valid_ids_by_pair[pair_key] = valid_ts_ids
+        grouped[pair_key] = interpret_timeseries_list(pair_payload, provider_config, station_ts_map)
+    return valid_ids_by_pair, grouped
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
@@ -329,6 +412,111 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
         raise UnsupportedSourceStructureError("BoM getTimeseriesValues response is not valid JSON") from error
     if not isinstance(blocks, list) or not blocks:
         raise UnsupportedSourceStructureError("BoM getTimeseriesValues response must be a nonempty JSON array")
+    try:
+        return _parse_values_blocks(payload, station, product, blocks)
+    finally:
+        del blocks
+
+
+def parse_values_group(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    provider_config: ProviderConfig,
+) -> dict[tuple[str, ProductId], ParsedSeries]:
+    """Decode one singleton or batched ``getTimeseriesValues`` payload once across all consumers."""
+    if not pair_payloads:
+        raise FatalContractError("au_bom group parse requires at least one station-product pair")
+    source_coords = payload.source_coordinates.value
+    if isinstance(source_coords, AuBomTimeseriesListCoordinates):
+        return resolve_timeseries_list_group(payload, pair_payloads, provider_config)[1]
+    if isinstance(source_coords, AuBomTimeseriesValuesCoordinates):
+        if len(pair_payloads) != 1:
+            raise FatalContractError("au_bom singleton values coordinates require one station-product pair")
+        pair_key, pair_payload = next(iter(pair_payloads.items()))
+        station, product = pair_key
+        coords = provider_config.products[product].coordinates.value
+        if coords != source_coords:
+            raise FatalContractError(f"au_bom product coordinates contradict payload coordinates: {product}")
+        try:
+            return {pair_key: _parse_values(pair_payload, station, product)}
+        except UnsupportedSourceStructureError as error:
+            return {pair_key: _failed_values(pair_payload, station, product, str(error))}
+
+    if not isinstance(source_coords, AuBomTimeseriesValuesBatchCoordinates):
+        raise FatalContractError("au_bom payload has invalid source coordinates for values group parse")
+
+    pair_targets: dict[tuple[str, ProductId], tuple[str, ...]] = {}
+    owner_by_ts: dict[str, tuple[str, ProductId]] = {}
+    for station, product, ts_ids in source_coords.items:
+        pair_key = (station, product)
+        if product not in provider_config.products or not isinstance(
+            provider_config.products[product].coordinates.value, AuBomTimeseriesValuesCoordinates
+        ):
+            raise FatalContractError(f"au_bom product has invalid source coordinates: {product}")
+        if pair_key not in pair_payloads:
+            continue
+        pair_targets[pair_key] = ts_ids
+        for ts_id in ts_ids:
+            if ts_id in owner_by_ts:
+                raise FatalContractError("au_bom values batch assigns one ts_id to multiple consumers")
+            owner_by_ts[ts_id] = pair_key
+    if set(pair_targets) != set(pair_payloads):
+        raise FatalContractError("au_bom values batch coordinates do not match requested pairs")
+
+    if payload.content == b"":
+        return {
+            (st, pr): _failed_values(pp, st, pr, f"BoM getTimeseriesValues response for {st} {pr} is empty")
+            for (st, pr), pp in pair_payloads.items()
+        }
+    try:
+        blocks = json.loads(payload.content)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {
+            (st, pr): _failed_values(pp, st, pr, "BoM getTimeseriesValues response is not valid JSON")
+            for (st, pr), pp in pair_payloads.items()
+        }
+    if not isinstance(blocks, list) or not blocks:
+        return {
+            (st, pr): _failed_values(pp, st, pr, "BoM getTimeseriesValues response must be a nonempty JSON array")
+            for (st, pr), pp in pair_payloads.items()
+        }
+
+    blocks_by_ts: dict[str, list[object]] = {}
+    for block in blocks:
+        if not isinstance(block, dict) or "ts_id" not in block or "columns" not in block or "data" not in block:
+            del blocks, blocks_by_ts
+            reason = "BoM getTimeseriesValues block lacks ts_id, columns or data"
+            return {(st, pr): _failed_values(pp, st, pr, reason) for (st, pr), pp in pair_payloads.items()}
+        blocks_by_ts.setdefault(str(block["ts_id"]), []).append(block)
+
+    results: dict[tuple[str, ProductId], ParsedSeries] = {}
+    for pair_key, pair_payload in pair_payloads.items():
+        station, product = pair_key
+        expected_ts_ids = pair_targets[pair_key]
+        missing = [ts_id for ts_id in expected_ts_ids if ts_id not in blocks_by_ts]
+        if missing:
+            results[pair_key] = _failed_values(
+                pair_payload,
+                station,
+                product,
+                f"BoM getTimeseriesValues batch omitted requested ts_id: {', '.join(missing)}",
+            )
+            continue
+        pair_blocks = [block for ts_id in expected_ts_ids for block in blocks_by_ts[ts_id]]
+        try:
+            results[pair_key] = _parse_values_blocks(pair_payload, station, product, pair_blocks)
+        except UnsupportedSourceStructureError as error:
+            results[pair_key] = _failed_values(pair_payload, station, product, str(error))
+    del blocks, blocks_by_ts
+    return results
+
+
+def _parse_values_blocks(
+    payload: Payload,
+    station: str,
+    product: ProductId,
+    blocks: list[object],
+) -> ParsedSeries:
 
     window = SeriesWindow(
         start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
@@ -352,9 +540,15 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
     all_members: list[str] = []
     all_member_facts: list[tuple[str, tuple[str, ...]]] = []
 
-    for block in blocks:
-        if not isinstance(block, dict) or "ts_id" not in block or "columns" not in block or "data" not in block:
+    for raw_block in blocks:
+        if (
+            not isinstance(raw_block, dict)
+            or "ts_id" not in raw_block
+            or "columns" not in raw_block
+            or "data" not in raw_block
+        ):
             raise UnsupportedSourceStructureError("BoM getTimeseriesValues block lacks ts_id, columns or data")
+        block = cast("dict[str, object]", raw_block)
         ts_id = str(block["ts_id"])
         columns = [name.strip() for name in str(block["columns"]).split(",")]
         try:
@@ -411,11 +605,11 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
                     )
                 observed_anchors.add(hhmm)
             value = raw_row[value_index]
-            if value is not None and (type(value) not in (int, float) or not math.isfinite(value)):
+            if value is not None and (type(value) not in (int, float) or not math.isfinite(cast("int | float", value))):
                 raise UnsupportedSourceStructureError(f"BoM getTimeseriesValues value for ts_id {ts_id} is not numeric")
             code: int | None = None
             name: str | None = None
-            if has_quality:
+            if quality_index is not None and quality_name_index is not None:
                 raw_code = raw_row[quality_index]
                 if raw_code is not None and type(raw_code) is not int:
                     raise UnsupportedSourceStructureError(
@@ -428,7 +622,9 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
                     )
                 code = raw_code
                 name = raw_name
-            parsed_rows.append((naive_time, float(value) if value is not None else None, code, name))
+            parsed_rows.append(
+                (naive_time, float(cast("int | float", value)) if value is not None else None, code, name)
+            )
 
         if len(observed_anchors) > 1:
             raise UnsupportedSourceStructureError(

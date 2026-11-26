@@ -7,12 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
+import polars as pl
 import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
-from rivretrieve._internal.discovery import _merge_provider_results
+from rivretrieve._internal.discovery import _finalize_provider_result
 from rivretrieve._internal.engine import (
     Payload,
     SourceCallOrigin,
@@ -26,7 +27,7 @@ from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.fr_hubeau.config import FrHubeauSourceCoordinates, config
 from rivretrieve._internal.providers.fr_hubeau.parse import parse
 from rivretrieve._internal.recordings import ReplayTransport, read_recording
-from rivretrieve._internal.source_annotations import CATALOG_SCHEMA, AnnotationScope
+from rivretrieve._internal.source_annotations import CATALOG_SCHEMA, AnnotationBundle, AnnotationScope, with_annotations
 from rivretrieve._internal.source_series import OutcomeStatus
 from rivretrieve._internal.transport import TransportRequest, TransportResponse
 
@@ -481,10 +482,24 @@ def test_fr_hubeau_public_fetch_cache_reuse_pick_and_bundle_roundtrip(
     assert t_fresh.to_polars(annotations=True)["code_qualification"].to_list() == ["4"]
 
     both_sel = rr.find(provider="fr_hubeau", station=("1011000101", "01001336"))
-    mixed = _merge_provider_results(
-        (q_fresh.model_copy(update={"scope": both_sel.scope}), t_fresh),
-        (*q_fresh.source_series, *t_fresh.source_series),
+    combined_data = pl.concat([q_fresh.data, t_fresh.data])
+    combined_bundle = AnnotationBundle.merge_sorted(
+        (q_fresh._annotations, t_fresh._annotations),
+        row_offsets=(0, q_fresh.data.height),
+        old_to_new={index: index for index in range(combined_data.height)},
     )
+    raw_mixed = with_annotations(
+        q_fresh.model_copy(
+            update={
+                "data": combined_data,
+                "source_series": (*q_fresh.source_series, *t_fresh.source_series),
+                "outcomes": (*q_fresh.outcomes, *t_fresh.outcomes),
+                "scope": both_sel.scope,
+            }
+        ),
+        combined_bundle,
+    )
+    mixed = _finalize_provider_result(raw_mixed, (*q_fresh.source_series, *t_fresh.source_series))
     assert set(rr.annotations(mixed)["schema"].to_list()) == {
         "fr_hubeau.obs_elab",
         "fr_hubeau.temperature_chronique",

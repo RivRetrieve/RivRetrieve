@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 from calendar import monthrange
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from math import isfinite
@@ -23,7 +24,12 @@ from rivretrieve._internal.providers.br_ana.annotations import (
     BR_ANA_TELEMETRY_COTA_SCHEMA,
     BR_ANA_TELEMETRY_VAZAO_SCHEMA,
 )
-from rivretrieve._internal.providers.br_ana.config import BrAnaDailySourceCoordinates, BrAnaSourceCoordinates
+from rivretrieve._internal.providers.br_ana.config import (
+    BrAnaDailySourceCoordinates,
+    BrAnaSharedDailyCoordinates,
+    BrAnaSharedTelemetryCoordinates,
+    BrAnaSourceCoordinates,
+)
 from rivretrieve._internal.providers.br_ana.issue_codes import BrAnaObservationIssueCodes
 from rivretrieve._internal.providers.br_ana.series import _DAILY_EVIDENCE, _TELEMETRY_EVIDENCE, describe_series
 from rivretrieve._internal.source_annotations import AnnotationBundle, ObservationAnnotationTable
@@ -231,16 +237,45 @@ def _value(value: object, index: int) -> float | None:
     return result
 
 
-def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
-    if len(payload.station_products) != 1:
-        raise FatalContractError("ANA payload requires exactly one station-product pair")
-    station, product = payload.station_products[0]
-    coordinates = config.products[product].coordinates.value
-    if (
-        not isinstance(coordinates, (BrAnaSourceCoordinates, BrAnaDailySourceCoordinates))
-        or payload.source_coordinates.value != coordinates
-    ):
+def _validate_pair_coordinates(
+    payload_coords: object,
+    pair_coords: object,
+    *,
+    is_group: bool,
+) -> BrAnaSourceCoordinates | BrAnaDailySourceCoordinates:
+    if not isinstance(pair_coords, (BrAnaSourceCoordinates, BrAnaDailySourceCoordinates)):
         raise FatalContractError("ANA payload coordinates differ from the requested source product")
+    if payload_coords == pair_coords:
+        return pair_coords
+    if (
+        is_group
+        and isinstance(pair_coords, BrAnaSourceCoordinates)
+        and isinstance(payload_coords, BrAnaSharedTelemetryCoordinates)
+    ):
+        return pair_coords
+    if (
+        is_group
+        and isinstance(pair_coords, BrAnaDailySourceCoordinates)
+        and isinstance(payload_coords, BrAnaSharedDailyCoordinates)
+        and (payload_coords.endpoint, payload_coords.field_prefix) == (pair_coords.endpoint, pair_coords.field_prefix)
+    ):
+        return pair_coords
+    raise FatalContractError("ANA payload coordinates differ from the requested source product")
+
+
+def _parse_pair_from_observations(
+    payload: Payload,
+    pair_payload: Payload,
+    station: str,
+    product: ProductId,
+    coordinates: BrAnaSourceCoordinates | BrAnaDailySourceCoordinates,
+    observations: list[dict[str, object]],
+    *,
+    content_hash: str,
+    retrieved: datetime | None,
+    calls: tuple[str, ...],
+    include_sibling_daily: bool,
+) -> ParsedSeries:
     definitions = []
     frames = []
     part_bundles: list[AnnotationBundle] = []
@@ -249,47 +284,17 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
     outcomes = []
     issues = []
     window = SeriesWindow(
-        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+        start=datetime.fromisoformat(pair_payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(pair_payload.fetch_window.end.isoformat()),
     )
-    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
-    calls = tuple(item.attempt_id for item in payload.attempt_traces) or (payload.acquisition_id,)
-    content_hash = hashlib.sha256(payload.content).hexdigest()
-    try:
-        observations = _observations(payload.content)
-    except SourceStructureError as error:
-        reason = str(error)
-        window_outcome = RetrievalOutcome(
-            outcome_id=stable_id(
-                payload.acquisition_id,
-                content_hash,
-                str(retrieved),
-                station,
-                product,
-                reason,
-            ),
-            series_id=None,
-            station_id=station,
-            product_id=product,
-            window=window,
-            status=OutcomeStatus.UNSUPPORTED,
-            reason=reason,
-            retrieved_at=retrieved,
-            calls=calls,
-        )
-        issue = Issue(
-            severity="warning",
-            code="source.unsupported_response",
-            message=reason,
-            details={"station_id": station, "product_id": product},
-            provider_id=_PROVIDER,
-        )
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), (window_outcome,), (issue,))
+    consistency_field = ""
+    present: set[str] = set()
+    selected: list[tuple[ProductId, BrAnaSourceCoordinates | BrAnaDailySourceCoordinates]]
     if isinstance(coordinates, BrAnaDailySourceCoordinates):
         consistency_field = "nivelconsistencia" if coordinates.field_prefix == "Cota" else "Nivel_Consistencia"
         # Only source-published identities are observations; an unobserved sibling stays unknown.
         present = {
-            row.get(consistency_field)
+            cast("str", row.get(consistency_field))
             for row in observations
             if row.get("Mediadiaria") == "1" and isinstance(row.get(consistency_field), str)
         }
@@ -302,10 +307,12 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             reason = "ANA response contains rows with unestablished mean/consistency identity"
             outcomes.append(
                 RetrievalOutcome(
-                    outcome_id=stable_id(payload.acquisition_id, content_hash, str(retrieved), reason),
+                    outcome_id=stable_id(
+                        payload.acquisition_id, content_hash, str(retrieved), station, str(product), reason
+                    ),
                     series_id=None,
                     station_id=station,
-                    product_id=product,
+                    product_id=str(product),
                     window=window,
                     status=OutcomeStatus.UNSUPPORTED,
                     reason=reason,
@@ -318,15 +325,19 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                     severity="warning",
                     code="source.unsupported_series",
                     message=reason,
-                    details={"station_id": station, "product_id": product, "unrepresentable_rows": len(invalid)},
+                    details={"station_id": station, "product_id": str(product), "unrepresentable_rows": len(invalid)},
                     provider_id=_PROVIDER,
                 )
             )
         selected = []
-        for consistency in ("1", "2"):
+        if include_sibling_daily:
+            consistencies: tuple[str, ...] = ("1", "2")
+        else:
+            consistencies = (coordinates.consistency,)
+        for consistency in consistencies:
             if consistency not in present:
                 continue
-            native = replace(coordinates, consistency=consistency)
+            native = replace(coordinates, consistency=consistency)  # type: ignore[arg-type]
             canonical_product = ProductId(
                 ("stage" if native.field_prefix == "Cota" else "discharge")
                 + "_daily_mean_"
@@ -335,6 +346,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             selected.append((canonical_product, native))
     else:
         selected = [(product, coordinates)]
+
     for emitted_product, native in selected:
         definition = describe_series(station, emitted_product, native, origin="response")
         definitions.append(definition)
@@ -438,12 +450,11 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 calls=calls,
             )
         )
-    del observations
     observed_ids = tuple(item.series_id for item in definitions)
     if isinstance(coordinates, BrAnaDailySourceCoordinates) and coordinates.consistency not in present:
-        default_candidate = describe_series(station, product, coordinates, origin="mapping")
+        default_candidate = describe_series(station, str(product), coordinates, origin="mapping")
         candidate = next(
-            (item for item in payload.known_series if item.series_id == default_candidate.series_id),
+            (item for item in pair_payload.known_series if item.series_id == default_candidate.series_id),
             default_candidate,
         )
         definitions.append(candidate)
@@ -459,7 +470,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 ),
                 series_id=candidate.series_id,
                 station_id=station,
-                product_id=product,
+                product_id=str(product),
                 window=window,
                 status=OutcomeStatus.UNRESOLVED,
                 reason=reason,
@@ -472,11 +483,13 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 severity="warning",
                 code="source.unresolved_inventory",
                 message=reason,
-                details={"station_id": station, "product_id": product, "series_id": candidate.series_id},
+                details={"station_id": station, "product_id": str(product), "series_id": candidate.series_id},
                 provider_id=_PROVIDER,
             )
         )
-    scope = payload.scope or SeriesScope(provider_ids=("br_ana",), station_ids=(station,), product_ids=(product,))
+    scope = pair_payload.scope or SeriesScope(
+        provider_ids=("br_ana",), station_ids=(station,), product_ids=(str(product),)
+    )
     if not definitions and not outcomes:
         reason = "No daily mean source identity is published in this response; sibling availability remains unresolved"
         outcomes.append(
@@ -486,13 +499,13 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                     content_hash,
                     str(payload.origin.retrieved_at),
                     station,
-                    product,
+                    str(product),
                     str(window),
                     reason,
                 ),
                 series_id=None,
                 station_id=station,
-                product_id=product,
+                product_id=str(product),
                 window=window,
                 status=OutcomeStatus.UNRESOLVED,
                 reason=reason,
@@ -505,7 +518,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
                 severity="warning",
                 code="source.unresolved_inventory",
                 message=reason,
-                details={"station_id": station, "product_id": product},
+                details={"station_id": station, "product_id": str(product)},
                 provider_id=_PROVIDER,
             )
         )
@@ -521,7 +534,7 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
             str(payload.origin.retrieved_at),
             "br_ana",
             station,
-            product,
+            str(product),
             str(retrieved),
             str(window),
         ),
@@ -555,3 +568,99 @@ def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
         tuple(issues),
         annotations=bundle,
     )
+
+
+def parse_group(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    config: ProviderConfig,
+) -> dict[tuple[str, ProductId], ParsedSeries]:
+    """Decode one shared ANA JSON response once across all requested products or variants."""
+    if not pair_payloads:
+        raise FatalContractError("ANA group parse requires at least one station-product pair")
+    stations = {station for station, _ in pair_payloads}
+    if len(stations) != 1:
+        raise FatalContractError("ANA payload requires a single station per request")
+
+    validated_coords: dict[tuple[str, ProductId], BrAnaSourceCoordinates | BrAnaDailySourceCoordinates] = {}
+    is_group = len(pair_payloads) > 1 or isinstance(
+        payload.source_coordinates.value, (BrAnaSharedTelemetryCoordinates, BrAnaSharedDailyCoordinates)
+    )
+    for pair_key in pair_payloads:
+        station, product = pair_key
+        if product not in config.products:
+            raise FatalContractError(f"ANA product is absent from provider config: {product}")
+        validated_coords[pair_key] = _validate_pair_coordinates(
+            payload.source_coordinates.value,
+            config.products[product].coordinates.value,
+            is_group=is_group,
+        )
+
+    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+    calls = tuple(item.attempt_id for item in payload.attempt_traces) or (payload.acquisition_id,)
+    content_hash = hashlib.sha256(payload.content).hexdigest()
+    try:
+        observations = _observations(payload.content)
+    except SourceStructureError as error:
+        reason = str(error)
+        results: dict[tuple[str, ProductId], ParsedSeries] = {}
+        empty_rows = pl.DataFrame(schema=RowsSchema.polars_schema)
+        for pair_key, pair_payload in pair_payloads.items():
+            station, product = pair_key
+            window = SeriesWindow(
+                start=datetime.fromisoformat(pair_payload.fetch_window.start.isoformat()),
+                end=datetime.fromisoformat(pair_payload.fetch_window.end.isoformat()),
+            )
+            window_outcome = RetrievalOutcome(
+                outcome_id=stable_id(
+                    payload.acquisition_id,
+                    content_hash,
+                    str(retrieved),
+                    station,
+                    str(product),
+                    reason,
+                ),
+                series_id=None,
+                station_id=station,
+                product_id=str(product),
+                window=window,
+                status=OutcomeStatus.UNSUPPORTED,
+                reason=reason,
+                retrieved_at=retrieved,
+                calls=calls,
+            )
+            issue = Issue(
+                severity="warning",
+                code="source.unsupported_response",
+                message=reason,
+                details={"station_id": station, "product_id": str(product)},
+                provider_id=_PROVIDER,
+            )
+            results[pair_key] = ParsedSeries(empty_rows, (), (), (window_outcome,), (issue,))
+        return results
+
+    include_sibling_daily = len(pair_payloads) == 1
+    results = {
+        pair_key: _parse_pair_from_observations(
+            payload,
+            pair_payload,
+            pair_key[0],
+            pair_key[1],
+            validated_coords[pair_key],
+            observations,
+            content_hash=content_hash,
+            retrieved=retrieved,
+            calls=calls,
+            include_sibling_daily=include_sibling_daily,
+        )
+        for pair_key, pair_payload in pair_payloads.items()
+    }
+    del observations
+    return results
+
+
+def parse(payload: Payload, config: ProviderConfig) -> ParsedSeries:
+    if len(payload.station_products) != 1:
+        raise FatalContractError("ANA payload requires exactly one station-product pair")
+    key = payload.station_products[0]
+    return parse_group(payload, {key: payload}, config)[key]

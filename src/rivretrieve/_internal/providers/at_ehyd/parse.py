@@ -229,6 +229,39 @@ def interpret_structure_failure(
     return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), (outcome,), (issue,))
 
 
+def resolve_info_group(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    provider_config: ProviderConfig,
+) -> tuple[dict[ProductId, int] | None, dict[tuple[str, ProductId], ParsedSeries]]:
+    """Decode ``Messstellen/info`` once and project prerequisite file outcomes per product."""
+    del provider_config
+    if not pair_payloads:
+        raise FatalContractError("at_ehyd info resolution requires at least one pair payload")
+    stations = {station for station, _ in pair_payloads}
+    if len(stations) != 1:
+        raise FatalContractError("at_ehyd info resolution requires a single station")
+    station = next(iter(stations))
+    structure_error: str | None = None
+    try:
+        file_map = resolve_messstellen_info_files(payload.content, station)
+    except UnsupportedSourceStructureError as error:
+        file_map = None
+        structure_error = str(error)
+
+    grouped: dict[tuple[str, ProductId], ParsedSeries] = {}
+    for key, pair_payload in pair_payloads.items():
+        st, product = key
+        if pair_payload.station_products != ((st, product),):
+            raise FatalContractError("Pair payload station_products does not match its group key")
+        if file_map is not None:
+            grouped[key] = interpret_info_file_map(pair_payload, st, product, file_map)
+        else:
+            assert structure_error is not None
+            grouped[key] = interpret_structure_failure(pair_payload, st, product, structure_error)
+    return file_map, grouped
+
+
 def interpret_info_file_map(
     payload: Payload,
     station: str,

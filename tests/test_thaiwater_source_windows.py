@@ -125,12 +125,12 @@ def test_public_multi_window_reuse_and_refresh_preserve_complete_requested_cover
     # Explicit source IDs freeze this test scope; incomplete all-series inventory cannot be reused.
     selection = rr.pick(discovered, series_id=[series.series_id for series in discovered.series])
     first = rr.fetch(selection, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
-    assert len(replay.calls) == 4  # Two genuine source requests for each product, not public coalescing.
+    assert len(replay.calls) == 2  # Two shared 365-day source requests across both products.
     repeated = rr.fetch(selection, start=_START, end=_END, cache="reuse", receipts=True, on_issue="ignore")
-    assert len(replay.calls) == 4
+    assert len(replay.calls) == 2
     assert_frame_equal(first.data, repeated.data)
     early = rr.fetch(selection, start=_START, end=_START, cache="reuse", on_issue="ignore")
-    assert len(replay.calls) == 4
+    assert len(replay.calls) == 2
     assert not early.data.is_empty()
     import polars as pl
 
@@ -146,7 +146,7 @@ def test_public_multi_window_reuse_and_refresh_preserve_complete_requested_cover
         RequestedInterval(datetime(2026, 9, 9), datetime(2026, 9, 10, 23, 59, 59, 999999)),
     }
     refreshed = rr.fetch(selection, start=_START, end=_END, cache="refresh", receipts=True, on_issue="ignore")
-    assert len(replay.calls) == 8
+    assert len(replay.calls) == 4
     assert_frame_equal(first.data, refreshed.data)
     assert all(entry.authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD for entry in refreshed.receipts.entries)
     # A refresh replays actual source responses; the test does not claim a later source vintage.

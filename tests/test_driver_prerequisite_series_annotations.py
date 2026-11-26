@@ -110,7 +110,6 @@ class _LookupThenFetchProvider:
             )
         }
     )
-    shared_acquisition_products = ()
 
     def __init__(self) -> None:
         self.config = ProviderConfig(

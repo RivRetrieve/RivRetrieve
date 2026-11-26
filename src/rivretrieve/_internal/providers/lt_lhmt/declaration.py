@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from rivretrieve._internal.providers.lt_lhmt.config import config, window_declarations
-from rivretrieve._internal.providers.lt_lhmt.fetch import fetch
+from rivretrieve._internal.providers.lt_lhmt.fetch import LtLhmtRequestPlanner, fetch
 from rivretrieve._internal.providers.lt_lhmt.parse import parse, parse_group
 from rivretrieve._internal.providers.registration import LiveStages, ProviderDeclaration
 
@@ -14,7 +14,7 @@ class _Stages:
     observation_source = "live"
     config = config()
     window_declarations = window_declarations()
-    shared_acquisition_products = (frozenset(config.products),)
+    request_planner = LtLhmtRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
     parse_group = staticmethod(parse_group)

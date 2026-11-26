@@ -32,7 +32,7 @@ from rivretrieve._internal.source_annotations import (
     AnnotationSelection,
     with_annotations,
 )
-from rivretrieve._internal.source_series import RetrievalOutcome, SeriesScope, SourceSeries
+from rivretrieve._internal.source_series import SeriesScope, SourceSeries
 from rivretrieve._internal.station_map import StationMap
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import (
@@ -1485,11 +1485,12 @@ def _fetch_provider_series(
     # The detached handle carries only this public request's store preparation.
     # Provider registration and later requests never retain the reader.
     handle = replace(_provider_lookup(provider_id), _reader=StoreReader())
-    by_station: dict[str, list[str]] = {}
+    stations = tuple(dict.fromkeys(selected_series.station_id for selected_series in series))
+    products = tuple(dict.fromkeys(selected_series.product_id for selected_series in series))
+    pairs_by_station: dict[str, list[tuple[str, str]]] = {station: [] for station in stations}
     for selected_series in series:
-        product_ids = by_station.setdefault(selected_series.station_id, [])
-        if selected_series.product_id not in product_ids:
-            product_ids.append(selected_series.product_id)
+        pairs_by_station[selected_series.station_id].append((selected_series.station_id, selected_series.product_id))
+    station_products = tuple(dict.fromkeys(pair for station in stations for pair in pairs_by_station[station]))
     if handle.public_archive_access is not None:
         from rivretrieve._internal.coverage import RequestedInterval
         from rivretrieve._internal.driver import _padded_interval
@@ -1500,28 +1501,26 @@ def _fetch_provider_series(
             _padded_interval(RequestedInterval(start, end)),
             _SystemClock().utcnow(),
         )
-    results = tuple(
-        handle.observations(
-            stations=station_id,
-            products=tuple(product_ids),
-            start=start,
-            end=end,
-            on_issue="ignore",
-            receipts=receipts,
-            transport=transport,
-            cache=cache,
-            store=store,
-            scope=selection.scope.model_copy(update={"provider_ids": (provider_id,)}),
-            known_series=tuple(item for item in selection.known_series if item.provider_id == provider_id),
-            inventories=tuple(
-                item
-                for item in selection.inventories
-                if not item.scope.provider_ids or provider_id in item.scope.provider_ids
-            ),
-        )
-        for station_id, product_ids in by_station.items()
+    raw_result = handle.observations(
+        stations=stations,
+        products=products,
+        station_products=station_products,
+        start=start,
+        end=end,
+        on_issue="ignore",
+        receipts=receipts,
+        transport=transport,
+        cache=cache,
+        store=store,
+        scope=selection.scope.model_copy(update={"provider_ids": (provider_id,)}),
+        known_series=tuple(item for item in selection.known_series if item.provider_id == provider_id),
+        inventories=tuple(
+            item
+            for item in selection.inventories
+            if not item.scope.provider_ids or provider_id in item.scope.provider_ids
+        ),
     )
-    result = _merge_provider_results(results, series)
+    result = _finalize_provider_result(raw_result, series)
     result = _reconcile_selector_searches(result, result.source_series)
     if future_local_date is not None:
         future_issue = Issue(
@@ -1557,10 +1556,11 @@ def _is_canonical_observation_order(data: pl.DataFrame) -> bool:
     return data.select(pl.struct(_CANONICAL_OBSERVATION_SORT_COLUMNS).alias("_sort_key"))["_sort_key"].is_sorted()
 
 
-def _merge_single_provider_result(
+def _finalize_provider_result(
     first: ObservationResult,
     series: tuple[SourceSeries, ...],
 ) -> ObservationResult:
+    """Finalize one whole-provider result in canonical observation order."""
     from rivretrieve._internal.driver import _unique_calls
 
     request = first.provenance.request
@@ -1643,117 +1643,6 @@ def _merge_single_provider_result(
         provenance=provenance,
         issues=issues,
         receipts=Receipts(provider_id=first.provenance.provider_id, entries=first.receipts.entries),
-    )
-    if merged_annotations.is_empty:
-        return merged
-    return with_annotations(merged, merged_annotations)
-
-
-def _merge_provider_results(
-    results: tuple[ObservationResult, ...],
-    series: tuple[SourceSeries, ...],
-) -> ObservationResult:
-    """provider result merge : NonEmptyTuple[ObservationResult] × SelectedSeries → ObservationResult"""
-    if not results:
-        raise FatalContractError("Provider result merge requires at least one result")
-    if len(results) == 1:
-        return _merge_single_provider_result(results[0], series)
-
-    first = results[0]
-    request = first.provenance.request
-    if request is None or "start" not in request or "end" not in request:
-        raise FatalContractError("Observation provenance must retain the normalized requested window")
-    merged_request = {
-        "scope": first.scope.model_dump(mode="json"),
-        "series": [
-            {
-                "station_id": selected_series.station_id,
-                "product_id": selected_series.product_id,
-                "series_id": selected_series.series_id,
-            }
-            for selected_series in series
-        ],
-        "start": request["start"],
-        "end": request["end"],
-    }
-    issues = _merge_provider_issues(results)
-    receipt_entries = tuple(entry for result in results for entry in result.receipts.entries)
-    from rivretrieve._internal.driver import _unique_calls
-
-    calls_made = _unique_calls(tuple(call for result in results for call in result.provenance.calls_made))
-    endpoints = tuple(dict.fromkeys(endpoint for result in results for endpoint in result.provenance.endpoints))
-    retrieved = tuple(
-        result.provenance.retrieved_at for result in results if result.provenance.retrieved_at is not None
-    )
-    queries: list[dict[str, object]] = []
-    for result in results:
-        query = result.provenance.query
-        if query is not None and query not in queries:
-            queries.append(query)
-    merged_query = None if not queries else queries[0] if len(queries) == 1 else {"calls": tuple(queries)}
-    active_outcomes: dict[str, RetrievalOutcome] = {}
-    supporting_outcomes: dict[str, RetrievalOutcome] = {}
-    for result in results:
-        for item in (*result.outcomes, *result.supporting_outcomes):
-            existing = active_outcomes.get(item.outcome_id, supporting_outcomes.get(item.outcome_id))
-            if existing is not None and existing != item:
-                raise FatalContractError("Provider results disagree about an acquisition outcome")
-        active_outcomes.update((item.outcome_id, item) for item in result.outcomes)
-        supporting_outcomes.update((item.outcome_id, item) for item in result.supporting_outcomes)
-    has_obs_annotations = any(item._annotations.observation_tables for item in results)
-    has_any_annotations = has_obs_annotations or any(not item._annotations.is_empty for item in results)
-    row_offsets: list[int] = []
-    running = 0
-    for item in results:
-        row_offsets.append(running)
-        running += item.data.height
-    if running > 0:
-        if has_obs_annotations:
-            combined = pl.concat([item.data for item in results]).with_columns(
-                pl.arange(0, running, eager=True, dtype=pl.Int64).alias("_rr_row_idx")
-            )
-            ordered = _canonical_observation_order(combined)
-            old_to_new = {old: new for new, old in enumerate(ordered["_rr_row_idx"].to_list())}
-            merged_data = ordered.drop("_rr_row_idx")
-        else:
-            old_to_new = {}
-            merged_data = _canonical_observation_order(pl.concat([item.data for item in results]))
-    else:
-        old_to_new = {}
-        merged_data = pl.concat([item.data for item in results])
-
-    merged = ObservationResult(
-        data=merged_data,
-        source_series=_merge_series_definitions(results),
-        inventories=tuple({item.snapshot_id: item for result in results for item in result.inventories}.values()),
-        outcomes=tuple(active_outcomes.values()),
-        supporting_outcomes=tuple(item for key, item in supporting_outcomes.items() if key not in active_outcomes),
-        scope=first.scope,
-        provenance=first.provenance.model_copy(
-            update={
-                "request": merged_request,
-                "calls_made": calls_made,
-                "served_intervals": tuple(
-                    interval for result in results for interval in result.provenance.served_intervals
-                ),
-                "endpoints": endpoints,
-                "retrieved_at": max(retrieved) if retrieved else None,
-                "query": merged_query,
-                "time_windows": tuple(window for result in results for window in result.provenance.time_windows),
-                "decomposition": tuple(
-                    dict.fromkeys(value for result in results for value in result.provenance.decomposition)
-                ),
-            }
-        ),
-        issues=issues,
-        receipts=Receipts(provider_id=first.provenance.provider_id, entries=receipt_entries),
-    )
-    if not has_any_annotations:
-        return merged
-    merged_annotations = AnnotationBundle.merge_sorted(
-        [item._annotations for item in results],
-        row_offsets=row_offsets,
-        old_to_new=old_to_new,
     )
     if merged_annotations.is_empty:
         return merged

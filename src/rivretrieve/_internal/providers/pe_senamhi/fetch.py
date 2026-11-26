@@ -5,34 +5,47 @@ must enforce that interval before combining responses, including revised values.
 This module leaves parsing and public registration to their respective stages.
 """
 
-import hashlib
-from collections.abc import Mapping
-from datetime import datetime
-from uuid import uuid4
+from __future__ import annotations
 
-from rivretrieve._internal.authentication import CredentialExchangeError
+from collections.abc import Hashable, Mapping
+from datetime import datetime
+
+from rivretrieve._internal.coverage import RequestedInterval
 from rivretrieve._internal.engine import (
-    InterpretedPayload,
-    Payload,
+    FetchWindow,
+    ProductConfig,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
-    SourceCallOrigin,
     SourceCoordinates,
     StopConvention,
-    UnknownOriginFact,
+    Unit,
+    UnknownTemporalSupport,
     WindowDeclaration,
     WindowGranularity,
     WindowRenderingVocabulary,
-    narrow_payload_for_pair,
+    ZoneValue,
 )
-from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.pe_senamhi.parse import decode_response, interpret_decoded_group
-from rivretrieve._internal.providers.pe_senamhi.series import SenamhiSourceCoordinates, series_mappings
-from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_request
-from rivretrieve._internal.source_series import OutcomeStatus, RetrievalOutcome, SeriesScope, SeriesWindow, SourceSeries
-from rivretrieve._internal.transport import HttpMethod, Transport, TransportFailure, TransportRequest, TransportResponse
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.providers.pe_senamhi.parse import interpret_planned_group
+from rivretrieve._internal.providers.pe_senamhi.series import (
+    SenamhiSourceCoordinates as SenamhiSourceCoordinates,
+)
+from rivretrieve._internal.providers.pe_senamhi.series import (
+    series_mappings,
+)
+from rivretrieve._internal.request_planning import (
+    ConsumerNeed,
+    LookupResolution,
+    ObservationPlan,
+    PlannedLookup,
+    PlannedObservationRequest,
+    _merge_fetch_windows,
+    execute_planned_acquisition,
+)
+from rivretrieve._internal.source_series import OutcomeStatus, SeriesScope, SeriesWindow, SourceSeries, TimeAxis
+from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest
 
 
 def window_declaration(coordinates: SenamhiSourceCoordinates) -> WindowDeclaration:
@@ -48,6 +61,71 @@ def window_declaration(coordinates: SenamhiSourceCoordinates) -> WindowDeclarati
     return WindowDeclaration(
         WindowGranularity("fixed-backward-span"), WindowRenderingVocabulary.DATE, StopConvention.INCLUSIVE, size=2
     )
+
+
+class PeSenamhiRequestPlanner:
+    """Coalesce SENAMHI monthly archive requests while preserving separate PHISIS routes."""
+
+    def plan_lookups(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        config: ProviderConfig,
+    ) -> tuple[PlannedLookup, ...]:
+        del needs, config
+        return ()
+
+    def plan_observations(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        lookups: Mapping[tuple[Hashable, str, ProductId], LookupResolution],
+        config: ProviderConfig,
+    ) -> ObservationPlan:
+        del lookups
+        groups: dict[tuple[str, str, str | None, str | None, str | None, RenderedWindow], list[ConsumerNeed]] = {}
+        for need in needs:
+            try:
+                route = config.products[need.product].coordinates.value
+            except KeyError as error:
+                raise FatalContractError(f"SENAMHI product is absent from provider config: {need.product}") from error
+            if not isinstance(route, SenamhiSourceCoordinates) or not need.rendered:
+                raise FatalContractError("SENAMHI requires coordinates and planned windows for each product")
+            for window in need.rendered:
+                if window.bounds is None:
+                    raise FatalContractError("SENAMHI requires engine-established partition bounds")
+                key = (
+                    need.station,
+                    route.subsystem,
+                    route.resolution,
+                    route.variable if route.subsystem == "phisis" else None,
+                    route.unit if route.subsystem == "phisis" else None,
+                    window,
+                )
+                groups.setdefault(key, []).append(need)
+
+        requests: list[PlannedObservationRequest] = []
+        for (station, _sub, _res, _var, _unit, window), group_needs in groups.items():
+            assert window.bounds is not None
+            consumers = tuple(group_needs)
+            head_route = config.products[consumers[0].product].coordinates.value
+            assert isinstance(head_route, SenamhiSourceCoordinates)
+            targets = tuple(
+                mapping.source_series("pe_senamhi", station, consumer.product)
+                for consumer in consumers
+                for route in (config.products[consumer.product].coordinates.value,)
+                if isinstance(route, SenamhiSourceCoordinates)
+                for mapping in series_mappings(route.subsystem, route.resolution, route.variable, route.unit).values()
+            )
+            requests.append(
+                PlannedObservationRequest(
+                    consumers=consumers,
+                    request=_request(station, head_route, window),
+                    source_coordinates=SourceCoordinates(head_route),
+                    fetch_window=window.bounds,
+                    failure_targets=targets,
+                    interpret_group=interpret_planned_group,
+                )
+            )
+        return ObservationPlan(requests=tuple(requests))
 
 
 def fetch(
@@ -68,120 +146,81 @@ def fetch(
     bytes. Successful empty responses never stop traversal. No period-list or
     invented historical boundary restricts requests.
     """
-    groups: dict[tuple[str, str | None, str | None, str | None, RenderedWindow], list[ProductId]] = {}
+    all_bounds: list[FetchWindow] = []
     for product, route in coordinates.items():
         if not isinstance(route, SenamhiSourceCoordinates) or not rendered_windows.get(product):
             raise FatalContractError("SENAMHI requires coordinates and planned windows for each product")
-        for window in rendered_windows[product]:
-            if window.bounds is None:
+        for win in rendered_windows[product]:
+            if win.bounds is None:
                 raise FatalContractError("SENAMHI requires engine-established partition bounds")
-            key = (
-                route.subsystem,
-                route.resolution,
-                route.variable if route.subsystem == "phisis" else None,
-                route.unit if route.subsystem == "phisis" else None,
-                window,
-            )
-            groups.setdefault(key, []).append(product)
-    payloads = []
-    failures = []
-    outcomes = []
-    issues = []
-    interpretations: list[InterpretedPayload] = []
-    acquired_series: dict[str, SourceSeries] = {}
-    for station in stations:
-        for (_, _, _, _, window), products in groups.items():
-            route = coordinates[products[0]]
-            request = _request(station, route, window)
-            response = attempt_request(transport, request)
-            assert window.bounds is not None
-            interval = SeriesWindow(
-                start=datetime.fromisoformat(window.bounds.start.isoformat()),
-                end=datetime.fromisoformat(window.bounds.end.isoformat()),
-            )
-            definitions = tuple(
-                mapping.source_series("pe_senamhi", station, product)
-                for product in products
-                for mapping in series_mappings(
-                    coordinates[product].subsystem,
-                    coordinates[product].resolution,
-                    coordinates[product].variable,
-                    coordinates[product].unit,
-                ).values()
-            )
-            acquired_series.update((definition.series_id, definition) for definition in definitions)
-            if isinstance(response, (TransportFailure, CredentialExchangeError)):
-                call_id = uuid4().hex
-                failures.extend(
-                    FailedSourceRequest(uuid4().hex, definition, interval, request, response, call_id=call_id)
-                    for definition in definitions
+            all_bounds.append(win.bounds)
+    if not stations or not coordinates:
+        return SourceAcquisition(value=())
+
+    effective_config = (
+        config
+        if config is not None
+        else ProviderConfig(
+            zone=ZoneValue("unknown"),
+            products={
+                product: ProductConfig(
+                    SourceCoordinates(route),
+                    Unit.M3_S if route.variable == "FLOW" else Unit.M,
+                    UnknownTemporalSupport(),
                 )
-                continue
-            payload = Payload(
-                source_coordinates=SourceCoordinates(route),
-                station_products=tuple((station, product) for product in products),
-                fetch_window=window.bounds,
-                content=response.content,
-                origin=_origin(response),
-                prerequisite_calls=response.prerequisite_calls,
-                scope=scope,
-                known_series=known_series,
-                attempt_traces=response.attempt_traces,
-            )
-            payloads.append(payload)
-            data, reason = decode_response(response.content, route, station)
-            if reason is not None:
-                for definition in definitions:
-                    outcome = RetrievalOutcome(
-                        outcome_id=uuid4().hex,
-                        series_id=definition.series_id,
-                        station_id=station,
-                        product_id=definition.product_id,
-                        window=interval,
-                        status=OutcomeStatus.FAILED,
-                        facts_ids=tuple(fact.facts_id for fact in definition.facts),
-                        reason=reason,
-                        retrieved_at=response.retrieved_at,
-                        calls=(payload.acquisition_id,),
-                    )
-                    outcomes.append(outcome)
-                    issues.append(
-                        Issue(
-                            severity="error",
-                            code="source.response_failed",
-                            message=reason,
-                            provider_id=ProviderId("pe_senamhi"),
-                            details={
-                                "station_id": station,
-                                "product_id": definition.product_id,
-                                "series_id": definition.series_id,
-                                "outcome_id": outcome.outcome_id,
-                                "window": interval.model_dump(mode="json"),
-                            },
-                        )
-                    )
-            if config is not None:
-                response_hash = hashlib.sha256(response.content).hexdigest() if reason is None else None
-                pair_payloads = {
-                    (station, product): narrow_payload_for_pair(payload, station, product) for product in products
-                }
-                interpreted = interpret_decoded_group(
-                    payload,
-                    pair_payloads,
-                    data if reason is None else None,
-                    config,
-                    response_hash=response_hash,
+                for product, route in coordinates.items()
+            },
+        )
+    )
+    fetch_window = _merge_fetch_windows(all_bounds)
+    start = datetime.fromisoformat(fetch_window.start.isoformat())
+    end = datetime.fromisoformat(fetch_window.end.isoformat())
+    interval = RequestedInterval(start, end, axis=TimeAxis.NATIVE)
+    window = SeriesWindow(start=start, end=end, axis=TimeAxis.NATIVE)
+    needs = tuple(
+        ConsumerNeed(
+            station=station,
+            product=product,
+            scope=(
+                scope.model_copy(
+                    update={
+                        "provider_ids": ("pe_senamhi",),
+                        "station_ids": (station,),
+                        "product_ids": (str(product),),
+                    }
                 )
-                for pair_key, parsed in interpreted.items():
-                    interpretations.append(InterpretedPayload.from_payload(pair_payloads[pair_key], parsed))
-            del data
+                if scope is not None
+                else SeriesScope(provider_ids=("pe_senamhi",), station_ids=(station,), product_ids=(str(product),))
+            ),
+            known_series=known_series,
+            interval=interval,
+            window=window,
+            fetch_window=fetch_window,
+            rendered=rendered_windows[product],
+        )
+        for station in stations
+        for product in coordinates
+    )
+    acquisition = execute_planned_acquisition(PeSenamhiRequestPlanner(), needs, effective_config, transport)
+    failed_outcomes = tuple(
+        outcome
+        for item in acquisition.interpretations
+        for outcome in item.parsed.outcomes
+        if outcome.status is OutcomeStatus.FAILED
+    )
+    failed_issues = tuple(
+        issue
+        for item in acquisition.interpretations
+        for issue in item.parsed.issues
+        if issue.code == "source.response_failed"
+    )
     return SourceAcquisition(
-        value=tuple(payloads),
-        series=tuple(acquired_series.values()),
-        failed_requests=tuple(failures),
-        outcomes=tuple(outcomes),
-        issues=tuple(issues),
-        interpretations=tuple(interpretations),
+        value=acquisition.value,
+        series=acquisition.series,
+        failed_requests=acquisition.failed_requests,
+        outcomes=failed_outcomes,
+        issues=failed_issues,
+        interpretations=acquisition.interpretations if config is not None else (),
     )
 
 
@@ -203,20 +242,3 @@ def _request(station: str, route: SenamhiSourceCoordinates, window: RenderedWind
         f"{base}/hydrology/stations/{station}/hydrogram",
         params={"type": route.resolution, "variable": route.variable, "date": window.stop + clock},
     )
-
-
-def _origin(response: TransportResponse) -> SourceCallOrigin:
-    return SourceCallOrigin(
-        url=response.url,
-        request_parameters=response.request_parameters,
-        status_code=response.status_code,
-        retrieved_at=response.retrieved_at,
-        content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
-        source_path=UnknownOriginFact(),
-        query=UnknownOriginFact(),
-        attempts=response.attempts,
-    )
-
-
-def _response_failure(content: bytes, route: SenamhiSourceCoordinates, station: str) -> str | None:
-    return decode_response(content, route, station)[1]

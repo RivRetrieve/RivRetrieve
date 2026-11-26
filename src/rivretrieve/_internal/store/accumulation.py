@@ -36,7 +36,8 @@ from rivretrieve._internal.source_series import (
     RetrievalOutcome,
     SourceSeries,
     stable_id,
-    validate_series_rows,
+    validate_rows_against_definitions,
+    validate_series_definitions,
 )
 from rivretrieve._internal.store.authority import compact_evidence
 from rivretrieve._internal.store.integrity import (
@@ -248,6 +249,7 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             provider_id,
         )
         definitions = {item.series_id: item for item in series}
+        validated_definitions, validated_series_facts = validate_series_definitions(series)
         replacements: list[SuccessfulReplacement] = []
         snapshot_keys: set[tuple[str, str, datetime, str]] = set()
         acquisition_axes: dict[tuple[str, str], TimeAxis] = {}
@@ -290,18 +292,19 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
             ):
                 raise FatalContractError("Replacement scope must identify known old and newly covered physical facts")
             rows = replacement.rows
-            validate_series_rows(rows, series)
-            if not rows.is_empty() and (
-                rows.select(axis_time_expression(coverage.interval.axis).is_null().any()).item()
-                or rows.filter(pl.col("series_id") != coverage.series_id).height
-                or rows.filter(
-                    ~axis_time_expression(coverage.interval.axis).is_between(
-                        coverage.interval.start, coverage.interval.end
+            validate_rows_against_definitions(rows, validated_definitions, validated_series_facts)
+            if not rows.is_empty():
+                axis_time = axis_time_expression(coverage.interval.axis)
+                invalid = (
+                    axis_time.is_null()
+                    | (pl.col("series_id") != coverage.series_id)
+                    | ~axis_time.is_between(coverage.interval.start, coverage.interval.end)
+                    | ~pl.col("facts_id").is_in(coverage.facts_ids)
+                )
+                if rows.select(invalid.any()).item():
+                    raise FatalContractError(
+                        "Replacement rows exceed their successful series interval or physical facts"
                     )
-                ).height
-                or rows.filter(~pl.col("facts_id").is_in(coverage.facts_ids)).height
-            ):
-                raise FatalContractError("Replacement rows exceed their successful series interval or physical facts")
             if outcome.coverage == "observations":
                 keys = tuple(rows.select("facts_id", "time", "time_zone").iter_rows())
                 if set(outcome.observation_keys) != set(keys):
@@ -431,33 +434,105 @@ def accumulate(store: StoreRoot, provider_id: ProviderId, update: StoreUpdate) -
                         pl.read_parquet(ann_source), schemas_by_id[schema_id], existing_rows
                     )
             existing_bundle = AnnotationBundle(observation_tables=existing_obs_tables)
+            prepared_parts: list[tuple[SuccessfulReplacement, pl.DataFrame, AnnotationBundle]] = []
             for replacement in changes:
                 coverage = replacement.coverage
-                replaced_facts = replacement.replaced_facts_ids or coverage.facts_ids
-                part_rows, part_bundle = filter_native_with_annotations_by_expr(
-                    replacement.rows,
-                    replacement.annotations,
-                    pl.col("time").dt.year() == year,
-                    allowed_series_ids={coverage.series_id},
-                )
-                part_obs_bundle = AnnotationBundle(observation_tables=part_bundle.observation_tables)
-                if outcome_by_id[coverage.outcome_id].coverage == "observations":
-                    existing_rows, existing_bundle = anti_join_native_with_annotations(
-                        existing_rows, existing_bundle, part_rows
-                    )
+                if replacement.rows.is_empty() and not replacement.annotations.observation_tables:
+                    part_rows = pl.DataFrame(schema=RowsSchema.polars_schema)
+                    part_obs_bundle = AnnotationBundle.empty()
                 else:
-                    keep_expr = ~(
-                        (pl.col("series_id") == coverage.series_id)
-                        & pl.col("facts_id").is_in(replaced_facts)
-                        & axis_time_expression(coverage.interval.axis).is_between(
-                            coverage.interval.start, coverage.interval.end
+                    part_rows, part_bundle = filter_native_with_annotations_by_expr(
+                        replacement.rows,
+                        replacement.annotations,
+                        pl.col("time").dt.year() == year,
+                        allowed_series_ids={coverage.series_id},
+                    )
+                    part_obs_bundle = AnnotationBundle(observation_tables=part_bundle.observation_tables)
+                prepared_parts.append((replacement, part_rows, part_obs_bundle))
+
+            if not existing_rows.is_empty() or existing_bundle.observation_tables:
+                existing_series_ids = set(existing_rows["series_id"].unique().to_list())
+                for table in existing_bundle.observation_tables.values():
+                    existing_series_ids.update(table.rows["series_id"].unique().to_list())
+                obs_drop_frames: list[pl.DataFrame] = []
+                interval_drop_groups: dict[tuple[TimeAxis, datetime, datetime, tuple[str, ...]], list[str]] = {}
+                for replacement, part_rows, _ in prepared_parts:
+                    coverage = replacement.coverage
+                    if coverage.series_id not in existing_series_ids:
+                        continue
+                    if outcome_by_id[coverage.outcome_id].coverage == "observations":
+                        if not part_rows.is_empty():
+                            obs_drop_frames.append(part_rows)
+                    else:
+                        replaced_facts = tuple(sorted(replacement.replaced_facts_ids or coverage.facts_ids))
+                        interval_key = (
+                            coverage.interval.axis,
+                            coverage.interval.start,
+                            coverage.interval.end,
+                            replaced_facts,
                         )
+                        interval_drop_groups.setdefault(interval_key, []).append(coverage.series_id)
+                if obs_drop_frames:
+                    combined_obs_drops = obs_drop_frames[0] if len(obs_drop_frames) == 1 else pl.concat(obs_drop_frames)
+                    existing_rows, existing_bundle = anti_join_native_with_annotations(
+                        existing_rows, existing_bundle, combined_obs_drops
                     )
-                    existing_rows, existing_bundle = filter_native_with_annotations_by_expr(
-                        existing_rows, existing_bundle, keep_expr
+                if interval_drop_groups:
+                    drop_exprs = [
+                        pl.col("series_id").is_in(tuple(dict.fromkeys(sids)))
+                        & pl.col("facts_id").is_in(facts)
+                        & axis_time_expression(axis).is_between(start, end)
+                        for (axis, start, end, facts), sids in interval_drop_groups.items()
+                    ]
+                    for chunk_start in range(0, len(drop_exprs), 32):
+                        chunk = drop_exprs[chunk_start : chunk_start + 32]
+                        combined_drop = chunk[0]
+                        for extra_expr in chunk[1:]:
+                            combined_drop = combined_drop | extra_expr
+                        existing_rows, existing_bundle = filter_native_with_annotations_by_expr(
+                            existing_rows, existing_bundle, ~combined_drop
+                        )
+
+            by_series: dict[str, list[tuple[SuccessfulReplacement, pl.DataFrame, AnnotationBundle]]] = {}
+            for entry in prepared_parts:
+                by_series.setdefault(entry[0].coverage.series_id, []).append(entry)
+            new_parts: list[tuple[pl.DataFrame, AnnotationBundle]] = []
+            for series_entries in by_series.values():
+                if len(series_entries) == 1:
+                    _, part_rows, part_obs_bundle = series_entries[0]
+                    if not part_rows.is_empty() or part_obs_bundle.observation_tables:
+                        new_parts.append((part_rows, part_obs_bundle))
+                    continue
+                series_rows = pl.DataFrame(schema=RowsSchema.polars_schema)
+                series_bundle = AnnotationBundle.empty()
+                for replacement, part_rows, part_obs_bundle in series_entries:
+                    coverage = replacement.coverage
+                    replaced_facts = replacement.replaced_facts_ids or coverage.facts_ids
+                    if outcome_by_id[coverage.outcome_id].coverage == "observations":
+                        series_rows, series_bundle = anti_join_native_with_annotations(
+                            series_rows, series_bundle, part_rows
+                        )
+                    else:
+                        keep_expr = ~(
+                            (pl.col("series_id") == coverage.series_id)
+                            & pl.col("facts_id").is_in(replaced_facts)
+                            & axis_time_expression(coverage.interval.axis).is_between(
+                                coverage.interval.start, coverage.interval.end
+                            )
+                        )
+                        series_rows, series_bundle = filter_native_with_annotations_by_expr(
+                            series_rows, series_bundle, keep_expr
+                        )
+                    series_rows, series_bundle = concat_native_with_annotations(
+                        [(series_rows, series_bundle), (part_rows, part_obs_bundle)],
+                        empty_schema=RowsSchema.polars_schema,
                     )
+                if not series_rows.is_empty() or series_bundle.observation_tables:
+                    new_parts.append((series_rows, series_bundle))
+
+            if new_parts:
                 existing_rows, existing_bundle = concat_native_with_annotations(
-                    [(existing_rows, existing_bundle), (part_rows, part_obs_bundle)],
+                    [(existing_rows, existing_bundle), *new_parts],
                     empty_schema=RowsSchema.polars_schema,
                 )
             sorted_rows, sorted_bundle = sort_native_by_station_with_annotations(existing_rows, existing_bundle)
