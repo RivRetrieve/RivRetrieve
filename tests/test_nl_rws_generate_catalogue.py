@@ -123,7 +123,7 @@ def _synthetic_catalogus() -> dict[str, object]:
             _meta(25, g="WATHTE", e="cm", h="NAP", pt="meting", wbw="GEMH"),
             _meta(26, g="T", e="oC", h="NVT", pt="meting", wbw="GEM6H"),
             _meta(27, g="T", e="oC", h="NVT", pt="meting", wbw="GEM"),
-            _meta(28, g="WATHTE", e="cm", h="NAP", pt="meting", wbw="other:EXTMND", grp="EXTMWTHTE2"),
+            _meta(28, g="WATHTE", e="cm", h="NAP", pt="meting", wbw="other:EXTMND", grp=""),
             _meta(29, comp="LT", g="T", e="oC", h="NVT", pt="meting", wbw="NVT"),
             _meta(30, comp="OW", g="SALNTT", e="DIMSLS", h="NVT", pt="meting", wbw="NVT"),
         ],
@@ -417,6 +417,22 @@ def test_station_native_table_rejects_duplicate_code_and_unknown_crs() -> None:
     bad_crs["LocatieLijst"][0]["Coordinatenstelsel"] = "RD"
     with pytest.raises(FatalContractError, match="ETRS89"):
         generate_catalogue.station_native_table(bad_crs, retrieved_at=RETRIEVED_AT)
+
+    bad_dup_id = _synthetic_catalogus()
+    bad_dup_id["LocatieLijst"] = [
+        *bad_dup_id["LocatieLijst"],
+        {
+            "Locatie_MessageID": 1001,
+            "Code": "lobith.different.code",
+            "Coordinatenstelsel": "ETRS89",
+            "Lat": 51.85,
+            "Lon": 6.11,
+            "Naam": "Lobith Duplicate ID",
+            "Omschrijving": "Duplicate ID",
+        },
+    ]
+    with pytest.raises(FatalContractError, match="duplicate Locatie_MessageID"):
+        generate_catalogue.station_native_table(bad_dup_id, retrieved_at=RETRIEVED_AT)
 
 
 def test_packaged_nl_rws_catalogue_loads_cleanly() -> None:

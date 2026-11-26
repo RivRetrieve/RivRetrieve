@@ -112,7 +112,7 @@ def station_native_table(
         if product_id is None:
             continue
         mid = entry.get("AquoMetadata_MessageID")
-        if not isinstance(mid, int):
+        if not isinstance(mid, int) or isinstance(mid, bool):
             raise FatalContractError(f"nl_rws AquoMetadata entry has invalid AquoMetadata_MessageID: {mid!r}")
         meta_to_product[mid] = product_id
 
@@ -135,8 +135,10 @@ def station_native_table(
         if code in seen_codes:
             raise FatalContractError(f"nl_rws LocatieLijst has duplicate Code: {code!r}")
         seen_codes.add(code)
-        if not isinstance(lid, int):
+        if not isinstance(lid, int) or isinstance(lid, bool):
             raise FatalContractError(f"nl_rws location {code!r} has invalid Locatie_MessageID: {lid!r}")
+        if lid in loc_by_id:
+            raise FatalContractError(f"nl_rws LocatieLijst has duplicate Locatie_MessageID: {lid!r}")
         if not isinstance(naam, str) or not naam.strip():
             raise FatalContractError(f"nl_rws location {code!r} has blank or invalid Naam: {naam!r}")
         if oms is not None and not isinstance(oms, str):
@@ -173,7 +175,7 @@ def station_native_table(
         if mid is None:
             mid = link.get("AquoMetadata_MessageID")
         lid = link.get("Locatie_MessageID")
-        if not isinstance(mid, int) or not isinstance(lid, int):
+        if not isinstance(mid, int) or isinstance(mid, bool) or not isinstance(lid, int) or isinstance(lid, bool):
             continue
         product_id = meta_to_product.get(mid)
         if product_id is None:

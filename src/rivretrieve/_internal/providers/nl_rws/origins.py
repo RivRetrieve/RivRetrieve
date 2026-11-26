@@ -115,7 +115,7 @@ def build_acquisition_provenance(
                 evidence=tuple(
                     EvidenceReference(
                         evidence_id=item.recording_id,
-                        description="Selected official Rijkswaterstaat DDAPI 2.0 catalogue snapshot",
+                        description="Selected official Rijkswaterstaat catalogue source",
                         recording=item,
                     )
                     for item in recordings
