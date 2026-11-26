@@ -157,6 +157,7 @@ class PhysicalFacts(BaseModel):
 # Conversion factors are dimensional mappings, not source-series classifications.
 _UNIT_DIMENSIONS = {
     "m3/s": ("discharge", 1.0),
+    "m3/d": ("discharge", 1.0 / 86400.0),
     "ft3/s": ("discharge", 0.028316846592),
     "l/s": ("discharge", 0.001),
     "m": ("stage", 1.0),
@@ -178,6 +179,7 @@ _UNIT_SPELLINGS = {unit: unit for unit in _UNIT_DIMENSIONS} | {
     "M3_S": "m3/s",
     "CM": "cm",
     "0C": "degC",
+    "oC": "degC",
     "°C": "degC",
     "K": "K",
     # Litres are a volume here, never an unqualified rate alias.
