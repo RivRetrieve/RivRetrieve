@@ -66,6 +66,7 @@ of the source view.
 | [`cl_dga`](providers/cl_dga.md) | `NOMBRE ESTACION` | — | — | `ALTITUD` (m) |
 | [`co_ideam`](providers/co_ideam.md) | `Nombre` | `Corriente` | — | `Altitud` |
 | [`cz_chmi`](providers/cz_chmi.md) | `STATION_NAME` | `STREAM_NAME` | `PLO_STA` (km²) | — |
+| [`de_pegelonline`](providers/de_pegelonline.md) | `longname`, `shortname` | `water_longname`, `water_shortname` | — | `w_gauge_zero_value` |
 | [`dk_vanda`](providers/dk_vanda.md) | `name` | — | `catchmentAreaKm2` (km2) | — |
 | [`fi_syke`](providers/fi_syke.md) | `Nimi` | `PaaVesalNimi`, `VesalNimi` | — | — |
 | [`fr_hubeau`](providers/fr_hubeau.md) | `libelle_station` | `libelle_cours_eau`, `libelle_masse_eau` | `superficie_reelle`, `superficie_topo`; `surface_bv` (km²) | `altitude`, `altitude_site`; `altitude_ref_alti_station` (m) |
