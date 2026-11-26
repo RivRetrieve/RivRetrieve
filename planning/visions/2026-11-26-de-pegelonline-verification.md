@@ -82,13 +82,15 @@ values together, per the guide. Confirm both `uv run pytest --logic-only`
 and the private archive's own `verify.py` controlled run pass, as `au_bom`
 and `fi_syke`'s own step-6 commits both did.
 
-Fold a cache-reuse check into this new test rather than building a separate
-dedicated cache-roundtrip test file: `lt_lhmt` and `fi_syke` (de_pegelonline's
-closest architectural siblings) have no dedicated cache test at all, while
-`at_ehyd`/`br_ana`/`fr_hubeau` fold one `cache="refresh"` then `cache="reuse"`
-assertion into their own `_annotations.py` test — there is no single
-established pattern requiring a dedicated file, and the recorded-replay test
-is the natural place to exercise it once.
+Verify relevant cache/store behavior somewhere in this step's new coverage.
+There is no single established pattern to match: `lt_lhmt` and `fi_syke`
+(de_pegelonline's closest architectural siblings) have no dedicated cache
+test at all, while `at_ehyd`/`br_ana`/`fr_hubeau` fold one `cache="refresh"`
+then `cache="reuse"` assertion into their own `_annotations.py` test.
+Folding a similar assertion into the new recorded-replay test (rather than a
+separate dedicated file) is a reasonable option given that precedent split,
+but it's a file-organization choice left to the implementer, not a
+requirement.
 
 ### 2. Extend the all-provider offline-rebuild test
 
@@ -119,15 +121,17 @@ pytest.param(
 
 The analogous `de_pegelonline` entry is expected to be exactly this shape
 (`_catalogue_recording_paths("de_pegelonline")` auto-derives from the already
-real `provenance.json`). `lt_lhmt` is not in the test function's few
-provider-special-cased branches (`br_ana`, or the
-`{ar_ina, at_ehyd, ch_foen, co_ideam, dk_vanda, pe_senamhi}` group) — it runs
-through the shared default path, and `de_pegelonline` is expected to as well,
-since it follows the same build shape. This was verified structurally
-(reading the test's requirements and code paths) but not yet by actually
-running it; if it turns out to need genuinely new archive-side design work,
-as happened for `au_bom`, name that plainly and defer it rather than forcing
-it or silently skipping it.
+real `provenance.json`). The test function and its helper special-case
+several providers (`br_ana`, `cl_dga`, `{ar_ina, at_ehyd, ch_foen, co_ideam,
+dk_vanda, pe_senamhi}`, `{au_bom, fi_syke}`, and a separate 9-provider
+output-directory-handling set) — this is not an exhaustive list, confirm the
+current set by reading the file directly. `lt_lhmt` is not in any of them —
+it runs through the shared default path, and `de_pegelonline` is expected to
+as well, since it follows the same build shape. This was verified
+structurally (reading the test's requirements and code paths) but not yet by
+actually running it; if it turns out to need genuinely new archive-side
+design work, as happened for `au_bom`, name that plainly and defer it rather
+than forcing it or silently skipping it.
 
 The exact insertion point in the parametrize list does not need to match
 `BUILTIN_PROVIDER_IDS`'s alphabetical convention — that list is ordered by
