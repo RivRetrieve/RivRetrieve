@@ -212,6 +212,7 @@ def test_config_and_window_declarations_match_empirically_validated_spans() -> N
             assert decl.size == 90
 
     assert len(SHARED_ACQUISITION_PRODUCTS) == 3
+    assert all(isinstance(group, frozenset) and len(group) == 2 for group in SHARED_ACQUISITION_PRODUCTS)
 
 
 def test_fetch_single_product_enforces_meting_and_preserves_milliseconds() -> None:
@@ -239,8 +240,8 @@ def test_fetch_single_product_enforces_meting_and_preserves_milliseconds() -> No
     am = body["AquoPlusWaarnemingMetadata"]["AquoMetadata"]
     assert am["ProcesType"] == "meting"
     assert am["WaardeBewerkingsMethode"] == {"Code": "GEM24H"}
-    assert body["Periode"]["Begindatumtijd"] == "2020-03-01T01:00:00.000+01:00"
-    assert body["Periode"]["Einddatumtijd"] == "2020-03-06T00:59:59.999+01:00"
+    assert body["Periode"]["Begindatumtijd"] == "2020-03-01T00:00:00.000+01:00"
+    assert body["Periode"]["Einddatumtijd"] == "2020-03-05T23:59:59.999+01:00"
     assert len(acq.value) == 1
     assert not acq.failed_requests
 
@@ -409,3 +410,117 @@ def test_parse_handles_http_204_empty_gem_only_and_invalid_json() -> None:
     )
     res_bad = parse(p_bad, cfg)
     assert res_bad.outcomes[0].status is OutcomeStatus.FAILED
+
+
+def test_parse_merges_duplicate_methods_ignores_malformed_out_of_scope_and_preserves_negatives() -> None:
+    cfg = config()
+    start = datetime(2020, 3, 28, 0, 0, 0, tzinfo=UTC)
+    stop = datetime(2020, 3, 30, 23, 59, 59, tzinfo=UTC)
+    fw = _window(start, stop)
+    p_stage = ProductId("stage_nap_nvt")
+    origin = SourceCallOrigin(
+        url="https://ddapi20-waterwebservices.rijkswaterstaat.nl/ONLINEWAARNEMINGENSERVICES/OphalenWaarnemingen",
+        request_parameters={},
+        status_code=200,
+        retrieved_at=datetime(2026, 11, 26, 10, 0, 0, tzinfo=UTC),
+        content_type="application/json",
+        source_path=UnknownOriginFact(),
+        query=UnknownOriginFact(),
+        attempts=1,
+    )
+    body = json.dumps(
+        {
+            "WaarnemingenLijst": [
+                # Out-of-scope forecast with malformed MetingenLijst must be skipped before row parsing
+                {
+                    "AquoMetadata": {
+                        "Compartiment": {"Code": "OW"},
+                        "Grootheid": {"Code": "WATHTE"},
+                        "Eenheid": {"Code": "cm"},
+                        "Hoedanigheid": {"Code": "NAP"},
+                        "ProcesType": "verwachting",
+                        "WaardeBewerkingsMethode": {"Code": "NVT"},
+                        "WaardeBepalingsMethode": {"Code": "other:F999"},
+                        "Groepering": {"Code": ""},
+                    },
+                    "MetingenLijst": [{"Tijdstip": None}],
+                },
+                # Two WaarnemingenLijst entries sharing other:F007 across mixed +01:00 / +02:00 offsets
+                {
+                    "AquoMetadata": {
+                        "Compartiment": {"Code": "OW"},
+                        "Grootheid": {"Code": "WATHTE"},
+                        "Eenheid": {"Code": "cm"},
+                        "Hoedanigheid": {"Code": "NAP"},
+                        "ProcesType": "meting",
+                        "WaardeBewerkingsMethode": {"Code": "NVT"},
+                        "WaardeBepalingsMethode": {"Code": "other:F007"},
+                        "Groepering": {"Code": ""},
+                        "MeetApparaat": {"Code": "sensor-A"},
+                    },
+                    "MetingenLijst": [
+                        {
+                            "Tijdstip": "2020-03-28T12:00:00.000+01:00",
+                            "Meetwaarde": {"Waarde_Numeriek": -12.5, "Waarde_Alfanumeriek": "-12.5"},
+                            "WaarnemingMetadata": {"Statuswaarde": "Gecontroleerd", "Kwaliteitswaardecode": "00"},
+                        }
+                    ],
+                },
+                {
+                    "AquoMetadata": {
+                        "Compartiment": {"Code": "OW"},
+                        "Grootheid": {"Code": "WATHTE"},
+                        "Eenheid": {"Code": "cm"},
+                        "Hoedanigheid": {"Code": "NAP"},
+                        "ProcesType": "meting",
+                        "WaardeBewerkingsMethode": {"Code": "NVT"},
+                        "WaardeBepalingsMethode": {"Code": "other:F007"},
+                        "Groepering": {"Code": ""},
+                        "MeetApparaat": {"Code": "sensor-B"},
+                    },
+                    "MetingenLijst": [
+                        {
+                            "Tijdstip": "2020-03-29T12:00:00.000+02:00",
+                            "Meetwaarde": {"Waarde_Numeriek": -3.0, "Waarde_Alfanumeriek": "-3.0"},
+                            "WaarnemingMetadata": {"Statuswaarde": "Gecontroleerd", "Kwaliteitswaardecode": "00"},
+                        }
+                    ],
+                },
+                # Admitted series with empty MetingenLijst -> OutcomeStatus.EMPTY
+                {
+                    "AquoMetadata": {
+                        "Compartiment": {"Code": "OW"},
+                        "Grootheid": {"Code": "WATHTE"},
+                        "Eenheid": {"Code": "cm"},
+                        "Hoedanigheid": {"Code": "NAP"},
+                        "ProcesType": "meting",
+                        "WaardeBewerkingsMethode": {"Code": "NVT"},
+                        "WaardeBepalingsMethode": {"Code": "other:F008"},
+                        "Groepering": {"Code": ""},
+                    },
+                    "MetingenLijst": [],
+                },
+            ]
+        }
+    ).encode("utf-8")
+
+    payload = Payload(
+        source_coordinates=SourceCoordinates(cfg.products[p_stage].coordinates.value),
+        station_products=(("hoek.van.holland", p_stage),),
+        fetch_window=fw,
+        content=body,
+        origin=origin,
+        prerequisite_calls=(),
+    )
+    res = parse(payload, cfg)
+    assert len(res.series) == 2
+    assert {s.variant for s in res.series} == {"other:F007", "other:F008"}
+    f007 = next(s for s in res.series if s.variant == "other:F007")
+    assert {f.time_zone.value for f in f007.facts} == {"+01:00", "+02:00"}
+    assert len(res.rows) == 2
+    assert res.rows["value"].to_list() == [-12.5, -3.0]
+    assert len(res.inventories[0].members) == 2
+    statuses = {o.series_id: o.status for o in res.outcomes}
+    assert statuses[f007.series_id] is OutcomeStatus.SUCCESS
+    f008 = next(s for s in res.series if s.variant == "other:F008")
+    assert statuses[f008.series_id] is OutcomeStatus.EMPTY

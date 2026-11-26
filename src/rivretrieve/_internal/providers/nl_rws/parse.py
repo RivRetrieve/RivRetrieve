@@ -121,19 +121,43 @@ def _parse_decoded_for_product(
     series_list: list[SourceSeries] = []
     outcomes: list[RetrievalOutcome] = []
 
+    # Group matching entries by concrete series_id (WaardeBepalingsMethode) before parsing MetingenLijst,
+    # so out-of-scope / sibling-product entries are skipped cheaply and duplicate WaardeBepalingsMethode
+    # entries split across secondary AquoMetadata fields merge cleanly into one SourceSeries.
+    grouped_entries: dict[
+        str,
+        tuple[
+            dict[str, object],
+            list[tuple[datetime, str, float | None, str | None, str | None]],
+            list[str],
+        ],
+    ] = {}
+
     for entry in entries:
         aquo_meta = _as_dict(entry.get("AquoMetadata"))
         if aquo_meta is None:
             raise UnsupportedSourceStructureError("nl_rws WaarnemingenLijst entry missing AquoMetadata")
+
+        probe = resolve_response_series(
+            station_id=station,
+            aquo_metadata=aquo_meta,
+            offsets=(),
+        )
+        if probe is None or probe.product_id != product_str:
+            continue
+
         raw_metingen = entry.get("MetingenLijst")
         if raw_metingen is None:
             raw_metingen = []
         if not isinstance(raw_metingen, list):
             raise UnsupportedSourceStructureError("nl_rws MetingenLijst must be a JSON array")
 
-        # First pass: parse timestamps/offsets for this series so mixed-offset segments can be resolved
-        parsed_items: list[tuple[datetime, str, float | None, str | None, str | None]] = []
-        offsets: list[str] = []
+        bucket = grouped_entries.get(probe.series_id)
+        if bucket is None:
+            bucket = (aquo_meta, [], [])
+            grouped_entries[probe.series_id] = bucket
+        _, parsed_items, offsets = bucket
+
         for raw_m in raw_metingen:
             m = _as_dict(raw_m)
             if m is None:
@@ -167,18 +191,33 @@ def _parse_decoded_for_product(
 
             parsed_items.append((native_time, offset_str, clean_value, statuswaarde, qcode))
 
+    for group_aquo_meta, parsed_items, offsets in grouped_entries.values():
         resolved = resolve_response_series(
             station_id=station,
-            aquo_metadata=aquo_meta,
+            aquo_metadata=group_aquo_meta,
             offsets=offsets,
         )
-        if resolved is None or resolved.product_id != product_str:
-            continue
+        assert resolved is not None
 
         facts_by_offset = {f.time_zone.value: f for f in resolved.facts}
         series_list.append(resolved)
 
-        series_row_count = 0
+        if not parsed_items:
+            outcomes.append(
+                RetrievalOutcome(
+                    outcome_id=stable_id(payload.acquisition_id, resolved.series_id, product_str),
+                    series_id=resolved.series_id,
+                    station_id=station,
+                    product_id=product,
+                    window=window,
+                    facts_ids=tuple(f.facts_id for f in resolved.facts),
+                    status=OutcomeStatus.EMPTY,
+                    reason=None,
+                    retrieved_at=retrieved,
+                )
+            )
+            continue
+
         supported_facts_ids: list[str] = []
         unsupported_reason: str | None = None
         for f in resolved.facts:
@@ -216,15 +255,8 @@ def _parse_decoded_for_product(
                         "kwaliteitswaardecode": qcode,
                     }
                 )
-                series_row_count += 1
 
-        status = (
-            OutcomeStatus.UNSUPPORTED
-            if unsupported_reason is not None
-            else OutcomeStatus.SUCCESS
-            if series_row_count > 0
-            else OutcomeStatus.EMPTY
-        )
+        status = OutcomeStatus.UNSUPPORTED if unsupported_reason is not None else OutcomeStatus.SUCCESS
         outcomes.append(
             RetrievalOutcome(
                 outcome_id=stable_id(payload.acquisition_id, resolved.series_id, product_str),
@@ -326,6 +358,11 @@ def parse_group(
     config: ProviderConfig,
 ) -> Mapping[tuple[str, ProductId], ParsedSeries]:
     """Decode a shared DDAPI 2.0 response once into independent per-product ParsedSeries."""
+    if not pair_payloads:
+        raise FatalContractError("nl_rws parse_group() requires at least one (station, product) pair")
+    stations = {station for station, _ in pair_payloads}
+    if len(stations) != 1:
+        raise FatalContractError(f"nl_rws parse_group() expects a single station per payload, got {sorted(stations)!r}")
     try:
         entries = _decode_waarnemingen(payload.content)
     except UnsupportedSourceStructureError as error:

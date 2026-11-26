@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime
 from uuid import uuid4
 
 from rivretrieve._internal.authentication import CredentialExchangeError
@@ -46,7 +46,6 @@ from rivretrieve._internal.transport import (
 )
 
 _OBSERVATIONS_URL = "https://ddapi20-waterwebservices.rijkswaterstaat.nl/ONLINEWAARNEMINGENSERVICES/OphalenWaarnemingen"
-_FIXED_CET = timezone(timedelta(hours=1))
 
 
 def _coordinates(product: ProductId, config: ProviderConfig) -> NlRwsProductCoordinates:
@@ -57,18 +56,11 @@ def _coordinates(product: ProductId, config: ProviderConfig) -> NlRwsProductCoor
 
 
 def _format_ddapi_instant(endpoint: WindowEndpoint) -> str:
-    instant = datetime(
-        endpoint.year,
-        endpoint.month,
-        endpoint.day,
-        endpoint.hour,
-        endpoint.minute,
-        endpoint.second,
-        endpoint.microsecond,
-        tzinfo=UTC,
+    return (
+        f"{endpoint.year:04d}-{endpoint.month:02d}-{endpoint.day:02d}"
+        f"T{endpoint.hour:02d}:{endpoint.minute:02d}:{endpoint.second:02d}"
+        f".{endpoint.microsecond // 1000:03d}+01:00"
     )
-    cet = instant.astimezone(_FIXED_CET)
-    return f"{cet.strftime('%Y-%m-%dT%H:%M:%S')}.{cet.microsecond // 1000:03d}+01:00"
 
 
 def _origin(response: TransportResponse) -> SourceCallOrigin:
