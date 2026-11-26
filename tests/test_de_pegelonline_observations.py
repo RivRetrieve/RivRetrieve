@@ -34,7 +34,7 @@ _DATA = Path("tests/test_data")
 _RECENT_START, _RECENT_END = "2026-11-22T00:00:00", "2026-11-28T23:59:59.999999"
 
 
-def _window(product: ProductId, start: str, end: str) -> RenderedWindow:
+def _window(start: str, end: str) -> RenderedWindow:
     bounds = _make_fetch_window(
         WindowEndpoint.from_datetime(datetime.fromisoformat(start)), WindowEndpoint.from_datetime(datetime.fromisoformat(end))
     )
@@ -52,7 +52,7 @@ def _fetch_one(
     gauge_zero_unit: str | None = None,
 ):
     product_id = ProductId(product)
-    window = _window(product_id, _RECENT_START, _RECENT_END)
+    window = _window(_RECENT_START, _RECENT_END)
     series = source_series(station, product, unit=unit, equidistance=equidistance, gauge_zero_unit=gauge_zero_unit)
     transport = ReplayTransport([retained_evidence_root / _DATA / recording_name])
     return (
@@ -286,7 +286,7 @@ def test_passau_donau_scheduled_water_temperature_trm_wt_recording_is_genuinely_
 def test_future_window_is_genuinely_empty_not_an_error(retained_evidence_root) -> None:
     station = "616dd98e-816d-4e17-b8cd-57b163dbc8a2"
     product_id = ProductId("Q")
-    window = _window(product_id, "2027-05-30T00:00:00", "2027-06-04T23:59:59.999999")
+    window = _window("2027-05-30T00:00:00", "2027-06-04T23:59:59.999999")
     series = source_series(station, "Q", unit="m³/s", equidistance=15)
     transport = ReplayTransport(
         [retained_evidence_root / _DATA / "de_pegelonline_hofkirchen_q_future-empty.recording.json"]
