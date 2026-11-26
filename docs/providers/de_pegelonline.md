@@ -89,9 +89,7 @@ has the full station-level breakdown.
 These source fields identify the published timeseries; there is no separate
 `variant` to choose for de_pegelonline's products. `TRM` and `TRM_WT` are their
 own products, not a `variant` of `W`/`WT`: PEGELONLINE never publishes a regular
-reporting interval for them, so RivRetrieve leaves their frequency
-`not_established` regardless of the equidistant intervals the Catalogue
-otherwise reports as `Unknown`. `Frequency` and `Statistic` are `Unknown` for
+reporting interval for them. `Frequency` and `Statistic` are `Unknown` for
 every row because actual reporting intervals vary by station and PEGELONLINE
 does not state a statistic for any of these series.
 
