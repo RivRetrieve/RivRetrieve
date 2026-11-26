@@ -18,7 +18,11 @@ from rivretrieve._internal.providers.au_bom.config import (
     AuBomTimeseriesListCoordinates,
     AuBomTimeseriesValuesCoordinates,
 )
-from rivretrieve._internal.providers.au_bom.series import PRODUCT_DEFINITIONS, describe_series
+from rivretrieve._internal.providers.au_bom.series import (
+    PRODUCT_DEFINITIONS,
+    allowed_label_times,
+    describe_series,
+)
 from rivretrieve._internal.source_annotations import (
     OBSERVATION_STRUCTURAL_SCHEMA,
     AnnotationBundle,
@@ -369,8 +373,75 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
         if not isinstance(rows, list):
             raise UnsupportedSourceStructureError("BoM getTimeseriesValues block data must be a list")
 
+        allowed_anchors = allowed_label_times(str(product))
+        parsed_rows: list[tuple[datetime, float | None, int | None, str | None]] = []
+        observed_anchors: set[str] = set()
+        for raw_row in rows:
+            if not isinstance(raw_row, list) or len(raw_row) != len(columns):
+                raise UnsupportedSourceStructureError(f"BoM getTimeseriesValues row for ts_id {ts_id} is malformed")
+            label = raw_row[time_index]
+            if not isinstance(label, str):
+                raise UnsupportedSourceStructureError(
+                    f"BoM getTimeseriesValues timestamp for ts_id {ts_id} is not a string"
+                )
+            try:
+                timestamp = datetime.fromisoformat(label)
+            except ValueError as error:
+                raise UnsupportedSourceStructureError(
+                    f"Malformed BoM getTimeseriesValues timestamp {label!r} for ts_id {ts_id}"
+                ) from error
+            # Confirmed live, 2026-11-03 and 2026-11-26: every admitted series under
+            # BoM's default wire request labels +10:00 explicitly; a disagreement here
+            # is a genuine surprise, not a formatting variant to absorb.
+            if timestamp.utcoffset() != _PLUS_TEN_HOURS:
+                raise UnsupportedSourceStructureError(
+                    f"BoM getTimeseriesValues timestamp {label!r} for ts_id {ts_id} does not carry +10:00"
+                )
+            naive_time = timestamp.replace(tzinfo=None)
+            if allowed_anchors is not None:
+                if naive_time.second != 0 or naive_time.microsecond != 0:
+                    raise UnsupportedSourceStructureError(
+                        f"BoM getTimeseriesValues timestamp {label!r} for ts_id {ts_id} has non-zero seconds"
+                    )
+                hhmm = f"{naive_time.hour:02d}:{naive_time.minute:02d}"
+                if hhmm not in allowed_anchors:
+                    raise UnsupportedSourceStructureError(
+                        f"BoM getTimeseriesValues timestamp {label!r} for ts_id {ts_id} has unexpected "
+                        f"wall-clock anchor {hhmm!r} (expected one of {sorted(allowed_anchors)})"
+                    )
+                observed_anchors.add(hhmm)
+            value = raw_row[value_index]
+            if value is not None and (type(value) not in (int, float) or not math.isfinite(value)):
+                raise UnsupportedSourceStructureError(f"BoM getTimeseriesValues value for ts_id {ts_id} is not numeric")
+            code: int | None = None
+            name: str | None = None
+            if has_quality:
+                raw_code = raw_row[quality_index]
+                if raw_code is not None and type(raw_code) is not int:
+                    raise UnsupportedSourceStructureError(
+                        f"BoM getTimeseriesValues Quality Code for ts_id {ts_id} is not an integer or null"
+                    )
+                raw_name = raw_row[quality_name_index]
+                if raw_name is not None and not isinstance(raw_name, str):
+                    raise UnsupportedSourceStructureError(
+                        f"BoM getTimeseriesValues Quality Code Name for ts_id {ts_id} is not a string or null"
+                    )
+                code = raw_code
+                name = raw_name
+            parsed_rows.append((naive_time, float(value) if value is not None else None, code, name))
+
+        if len(observed_anchors) > 1:
+            raise UnsupportedSourceStructureError(
+                f"BoM getTimeseriesValues ts_id {ts_id} mixes multiple wall-clock anchors {sorted(observed_anchors)}"
+            )
+        series_label_time = next(iter(observed_anchors)) if observed_anchors else None
+
         series = describe_series(
-            station, ts_id, str(product), NATIVE_UNIT_SYMBOLS[_QUANTITY_BY_PRODUCT_ID[str(product)]]
+            station,
+            ts_id,
+            str(product),
+            NATIVE_UNIT_SYMBOLS[_QUANTITY_BY_PRODUCT_ID[str(product)]],
+            label_time=series_label_time,
         )
         fact = series.facts[0]
         definitions[series.series_id] = series
@@ -393,36 +464,13 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
             continue
 
         numeric_rows: list[dict[str, object]] = []
-        for raw_row in rows:
-            if not isinstance(raw_row, list) or len(raw_row) != len(columns):
-                raise UnsupportedSourceStructureError(f"BoM getTimeseriesValues row for ts_id {ts_id} is malformed")
-            label = raw_row[time_index]
-            if not isinstance(label, str):
-                raise UnsupportedSourceStructureError(
-                    f"BoM getTimeseriesValues timestamp for ts_id {ts_id} is not a string"
-                )
-            try:
-                timestamp = datetime.fromisoformat(label)
-            except ValueError as error:
-                raise UnsupportedSourceStructureError(
-                    f"Malformed BoM getTimeseriesValues timestamp {label!r} for ts_id {ts_id}"
-                ) from error
-            # Confirmed live, 2026-11-03: every admitted series labels +10:00 explicitly;
-            # a disagreement here is a genuine surprise, not a formatting variant to absorb.
-            if timestamp.utcoffset() != _PLUS_TEN_HOURS:
-                raise UnsupportedSourceStructureError(
-                    f"BoM getTimeseriesValues timestamp {label!r} for ts_id {ts_id} does not carry +10:00"
-                )
-            naive_time = timestamp.replace(tzinfo=None)
-            value = raw_row[value_index]
-            if value is not None and (type(value) not in (int, float) or not math.isfinite(value)):
-                raise UnsupportedSourceStructureError(f"BoM getTimeseriesValues value for ts_id {ts_id} is not numeric")
+        for naive_time, float_value, code, name in parsed_rows:
             numeric_rows.append(
                 {
                     "station_id": station,
                     "product_id": str(product),
                     "time": naive_time,
-                    "value": float(value) if value is not None else None,
+                    "value": float_value,
                     "time_zone": "+10:00",
                     "series_id": series.series_id,
                     "facts_id": fact.facts_id,
@@ -430,16 +478,6 @@ def _parse_values(payload: Payload, station: str, product: ProductId) -> ParsedS
                 }
             )
             if has_quality:
-                code = raw_row[quality_index]
-                if code is not None and type(code) is not int:
-                    raise UnsupportedSourceStructureError(
-                        f"BoM getTimeseriesValues Quality Code for ts_id {ts_id} is not an integer or null"
-                    )
-                name = raw_row[quality_name_index]
-                if name is not None and not isinstance(name, str):
-                    raise UnsupportedSourceStructureError(
-                        f"BoM getTimeseriesValues Quality Code Name for ts_id {ts_id} is not a string or null"
-                    )
                 ann_rows.append(
                     {
                         "series_id": series.series_id,

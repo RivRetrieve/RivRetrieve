@@ -306,3 +306,134 @@ def test_public_recorded_camels_aus_v2_cross_check_09hr_matches_24hr_does_not(
     assert value_09hr == pytest.approx(camels_m3_per_s, abs=1e-6)
     assert value_24hr != pytest.approx(camels_m3_per_s, abs=1e-3)
     assert value_24hr == pytest.approx(17.955, abs=1e-6)
+
+
+@pytest.mark.recorded(_SCOPE)
+def test_public_recorded_wa_station_601001_preserves_0200_and_1100_anchors(
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Replay genuine WA station 601001 (+08:00 AWST -> 02:00 / 11:00 under +10:00; #1082)."""
+
+    class _Replay:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = request.params or {}
+            if params.get("request") == "getTimeseriesList":
+                return _response_matching_request(retained_evidence_root, "timeserieslist-601001", request)
+            name = {
+                "73472010": "timeseriesvalues-601001-discharge-24hr",
+                "73471010": "timeseriesvalues-601001-discharge-09hr",
+            }[str(params.get("ts_id"))]
+            return _response_matching_request(retained_evidence_root, name, request)
+
+    monkeypatch.setattr(discovery, "HttpClient", _Replay)
+    selection = rr.find(provider="au_bom", station="601001", quantity="discharge", frequency="P1D", statistic="mean")
+    result = rr.fetch(selection, start="2026-08-01", end="2026-08-05", cache="bypass", on_issue="ignore")
+
+    rows_24hr = result.data.filter(result.data["product_id"] == "discharge_daily_mean_24hr").sort("time")
+    rows_09hr = result.data.filter(result.data["product_id"] == "discharge_daily_mean_09hr").sort("time")
+    assert rows_24hr.height == 5
+    assert rows_09hr.height == 5
+    assert all((t.hour, t.minute) == (2, 0) for t in rows_24hr["time"].to_list())
+    assert all((t.hour, t.minute) == (11, 0) for t in rows_09hr["time"].to_list())
+    assert result.data["time_zone"].unique().to_list() == ["+10:00"]
+
+    label_by_ts = {s.identity.published_id: s.facts[0].label_time for s in result.source_series}
+    assert label_by_ts["73472010"] == "02:00"
+    assert label_by_ts["73471010"] == "11:00"
+
+
+@pytest.mark.recorded(_SCOPE)
+def test_public_recorded_sa_station_a5131021_supports_different_anchors_on_same_station(
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Replay genuine SA station A5131021: discharge at 00:00+10:00 and temperature at 00:30+10:00 (#1082)."""
+
+    class _Replay:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = request.params or {}
+            if params.get("request") == "getTimeseriesList":
+                return _response_matching_request(retained_evidence_root, "timeserieslist-a5131021", request)
+            ts_id = str(params.get("ts_id", ""))
+            if ts_id == "227552010":
+                return _response_matching_request(
+                    retained_evidence_root, "timeseriesvalues-a5131021-temperature-24hr", request
+                )
+            if ts_id == "485390010":
+                return _response_matching_request(
+                    retained_evidence_root, "timeseriesvalues-a5131021-discharge-24hr", request
+                )
+            return _synthetic_empty_values(request)
+
+    monkeypatch.setattr(discovery, "HttpClient", _Replay)
+    temp_sel = rr.find(provider="au_bom", station="A5131021", quantity="temperature", frequency="P1D", statistic="mean")
+    temp_res = rr.fetch(temp_sel, start="2026-08-01", end="2026-08-05", cache="bypass", on_issue="ignore")
+    assert temp_res.data.height == 5
+    assert all((t.hour, t.minute) == (0, 30) for t in temp_res.data["time"].to_list())
+    assert [s.facts[0].label_time for s in temp_res.source_series if s.identity.published_id == "227552010"] == [
+        "00:30"
+    ]
+
+    disch_sel = rr.find(provider="au_bom", station="A5131021", quantity="discharge", frequency="P1D", statistic="mean")
+    disch_res = rr.fetch(disch_sel, start="2026-08-01", end="2026-08-05", cache="bypass", on_issue="ignore")
+    disch_rows = disch_res.data.filter(disch_res.data["product_id"] == "discharge_daily_mean_24hr")
+    assert disch_rows.height == 5
+    assert all((t.hour, t.minute) == (0, 0) for t in disch_rows["time"].to_list())
+    assert [s.facts[0].label_time for s in disch_res.source_series if s.identity.published_id == "485390010"] == [
+        "00:00"
+    ]
+
+
+@pytest.mark.recorded(_SCOPE)
+def test_public_recorded_nt_station_g8100106_and_wa_gmt_station_802009(
+    retained_evidence_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Replay genuine NT G8100106 (00:30/09:30) and WA 802009 (02:00 on right calendar date; #1082)."""
+
+    class _ReplayNT:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = request.params or {}
+            if params.get("request") == "getTimeseriesList":
+                return _response_matching_request(retained_evidence_root, "timeserieslist-g8100106", request)
+            name = {
+                "52074010": "timeseriesvalues-g8100106-discharge-24hr",
+                "52073010": "timeseriesvalues-g8100106-discharge-09hr",
+            }[str(params.get("ts_id"))]
+            return _response_matching_request(retained_evidence_root, name, request)
+
+    monkeypatch.setattr(discovery, "HttpClient", _ReplayNT)
+    nt_sel = rr.find(provider="au_bom", station="G8100106", quantity="discharge", frequency="P1D", statistic="mean")
+    nt_res = rr.fetch(nt_sel, start="2026-08-01", end="2026-08-05", cache="bypass", on_issue="ignore")
+    nt_24 = nt_res.data.filter(nt_res.data["product_id"] == "discharge_daily_mean_24hr")
+    nt_09 = nt_res.data.filter(nt_res.data["product_id"] == "discharge_daily_mean_09hr")
+    assert nt_24.height == 5 and all((t.hour, t.minute) == (0, 30) for t in nt_24["time"].to_list())
+    assert nt_09.height == 5 and all((t.hour, t.minute) == (9, 30) for t in nt_09["time"].to_list())
+    nt_labels = {s.identity.published_id: s.facts[0].label_time for s in nt_res.source_series}
+    assert nt_labels["52074010"] == "00:30"
+    assert nt_labels["52073010"] == "09:30"
+
+    class _ReplayWA802009:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = request.params or {}
+            if params.get("request") == "getTimeseriesList":
+                return _response_matching_request(retained_evidence_root, "timeserieslist-802009", request)
+            if str(params.get("ts_id")) == "763266010":
+                return _response_matching_request(
+                    retained_evidence_root, "timeseriesvalues-802009-discharge-24hr", request
+                )
+            return _synthetic_empty_values(request)
+
+    monkeypatch.setattr(discovery, "HttpClient", _ReplayWA802009)
+    wa_sel = rr.find(provider="au_bom", station="802009", quantity="discharge", frequency="P1D", statistic="mean")
+    wa_res = rr.fetch(wa_sel, start="2024-03-01", end="2024-03-05", cache="bypass", on_issue="ignore")
+    wa_24 = wa_res.data.filter(wa_res.data["product_id"] == "discharge_daily_mean_24hr").sort("time")
+    assert wa_24.height == 5
+    assert [t.date().isoformat() for t in wa_24["time"].to_list()] == [
+        "2024-03-01",
+        "2024-03-02",
+        "2024-03-03",
+        "2024-03-04",
+        "2024-03-05",
+    ]
+    assert all((t.hour, t.minute) == (2, 0) for t in wa_24["time"].to_list())
+    assert wa_24.filter(wa_24["time"] == datetime(2024, 3, 3, 2, 0))["value"].item() == pytest.approx(659.138)
+    assert [s.facts[0].label_time for s in wa_res.source_series if s.identity.published_id == "763266010"] == ["02:00"]
