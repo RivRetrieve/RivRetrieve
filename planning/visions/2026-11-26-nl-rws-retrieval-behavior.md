@@ -59,12 +59,15 @@ origin-gate registration (`BUILTIN_PROVIDER_IDS`,
     (always enforced so forecasts `verwachting` and astronomical tides
     `astronomisch` are never requested or returned).
   - `Periode`: `Begindatumtijd` and `Einddatumtijd` rendered from the engine's
-    `RenderedWindow` bounds without shifting them, using explicit fixed
-    `+01:00` ISO-8601 timestamps (`YYYY-MM-DDTHH:MM:SS.000+01:00`).
+    `RenderedWindow.bounds` without shifting them, using explicit fixed
+    `+01:00` ISO-8601 timestamps preserving millisecond precision
+    (`YYYY-MM-DDTHH:MM:SS.mmm+01:00`, e.g. `.999+01:00` for `.999999` chunk
+    stops, never truncating milliseconds to `.000`), with the engine's default
+    `fetch_padding` (`None`, ±2 days).
 - **Pacing:** Use RivRetrieve's shared transport default pacing (≥1 s between
   requests); no custom `ProviderRateLimit` override is needed.
 
-### 2. Window declarations and empirically validated chunk spans
+### 2. Provider config, window declarations, and empirically validated chunk spans
 
 Live multi-gauge benchmarking on 2026-11-26 across 5 gauges
 (`lobith.bovenrijn.tolkamer`, `eijsden.grens`, `arnhem.nederrijn`,
@@ -77,35 +80,50 @@ Live multi-gauge benchmarking on 2026-11-26 across 5 gauges
 
 Accordingly:
 - `ProviderConfig.zone = ZoneValue("+01:00")`.
-- `WindowDeclaration`: `WindowGranularity("iso-instant")`,
-  `WindowRenderingVocabulary.ISO_INSTANT`, `StopConvention.INCLUSIVE`.
-- **Chunk spans (`max_span`):**
-  - **`timedelta(days=90)`** for all 7 `NVT` products (`discharge_m3s_nvt`,
+- `ProductConfig.unit`: canonical target `Unit` (`Unit.M3_S` for all 3
+  discharge products including `discharge_m3d_nvt`, `Unit.M` for all 5 stage
+  products, `Unit.DEG_C` for both water-temperature products; native unit
+  conversion from `m3/d` and `cm` is governed by `series.py`'s `PhysicalFacts`
+  and `admission()`).
+- `ProductConfig.semantics`: `UnknownTemporalSupport()` for all 10 products
+  (matching Step 3's `temporal_support = NOT_ESTABLISHED`).
+- `WindowDeclaration`: `WindowGranularity("capped-span")`,
+  `rendering=WindowRenderingVocabulary.ISO_INSTANT`,
+  `stop_convention=StopConvention.INCLUSIVE`:
+  - **`size=90`** (days) for all 7 `NVT` products (`discharge_m3s_nvt`,
     `discharge_m3d_nvt`, `stage_nap_nvt`, `stage_plaatslr_nvt`, `stage_msl_nvt`,
     `stage_taw_nvt`, `water_temperature_nvt`).
-  - **`timedelta(days=3650)`** (~10 years) for all 3 `GEM24H` products
+  - **`size=3650`** (days, ~10 years) for all 3 `GEM24H` products
     (`discharge_m3s_gem24h`, `stage_nap_gem24h`, `water_temperature_gem24h`).
 
 ### 3. Adaptive co-acquisition and `SharedParseProvider` (`parse_group`)
 
-Live probing confirmed DDAPI 2.0 filters `WaardeBewerkingsMethode` server-side:
-- **Joint `NVT` + `GEM24H` request for the same `(Grootheid, Eenheid, Hoedanigheid)`:**
+Live probing confirmed DDAPI 2.0 filters `WaardeBewerkingsMethode` server-side.
+In `driver.py`, `_acquisition_groups()` groups two products into one `fetch()`
+call when they are declared as shared-acquisition products and share identical
+`fetch_window` and `rendered` windows (which holds for windows where both
+`NVT` and `GEM24H` produce the same rendered chunk tuple, i.e. padded spans
+≤90 days; no shared-engine change to `driver.py` is required because `GEM24H`
+already fetches a full decade in ~1 s / ~1 MB on longer spans):
+
+- **Joint `NVT` + `GEM24H` call (matching `rendered_windows`):**
   When `fetch()` receives both the `NVT` and `GEM24H` products for the same
-  physical group (`Q`/`m3/s`/`NVT`, `WATHTE`/`cm`/`NAP`, or `T`/`oC`/`NVT`),
-  co-acquire them in **one** POST per 90-day chunk by omitting
+  `(Grootheid, Eenheid, Hoedanigheid)` group (`Q`/`m3/s`/`NVT`,
+  `WATHTE`/`cm`/`NAP`, or `T`/`oC`/`NVT`) with identical `rendered_windows`,
+  co-acquire them in **one** POST per window by omitting
   `WaardeBewerkingsMethode` from `AquoMetadata`, and attach the shared payload
   to both products so `parse_group()` decodes the JSON once into independent
   per-product `ParsedSeries` results and immediately drops intermediate decoded
   structures.
-- **Single-product request (`NVT`-only or `GEM24H`-only):**
+- **Single-product call (`NVT`-only or `GEM24H`-only, or ungrouped long-span calls):**
   Pass `WaardeBewerkingsMethode: {"Code": "NVT"}` or `{"Code": "GEM24H"}`
   explicitly on the POST body so a 10-year `GEM24H`-only query never downloads
   10-minute `NVT` rows (staying ~1 MB / ~1 s per decade) and an `NVT`-only
   query downloads no extra `GEM24H` rows.
-- When `rendered_windows` differ between co-acquired `NVT` (90d) and `GEM24H`
-  (3,650d) products, use the 90-day `NVT` chunks to cover the requested window
-  for both products (since the union of the 90-day chunks covers the exact same
-  requested window for `GEM24H`).
+- **Step 5 (`#1052`) wiring handoff:** `declaration.py` will expose both
+  `SharedParseProvider` (`parse_group`) and `SharedAcquisitionProvider`
+  (`shared_acquisition_products` for the three `(NVT, GEM24H)` pairs) so
+  `drive()` activates co-acquisition automatically on matching windows.
 
 ### 4. Empty responses, errors, and parsing semantics
 
