@@ -41,33 +41,35 @@ sources. Live providers fetch bytes and parse native rows. Bulk providers downlo
 compile publisher artifacts for the shared store reader. Catalogue-only providers
 support discovery and refuse observation retrieval.
 
-The shared engine owns request planning, window arithmetic, unit conversion, clipping
-and assembly. Providers consume its rendered request bounds without shifting them.
-Keeping these operations shared prevents providers from developing incompatible
-interpretations of the same request.
+The shared engine owns whole-selection request planning, window arithmetic, unit
+conversion, clipping, and assembly. Providers consume its rendered request bounds
+without shifting them. Keeping these operations shared prevents providers from
+developing incompatible interpretations of the same request.
 
 The stages preserve distinct responsibilities:
 
-- **Fetch** supplies immutable bytes and their source-call origins.
-- **Parse** establishes native rows, series definitions, scoped inventories, outcomes
+- **Plan and Fetch** turn uncached station, product, and window selections into
+  bounded HTTP requests, returning immutable bytes and source-call origins.
+- **Parse** establishes native rows, series definitions, scoped inventories, outcomes,
   and issues from source responses.
-- **Convert** validates rows, applies declared unit conversions and clips to the
+- **Convert** validates rows, applies declared unit conversions, and clips to the
   requested window.
 - **Assemble** combines observations with the information needed to interpret and
   trace them, including outcomes without rows.
 
-When a provider's fetch stage must inspect a response directly, such as following
-cursor pagination chains, checking a response envelope, or reading a prerequisite
-lookup, it narrows each consumer pair with `narrow_payload_for_pair` when a payload
-serves multiple pairs, attaches context-bound `InterpretedPayload` entries alongside
-the payload, and drops decoded source structures before returning. The engine reuses
-each interpretation when effective parsing inputs match and falls back to **Parse**
-otherwise. When a provider implements `SharedParseProvider` and at least two
-co-acquired products share a response without pre-interpretation, the engine invokes
-`parse_group` once per shared payload so source bytes decode once into isolated
-per-product `ParsedSeries` outputs. The provider releases intermediate decoded
-structures before returning, and the engine clears unretained response bytes once every
-remaining consumer plan has an interpretation.
+Providers that implement `PlannedAcquisitionProvider` expose a `SourceRequestPlanner`
+so the engine plans lookups and observation requests across the full provider selection.
+Identical prerequisite metadata calls run once per identity and supply resolved mappings
+to dependent requests, while supported multi-station or multi-series endpoints batch
+selectors within publisher limits and keep consumer attribution separate.
+
+When a planner or fetch stage decodes a shared or paginated response directly, it
+narrows each consumer pair with `narrow_payload_for_pair`, decodes once through
+`interpret_group`, `resolve_payload`, or `SharedParseProvider`, attaches
+context-bound `InterpretedPayload` entries, and releases intermediate decoded
+structures before returning. The engine reuses matching interpretations, falls back to
+**Parse** or `parse_group` when effective parsing inputs differ, and drops unretained
+response bytes once every remaining consumer plan has an interpretation.
 
 Typed contracts and runtime validation check the boundaries between these stages.
 A fetch window must contain its requested window; converted rows must remain within

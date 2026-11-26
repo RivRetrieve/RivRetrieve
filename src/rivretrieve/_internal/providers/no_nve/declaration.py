@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from rivretrieve._internal.providers.no_nve.config import config, window_declarations
-from rivretrieve._internal.providers.no_nve.fetch import fetch
+from rivretrieve._internal.providers.no_nve.fetch import NoNveRequestPlanner, fetch
 from rivretrieve._internal.providers.no_nve.parse import parse
 from rivretrieve._internal.providers.registration import CredentialHeaderBinding, LiveStages, ProviderDeclaration
 
@@ -14,6 +14,7 @@ class _Stages:
     observation_source = "live"
     config = config()
     window_declarations = window_declarations()
+    request_planner = NoNveRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
 

@@ -3,12 +3,11 @@
 from pathlib import Path
 
 from rivretrieve._internal.providers.au_bom.config import (
-    SHARED_ACQUISITION_PRODUCTS,
     config,
     window_declarations,
 )
-from rivretrieve._internal.providers.au_bom.fetch import fetch
-from rivretrieve._internal.providers.au_bom.parse import parse
+from rivretrieve._internal.providers.au_bom.fetch import AuBomRequestPlanner, fetch
+from rivretrieve._internal.providers.au_bom.parse import parse, parse_values_group
 from rivretrieve._internal.providers.registration import LiveStages, ProviderDeclaration
 
 
@@ -16,9 +15,10 @@ class _Stages:
     observation_source = "live"
     config = config()
     window_declarations = window_declarations()
-    shared_acquisition_products = SHARED_ACQUISITION_PRODUCTS
+    request_planner = AuBomRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
+    parse_group = staticmethod(parse_values_group)
 
 
 declaration = ProviderDeclaration(

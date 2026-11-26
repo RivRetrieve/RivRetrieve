@@ -2,27 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
 from datetime import datetime
-from typing import Literal
-from uuid import uuid4
+from typing import Literal, cast
 
-from rivretrieve._internal.authentication import CredentialExchangeError
+from rivretrieve._internal.coverage import RequestedInterval
 from rivretrieve._internal.engine import (
     FetchWindow,
-    InterpretedPayload,
-    Payload,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
-    SourceCallOrigin,
     SourceCoordinates,
-    UnknownOriginFact,
-    narrow_payload_for_pair,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.at_ehyd.config import (
     AtEhydInfoCoordinates,
     AtEhydOwfCoordinates,
@@ -30,24 +23,28 @@ from rivretrieve._internal.providers.at_ehyd.config import (
     AtEhydPegelEndpointCoordinates,
 )
 from rivretrieve._internal.providers.at_ehyd.parse import (
-    interpret_info_file_map,
-    interpret_structure_failure,
+    parse_group,
+    resolve_info_group,
 )
 from rivretrieve._internal.providers.at_ehyd.parse import (
     resolve_messstellen_info_files as resolve_messstellen_info_files,
 )
-from rivretrieve._internal.source_acquisition import (
-    FailedSourceRequest,
-    SourceRequestTarget,
-    attempt_request,
+from rivretrieve._internal.request_planning import (
+    ConsumerNeed,
+    LookupResolution,
+    ObservationPlan,
+    PlannedLookup,
+    PlannedObservationRequest,
+    ResolvedLookup,
+    _merge_fetch_windows,
+    execute_planned_acquisition,
 )
-from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries
+from rivretrieve._internal.source_acquisition import SourceRequestTarget
+from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries, TimeAxis
 from rivretrieve._internal.transport import (
     HttpMethod,
     Transport,
-    TransportFailure,
     TransportRequest,
-    TransportResponse,
 )
 
 _INFO_URL = "https://ehyd.gv.at/services/Messstellen/info"
@@ -56,6 +53,120 @@ _PEGEL_URLS: dict[Literal["pegel_bgis", "pegel_longterm"], str] = {
     "pegel_bgis": "https://ehyd.gv.at/services/Diagram/pegelBgis",
     "pegel_longterm": "https://ehyd.gv.at/services/Diagram/pegelLongterm",
 }
+
+
+class AtEhydRequestPlanner:
+    """Deduplicate ``Messstellen/info`` prerequisite lookups and share Pegel Aktuell endpoints."""
+
+    def _partition_needs(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        config: ProviderConfig,
+    ) -> tuple[
+        dict[str, list[ConsumerNeed]],
+        dict[str, dict[Literal["pegel_bgis", "pegel_longterm"], list[ConsumerNeed]]],
+    ]:
+        owf_by_station: dict[str, list[ConsumerNeed]] = {}
+        pegel_by_station: dict[str, dict[Literal["pegel_bgis", "pegel_longterm"], list[ConsumerNeed]]] = {}
+        for need in needs:
+            try:
+                product_config = config.products[need.product]
+            except KeyError as error:
+                raise FatalContractError(f"at_ehyd product is absent from provider config: {need.product}") from error
+            if need.rendered != ():
+                raise FatalContractError(
+                    f"at_ehyd source-fixed product received unexpected rendered windows: {need.product}"
+                )
+            coords = product_config.coordinates.value
+            if isinstance(coords, AtEhydOwfCoordinates):
+                owf_by_station.setdefault(need.station, []).append(need)
+            elif isinstance(coords, AtEhydPegelCoordinates):
+                pegel_by_station.setdefault(need.station, {}).setdefault(coords.subsystem, []).append(need)
+            else:
+                raise FatalContractError(f"at_ehyd product has invalid source coordinates: {need.product}")
+        return owf_by_station, pegel_by_station
+
+    def plan_lookups(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        config: ProviderConfig,
+    ) -> tuple[PlannedLookup, ...]:
+        owf_by_station, _ = self._partition_needs(needs, config)
+        return tuple(
+            PlannedLookup(
+                key=("at_ehyd_info", station),
+                consumers=tuple(station_needs),
+                request=TransportRequest(
+                    method=HttpMethod.GET,
+                    url=_INFO_URL,
+                    params={"hzbnr": station},
+                    headers={"Accept": "application/json"},
+                ),
+                source_coordinates=SourceCoordinates(AtEhydInfoCoordinates()),
+                fetch_window=_merge_fetch_windows([item.fetch_window for item in station_needs]),
+                window_in_identity=False,
+                emit_payload=True,
+                resolve_payload=resolve_info_group,
+            )
+            for station, station_needs in owf_by_station.items()
+        )
+
+    def plan_observations(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        lookups: Mapping[tuple[Hashable, str, ProductId], LookupResolution],
+        config: ProviderConfig,
+    ) -> ObservationPlan:
+        owf_by_station, pegel_by_station = self._partition_needs(needs, config)
+        requests: list[PlannedObservationRequest] = []
+        for station in tuple(dict.fromkeys(need.station for need in needs)):
+            for need in owf_by_station.get(station, ()):
+                resolution = lookups.get((("at_ehyd_info", station), station, need.product))
+                if not isinstance(resolution, ResolvedLookup) or not isinstance(resolution.value, Mapping):
+                    continue
+                file_nr = cast("Mapping[ProductId, int]", resolution.value).get(need.product)
+                if file_nr is None:
+                    continue
+                requests.append(
+                    PlannedObservationRequest(
+                        consumers=(need,),
+                        request=TransportRequest(
+                            method=HttpMethod.GET,
+                            url=_OWF_URL,
+                            params={"id": station, "file": str(file_nr)},
+                        ),
+                        source_coordinates=config.products[need.product].coordinates,
+                        fetch_window=need.fetch_window,
+                        prerequisite_acquisition_ids=(resolution.acquisition_id,),
+                        failure_targets=(_request_target(station, need.product, need.known_series),),
+                    )
+                )
+
+            for subsystem, group_needs in pegel_by_station.get(station, {}).items():
+                consumers = tuple(group_needs)
+                coordinates = (
+                    config.products[consumers[0].product].coordinates
+                    if len(consumers) == 1
+                    else SourceCoordinates(AtEhydPegelEndpointCoordinates(subsystem))
+                )
+                requests.append(
+                    PlannedObservationRequest(
+                        consumers=consumers,
+                        request=TransportRequest(
+                            method=HttpMethod.GET,
+                            url=_PEGEL_URLS[subsystem],
+                            params={"hzbnr": station},
+                            headers={"Accept": "application/json"},
+                        ),
+                        source_coordinates=coordinates,
+                        fetch_window=_merge_fetch_windows([item.fetch_window for item in consumers]),
+                        failure_targets=tuple(
+                            _request_target(station, item.product, item.known_series) for item in consumers
+                        ),
+                        interpret_group=parse_group if len(consumers) > 1 else None,
+                    )
+                )
+        return ObservationPlan(requests=tuple(requests))
 
 
 def fetch(
@@ -72,166 +183,35 @@ def fetch(
     """Fetch source-fixed eHYD responses while isolating independent route and file failures."""
     if not stations or not products:
         raise FatalContractError("at_ehyd fetch requires at least one station and product")
-
-    owf_products: list[tuple[ProductId, AtEhydOwfCoordinates]] = []
-    pegel_groups: dict[Literal["pegel_bgis", "pegel_longterm"], list[ProductId]] = {}
-    for product in products:
-        try:
-            product_config = config.products[product]
-        except KeyError as error:
-            raise FatalContractError(f"at_ehyd product is absent from provider config: {product}") from error
-        if rendered_windows.get(product) != ():
-            raise FatalContractError(f"at_ehyd source-fixed product received unexpected rendered windows: {product}")
-        coords = product_config.coordinates.value
-        if isinstance(coords, AtEhydOwfCoordinates):
-            owf_products.append((product, coords))
-        elif isinstance(coords, AtEhydPegelCoordinates):
-            pegel_groups.setdefault(coords.subsystem, []).append(product)
-        else:
-            raise FatalContractError(f"at_ehyd product has invalid source coordinates: {product}")
-
-    window = SeriesWindow(
-        start=datetime.fromisoformat(fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(fetch_window.end.isoformat()),
-    )
-    payloads: list[Payload] = []
-    failures: list[FailedSourceRequest] = []
-    interpretations: list[InterpretedPayload] = []
-
-    for station in stations:
-        if owf_products:
-            info_request = TransportRequest(
-                method=HttpMethod.GET,
-                url=_INFO_URL,
-                params={"hzbnr": station},
-                headers={"Accept": "application/json"},
-            )
-            info_response = attempt_request(transport, info_request)
-            if isinstance(info_response, (TransportFailure, CredentialExchangeError)):
-                call_id = uuid4().hex
-                for product, _ in owf_products:
-                    failures.append(
-                        FailedSourceRequest(
-                            uuid4().hex,
-                            _request_target(station, product, known_series),
-                            window,
-                            info_request,
-                            info_response,
-                            call_id=call_id,
-                        )
-                    )
-            else:
-                info_payload = Payload(
-                    source_coordinates=SourceCoordinates(AtEhydInfoCoordinates()),
-                    station_products=tuple((station, product) for product, _ in owf_products),
-                    fetch_window=fetch_window,
-                    content=info_response.content,
-                    origin=_origin(info_response),
-                    prerequisite_calls=info_response.prerequisite_calls,
-                    scope=scope,
-                    known_series=known_series,
-                    attempt_traces=info_response.attempt_traces,
+    start = datetime.fromisoformat(fetch_window.start.isoformat())
+    end = datetime.fromisoformat(fetch_window.end.isoformat())
+    interval = RequestedInterval(start, end, axis=TimeAxis.NATIVE)
+    window = SeriesWindow(start=start, end=end, axis=TimeAxis.NATIVE)
+    needs = tuple(
+        ConsumerNeed(
+            station=station,
+            product=product,
+            scope=(
+                scope.model_copy(
+                    update={
+                        "provider_ids": ("at_ehyd",),
+                        "station_ids": (station,),
+                        "product_ids": (str(product),),
+                    }
                 )
-                payloads.append(info_payload)
-                structure_error: str | None = None
-                try:
-                    file_map = resolve_messstellen_info_files(info_response.content, station)
-                except UnsupportedSourceStructureError as error:
-                    # Parse retains info_payload and classifies the invalid prerequisite per product.
-                    file_map = None
-                    structure_error = str(error)
-                for product, _ in owf_products:
-                    pair_payload = narrow_payload_for_pair(info_payload, station, product)
-                    if file_map is not None:
-                        pair_parsed = interpret_info_file_map(pair_payload, station, product, file_map)
-                    else:
-                        assert structure_error is not None
-                        pair_parsed = interpret_structure_failure(pair_payload, station, product, structure_error)
-                    interpretations.append(InterpretedPayload.from_payload(pair_payload, pair_parsed))
-                if file_map is not None:
-                    for product, _ in owf_products:
-                        file_nr = file_map.get(product)
-                        if file_nr is None:
-                            continue
-                        csv_request = TransportRequest(
-                            method=HttpMethod.GET,
-                            url=_OWF_URL,
-                            params={"id": station, "file": str(file_nr)},
-                        )
-                        csv_response = attempt_request(transport, csv_request)
-                        if isinstance(csv_response, (TransportFailure, CredentialExchangeError)):
-                            failures.append(
-                                FailedSourceRequest(
-                                    uuid4().hex,
-                                    _request_target(station, product, known_series),
-                                    window,
-                                    csv_request,
-                                    csv_response,
-                                    prerequisite_acquisition_ids=(info_payload.acquisition_id,),
-                                )
-                            )
-                            continue
-                        payloads.append(
-                            Payload(
-                                source_coordinates=config.products[product].coordinates,
-                                station_products=((station, product),),
-                                fetch_window=fetch_window,
-                                content=csv_response.content,
-                                origin=_origin(csv_response),
-                                prerequisite_calls=csv_response.prerequisite_calls,
-                                scope=scope,
-                                known_series=known_series,
-                                attempt_traces=csv_response.attempt_traces,
-                                prerequisite_acquisition_ids=(info_payload.acquisition_id,),
-                            )
-                        )
-
-        for subsystem, group_products in pegel_groups.items():
-            pegel_request = TransportRequest(
-                method=HttpMethod.GET,
-                url=_PEGEL_URLS[subsystem],
-                params={"hzbnr": station},
-                headers={"Accept": "application/json"},
-            )
-            pegel_response = attempt_request(transport, pegel_request)
-            if isinstance(pegel_response, (TransportFailure, CredentialExchangeError)):
-                call_id = uuid4().hex
-                for product in group_products:
-                    failures.append(
-                        FailedSourceRequest(
-                            uuid4().hex,
-                            _request_target(station, product, known_series),
-                            window,
-                            pegel_request,
-                            pegel_response,
-                            call_id=call_id,
-                        )
-                    )
-                continue
-            coordinates = (
-                config.products[group_products[0]].coordinates
-                if len(group_products) == 1
-                else SourceCoordinates(AtEhydPegelEndpointCoordinates(subsystem))
-            )
-            payloads.append(
-                Payload(
-                    source_coordinates=coordinates,
-                    station_products=tuple((station, product) for product in group_products),
-                    fetch_window=fetch_window,
-                    content=pegel_response.content,
-                    origin=_origin(pegel_response),
-                    prerequisite_calls=pegel_response.prerequisite_calls,
-                    scope=scope,
-                    known_series=known_series,
-                    attempt_traces=pegel_response.attempt_traces,
-                )
-            )
-
-    return SourceAcquisition(
-        value=tuple(payloads),
-        failed_requests=tuple(failures),
-        interpretations=tuple(interpretations),
+                if scope is not None
+                else SeriesScope(provider_ids=("at_ehyd",), station_ids=(station,), product_ids=(str(product),))
+            ),
+            known_series=known_series,
+            interval=interval,
+            window=window,
+            fetch_window=fetch_window,
+            rendered=rendered_windows.get(product, ()),
+        )
+        for station in stations
+        for product in products
     )
+    return execute_planned_acquisition(AtEhydRequestPlanner(), needs, config, transport)
 
 
 def _request_target(
@@ -241,16 +221,3 @@ def _request_target(
     if len(matching) == 1:
         return matching[0]
     return SourceRequestTarget(station, str(product))
-
-
-def _origin(response: TransportResponse) -> SourceCallOrigin:
-    return SourceCallOrigin(
-        url=response.url,
-        request_parameters=response.request_parameters,
-        status_code=response.status_code,
-        retrieved_at=response.retrieved_at,
-        content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
-        source_path=UnknownOriginFact(),
-        query=UnknownOriginFact(),
-        attempts=response.attempts,
-    )

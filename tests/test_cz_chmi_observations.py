@@ -167,7 +167,7 @@ def test_real_driver_path_clips_and_returns_one_receipt_for_coalesced_daily_call
         transport=ReplayTransport([(retained_evidence_root / _DQ)]),
     )
     assert result.canonical_rows.height == 6
-    assert len(result.receipts.entries) == 3
+    assert len(result.receipts.entries) == 1
     stage = result.canonical_rows.filter(pl.col("product_id") == "stage_daily_mean").sort("time")
     assert stage["value"][0] == pytest.approx(0.13)
 
@@ -198,16 +198,10 @@ def test_coalesced_receipts_preserve_exact_publisher_bytes_origin_order_and_opt_
     hourly = read_recording(retained_evidence_root / _HQ)
     assert [entry.content for entry in included.receipts.entries] == [
         daily.content,
-        daily.content,
-        daily.content,
-        hourly.content,
         hourly.content,
     ]
     assert [entry.origin.url for entry in included.receipts.entries] == [
         daily.request.url,
-        daily.request.url,
-        daily.request.url,
-        hourly.request.url,
         hourly.request.url,
     ]
     assert len({entry.origin.url for entry in included.receipts.entries}) == 2

@@ -139,6 +139,16 @@ def _make_fetch_window(start: WindowEndpoint, end: WindowEndpoint) -> FetchWindo
     return window
 
 
+def _clamp_fetch_window(received: FetchWindow, own: FetchWindow | None) -> FetchWindow:
+    if own is None:
+        return received
+    start = max(received.start, own.start)
+    end = min(received.end, own.end)
+    if start > end or (start == received.start and end == received.end):
+        return received
+    return _make_fetch_window(start, end)
+
+
 WindowGranularity = NewType("WindowGranularity", str)
 
 
@@ -278,6 +288,31 @@ class ObservationRequest:
     scope: SeriesScope | None = None
     known_series: tuple[SourceSeries, ...] = ()
     inventories: tuple[InventorySnapshot, ...] = ()
+    station_products: tuple[tuple[str, ProductId], ...] | None = None
+
+    def __post_init__(self) -> None:
+        if self.station_products is None:
+            return
+        if not self.station_products:
+            raise ValueError("station_products cannot be empty when supplied")
+        allowed_stations = set(self.stations)
+        allowed_products = set(self.products)
+        seen: set[tuple[str, ProductId]] = set()
+        for station, product in self.station_products:
+            if station not in allowed_stations:
+                raise ValueError(f"station_products references unknown station {station!r}")
+            if product not in allowed_products:
+                raise ValueError(f"station_products references unknown product {product!r}")
+            if (station, product) in seen:
+                raise ValueError("station_products cannot contain duplicate station-product pairs")
+            seen.add((station, product))
+
+    @property
+    def pairs(self) -> tuple[tuple[str, ProductId], ...]:
+        """Requested ``(station, product)`` consumer pairs in request order."""
+        if self.station_products is not None:
+            return self.station_products
+        return tuple((station, product) for station in self.stations for product in self.products)
 
 
 @dataclass(frozen=True, slots=True)
@@ -564,6 +599,7 @@ class SourceAcquisition(WithIssues[tuple[Payload, ...]]):
     calls: tuple[SourceCallOrigin, ...] = ()
     failed_requests: tuple[FailedSourceRequest, ...] = ()
     interpretations: tuple[InterpretedPayload, ...] = ()
+    call_station_products: tuple[tuple[str, tuple[tuple[str, ProductId], ...]], ...] = ()
 
 
 type Rows = pl.DataFrame

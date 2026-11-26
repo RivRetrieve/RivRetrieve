@@ -11,8 +11,8 @@ from typing import cast
 import polars as pl
 
 from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema, WithIssues
-from rivretrieve._internal.issues import FatalContractError
-from rivretrieve._internal.primitives import ProductId
+from rivretrieve._internal.issues import FatalContractError, Issue
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import (
     NATIVE_SCHEMA,
     SeriesMapping,
@@ -20,7 +20,14 @@ from rivretrieve._internal.provider_series import (
     parse_mapped_series,
 )
 from rivretrieve._internal.providers.pe_senamhi.series import SenamhiSourceCoordinates, series_mappings
-from rivretrieve._internal.source_series import ParsedSeries, SeriesScope, stable_id
+from rivretrieve._internal.source_series import (
+    OutcomeStatus,
+    ParsedSeries,
+    RetrievalOutcome,
+    SeriesScope,
+    SeriesWindow,
+    stable_id,
+)
 
 
 def decode_response(
@@ -228,6 +235,81 @@ def parse_group(
     station = next(iter(stations))
     data, reason = decode_response(payload.content, coordinate, station)
     return interpret_decoded_group(payload, pair_payloads, data if reason is None else None, provider_config)
+
+
+def interpret_planned_group(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    provider_config: ProviderConfig,
+) -> dict[tuple[str, ProductId], ParsedSeries]:
+    """Decode one planned SENAMHI response once, keeping failed-envelope outcomes per pair."""
+    if not pair_payloads:
+        raise FatalContractError("SENAMHI group parse requires at least one pair payload")
+    stations = {station for station, _ in pair_payloads}
+    if len(stations) != 1:
+        raise FatalContractError("SENAMHI payload requires one station and selected products")
+    coordinate = payload.source_coordinates.value
+    if not isinstance(coordinate, SenamhiSourceCoordinates):
+        raise FatalContractError("SENAMHI payload requires source coordinates")
+    station = next(iter(stations))
+    data, reason = decode_response(payload.content, coordinate, station)
+    if reason is None:
+        try:
+            return interpret_decoded_group(payload, pair_payloads, data, provider_config)
+        finally:
+            del data
+    results: dict[tuple[str, ProductId], ParsedSeries] = {}
+    empty_rows = pl.DataFrame(schema=RowsSchema.polars_schema)
+    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+    for key, pair_payload in pair_payloads.items():
+        st, product = key
+        product_cfg = provider_config.products.get(product)
+        route = product_cfg.coordinates.value if product_cfg is not None else None
+        if not isinstance(route, SenamhiSourceCoordinates):
+            raise FatalContractError("SENAMHI product requires source coordinates")
+        if pair_payload.station_products != ((st, product),):
+            raise FatalContractError("Pair payload station_products does not match its group key")
+        interval = SeriesWindow(
+            start=datetime.fromisoformat(pair_payload.fetch_window.start.isoformat()),
+            end=datetime.fromisoformat(pair_payload.fetch_window.end.isoformat()),
+        )
+        definitions = tuple(
+            mapping.source_series("pe_senamhi", st, product)
+            for mapping in series_mappings(route.subsystem, route.resolution, route.variable, route.unit).values()
+        )
+        outcomes: list[RetrievalOutcome] = []
+        issues: list[Issue] = []
+        for definition in definitions:
+            outcome = RetrievalOutcome(
+                outcome_id=stable_id(payload.acquisition_id, definition.series_id, "failed"),
+                series_id=definition.series_id,
+                station_id=st,
+                product_id=definition.product_id,
+                window=interval,
+                status=OutcomeStatus.FAILED,
+                facts_ids=tuple(fact.facts_id for fact in definition.facts),
+                reason=reason,
+                retrieved_at=retrieved,
+                calls=(payload.acquisition_id,),
+            )
+            outcomes.append(outcome)
+            issues.append(
+                Issue(
+                    severity="error",
+                    code="source.response_failed",
+                    message=reason,
+                    provider_id=ProviderId("pe_senamhi"),
+                    details={
+                        "station_id": st,
+                        "product_id": definition.product_id,
+                        "series_id": definition.series_id,
+                        "outcome_id": outcome.outcome_id,
+                        "window": interval.model_dump(mode="json"),
+                    },
+                )
+            )
+        results[key] = ParsedSeries(empty_rows, definitions, (), tuple(outcomes), tuple(issues))
+    return results
 
 
 def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:

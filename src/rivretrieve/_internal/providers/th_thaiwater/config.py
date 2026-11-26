@@ -26,6 +26,11 @@ from rivretrieve._internal.provider_series import SeriesMapping
 
 
 @dataclass(frozen=True, slots=True)
+class ThThaiWaterGraphRoute:
+    """The one source route that co-publishes both configured products."""
+
+
+@dataclass(frozen=True, slots=True)
 class ThThaiWaterSourceCoordinates:
     native_field: Literal["discharge", "value"]
 

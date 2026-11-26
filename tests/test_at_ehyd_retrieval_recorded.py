@@ -25,12 +25,11 @@ from rivretrieve._internal.engine import (
 )
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.at_ehyd.config import (
-    SHARED_ACQUISITION_PRODUCTS,
     AtEhydInfoCoordinates,
     config,
     window_declarations,
 )
-from rivretrieve._internal.providers.at_ehyd.fetch import fetch, resolve_messstellen_info_files
+from rivretrieve._internal.providers.at_ehyd.fetch import AtEhydRequestPlanner, fetch, resolve_messstellen_info_files
 from rivretrieve._internal.providers.at_ehyd.parse import parse, parse_group
 from rivretrieve._internal.source_series import InventoryCompleteness, OutcomeStatus, admission
 from rivretrieve._internal.store import StoreRoot
@@ -44,7 +43,7 @@ _SCOPE = "maintenance/observations/at_ehyd/retrieval"
 class _AtEhydStages:
     config: ProviderConfig = config()
     window_declarations: ProductWindowDeclarations = window_declarations()
-    shared_acquisition_products: tuple[frozenset[ProductId], ...] = SHARED_ACQUISITION_PRODUCTS
+    request_planner: AtEhydRequestPlanner = AtEhydRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
     parse_group = staticmethod(parse_group)

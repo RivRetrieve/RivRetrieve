@@ -82,7 +82,7 @@ def test_public_fetch_preserves_provider_acquisition_boundaries(
         result.data.sort(["station_id", "product_id", "time", "time_zone", "value"], maintain_order=True)
     )
     assert set(result.data["product_id"]) == set(rr.products(provider))
-    expected_calls = 1 if provider == "lt_lhmt" else 2
+    expected_calls = 1
     assert len(replay.requests) == expected_calls
     assert len(result.receipts.entries) == expected_calls
     receipt = result.receipts.entries[0]
@@ -141,11 +141,11 @@ def test_thaiwater_null_rows_do_not_establish_complete_inventory_for_reuse(
     assert result.data["value"].is_null().all()
     assert result.data["time_zone"].unique().to_list() == ["unknown"]
     assert set(result.data["station_id"]) == {"11688546"}
-    assert len(replay.requests) == 2
+    assert len(replay.requests) == 1
     assert all(entry.content == envelope.content for entry in result.receipts.entries)
     repeated = rr.fetch(selection, start="2026-06-10", end="2026-09-04", cache="reuse", on_issue="ignore")
     # Incomplete source inventory cannot satisfy an unrestricted all-series request.
-    assert len(replay.requests) == 4
+    assert len(replay.requests) == 2
     from polars.testing import assert_frame_equal
 
     assert_frame_equal(result.data, repeated.data)

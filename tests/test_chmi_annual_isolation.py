@@ -190,5 +190,5 @@ def test_hourly_shared_annual_file_preserves_siblings_around_failed_year(
     failures = [item for item in result.outcomes if item.status == "failed"]
     assert len(failures) == 2
     assert all(item.window.start.year == item.window.end.year == 2022 for item in failures)
-    # Public singleton composition may acquire each product separately; each retains its bytes.
-    assert len(result.receipts.entries) == 4
+    # Shared source request planning acquires each annual _HQ_ file once across stage and discharge.
+    assert len(result.receipts.entries) == 2

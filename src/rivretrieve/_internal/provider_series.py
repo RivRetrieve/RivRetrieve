@@ -368,7 +368,7 @@ def parse_mapped_group(
     Parameters
     ----------
     payload:
-        Shared response payload covering one station and one or more products.
+        Shared response payload covering one or more stations and products.
     pair_payloads:
         Per-pair narrowed payloads keyed by ``(station_id, product_id)``.
     config:
@@ -394,14 +394,11 @@ def parse_mapped_group(
     Raises
     ------
     FatalContractError
-        If group inputs violate single-station/pair contracts, mappings are
+        If group inputs violate pair contracts, mappings are
         incomplete, or ``native_parse_group`` returns an invalid mapping.
     """
     if not pair_payloads:
         raise FatalContractError("Mapped group parse requires at least one pair payload")
-    stations = {station for station, _ in pair_payloads}
-    if len(stations) != 1:
-        raise FatalContractError("Mapped payload must identify one station and at least one product")
 
     resolved_hash = response_hash if response_hash is not None else hashlib.sha256(payload.content).hexdigest()
     empty_rows = pl.DataFrame(schema=RowsSchema.polars_schema)

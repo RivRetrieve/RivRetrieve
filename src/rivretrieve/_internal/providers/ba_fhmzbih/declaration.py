@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from rivretrieve._internal.providers.ba_fhmzbih.config import config, window_declarations
-from rivretrieve._internal.providers.ba_fhmzbih.fetch import fetch
+from rivretrieve._internal.providers.ba_fhmzbih.fetch import BaFhmzbihRequestPlanner, fetch
 from rivretrieve._internal.providers.ba_fhmzbih.parse import parse
 from rivretrieve._internal.providers.registration import LiveStages, ProviderDeclaration
 
@@ -14,6 +14,7 @@ class _Stages:
     observation_source = "live"
     config = config()
     window_declarations = window_declarations()
+    request_planner = BaFhmzbihRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
 

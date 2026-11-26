@@ -18,6 +18,7 @@ import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.recordings import read_recording
+from rivretrieve._internal.request_planning import ObservationPlan
 from rivretrieve._internal.transport import TransportFailure, TransportFailureReason, TransportResponse
 
 STATION = "anyksciu-vms"
@@ -327,15 +328,27 @@ def test_shared_internal_parser_contract_errors_still_raise(transport, monkeypat
     original = declaration.observations.stages
     lookup = discovery._provider_lookup
 
+    class _BrokenParsePlanner:
+        def plan_lookups(self, needs, config):
+            return original.request_planner.plan_lookups(needs, config)
+
+        def plan_observations(self, needs, lookups, config):
+            assert {need.product for need in needs} == PRODUCTS
+            plan = original.request_planner.plan_observations(needs, lookups, config)
+            return ObservationPlan(
+                requests=tuple(replace(req, interpret_group=None) for req in plan.requests),
+                series=plan.series,
+                inventories=plan.inventories,
+                outcomes=plan.outcomes,
+                issues=plan.issues,
+                calls=plan.calls,
+                failed_requests=plan.failed_requests,
+            )
+
     class BrokenParse:
         config = original.config
         window_declarations = original.window_declarations
-        shared_acquisition_products = original.shared_acquisition_products
-
-        @staticmethod
-        def fetch(stations, products, *args, **kwargs):
-            assert set(products) == PRODUCTS
-            return original.fetch(stations, products, *args, **kwargs)
+        request_planner = _BrokenParsePlanner()
 
         @staticmethod
         def parse(payload, config):
