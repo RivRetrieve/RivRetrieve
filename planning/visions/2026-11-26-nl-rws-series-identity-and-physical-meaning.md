@@ -24,17 +24,25 @@ work on `port/nl-rws` — never merge into `main` before final review
 ## Outcome
 
 Implement runtime-safe series-identity and source-annotation modules under
-`src/rivretrieve/_internal/providers/nl_rws/`:
+`src/rivretrieve/_internal/providers/nl_rws/`, plus the minimal shared unit
+additions in `src/rivretrieve/_internal/source_series.py`:
 
+- `src/rivretrieve/_internal/source_series.py` — add `"m3/d": ("discharge", 1.0 / 86400.0)`
+  to `_UNIT_DIMENSIONS` and `"oC": "degC"` to `_UNIT_SPELLINGS` so all 10
+  admitted `nl_rws` products pass shared `admission()` explicitly.
 - `src/rivretrieve/_internal/providers/nl_rws/series.py` — runtime series
   identity (`SourceIdentity`, `SourceSeries`, `PhysicalFacts`), missing-value
   classification, and product/unit admission helpers shared cleanly with
   `catalogue_series.py` (never importing `generate_catalogue.py`, respecting
-  `tests/test_provider_architecture_contracts.py`).
+  `tests/test_provider_architecture_contracts.py`). Update
+  `catalogue_series.py`'s docstring to reflect that unestablished facts remain
+  `not_established` after Step 3 (`catalogue_series.py` keeps
+  `time_zone = not_established` since catalogue metadata carries no `Tijdstip`).
 - `src/rivretrieve/_internal/providers/nl_rws/annotations.py` — declared
   `AnnotationSchema` definition for `nl_rws` observation qualifiers.
 - Focused source-independent tests in `tests/test_nl_rws_series.py` (and/or
-  `tests/test_nl_rws_annotations.py`).
+  `tests/test_nl_rws_annotations.py`) plus unit-admission coverage for `m3/d`
+  and `oC`.
 
 Step 3 does not implement HTTP fetching/chunking (`fetch.py`), full driver
 parsing/integration (`parse.py` / `declaration.py`), or `BUILTIN_PROVIDER_IDS`
@@ -48,7 +56,10 @@ registration; those belong to Steps 4–5 (`#1051`–`#1052`).
   products (`Groepering = ""`, `WaardeBewerkingsMethode` in `{"NVT", "GEM24H"}`),
   identify each distinct measured stream in `WaarnemingenLijst` by
   **`variant = WaardeBepalingsMethode.Code`** (for example `"other:F216"`,
-  `"other:F230"`, `"other:F006"`, `"other:F007"`, `"NVT"`).
+  `"other:F230"`, `"other:F006"`, `"other:F007"`, `"NVT"`), with runtime
+  `SourceIdentity(namespace=f"nl_rws/{product_id}", published_id=variant, origin="response", ...)`.
+  Fail loudly with `FatalContractError` if `WaardeBepalingsMethode.Code` is
+  missing or empty on an admitted response series.
 - Never collapse parallel `WaardeBepalingsMethode` series (such as Lobith
   unchecked `other:F216` and checked `other:F230` 10-minute discharge series)
   into one series, and never fabricate daily means from `NVT` readings.
@@ -82,9 +93,10 @@ registration; those belong to Steps 4–5 (`#1051`–`#1052`).
   - Confirmed live across the 2020-03-29 spring DST transition
     (`12_obs_dst_lobith_2020_03_29_meting.json`): DDAPI 2.0 stamps observations
     with explicit fixed ISO-8601 `+01:00` offsets (no jump to `+02:00`).
-  - Derive/validate `time_zone` from the explicit offset on `Tijdstip` (e.g.
-    `known("+01:00", ...)` when all offsets match `+01:00`) and use
-    `ClippingAxis.SOURCE_TIMESTAMP`.
+  - Derive `time_zone` from the explicit ISO-8601 offset on each `Tijdstip`
+    (splitting `PhysicalFacts` segments if a response ever mixes offsets such
+    as `+01:00` and `+02:00`, rather than hardcoding or failing on valid
+    explicit offsets) and use `ClippingAxis.SOURCE_TIMESTAMP`.
 
 ### 3. Declared source annotations (`nl_rws.observation`)
 
@@ -112,13 +124,16 @@ registration; those belong to Steps 4–5 (`#1051`–`#1052`).
   correspondence: all 435 rows with `Kwaliteitswaardecode = "99"` carry
   `Waarde_Numeriek = 9.99999e+37` (`Waarde_Alfanumeriek = ".999999E+38"`), while
   all 210,827 `"00"` rows carry normal physical readings.
-- Classify any row with `Kwaliteitswaardecode == "99"` or
-  `Waarde_Numeriek == 9.99999e+37` (or `Waarde_Numeriek is None`) as a
-  **published missing slot**:
-  - Canonical observation value becomes `null` (never letting `9.99999e+37`
-    leak as a numeric measurement).
-  - Observation annotation table retains the slot with `measured = False`,
-    preserving `statuswaarde` and `kwaliteitswaardecode` (e.g. `"99"`).
+- Classify any row with `Kwaliteitswaardecode == "99"`,
+  `Waarde_Numeriek is None`, `abs(Waarde_Numeriek) >= 1e37`, or
+  `Waarde_Alfanumeriek == ".999999E+38"` as a **published null observation**:
+  - Emit `value = None` in the canonical observation table (never letting
+    `9.99999e+37` leak as a numeric measurement).
+  - Link its row in the `nl_rws.observation` annotation table with
+    `measured = True` and `measurement_index = <row_idx>` (matching
+    `source_annotations.py`'s join contract and `au_bom/parse.py`) so
+    `result.to_polars(annotations=True)` attaches `statuswaarde` and
+    `kwaliteitswaardecode = "99"` directly onto the published `null` row.
 - Never drop missing-value rows silently, and never treat valid `0.0` or
   negative readings (such as low/negative coastal or polder `WATHTE` in `cm`
   or `0.0 °C` water temperature) as missing.
@@ -129,7 +144,9 @@ registration; those belong to Steps 4–5 (`#1051`–`#1052`).
 
 ## Evidence of completion
 
-1. `src/rivretrieve/_internal/providers/nl_rws/series.py` and
+1. `src/rivretrieve/_internal/source_series.py` updated with `"m3/d"` in
+   `_UNIT_DIMENSIONS` and `"oC"` in `_UNIT_SPELLINGS`, and
+   `src/rivretrieve/_internal/providers/nl_rws/series.py` plus
    `src/rivretrieve/_internal/providers/nl_rws/annotations.py` implemented on
    `port/nl-rws` (with `catalogue_series.py` sharing `PRODUCT_DEFINITIONS`
    cleanly and no runtime import of `generate_catalogue.py`).
@@ -141,11 +158,13 @@ registration; those belong to Steps 4–5 (`#1051`–`#1052`).
      `other:F006` `GEM24H`) resolve to distinct `SourceSeries` identities with
      `variant = WaardeBepalingsMethode.Code`.
    - `Kwaliteitswaardecode == "99"` and `9.99999e+37` classify as published
-     missing slots (`null` value + `measured = False` annotation slot), while
-     `0.0` and negative stage/temperature values remain measured.
+     null observations (`value = None`, linked in `nl_rws.observation` with
+     `measured = True` and `measurement_index` set so annotations join cleanly),
+     while `0.0` and negative stage/temperature values remain numeric.
    - `nl_rws.observation` `AnnotationSchema` validates cleanly with exactly
      `statuswaarde` and `kwaliteitswaardecode` and valid official `reference_url`s.
-   - Fixed `+01:00` offset parsing and `ClippingAxis.SOURCE_TIMESTAMP`.
+   - Explicit offset parsing (fixed `+01:00` and offset-segment splitting if
+     mixed offsets appear) and `ClippingAxis.SOURCE_TIMESTAMP`.
 3. `ruff format --check`, `ruff check`, `ty check src`, and affected tests
    (including `tests/test_nl_rws_*.py` and `tests/test_provider_architecture_contracts.py`)
    pass on `port/nl-rws`.
