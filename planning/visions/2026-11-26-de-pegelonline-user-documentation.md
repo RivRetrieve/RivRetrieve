@@ -78,10 +78,13 @@ word "variant" in prose next to `TRM`/`TRM_WT` in a way that implies that
 column applies to them. Describe them as their own products, not a
 `variant` of `W`/`WT`, with that one-sentence mechanism as the reason. Give
 each its own table row, with its native shortname (`TRM`, `TRM_WT`) in the
-`Source field` column, not the `variant` column. This mirrors established
-precedent elsewhere in the codebase for the same underlying reason
-(`ba_fhmzbih`, `th_thaiwater`, `fi_syke`'s `_reported`-suffixed products:
-temporal structure is part of a product's identity, not a `variant` axis).
+`Source field` column, not the `variant` column. `ba_fhmzbih`'s own page is
+useful precedent for a related point: it fills a column that doesn't
+obviously apply (`Frequency`/`Statistic`) with `Unknown` rather than
+dropping it, instead of inventing a new table shape — the same restraint
+applies here. (`th_thaiwater`/`fi_syke`'s `_reported`-suffixed products are
+a different, unrelated naming convention; they don't illustrate this
+specific TRM/`variant` distinction and aren't a precedent to look for here.)
 
 ## What else the page needs to explain
 
