@@ -122,6 +122,17 @@ _CATALOGUE_SOURCE_FACTS = {
 # (STATION_METADATA_FIELDS below), not a canonical catalogue carrier.
 _VERTICAL_DATUM_REGIME_FACT = "source.station.pegelonline_vertical_datum_regime"
 
+# Supports series.py's per-series SourceIdentity/PhysicalFacts evidence
+# references (TIMESERIES_EVIDENCE/GAUGE_ZERO_EVIDENCE/EQUIDISTANCE_EVIDENCE),
+# which source_series.json (step 5's describe_station_products) cites
+# directly. Not canonical catalogue-table carriers, so these are declared and
+# bound here without a complete_transformed_fact_universe transformation.
+_SERIES_EVIDENCE_FACTS = (
+    "source.station.timeseries_entry",
+    "source.station.gauge_zero",
+    "source.station.timeseries_equidistance",
+)
+
 
 def build_acquisition_provenance(
     *,
@@ -156,7 +167,7 @@ def build_acquisition_provenance(
     # `station_product`); bind each exactly once here, and let each carrier's
     # transformation below reference it again as an external input.
     source_facts = tuple(dict.fromkeys(fact for group in _CATALOGUE_SOURCE_FACTS.values() for fact in group))
-    fact_universe = (*source_facts, _VERTICAL_DATUM_REGIME_FACT, license_fact)
+    fact_universe = (*source_facts, _VERTICAL_DATUM_REGIME_FACT, *_SERIES_EVIDENCE_FACTS, license_fact)
     source_bindings = (
         FactBinding(
             fact_group=stations_acquisition_id,
@@ -167,6 +178,12 @@ def build_acquisition_provenance(
         FactBinding(
             fact_group=f"{stations_acquisition_id}-vertical-datum-regime",
             facts=(_VERTICAL_DATUM_REGIME_FACT,),
+            source_id="de_pegelonline",
+            acquisition_id=stations_acquisition_id,
+        ),
+        FactBinding(
+            fact_group=f"{stations_acquisition_id}-series-evidence",
+            facts=_SERIES_EVIDENCE_FACTS,
             source_id="de_pegelonline",
             acquisition_id=stations_acquisition_id,
         ),
@@ -259,6 +276,7 @@ def build_acquisition_provenance(
 
 
 CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
     ("src/rivretrieve/_internal/providers/de_pegelonline/origins.py", "build_acquisition_provenance"),
     ("src/rivretrieve/_internal/providers/de_pegelonline/origins.py", "STATION_METADATA_FIELDS"),
     ("src/rivretrieve/_internal/providers/de_pegelonline/origins.py", "STATION_METADATA_NOTICE"),

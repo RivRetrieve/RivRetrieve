@@ -1,5 +1,12 @@
 """Acquire one PEGELONLINE REST API v2 `measurements.json` window per station x product.
 
+Request construction and response-status handling only: response-body decoding
+lives in `parse.py` (`_parse_records`, `_failed_parsed`, `_numeric_or_none`,
+`_TRM_PRODUCTS`), split out to match every other live-`fetch`/`parse` provider
+in this codebase. `_acquire` below imports `parse_records` from `parse.py` for
+its own inline fetch-time interpretation, matching
+`ch_foen/official_fetch.py` importing from `ch_foen/official_parse.py`.
+
 Each of the five products (`W`, `Q`, `WT`, `TRM`, `TRM_WT`) lives at its own
 independent `/stations/{uuid}/{shortname}/measurements.json` route; there is
 nothing to decode jointly (unlike `lt_lhmt`'s two co-published products) and
@@ -38,16 +45,11 @@ meaning, which the engine maps to `OutcomeStatus.FAILED`.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from functools import partial
-from math import isfinite
-from typing import cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo
-
-import polars as pl
 
 from rivretrieve._internal.authentication import CredentialExchangeError
 from rivretrieve._internal.engine import (
@@ -56,7 +58,6 @@ from rivretrieve._internal.engine import (
     Payload,
     ProviderConfig,
     RenderedWindow,
-    RowsSchema,
     SourceAcquisition,
     SourceCallOrigin,
     SourceCoordinates,
@@ -65,38 +66,15 @@ from rivretrieve._internal.engine import (
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
-from rivretrieve._internal.providers.de_pegelonline.annotations import DE_PEGELONLINE_TRM_SCHEMA
 from rivretrieve._internal.providers.de_pegelonline.config import PegelOnlineTimeseries
+from rivretrieve._internal.providers.de_pegelonline.parse import parse_records
 from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget, attempt_request
-from rivretrieve._internal.source_annotations import (
-    OBSERVATION_STRUCTURAL_SCHEMA,
-    AnnotationBundle,
-    ObservationAnnotationTable,
-)
-from rivretrieve._internal.source_series import (
-    InventoryCompleteness,
-    InventorySnapshot,
-    OutcomeStatus,
-    ParsedSeries,
-    RetrievalOutcome,
-    SeriesScope,
-    SeriesWindow,
-    SourceSeries,
-    admission,
-    stable_id,
-)
+from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries
 from rivretrieve._internal.transport import HttpMethod, ReplaySafety, Transport, TransportFailure, TransportRequest
 from rivretrieve._internal.window_acquisition import WindowAcquisition, acquire_window
 
 _BASE_URL = "https://www.pegelonline.wsv.de/webservices/rest-api/v2"
 _ZONE = ZoneInfo("Europe/Berlin")
-_VALID_OFFSETS = {timedelta(hours=1): "+01:00", timedelta(hours=2): "+02:00"}
-
-# TRM and TRM_WT (and only these two) additionally publish a per-observation
-# "difference" field (change from the previous day's scheduled reading),
-# matching step 3's DE_PEGELONLINE_TRM_SCHEMA annotation (live-verified).
-_TRM_PRODUCTS = frozenset({"TRM", "TRM_WT"})
 
 # Overflow subdivision is never exercised: PEGELONLINE documents no row cap
 # and fetch() always reports WindowResponseMeaning.COMPLETE. acquire_window
@@ -213,10 +191,7 @@ def _acquire(
         known_series,
         attempt_traces=response.attempt_traces,
     )
-    try:
-        parsed = _parse_records(payload, station, product)
-    except UnsupportedSourceStructureError as error:
-        parsed = _failed_parsed(payload, station, product, str(error))
+    parsed = parse_records(payload, station, product)
     return WindowAcquisition(
         SourceAcquisition(
             (payload,),
@@ -234,184 +209,3 @@ def _local_offset_isoformat(endpoint: WindowEndpoint) -> str:
     """
     utc_instant = datetime.fromisoformat(endpoint.isoformat()).replace(tzinfo=UTC)
     return utc_instant.astimezone(_ZONE).isoformat()
-
-
-def _numeric_or_none(entry: dict[str, object], key: str) -> float | None:
-    if key not in entry:
-        raise UnsupportedSourceStructureError(f"de_pegelonline observation is missing required field {key!r}")
-    value = entry.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        raise UnsupportedSourceStructureError(f"de_pegelonline observation field {key!r} must be numeric or null")
-    try:
-        numeric = float(value)
-    except OverflowError as error:
-        raise UnsupportedSourceStructureError(
-            f"de_pegelonline observation field {key!r} must be numeric or null"
-        ) from error
-    if not isfinite(numeric):
-        raise UnsupportedSourceStructureError(f"de_pegelonline observation field {key!r} must be numeric or null")
-    return numeric
-
-
-def _parse_records(payload: Payload, station: str, product: ProductId) -> ParsedSeries:
-    """Interpret one station/product's pre-decoded `measurements.json` response."""
-    try:
-        document = json.loads(payload.content)
-    except (ValueError, UnicodeDecodeError) as error:
-        raise UnsupportedSourceStructureError("de_pegelonline response is not valid JSON") from error
-    if not isinstance(document, list):
-        raise UnsupportedSourceStructureError("de_pegelonline response is not a JSON array")
-    records = cast("list[object]", document)
-    del document
-
-    matches = tuple(
-        item for item in payload.known_series if item.station_id == station and item.product_id == str(product)
-    )
-    if len(matches) > 1:
-        raise FatalContractError("de_pegelonline payload matches more than one known source series")
-
-    window = SeriesWindow(
-        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
-    )
-    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
-
-    if not matches:
-        outcome = RetrievalOutcome(
-            outcome_id=stable_id(payload.acquisition_id, "unresolved"),
-            series_id=None,
-            station_id=station,
-            product_id=product,
-            window=window,
-            status=OutcomeStatus.UNRESOLVED,
-            reason="No established source-series identity for this station and product",
-            retrieved_at=retrieved,
-        )
-        return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), (outcome,))
-
-    definition = matches[0]
-    if len(definition.facts) != 1:
-        raise FatalContractError("de_pegelonline source series requires exactly one physical-fact segment")
-    fact = definition.facts[0]
-    decision = admission(fact)
-
-    track_difference = str(product) in _TRM_PRODUCTS
-    rows: list[dict[str, object]] = []
-    ann_rows: list[dict[str, object]] = []
-    if decision.status == "supported":
-        for item in records:
-            if not isinstance(item, dict):
-                raise UnsupportedSourceStructureError("de_pegelonline observation must be an object")
-            entry = cast("dict[str, object]", item)
-            label = entry.get("timestamp")
-            if not isinstance(label, str):
-                raise UnsupportedSourceStructureError("de_pegelonline observation requires a string timestamp")
-            try:
-                timestamp = datetime.fromisoformat(label)
-            except ValueError as error:
-                raise UnsupportedSourceStructureError("de_pegelonline observation timestamp is invalid") from error
-            offset = timestamp.utcoffset() if timestamp.tzinfo is not None else None
-            time_zone = _VALID_OFFSETS.get(offset) if offset is not None else None
-            if time_zone is None:
-                raise UnsupportedSourceStructureError(
-                    "de_pegelonline observation timestamp must carry the Europe/Berlin +01:00 or +02:00 offset"
-                )
-            native_time = timestamp.replace(tzinfo=None)
-            value = _numeric_or_none(entry, "value")
-            rows.append(
-                {
-                    "station_id": station,
-                    "product_id": str(product),
-                    "time": native_time,
-                    "value": value,
-                    "time_zone": time_zone,
-                    "series_id": definition.series_id,
-                    "facts_id": fact.facts_id,
-                    "source_unit": fact.source_unit.value,
-                }
-            )
-            if track_difference:
-                difference = _numeric_or_none(entry, "difference")
-                ann_rows.append(
-                    {
-                        "series_id": definition.series_id,
-                        "facts_id": fact.facts_id,
-                        "station_id": station,
-                        "product_id": str(product),
-                        "time": native_time,
-                        "time_zone": time_zone,
-                        "measured": True,
-                        "difference": difference,
-                    }
-                )
-    status = (
-        OutcomeStatus.UNSUPPORTED
-        if decision.status != "supported"
-        else OutcomeStatus.SUCCESS
-        if rows
-        else OutcomeStatus.EMPTY
-    )
-    outcome = RetrievalOutcome(
-        outcome_id=stable_id(payload.acquisition_id, definition.series_id, fact.facts_id),
-        series_id=definition.series_id,
-        station_id=station,
-        product_id=product,
-        window=window,
-        facts_ids=(fact.facts_id,),
-        status=status,
-        reason=decision.reason if status is OutcomeStatus.UNSUPPORTED else None,
-        retrieved_at=retrieved,
-    )
-    evidence = f"source-call:{payload.acquisition_id}"
-    inventory = InventorySnapshot(
-        snapshot_id=stable_id(payload.acquisition_id, "inventory"),
-        scope=payload.scope
-        or SeriesScope(provider_ids=("de_pegelonline",), station_ids=(station,), product_ids=(str(product),)),
-        members=(definition.series_id,),
-        completeness=InventoryCompleteness.INCOMPLETE,
-        access=str(product),
-        origin="response",
-        acquired_at=retrieved,
-        window=window,
-        evidence=(evidence,),
-        reason="Returned series establishes this response, not an exhaustive historical inventory",
-    )
-    if ann_rows:
-        ann_frame = pl.DataFrame(
-            ann_rows,
-            schema={**OBSERVATION_STRUCTURAL_SCHEMA, **DE_PEGELONLINE_TRM_SCHEMA.polars_schema()},
-        )
-        ann_table = ObservationAnnotationTable.from_rows(
-            schema=DE_PEGELONLINE_TRM_SCHEMA,
-            rows=ann_frame,
-            measurement_indices=list(range(len(rows))),
-        )
-        annotations = AnnotationBundle(observation_tables={DE_PEGELONLINE_TRM_SCHEMA.schema_id: ann_table})
-    else:
-        annotations = AnnotationBundle.empty()
-    return ParsedSeries(
-        pl.DataFrame(rows, schema=RowsSchema.polars_schema),
-        (definition,),
-        (inventory,),
-        (outcome,),
-        annotations=annotations,
-    )
-
-
-def _failed_parsed(payload: Payload, station: str, product: ProductId, reason: str) -> ParsedSeries:
-    window = SeriesWindow(
-        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
-    )
-    outcome = RetrievalOutcome(
-        outcome_id=stable_id(payload.acquisition_id, "unsupported"),
-        series_id=None,
-        station_id=station,
-        product_id=product,
-        window=window,
-        status=OutcomeStatus.FAILED,
-        reason=reason,
-    )
-    return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), (outcome,))

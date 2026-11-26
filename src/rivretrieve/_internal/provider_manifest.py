@@ -11,6 +11,7 @@ BUILTIN_PROVIDER_IDS = (
     "cl_dga",
     "co_ideam",
     "cz_chmi",
+    "de_pegelonline",
     "dk_vanda",
     "fi_syke",
     "fr_hubeau",
