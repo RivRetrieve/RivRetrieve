@@ -54,7 +54,8 @@ agencies; #875 inferred one. The agency boundary below makes that question moot.
 
 Settled: do not contact the EPA. The published CC BY 4.0 statement suffices.
 Meet the pass-on condition by linking the disclaimer and FAQ from the provider
-page and the catalogue attribution.
+page and from the catalogue's provenance or attribution metadata, as other
+providers do.
 
 ## Station scope
 
@@ -65,18 +66,27 @@ page and the catalogue attribution.
   stations run by other agencies, contradicting #875. The recheck found
   `26243`, `06036`, `38010` and `18027` (OPW) and `30111` (Teagasc, owned by
   Mayo County Council). Exclude them and record the exclusion. Only 49
-  non-EPA stations were sampled, so others may exist.
+  non-EPA stations were sampled, so check every non-EPA manifest during Step 1
+  to make the list of exclusions complete.
 - **Hosted files.** Determine availability from manifest `.zip` links, not from
-  `RESPONSIBLE_BODY` or the free-text `DATA_AVAILABLE` field.
-- **Shared with OPW.** The EPA-run Dún Laoghaire-Rathdown gauges
-  `10047`–`10050` are also retained by the `ie_opw` port. Include them in
-  `ie_epa`; each provider's documentation should point to the other. Step 2
-  should check whether `09045`, also retained by `ie_opw`, appears on HydroNet.
+  `RESPONSIBLE_BODY` or the free-text `DATA_AVAILABLE` field. A station is in
+  scope only when it hosts at least one in-scope `S` or `Q` file (see Products).
+  Spot-only stations and stations without files have nothing to retrieve and
+  are not included.
+- **Shared with OPW.** The `ie_opw` port is not yet on `main`; see
+  [#354](https://github.com/RivRetrieve/RivRetrieve/issues/354), branch
+  `port/ie-opw` and `docs/providers/ie_opw.md` there. It retains five
+  EPA-numbered gauges: `09045` and the Dún Laoghaire-Rathdown gauges
+  `10047`–`10050`. HydroNet lists all five as EPA-responsible. Include them in
+  `ie_epa` when they host in-scope files. Each provider's documentation should
+  point to the other.
 - **Water bodies.** Include rivers and streams. Exclude lakes and reservoirs
-  (42 EPA stations, `object_type` containing `Lake or Reservoir`) and springs
-  (3 EPA stations), consistent with `ie_opw`, `at_ehyd`, `co_ideam` and other
-  European ports. Groundwater, NI stations and other agencies' redirect entries
-  are out of scope.
+  (42 EPA stations, `object_type` `General;Surface water;Lake or Reservoir`) and
+  springs (`General;Surface water;Spring`: `DUB/14100`, `ATH/26332` and
+  `KIK/16025`). Lake and reservoir exclusions follow `ie_opw`, `at_ehyd` and
+  `co_ideam`. Spring exclusions follow `at_ehyd` and the Slovenia port
+  ([#1033](https://github.com/RivRetrieve/RivRetrieve/issues/1033)).
+  Groundwater, NI stations and other agencies' redirect entries are out of scope.
 - **Station status.** Include inactive and suspended stations that host files.
 
 Record the lake, reservoir and spring exclusion in the private research record
@@ -104,9 +114,9 @@ spot gaugings briefly, as the `ie_opw` and `at_ehyd` pages do.
 Later Efforts own these questions:
 
 - **Step 2** establishes the exact station universe and file availability from
-  manifests. It also handles anomalies: an active station without rolling files,
-  level-only stations hosting `Q` files, stations without files, and the
-  classification of rivers, lakes and springs from `object_type`.
+  manifests, applying the classification above. It also handles anomalies: an
+  active station without rolling files and level-only stations hosting `Q`
+  files.
 - **Step 3** establishes relative versus absolute levels, historical datums,
   timestamps, DST and quality-code annotations.
 - **Step 4** chooses between full-history and rolling files and handles empty
@@ -125,7 +135,8 @@ process:
 - representative manifests and `.zip` files, including every boundary case named
   above
 
-Earlier local captures from the recheck were provisional and not archived.
+Captures from the 2026-11-27 recheck were local and provisional. Recapture
+originals through intake; do not archive those files.
 
 Record the settled decisions, the contradictions with #875 and the open scope
 questions. Post a safe public summary on #1101 and mark tracker
