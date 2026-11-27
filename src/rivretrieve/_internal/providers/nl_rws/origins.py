@@ -80,6 +80,21 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/nl_rws/catalogue_series.py", "describe_catalogue"),
 )
 
+NATIVE_TABLE_ACQUISITION_IDS: tuple[str, ...] = ("nl-rws-ophalen-catalogus-2026-11-25",)
+
+CATALOGUE_SUPPORTING_INPUTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "maintenance/catalogue/nl_rws/official/access/01_catalogus.json",
+        "source_capture",
+        ("source.station.ophalen_catalogus_locations", "source.station.etrs89_coordinates"),
+    ),
+    (
+        "maintenance/catalogue/nl_rws/official/access/01b_catalogus_extended.json",
+        "source_capture",
+        ("source.product.aquo_metadata_catalogue", "source.station_product.aquo_metadata_location_links"),
+    ),
+)
+
 _CATALOGUE_SOURCE_FACTS = {
     "station": (
         "source.station.ophalen_catalogus_locations",

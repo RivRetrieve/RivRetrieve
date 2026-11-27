@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -378,3 +379,77 @@ def test_fetch_isolates_station_failures_and_handles_http_204_no_match(
     assert res_empty.data.is_empty()
     assert len(res_empty.outcomes) == 1
     assert res_empty.outcomes[0].status is OutcomeStatus.NO_MATCH
+
+
+def test_fetch_reuses_cache_for_single_product_and_coacquired_pair(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+
+    # 1. Single-product cache reuse (stage_nap_nvt)
+    stage_transport = _RecordingTransport(
+        [
+            _waarnemingen(
+                [
+                    _series_entry(
+                        grootheid="WATHTE",
+                        eenheid="cm",
+                        hoedanigheid="NAP",
+                        wbw="NVT",
+                        wbm="other:F007",
+                        metingen=[
+                            _obs("2020-03-01T12:00:00.000+01:00", 1195.0, statuswaarde="Gecontroleerd", qcode="00")
+                        ],
+                    )
+                ]
+            )
+        ]
+    )
+    monkeypatch.setattr(discovery, "HttpClient", lambda: stage_transport)
+    stage_sel = rr.find(provider="nl_rws", station="lobith.bovenrijn.tolkamer", quantity="stage", vertical_datum="NAP")
+    first_stage = rr.fetch(
+        stage_sel, start="2020-03-01T00:00:00", end="2020-03-02T00:00:00", cache="reuse", on_issue="ignore"
+    )
+    reused_stage = rr.fetch(
+        stage_sel, start="2020-03-01T00:00:00", end="2020-03-02T00:00:00", cache="reuse", on_issue="ignore"
+    )
+    assert len(stage_transport.requests) == 1
+    assert reused_stage.data["value"].to_list() == pytest.approx([11.95])
+    assert reused_stage.data["series_id"].to_list() == first_stage.data["series_id"].to_list()
+    assert reused_stage.to_polars(annotations=True)["kwaliteitswaardecode"].to_list() == ["00"]
+
+    # 2. Co-acquired NVT + GEM24H cache reuse (discharge_m3s_nvt + discharge_m3s_gem24h)
+    joint_transport = _RecordingTransport(
+        {
+            ("lobith.bovenrijn.tolkamer", "m3/s"): _waarnemingen(
+                [
+                    _series_entry(
+                        grootheid="Q",
+                        eenheid="m3/s",
+                        hoedanigheid="NVT",
+                        wbw="NVT",
+                        wbm="other:F216",
+                        metingen=[_obs("2020-03-01T12:00:00.000+01:00", 4242.07, qcode="00")],
+                    ),
+                    _series_entry(
+                        grootheid="Q",
+                        eenheid="m3/s",
+                        hoedanigheid="NVT",
+                        wbw="GEM24H",
+                        wbm="other:F216",
+                        metingen=[_obs("2020-03-01T00:00:00.000+01:00", 4312.0, qcode="00")],
+                    ),
+                ]
+            ),
+            ("lobith.bovenrijn.tolkamer", "m3/d"): b"",
+        }
+    )
+    monkeypatch.setattr(discovery, "HttpClient", lambda: joint_transport)
+    q_sel = rr.find(provider="nl_rws", station="lobith.bovenrijn.tolkamer", quantity="discharge")
+    first_q = rr.fetch(q_sel, start="2020-03-01T00:00:00", end="2020-03-02T00:00:00", cache="reuse", on_issue="ignore")
+    calls_after_first = len(joint_transport.requests)
+    reused_q = rr.fetch(q_sel, start="2020-03-01T00:00:00", end="2020-03-02T00:00:00", cache="reuse", on_issue="ignore")
+    assert len(joint_transport.requests) == calls_after_first
+    assert reused_q.data.height == first_q.data.height == 2
+    assert sorted(reused_q.data["product_id"].to_list()) == ["discharge_m3s_gem24h", "discharge_m3s_nvt"]
+    assert reused_q.to_polars(annotations=True)["kwaliteitswaardecode"].to_list() == ["00", "00"]
