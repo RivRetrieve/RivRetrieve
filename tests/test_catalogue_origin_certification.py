@@ -1140,7 +1140,10 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
         ),
         pytest.param(
             "nl_rws",
-            marks=pytest.mark.governing("maintenance/catalogue/nl_rws/official"),
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/nl_rws/official",
+                "maintenance/catalogue/station_metadata/review.json",
+            ),
         ),
         pytest.param(
             "ch_foen",
