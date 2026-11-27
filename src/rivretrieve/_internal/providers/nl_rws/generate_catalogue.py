@@ -446,7 +446,7 @@ def read_catalogue_sources(
         ),
         (
             RecordingReference(
-                recording_id="nl-rws-catalogus-extended-2026-11-25",
+                recording_id="nl_rws_catalogus_extended",
                 repository_path=catalogus_rel,
                 source_url="https://ddapi20-waterwebservices.rijkswaterstaat.nl/METADATASERVICES/OphalenCatalogus",
                 retrieved_at=retrieved_at,
@@ -454,7 +454,7 @@ def read_catalogue_sources(
                 sha256="80db05e8f6fd3dbf5d2322e654b13a8e9e0c2b188e70a0731e37129559239919",
             ),
             RecordingReference(
-                recording_id="nl-rws-terms-receipts-2026-11-25",
+                recording_id="nl_rws_terms_receipt",
                 repository_path=receipts_rel,
                 source_url="https://www.rijkswaterstaat.nl/copyright",
                 retrieved_at=retrieved_at,
@@ -464,24 +464,24 @@ def read_catalogue_sources(
         ),
         acquisitions=(
             AcquisitionRecord(
-                acquisition_id="nl-rws-ophalen-catalogus-2026-11-25",
+                acquisition_id="nl_rws_catalogus_2026_11_25",
                 method="http_request",
                 instant_type="retrieval",
-                description="DDAPI 2.0 POST OphalenCatalogus extended metadata response",
+                description="Extended DDAPI 2.0 OphalenCatalogus snapshot (nl_rws-access-2026-11-25-v1)",
                 requested_from=(
                     "https://ddapi20-waterwebservices.rijkswaterstaat.nl/METADATASERVICES/OphalenCatalogus",
                 ),
                 retrieved_at_start=retrieved_at,
-                recording_ids=("nl-rws-catalogus-extended-2026-11-25",),
+                recording_ids=("nl_rws_catalogus_extended",),
             ),
             AcquisitionRecord(
-                acquisition_id="nl-rws-terms-2026-11-25",
+                acquisition_id="nl_rws_terms_2026_11_25",
                 method="http_request",
                 instant_type="retrieval",
-                description="Rijkswaterstaat open data copyright and data.overheid.nl CC0-1.0 / Public Domain Mark 1.0 terms",
+                description="Rijkswaterstaat open data licence (Public Domain Mark 1.0 / CC0 1.0) and recommended attribution",
                 requested_from=("https://www.rijkswaterstaat.nl/copyright",),
                 retrieved_at_start=retrieved_at,
-                recording_ids=("nl-rws-terms-receipts-2026-11-25",),
+                recording_ids=("nl_rws_terms_receipt",),
             ),
         ),
         source_bindings=(
@@ -494,26 +494,26 @@ def read_catalogue_sources(
                     "source.station_product.aquo_metadata_location_links",
                 ),
                 source_id="nl_rws",
-                acquisition_id="nl-rws-ophalen-catalogus-2026-11-25",
+                acquisition_id="nl_rws_catalogus_2026_11_25",
             ),
             FactBinding(
                 fact_group="nl_rws_terms_source",
                 facts=("source.provider.license", "source.provider.citation"),
                 source_id="nl_rws",
-                acquisition_id="nl-rws-terms-2026-11-25",
+                acquisition_id="nl_rws_terms_2026_11_25",
             ),
         ),
         statements=(
             SourceStatement(
                 kind="license",
                 exact_text="CC0-1.0",
-                recording_id="nl-rws-terms-receipts-2026-11-25",
+                recording_id="nl_rws_terms_receipt",
                 fact="source.provider.license",
             ),
             SourceStatement(
                 kind="citation",
                 exact_text="Bron: Rijkswaterstaat – Waterwebservices",
-                recording_id="nl-rws-terms-receipts-2026-11-25",
+                recording_id="nl_rws_terms_receipt",
                 fact="source.provider.citation",
             ),
         ),
