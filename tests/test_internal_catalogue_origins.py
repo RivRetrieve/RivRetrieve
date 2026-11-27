@@ -288,6 +288,7 @@ def test_origin_gate_retains_registered_and_deferred_providers() -> None:
             ProviderId("fr_hubeau"),
             ProviderId("fr_hydroportail"),
             ProviderId("lt_lhmt"),
+            ProviderId("nl_rws"),
             ProviderId("no_nve"),
             ProviderId("pe_senamhi"),
             ProviderId("pl_imgw"),

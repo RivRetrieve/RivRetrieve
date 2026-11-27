@@ -51,6 +51,7 @@ from rivretrieve._internal.providers.dk_vanda.origins import Utm32EtrsToWgs84Con
 from rivretrieve._internal.providers.fi_syke.origins import ConstantCrsConversion
 from rivretrieve._internal.providers.fr_hubeau.generate_catalogue import decode_availability
 from rivretrieve._internal.providers.fr_hubeau.origins import HydrometryCoordinateConversion
+from rivretrieve._internal.providers.nl_rws.origins import Etrs89CrsConversion
 from rivretrieve._internal.providers.pe_senamhi.origins import CoordinateConversion
 from rivretrieve._internal.providers.th_thaiwater.generate_catalogue import GraphAvailabilityEvidence
 from rivretrieve._internal.providers.za_dws.origins import UnsignedDmsConversion
@@ -165,6 +166,8 @@ def _adapter(
         build = partial(
             build, associations=sources.associations, checked_on=sources.checked_on, provenance=sources.provenance
         )
+    if provider == "nl_rws":
+        native_path = retained_evidence_root / "maintenance/catalogue/nl_rws/official/native.parquet"
     if provider == "br_ana":
         from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence, read_capture_record
         from rivretrieve._internal.providers.br_ana.origins import (
@@ -393,6 +396,7 @@ DECLARATIONS = {
         "fi_syke",
         "fr_hydroportail",
         "lt_lhmt",
+        "nl_rws",
         "no_nve",
         "pe_senamhi",
         "pl_imgw",
@@ -422,7 +426,18 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
     paths = (
         [f"maintenance/catalogue/{provider}/official"]
         if provider
-        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "cl_dga", "co_ideam", "dk_vanda", "fi_syke", "pe_senamhi"}
+        in {
+            "ar_ina",
+            "at_ehyd",
+            "au_bom",
+            "ch_foen",
+            "cl_dga",
+            "co_ideam",
+            "dk_vanda",
+            "fi_syke",
+            "nl_rws",
+            "pe_senamhi",
+        }
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
     if provider in {"au_bom", "fi_syke"}:
@@ -465,6 +480,7 @@ def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> Pro
             "co_ideam",
             "dk_vanda",
             "fi_syke",
+            "nl_rws",
             "pe_senamhi",
             "usgs_nwis",
         }
@@ -626,6 +642,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "latitude": field("coordinates", StructMemberConversion()),
             "longitude": field("coordinates", StructMemberConversion()),
             "crs": documented("https://api.meteo.lt/"),
+        },
+        (ProviderId("nl_rws"), "stations"): {
+            "provider_id": authored("nl_rws"),
+            "station_id": field("Code"),
+            "latitude": field("Lat"),
+            "longitude": field("Lon"),
+            "crs": field("Coordinatenstelsel", Etrs89CrsConversion()),
         },
         (ProviderId("no_nve"), "stations"): {
             "provider_id": authored("no_nve"),
@@ -955,6 +978,10 @@ def _assert_reviewed_crs(
     elif adapter.provider_id == ProviderId("fi_syke"):
         assert isinstance(origin, Field)
         assert str(origin.native_column) == "KoordErTmIta"
+        assert stations["crs"].unique().to_list() == ["EPSG:4258"]
+    elif adapter.provider_id == ProviderId("nl_rws"):
+        assert isinstance(origin, Field)
+        assert str(origin.native_column) == "Coordinatenstelsel"
         assert stations["crs"].unique().to_list() == ["EPSG:4258"]
     else:
         assert adapter.provider_id == ProviderId("usgs_nwis")

@@ -239,6 +239,7 @@ ORIGIN_GATE_ENROLLED_PROVIDERS = frozenset(
         ProviderId("fr_hubeau"),
         ProviderId("fr_hydroportail"),
         ProviderId("lt_lhmt"),
+        ProviderId("nl_rws"),
         ProviderId("no_nve"),
         ProviderId("pe_senamhi"),
         ProviderId("pl_imgw"),
