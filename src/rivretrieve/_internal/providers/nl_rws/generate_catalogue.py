@@ -410,11 +410,6 @@ def read_catalogue_sources(
         verify_retained_input_files(input_receipt, evidence_root)
         selected = {item.consumer_path: item for item in input_receipt.inputs}
 
-    catalogus_bytes = (evidence_root / catalogus_rel).read_bytes()
-    catalogus_doc = json.loads(catalogus_bytes)
-    retrieved_at = datetime(2026, 11, 25, 13, 44, 26, tzinfo=UTC)
-    native, associations = station_native_table(catalogus_doc, retrieved_at=RetrievedAt(retrieved_at))
-
     native_member = selected.get(native_rel)
     if native_member is not None:
         retained_native = read_native_table(
@@ -430,6 +425,13 @@ def read_catalogue_sources(
         native_rev = "983ebb162a4fa6064ec8bee56427fb7d4e0161d3"
         native_sha = "b9ea91a1285fdc1476592c75e4636f3bbb0ec5b215dc3c715155815ebf92dc0c"
         native_size = (evidence_root / native_rel).stat().st_size
+
+    catalogus_bytes = (evidence_root / catalogus_rel).read_bytes()
+    catalogus_doc = json.loads(catalogus_bytes)
+    retrieved_at = retained_native.data["retrieved_at"][0]
+    if not isinstance(retrieved_at, datetime):
+        retrieved_at = datetime(2026, 11, 25, 13, 44, 26, tzinfo=UTC)
+    native, associations = station_native_table(catalogus_doc, retrieved_at=RetrievedAt(retrieved_at))
 
     if not native.data.equals(retained_native.data):
         raise FatalContractError("nl_rws recomputed native table differs from its separately retained identity")
