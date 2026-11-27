@@ -21,19 +21,28 @@ Update the tracker entry in place as work progresses. Fetch the latest issue bod
 immediately before editing (for example with `gh issue view 870 --json body`)
 and change only that provider's line so concurrent updates are preserved:
 
-1. **When starting work** (beginning Step 1 research or creating a `port/<provider>`
-   branch): change `- [ ]` to `- [ ] 🚧` and append a short status note naming the
-   active branch or Effort issue, such as `*(in progress on port/ee-est, #352)*`.
+1. **When starting Step 1**, change `- [ ]` to `- [ ] 🚧` and append a short
+   status note naming the active branch, such as `*(in progress on port/ee-est, #352)*`.
 2. **When pausing on a blocker** (such as awaiting an agency reply or a maintainer
    scope decision): keep `🚧` or move the entry to the blocked group and state what
    it is waiting on in the status note.
-3. **When merged into `main`** (after Step 8 final review is approved and the port
-   pull request is merged into `main`, not when work finishes on a `port/<provider>`
-   branch): remove `🚧`, tick `- [x]`, and record the merged pull request, such as
-   `*(merged in #900)*`.
+3. **When the final pull request merges into `main`**, remove `🚧`, tick `- [x]`,
+   and record the merged pull request, such as `*(merged in #900)*`.
 
 When opening a new provider-port issue that is not yet in the tracker, add a `- [ ]`
 entry in the matching complexity group linking to the new issue.
+
+## Use a dedicated port branch
+
+Before starting Step 1, check whether the provider has a `port/<provider>`
+branch on GitHub. Reuse the existing branch or create it from the latest `main`
+and push it to GitHub. A Program-level porting plan may be published to `main`
+before Step 1 begins.
+
+Use `port/<provider>` as the base branch for all pull requests in Steps 1–7,
+including vision publication and user documentation. Verify the base branch
+when opening each pull request. Merge the port branch into `main` through the
+final pull request once Step 7 is complete and final review is approved.
 
 ## Progress through evidence-backed steps
 
