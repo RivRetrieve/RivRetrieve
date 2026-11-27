@@ -44,6 +44,7 @@ _PROVENANCE_PROVIDER_IDS = {
     "fr_hubeau",
     "fr_hydroportail",
     "lt_lhmt",
+    "nl_rws",
     "no_nve",
     "pe_senamhi",
     "pl_imgw",
