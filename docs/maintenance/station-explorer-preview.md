@@ -16,6 +16,7 @@ Run these commands from the repository root:
 ```sh
 uv sync --all-extras --dev
 uv run python docs/scripts/generate_station_catalogue.py
+uv run python docs/scripts/coverage_map.py --out docs/assets/coverage-map.png
 npm --prefix web/station-explorer ci
 npm --prefix web/station-explorer run build
 uv run mkdocs build --strict
@@ -42,8 +43,8 @@ the built site are local outputs, not source files to commit or review evidence.
 ## Review the request workflow
 
 - Click a count bubble to zoom into its gauges. Groups split as projected points
-  separate. Co-located markers spread out when clicked (MarkerCluster's spiderfy behavior),
-  so each gauge remains inspectable. Selected gauges and conflicts remain separate map symbols.
+  separate. Spiderfy spreads co-located gauges when clicked, so each gauge remains
+  inspectable. Selected gauges and conflicts remain separate map symbols.
 - Change discovery filters, inspect a gauge, and add it individually. Try **Add
   all matches** with a larger selection.
 - Set retrieval dates in **Python**, then inspect single-provider and
@@ -77,11 +78,11 @@ temporal support configure the requested observations for the entire selection
 and also narrow the map matches. Dates are retrieval settings, not catalogue
 coverage filters. Advanced physical and source-identity controls, series-fact details,
 and the general gauge list are not exposed in this iteration. Inspect individual
-gauges on the map; co-located gauges remain reachable through MarkerCluster spiderfy.
+gauges on the map; co-located gauges remain reachable through spiderfy.
 
-The snapshot has 75,270 catalogue entries, of which 74,115 have matching series.
-Entries without described series are not individually browsable in this reduced UI.
-This catalogue limit does not establish absence of observations.
+Catalogue entries without described supported series are not individually
+browsable in this reduced UI. This catalogue limit does not establish absence of
+observations.
 
 Python previews use Shiki with the official VS Code Light+ and Dark+ themes,
 selected by the documentation scheme. The preview shows at most ten station IDs;
@@ -133,7 +134,8 @@ With the MkDocs preview running, check the full catalogue inside the docs:
 DOCS_URL=http://127.0.0.1:8000 npm --prefix web/station-explorer run test:browser
 ```
 
-The last command measures initial loading, filtering, and adding a long selection.
-It checks that the explorer requests only localhost and basemap tiles. The existing
-documentation theme also requests Google fonts and GitHub repository metadata.
-It does not contact observation services or run generated retrieval code.
+The last command measures initial loading, painted map readiness, filtering, and
+adding a long selection. It checks that the explorer requests only localhost and
+basemap tiles. The existing documentation theme also requests Google fonts and
+GitHub repository metadata. It does not contact observation services or run
+generated retrieval code.

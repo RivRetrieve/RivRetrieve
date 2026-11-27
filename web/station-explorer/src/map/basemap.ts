@@ -6,12 +6,13 @@ export function basemapTiles(
   scheme: string | undefined,
   key: string | undefined,
 ) {
-  if (!key)
+  if (!key) {
     return {
       style: "osm",
       url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
       attribution: osmAttribution,
     };
+  }
   const style = scheme === "slate" ? "dark_all" : "light_all";
   return {
     style,

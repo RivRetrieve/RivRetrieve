@@ -33,7 +33,7 @@ const fact = (quantity: string, frequency: string | null) => ({
   admission: "supported",
 });
 const fixture = {
-  version: 2,
+  version: 3,
   providers: [
     { provider_id: "alpha", retrieval: true, bulk: false, credentials: [] },
     {
@@ -49,17 +49,13 @@ const fixture = {
       credentials: [],
     },
   ],
-  stations: [
-    [0, "001", "River one", 10, 10, "EPSG:4326", []],
-    [1, "001", "Other provider", 20, 20, "unknown", []],
-    [2, "C", "Catalogue gauge", null, null, null, []],
-    [0, "empty", "No series described", 15, 15, "EPSG:4326", []],
-  ],
   facts: [fact("discharge", "P1D"), fact("stage", null)],
-  series: [
-    [0, "series-a", "raw", "published-a", [0]],
-    [1, "series-b", null, null, [1]],
-    [2, "series-c", null, null, [0]],
+  fact_sets: [[0], [1], []],
+  stations: [
+    [0, "001", "River one", 10, 10, "EPSG:4326", [], 0],
+    [1, "001", "Other provider", 20, 20, "unknown", [], 1],
+    [2, "C", "Catalogue gauge", null, null, null, [], 0],
+    [0, "empty", "No series described", 15, 15, "EPSG:4326", [], 2],
   ],
 };
 test.beforeEach(async ({ page }) => {
@@ -475,11 +471,11 @@ test("clusters keep one consistent non-state colour across counts, themes, filte
 }) => {
   const clustersFixture = structuredClone(fixture);
   clustersFixture.stations = [];
-  clustersFixture.series = [];
+  clustersFixture.fact_sets = [[0], [1]];
   const groups = [
-    { count: 2, lat: 46.2, lng: 6.2, provider: 0, factIndex: 0 },
-    { count: 15, lat: 46.8, lng: 8.2, provider: 0, factIndex: 0 },
-    { count: 120, lat: 47.4, lng: 9.8, provider: 1, factIndex: 1 },
+    { count: 2, lat: 46.2, lng: 6.2, provider: 0, factSetIndex: 0 },
+    { count: 15, lat: 46.8, lng: 8.2, provider: 0, factSetIndex: 0 },
+    { count: 120, lat: 47.4, lng: 9.8, provider: 1, factSetIndex: 1 },
   ];
   let idx = 0;
   for (const group of groups) {
@@ -493,13 +489,7 @@ test("clusters keep one consistent non-state colour across counts, themes, filte
         group.lng + Math.floor(i / 5) * 0.0002,
         "EPSG:4326",
         [],
-      ]);
-      clustersFixture.series.push([
-        stationIdx,
-        `ser-${stationIdx}`,
-        null,
-        null,
-        [group.factIndex],
+        group.factSetIndex,
       ]);
     }
   }
@@ -712,8 +702,7 @@ test("collecting stations and clearing search preserves shared discharge request
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const catalogue = structuredClone(fixture);
-  catalogue.stations.push([0, "002", "Second river", 11, 11, "EPSG:4326", []]);
-  catalogue.series.push([4, "series-two", null, null, [0]]);
+  catalogue.stations.push([0, "002", "Second river", 11, 11, "EPSG:4326", [], 0]);
   await page.route("**/catalogue.json", (route) =>
     route.fulfill({ json: catalogue }),
   );
@@ -742,4 +731,39 @@ test("collecting stations and clearing search preserves shared discharge request
   expect(copied).toContain('"001"');
   expect(copied).toContain('"002"');
   expect(copied).toContain("rr.pick(");
+});
+
+test("map mounts immediately while catalogue loads and single-gauge add preserves remaining markers", async ({
+  page,
+}) => {
+  let releaseCatalogue!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    releaseCatalogue = resolve;
+  });
+  const multi = structuredClone(fixture);
+  multi.stations.push([0, "002", "River two", 10.5, 10.5, "EPSG:4326", [], 0]);
+  await page.route("**/catalogue.json", async (route) => {
+    await gate;
+    await route.fulfill({ json: multi });
+  });
+  await page.goto("/");
+  await expect(page.getByLabel("Gauge map", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("Loading public catalogue");
+  releaseCatalogue();
+  await expect(page.getByTestId("match-count")).toHaveText("4 matching gauges");
+  await expect(page.locator("canvas.station-points")).toHaveAttribute(
+    "data-clustered",
+    "3",
+  );
+  await page.getByLabel("Provider", { exact: true }).selectOption("alpha");
+  await page.getByRole("button", { name: "Zoom to matches" }).click();
+  await page.getByRole("button", { name: "Inspect alpha / 001", exact: true }).click();
+  await page.getByRole("button", { name: "Add gauge", exact: true }).click();
+  await expect(page.locator("canvas.station-points")).toHaveAttribute(
+    "data-clustered",
+    "1",
+  );
+  await expect(
+    page.getByRole("button", { name: "Inspect alpha / 002", exact: true }),
+  ).toBeVisible();
 });

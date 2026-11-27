@@ -1,8 +1,137 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { captureClipboardWrites } from "./clipboard";
 import { test, expect, type FrameLocator } from "@playwright/test";
 
+interface BuiltCatalogueSummary {
+  providerOptions: string[];
+  totalMatching: number;
+  totalClustered: number;
+  usgsMatching: number;
+  usgsClustered: number;
+}
+
+let cachedSummary: BuiltCatalogueSummary | null = null;
+
+function readBuiltCatalogueSummary(): BuiltCatalogueSummary {
+  if (cachedSummary) return cachedSummary;
+  const cataloguePath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../docs/assets/station-explorer/catalogue.json",
+  );
+  const raw = JSON.parse(fs.readFileSync(cataloguePath, "utf8")) as {
+    version: number;
+    providers: Array<{ provider_id: string }>;
+    facts: Array<{ admission: string }>;
+    fact_sets: number[][];
+    stations: Array<
+      [
+        number,
+        string,
+        string | null,
+        number | null,
+        number | null,
+        string | null,
+        string[],
+        number,
+      ]
+    >;
+  };
+  if (raw.version !== 3) {
+    throw new Error(`Expected v3 catalogue at ${cataloguePath}, got ${raw.version}`);
+  }
+  const supportedSet = new Uint8Array(raw.fact_sets.length);
+  for (let i = 0; i < raw.fact_sets.length; i++) {
+    if (raw.fact_sets[i].some((fi) => raw.facts[fi]?.admission === "supported")) {
+      supportedSet[i] = 1;
+    }
+  }
+  const usgsIdx = raw.providers.findIndex((p) => p.provider_id === "usgs_nwis");
+  let totalMatching = 0;
+  let totalClustered = 0;
+  let usgsMatching = 0;
+  let usgsClustered = 0;
+  for (const st of raw.stations) {
+    if (!supportedSet[st[7]]) continue;
+    totalMatching++;
+    const isUsgs = st[0] === usgsIdx;
+    if (isUsgs) usgsMatching++;
+    const lat = st[3];
+    const lon = st[4];
+    const crs = st[5];
+    if (
+      lat !== null &&
+      lon !== null &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lon) &&
+      Math.abs(lat) <= 90 &&
+      Math.abs(lon) <= 180 &&
+      (crs === "EPSG:4326" || crs === "EPSG:4269" || crs === "unknown" || crs === null)
+    ) {
+      totalClustered++;
+      if (isUsgs) usgsClustered++;
+    }
+  }
+  cachedSummary = {
+    providerOptions: ["", ...raw.providers.map((p) => p.provider_id)],
+    totalMatching,
+    totalClustered,
+    usgsMatching,
+    usgsClustered,
+  };
+  return cachedSummary;
+}
+
+async function waitForPaintedMap(
+  app: FrameLocator,
+  options: { expectedClustered?: number; expectVisibleMarkers?: boolean } = {},
+) {
+  const { expectedClustered, expectVisibleMarkers = true } = options;
+  await expect
+    .poll(
+      async () =>
+        app.locator(".map").evaluate(
+          (map, { expected, requireVisible }) => {
+            const canvas = map
+              .closest(".map-shell")
+              ?.querySelector<HTMLCanvasElement>("canvas.station-points");
+            const clustered = Number(canvas?.dataset.clustered ?? -1);
+            if (expected !== undefined && clustered !== expected) return false;
+            if (
+              requireVisible &&
+              clustered > 0 &&
+              map.querySelectorAll(".marker-cluster, .gauge-point").length === 0
+            ) {
+              return false;
+            }
+            return clustered >= 0;
+          },
+          { expected: expectedClustered, requireVisible: expectVisibleMarkers },
+        ),
+      { timeout: 60000, message: "Stations rendered on map" },
+    )
+    .toBe(true);
+  await app
+    .locator(".map")
+    .evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+}
+
 test("built explorer offers only supported providers", async ({ page }) => {
   test.skip(!process.env.DOCS_URL, "Set DOCS_URL for prepared MkDocs preview.");
+  const summary = readBuiltCatalogueSummary();
+  for (const required of ["ch_foen", "usgs_nwis", "cl_dga", "no_nve", "fr_hubeau"]) {
+    expect(summary.providerOptions).toContain(required);
+  }
+  for (const excluded of ["za_dws", "jp_mlit"]) {
+    expect(summary.providerOptions).not.toContain(excluded);
+  }
+
   await page.goto(`${process.env.DOCS_URL}/map/`);
   const providers = page
     .frameLocator("#station-explorer")
@@ -15,21 +144,7 @@ test("built explorer offers only supported providers", async ({ page }) => {
           options.map((option) => (option as HTMLOptionElement).value),
         ),
     )
-    .toEqual([
-      "",
-      "ba_fhmzbih",
-      "br_ana",
-      "ca_eccc",
-      "ch_foen",
-      "cz_chmi",
-      "fr_hubeau",
-      "fr_hydroportail",
-      "lt_lhmt",
-      "no_nve",
-      "pl_imgw",
-      "th_thaiwater",
-      "usgs_nwis",
-    ]);
+    .toEqual(summary.providerOptions);
 });
 
 async function waitForBasemap(app: FrameLocator) {
@@ -67,12 +182,17 @@ async function waitForBasemap(app: FrameLocator) {
 test.beforeEach(async ({ page }) => {
   await captureClipboardWrites(page);
 });
+
 test("full catalogue and USGS points work in the viewport docs map", async ({
   page,
   context,
 }) => {
   test.skip(!process.env.DOCS_URL, "Set DOCS_URL for prepared MkDocs preview.");
   test.setTimeout(90000);
+  const summary = readBuiltCatalogueSummary();
+  const expectedMatchText = `${summary.totalMatching.toLocaleString()} matching gauges`;
+  const expectedUsgsText = `${summary.usgsMatching.toLocaleString()} matching gauges`;
+
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.setViewportSize({ width: 1600, height: 1100 });
   const requests: string[] = [];
@@ -91,22 +211,24 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
       explorerRequests.push(safe);
   });
   page.on("pageerror", () => errors.push("pageerror"));
+
   const start = Date.now();
   await page.goto(`${process.env.DOCS_URL}/map/`);
   const app = page.frameLocator("#station-explorer");
-  await expect(app.getByTestId("match-count")).toHaveText(
-    "74,115 matching gauges",
-    { timeout: 60000 },
-  );
+  await expect(app.getByTestId("match-count")).toHaveText(expectedMatchText, {
+    timeout: 60000,
+  });
+  const initialMs = Date.now() - start;
+  await waitForPaintedMap(app, {
+    expectedClustered: summary.totalClustered,
+    expectVisibleMarkers: true,
+  });
+  const initialPaintMs = Date.now() - start;
   await expect(app.locator("canvas.station-points")).toHaveAttribute(
     "data-drawn",
     /^[1-9][0-9]+$/,
   );
-  await expect(app.locator("canvas.station-points")).toHaveAttribute(
-    "data-clustered",
-    "74115",
-  );
-  const initialMs = Date.now() - start;
+
   await expect(app.locator(".map")).toHaveAttribute(
     "data-basemap",
     "light_all",
@@ -141,12 +263,18 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     await page.screenshot({
       path: `${process.env.EVIDENCE_DIR}/docs-desktop.png`,
     });
+
   const filterStart = Date.now();
   await app.getByLabel("Provider", { exact: true }).selectOption("usgs_nwis");
-  await expect(app.getByTestId("match-count")).toHaveText(
-    "26,201 matching gauges",
-  );
+  await expect(app.getByTestId("match-count")).toHaveText(expectedUsgsText);
   const filterMs = Date.now() - filterStart;
+  await waitForPaintedMap(app, {
+    expectedClustered: summary.usgsClustered,
+    expectVisibleMarkers: false,
+  });
+  const filterPaintMs = Date.now() - filterStart;
+  expect(filterPaintMs).toBeLessThan(2000);
+
   await app
     .getByRole("button", { name: "Zoom to matches", exact: true })
     .click();
@@ -176,7 +304,9 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
       ),
     )
     .toBeGreaterThan(zoomBefore);
+  await waitForPaintedMap(app, { expectVisibleMarkers: true });
   const clusterZoomMs = Date.now() - clusterStart;
+
   await app.getByLabel("Station", { exact: true }).fill("07374000");
   await expect(app.getByTestId("match-count")).toHaveText("1 matching gauge");
   await app.getByRole("button", { name: "Zoom to matches" }).click();
@@ -191,15 +321,8 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     app.getByRole("region", { name: "Gauge details" }),
   ).toBeVisible();
   await expect(
-    app.getByText(/NAD83.*without a datum transformation/),
-  ).toBeHidden();
-  await app
-    .getByRole("button", { name: "Coordinate reference warning", exact: true })
-    .focus();
-  await expect(
-    app.getByText(/NAD83.*without a datum transformation/),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
+    app.getByRole("button", { name: "Coordinate reference warning", exact: true }),
+  ).toHaveCount(0);
   await expect(
     app.getByRole("tab", { name: "Selection (0)", exact: true }),
   ).toBeVisible();
@@ -230,22 +353,33 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   await app.getByRole("tab", { name: "Filtering", exact: true }).click();
   await app.getByLabel("Quantity", { exact: true }).fill("");
   await app.getByLabel("Station", { exact: true }).fill("");
+
   const addStart = Date.now();
   await app
     .getByRole("button", { name: "Add all matches", exact: true })
     .click();
   await expect(
-    app.getByRole("tab", { name: "Selection (26,201)", exact: true }),
+    app.getByRole("tab", {
+      name: `Selection (${summary.usgsMatching.toLocaleString()})`,
+      exact: true,
+    }),
   ).toBeVisible();
   const addAllMs = Date.now() - addStart;
+  await waitForPaintedMap(app, {
+    expectedClustered: 0,
+    expectVisibleMarkers: false,
+  });
+  const addAllPaintMs = Date.now() - addStart;
+  expect(addAllPaintMs).toBeLessThan(2000);
+
   await app.getByRole("tab", { name: "Python", exact: true }).click();
   await app.getByRole("button", { name: "Copy Python request" }).click();
   const code = await page.evaluate(() => navigator.clipboard.readText());
   const allIds = JSON.parse(
     code.match(/station=(\[[\s\S]*?\])/)![1].replace(/,\s*]$/, "]"),
   ) as string[];
-  expect(allIds).toHaveLength(26201);
-  expect(new Set(allIds).size).toBe(26201);
+  expect(allIds).toHaveLength(summary.usgsMatching);
+  expect(new Set(allIds).size).toBe(summary.usgsMatching);
   expect(code).toContain('"07374000"');
   expect(code).not.toContain("<span");
   expect(code).not.toContain("Preview shortened");
@@ -253,7 +387,11 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   expect(shown).not.toBe(code);
   const shownIds = shown!.match(/"[0-9]+"/g) ?? [];
   expect(shownIds).toHaveLength(10);
-  await expect(app.getByText(/Copy includes all 26,201 gauges/)).toBeVisible();
+  await expect(
+    app.getByText(
+      `Copy includes all ${summary.usgsMatching.toLocaleString()} gauges`,
+    ),
+  ).toBeVisible();
   await expect(
     app.getByRole("button", { name: "Show complete preview", exact: true }),
   ).toHaveCount(0);
@@ -262,13 +400,37 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
     .getByRole("button", { name: "Clear selection", exact: true })
     .click();
   await app.getByRole("tab", { name: "Filtering", exact: true }).click();
+  await app.getByLabel("Provider", { exact: true }).selectOption("no_nve");
+  await app.getByLabel("Station", { exact: true }).fill("16.24.0");
+  await expect(app.getByTestId("match-count")).toHaveText("1 matching gauge");
+  await app.getByRole("button", { name: "Zoom to matches" }).click();
+  await app
+    .getByRole("button", { name: "Inspect no_nve / 16.24.0", exact: true })
+    .click();
+  await expect(
+    app.getByRole("region", { name: "Gauge details" }),
+  ).toContainText("Water body: Mår · MÅRVATN");
+  await expect(
+    app.getByText(/Unknown CRS\. Plotted as EPSG:4326/),
+  ).toBeHidden();
+  await app
+    .getByRole("button", { name: "Coordinate reference warning", exact: true })
+    .focus();
+  await expect(
+    app.getByText(/Unknown CRS\. Plotted as EPSG:4326/),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
   await app.getByRole("button", { name: "Clear search", exact: true }).click();
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
-  await expect(app.getByTestId("match-count")).toHaveText(
-    "74,115 matching gauges",
-    { timeout: 60000 },
-  );
+  await expect(app.getByTestId("match-count")).toHaveText(expectedMatchText, {
+    timeout: 60000,
+  });
+  await waitForPaintedMap(app, {
+    expectedClustered: summary.totalClustered,
+    expectVisibleMarkers: true,
+  });
   await waitForBasemap(app);
   await expect
     .poll(() =>
@@ -326,9 +488,12 @@ test("full catalogue and USGS points work in the viewport docs map", async ({
   console.log(
     JSON.stringify({
       initialMs,
+      initialPaintMs,
       filterMs,
+      filterPaintMs,
       clusterZoomMs,
       addAllMs,
+      addAllPaintMs,
       iframeWidth: iframeBox!.width,
       origins,
       requestCount: requests.length,
@@ -363,6 +528,9 @@ test("explorer and Python syntax follow the existing docs palette without losing
   page,
 }) => {
   test.skip(!process.env.DOCS_URL, "Set DOCS_URL for prepared MkDocs preview.");
+  const summary = readBuiltCatalogueSummary();
+  const expectedMatchText = `${summary.totalMatching.toLocaleString()} matching gauges`;
+
   const errors: string[] = [];
   const tileFailures: string[] = [];
   page.on("pageerror", () => errors.push("pageerror"));
@@ -393,10 +561,9 @@ test("explorer and Python syntax follow the existing docs palette without losing
   await page.setViewportSize({ width: 1600, height: 1100 });
   await page.goto(`${process.env.DOCS_URL}/map/`);
   const app = page.frameLocator("#station-explorer");
-  await expect(app.getByTestId("match-count")).toHaveText(
-    "74,115 matching gauges",
-    { timeout: 60000 },
-  );
+  await expect(app.getByTestId("match-count")).toHaveText(expectedMatchText, {
+    timeout: 60000,
+  });
   const view = () =>
     app
       .locator("canvas.station-points")
@@ -534,10 +701,9 @@ test("explorer and Python syntax follow the existing docs palette without losing
     .getByRole("link", { name: "Station Map", exact: true })
     .first()
     .click();
-  await expect(app.getByTestId("match-count")).toHaveText(
-    "74,115 matching gauges",
-    { timeout: 60000 },
-  );
+  await expect(app.getByTestId("match-count")).toHaveText(expectedMatchText, {
+    timeout: 60000,
+  });
   await expect(app.locator(".panel")).toHaveCSS("background-color", dark);
   expect(
     (await page.locator("#station-explorer").boundingBox())!.width,

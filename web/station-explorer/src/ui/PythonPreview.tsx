@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, type CSSProperties } from "react";
-import "./python.css";
+import "../styles/python.css";
 
 // Load only when the Python tab mounts. No bundled language or theme registry.
 const HighlightedPython = lazy(async () => {

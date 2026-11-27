@@ -53,12 +53,8 @@ body {
   gap: 12px;
   font-size: 12px;
 }
-.legend span:nth-child(1) {
-  color: var(--md-default-fg-color, #173746);
-}
-.legend span:nth-child(2) {
-  color: var(--md-default-fg-color, #173746);
-}
+.legend span:nth-child(1),
+.legend span:nth-child(2),
 .legend span:nth-child(3) {
   color: var(--md-default-fg-color, #173746);
 }

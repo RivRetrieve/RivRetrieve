@@ -1,5 +1,7 @@
-import "./icons.css";
+import "../styles/icons.css";
+
 export type GaugeState = "match" | "selected" | "conflict";
+
 export const pinPath =
   "M16 1C8.3 1 2 7.1 2 14.8C2 24 16 38 16 38S30 24 30 14.8C30 7.1 23.7 1 16 1Z";
 export const staffPath = "M11 8V23M11 9H15M11 13H14M11 17H15M11 21H14";
@@ -17,6 +19,7 @@ export function gaugePinSvg(state: GaugeState) {
       : `<circle class="gauge-badge" cx="25" cy="7" r="7"/><path data-badge="${state === "selected" ? "check" : "warning"}" class="gauge-badge-mark" d="${badgePaths[state]}"/>`;
   return `<svg class="gauge-symbol" data-state="${state}" viewBox="0 0 34 40" aria-hidden="true"><path class="gauge-body" d="${pinPath}"/><path data-part="staff" class="gauge-measurement" d="${staffPath}"/><path data-part="river" class="gauge-measurement" d="${riverPath}"/>${badge}</svg>`;
 }
+
 export function GaugeIcon({ state }: { state: GaugeState }) {
   return (
     <span
@@ -27,7 +30,7 @@ export function GaugeIcon({ state }: { state: GaugeState }) {
   );
 }
 
-/** Cache three small raster sprites per palette instead of adding selected DOM markers. */
+/** Cache small raster sprites per palette instead of adding selected DOM markers. */
 export function gaugeSprites(host: HTMLElement, ratio: number) {
   const style = getComputedStyle(host);
   return Object.fromEntries(
