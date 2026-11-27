@@ -61,9 +61,11 @@ Preserve the existing workflow and its domain rules, including:
 
 The [preview guide](../../docs/maintenance/station-explorer-preview.md) describes
 the current experience and build procedure. Existing tests and the public Python
-API provide additional contracts. Fix discovered defects explicitly rather than
-silently changing behavior during cleanup. No new user-facing feature, runtime
-agent integration, or visual redesign is requested.
+API provide additional contracts. Fix regressions and defects that prevent the
+preserved workflow, documenting any behavior correction. Record unrelated defects
+for an owner decision rather than expanding the rebuild into general backlog
+cleanup. No new user-facing feature, runtime agent integration, or visual redesign
+is requested.
 
 ## Organisation and testability
 
@@ -86,7 +88,10 @@ The owner has heard that the map is slow and reports that catalogue loading is n
 snappy. No browser benchmark was run during the discussion. Establish a baseline
 before changing the relevant paths and demonstrate improvements to catalogue
 startup and map responsiveness without sacrificing correctness or moving the same
-cost into another ordinary action.
+cost into another ordinary action. If measurements do not reproduce a reported
+problem or reveal a material performance trade-off, report the evidence and seek
+an owner decision rather than claiming improvement or expanding scope to obtain
+one.
 
 Inspection identified plausible contributors, not diagnosed bottlenecks:
 
@@ -107,8 +112,8 @@ and basemap tile loading. For ordinary interactions, distinguish updated count
 text from a usable, painted map. Include filtering, single-gauge selection changes,
 bulk selection, and pan/zoom where relevant. Compare equivalent catalogue content,
 selections, and outputs; account for deferred work and cold versus warm loading.
-Record browser/device and network conditions, dataset revision and size, and
-measurement limitations. Use proportionate browser profiling and project-native
+Record baseline and candidate source revisions, browser/device and network
+conditions, dataset revision and size, and measurement limitations. Use proportionate browser profiling and project-native
 tools rather than inventing a benchmark platform.
 
 The full-docs browser test currently logs initial/filter/cluster-zoom/add-all times,
