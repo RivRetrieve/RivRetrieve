@@ -29,15 +29,20 @@ comparison against the local E-STREAMS dataset.
   empty window, and HTTP 400 invalid station).
 - Publish a companion verification collection `nl_rws-verification-2026-11-27-v1`
   in `RivRetrieve/verification-evidence` containing:
-  1. `native.parquet` (exact SHA-256 matching the Step 2 packaged catalogue's
-     `provenance.json`: `b9ea91a1285fdc1476592c75e4636f3bbb0ec5b215dc3c715155815ebf92dc0c`).
+  1. `native.parquet` (`71,913` bytes, SHA-256
+     `b9ea91a1285fdc1476592c75e4636f3bbb0ec5b215dc3c715155815ebf92dc0c` — not
+     included in the 16-member `nl_rws-access-2026-11-25-v1` archive; reconcile
+     `src/rivretrieve/_internal/providers/nl_rws/catalogue/provenance.json` and
+     `croissant.json` via the Step 6 catalogue rebuild so `native_table` /
+     `build_inputs` reference `nl_rws-verification-2026-11-27-v1` accurately).
   2. A genuine far-back historical-depth capture for `lobith.bovenrijn.tolkamer`
      `discharge_m3s_gem24h` near the start of its record (e.g. `1901-01-01` to
-     `1901-01-31`, verifying historical reach beyond modern comparison windows).
+     `1901-01-31`, retrying transient cold-query failures if needed, verifying
+     historical reach beyond modern comparison windows).
   3. A genuine `Kwaliteitswaardecode = "99"` / `9.99999e+37` missing-sentinel
      DDAPI 2.0 capture.
-  4. E-STREAMS external comparison outputs (comparison summary JSON/CSV,
-     per-gauge metrics, and hydrograph comparison figures).
+  4. E-STREAMS external comparison outputs (dataset version, comparison summary
+     JSON/CSV, per-gauge metrics, and hydrograph comparison figures).
 - Wire `nl_rws` into `RivRetrieve/verification-evidence`
   `inventory/test-bindings.json` under `maintenance/catalogue/nl_rws/official`
   and update `research/nl-rws-source-access.md` with the Step 6 verification and
@@ -88,15 +93,21 @@ canonical units/values, and annotations together:
 
 ### 4. All-provider catalogue origin certification & rebuild
 
-- Add `read_catalogue_sources()` and `main()` CLI entrypoint to
+- Add `CATALOGUE_SUPPORTING_INPUTS` and `NATIVE_TABLE_ACQUISITION_IDS` to
+  `src/rivretrieve/_internal/providers/nl_rws/origins.py`, and add
+  `read_catalogue_sources()` and `main()` CLI entrypoint to
   `src/rivretrieve/_internal/providers/nl_rws/generate_catalogue.py` matching
   the shared catalogue certification contract.
 - Complete the `nl_rws` wiring in `tests/test_catalogue_origin_certification.py`
   (`_adapter()` binding `associations`/`checked_on`/`provenance`, and
-  parametrizing `"nl_rws"` in
-  `test_native_composition_root_rebuilds_committed_artifacts_without_network`)
-  and run both `test_catalogue_origin_certification.py` and
-  `test_catalogue_descriptor.py` against `--evidence-root`.
+  parametrizing `"nl_rws"` plus its CLI/output sets in
+  `test_native_composition_root_rebuilds_committed_artifacts_without_network`),
+  and run `test_catalogue_origin_certification.py`,
+  `test_catalogue_descriptor.py`, and `tests/test_nl_rws_recorded.py` through
+  the `RivRetrieve/verification-evidence` coordinator (`verify.py`, which
+  supplies `RIVRETRIEVE_TEST_EVIDENCE_ROOT`,
+  `RIVRETRIEVE_CATALOGUE_INPUT_PROVENANCE`, and
+  `RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT`).
 
 ### 5. Number-by-number E-STREAMS external hydrograph sanity comparison
 
@@ -127,10 +138,11 @@ canonical units/values, and annotations together:
   - Plot both hydrographs side-by-side / overlaid with explicit units (`m³/s`)
     and preserved gaps.
   - Check far-back historical reach on Lobith (`NL000010`, E-STREAMS start
-    `1901-01-01`) with real retrieved numbers from `1901`.
-  - Retain the E-STREAMS comparison summary, scripts/method, metrics, and
-    hydrograph figures in `nl_rws-verification-2026-11-27-v1` and document
-    findings/limitations in `RivRetrieve/verification-evidence`'s
+    `1901-01-01`) with real retrieved numbers from `1901` (retrying transient
+    cold-query failures before concluding data is unavailable).
+  - Retain the E-STREAMS dataset version, comparison summary, scripts/method,
+    metrics, and hydrograph figures in `nl_rws-verification-2026-11-27-v1` and
+    document findings/limitations in `RivRetrieve/verification-evidence`'s
     `research/nl-rws-source-access.md`.
 
 ### 6. Deferred to Steps 7–8
@@ -151,7 +163,7 @@ canonical units/values, and annotations together:
    reuse), `tests/test_catalogue_origin_certification.py` (full `nl_rws`
    rebuild), `tests/test_catalogue_descriptor.py`, and
    `tests/test_packaging_carries_catalogues.py` all pass (both `--logic-only`
-   and `--evidence-root`).
+   and through the `RivRetrieve/verification-evidence` `verify.py` coordinator).
 3. Number-by-number E-STREAMS comparison completed across all matched gauges
    with overlapping numeric data (`n > 0`), hydrograph figures and metrics
    retained in `verification-evidence`, and far-back `1901` Lobith reach
