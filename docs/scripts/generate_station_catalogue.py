@@ -1,9 +1,10 @@
 """Export an offline browser snapshot from approved packaged catalogue products.
 
-The wire format stores station and series tuples and shared physical-fact
-profiles. Profiles retain knowledge states and segment boundaries, but omit
-private evidence and per-segment identifiers. Coordinates are not rounded or
-reprojected. A listed station does not establish observation availability.
+The wire format stores station tuples, deduplicated physical-fact profiles, and
+per-station fact-profile sets. Profiles retain knowledge states and segment
+boundaries, but omit private evidence and per-series identifiers. Coordinates are
+not rounded or reprojected. A listed station does not establish observation
+availability.
 """
 
 from __future__ import annotations
@@ -52,10 +53,11 @@ def encode_catalogue(providers: list[dict], stations: pl.DataFrame, series: Iter
     Returns
     -------
     dict
-        Version 2 wire data. Station tuples contain provider index, station ID,
-        name, latitude, longitude, CRS and distinct nonblank water-body names in
-        metadata order. Name spelling is unchanged. Series tuples contain station index,
-        series ID, variant, published ID and physical-profile indices.
+        Version 3 wire data. Station tuples contain provider index, station ID,
+        name, latitude, longitude, CRS, distinct nonblank water-body names in
+        metadata order, and fact-set index. Name spelling is unchanged.
+        ``fact_sets`` maps each index to a deduplicated list of physical-profile
+        indices in ``facts`` for that station's catalogue series.
     """
     provider_indexes = {item["provider_id"]: index for index, item in enumerate(providers)}
     records = []
@@ -98,9 +100,10 @@ def encode_catalogue(providers: list[dict], stations: pl.DataFrame, series: Iter
     facts = []
     fact_indexes: dict[str, int] = {}
     segment_index_cache: dict[int, tuple[object, int]] = {}
-    series_records = []
+    station_facts: list[set[int]] = [set() for _ in range(len(records))]
     for item in series:
-        references = []
+        station_idx = station_indexes[(item.provider_id, item.station_id)]
+        target = station_facts[station_idx]
         for segment in item.facts:
             seg_key = id(segment)
             cached_seg = segment_index_cache.get(seg_key)
@@ -120,17 +123,20 @@ def encode_catalogue(providers: list[dict], stations: pl.DataFrame, series: Iter
                 segment_index_cache[seg_key] = (segment, idx)
             else:
                 idx = cached_seg[1]
-            references.append(idx)
-        series_records.append(
-            [
-                station_indexes[(item.provider_id, item.station_id)],
-                item.series_id,
-                item.variant,
-                item.identity.published_id,
-                references,
-            ]
-        )
-    return {"version": 2, "providers": providers, "stations": records, "facts": facts, "series": series_records}
+            target.add(idx)
+
+    fact_sets: list[list[int]] = []
+    fact_set_indexes: dict[tuple[int, ...], int] = {}
+    for record, fact_set in zip(records, station_facts, strict=True):
+        key = tuple(sorted(fact_set))
+        set_idx = fact_set_indexes.get(key)
+        if set_idx is None:
+            set_idx = len(fact_sets)
+            fact_set_indexes[key] = set_idx
+            fact_sets.append(list(key))
+        record.append(set_idx)
+
+    return {"version": 3, "providers": providers, "facts": facts, "fact_sets": fact_sets, "stations": records}
 
 
 def build_catalogue(output_path: Path) -> None:
@@ -163,9 +169,9 @@ def build_catalogue(output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(content, encoding="utf-8")
     print(
-        f"Exported {len(payload['stations']):,} stations, {len(series):,} series, "
-        f"{len(payload['facts']):,} fact profiles; {output_path.stat().st_size:,} bytes "
-        f"in {perf_counter() - started:.2f}s to {output_path}"
+        f"Exported {len(payload['stations']):,} stations, "
+        f"{len(payload['facts']):,} fact profiles, {len(payload['fact_sets']):,} fact sets; "
+        f"{output_path.stat().st_size:,} bytes in {perf_counter() - started:.2f}s to {output_path}"
     )
 
 

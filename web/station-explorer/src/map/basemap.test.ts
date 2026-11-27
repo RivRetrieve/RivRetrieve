@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { basemapTiles } from "./basemap";
+
 it("uses the public client key for the docs scheme and preserves attribution", () => {
   const light = basemapTiles("default", "synthetic-test-key");
   const dark = basemapTiles("slate", "synthetic-test-key");
@@ -12,6 +13,7 @@ it("uses the public client key for the docs scheme and preserves attribution", (
   expect(dark.attribution).toContain("CARTO");
   expect(dark.attribution).toContain("OpenStreetMap");
 });
+
 it("keeps unconfigured development usable without pretending CARTO is enabled", () => {
   expect(basemapTiles("slate", undefined).style).toBe("osm");
   expect(basemapTiles("default", "").url).toBe(

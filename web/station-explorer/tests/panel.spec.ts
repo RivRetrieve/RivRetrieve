@@ -16,7 +16,7 @@ const fields = [
   "vertical_datum",
 ];
 const fixture = {
-  version: 2,
+  version: 3,
   providers: [
     {
       name: "Alpha Hydrology",
@@ -32,18 +32,6 @@ const fixture = {
       credentials: [],
     },
   ],
-  stations: [
-    [
-      0,
-      "001",
-      "River at the old bridge with a long published station name",
-      47,
-      8,
-      "EPSG:4326",
-      ["Mår", "MÅRVATN"],
-    ],
-    [1, "001", null, null, null, null, []],
-  ],
   facts: [
     {
       ...Object.fromEntries(
@@ -58,9 +46,19 @@ const fixture = {
       admission: "supported",
     },
   ],
-  series: [
-    [0, "a", null, null, [0]],
-    [1, "b", null, null, [0]],
+  fact_sets: [[0]],
+  stations: [
+    [
+      0,
+      "001",
+      "River at the old bridge with a long published station name",
+      47,
+      8,
+      "EPSG:4326",
+      ["Mår", "MÅRVATN"],
+      0,
+    ],
+    [1, "001", null, null, null, null, [], 0],
   ],
 };
 
@@ -162,6 +160,7 @@ test("Python tab limits displayed gauge IDs while copying the full selection", a
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const many = {
     ...fixture,
+    fact_sets: [[0]],
     stations: Array.from({ length: 12 }, (_, i) => [
       0,
       `gauge-${String(i).padStart(2, "0")}`,
@@ -170,13 +169,7 @@ test("Python tab limits displayed gauge IDs while copying the full selection", a
       8,
       "EPSG:4326",
       [],
-    ]),
-    series: Array.from({ length: 12 }, (_, i) => [
-      i,
-      `series-${i}`,
-      null,
-      null,
-      [0],
+      0,
     ]),
   };
   await page.route("**/catalogue.json", (route) =>
@@ -326,4 +319,25 @@ test("retrieval date errors are beside inputs and block copying without changing
   await expect(copy).toBeEnabled();
   await page.getByRole("tab", { name: "Filtering", exact: true }).click();
   await expect(page.getByTestId("match-count")).toHaveText("1 matching gauge");
+});
+
+test("panel tabs support arrow, Home, and End keyboard navigation", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const filtering = page.getByRole("tab", { name: "Filtering", exact: true });
+  const selection = page.getByRole("tab", { name: /Selection/ });
+  const python = page.getByRole("tab", { name: "Python", exact: true });
+  await filtering.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(selection).toBeFocused();
+  await expect(selection).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("End");
+  await expect(python).toBeFocused();
+  await expect(python).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("ArrowLeft");
+  await expect(selection).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(filtering).toBeFocused();
+  await expect(filtering).toHaveAttribute("aria-selected", "true");
 });
