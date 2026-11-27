@@ -10,12 +10,14 @@ Completing the rebuild and the owner's review is intended to complete that issue
 even if UI SDK is not adopted. Publishing this document or completing an SDK
 comparison alone does not complete the issue.
 
-## Branch-only delivery and local review
+## Implementation branch and mandatory local review
 
-The owner explicitly prohibits merging into `main`. Keep this vision publication
-and subsequent implementation on branches; do not merge either PR into `main`.
-Publishing this vision does not start implementation. A later implementation
-instruction authorizes the rebuild, checks, and this required handoff:
+Publication and merge of this vision-only documentation PR are authorized. That
+authorization does not extend to implementation. Keep the rebuild on a dedicated
+branch and do not merge its implementation PR into `main` before the owner's
+hands-on local testing and subsequent explicit merge authorization.
+A later implementation instruction authorizes the rebuild, checks, and this
+required handoff:
 
 1. Finish the implementation on a dedicated branch, preserving unrelated work.
 2. Run the relevant checks and build the actual MkDocs documentation with the
@@ -159,4 +161,5 @@ report unavailable services or validation blockers rather than hiding them.
 The handoff should explain the new responsibility boundaries, SDK decision,
 correctness checks, and before/after performance evidence with remaining limits.
 Report assumptions and changed constants. Finish with the running local docs URL
-and stop for the owner's testing. No merge into `main` is authorized.
+and stop for the owner's testing. No implementation merge into `main` is authorized
+until that review and subsequent explicit owner permission.
