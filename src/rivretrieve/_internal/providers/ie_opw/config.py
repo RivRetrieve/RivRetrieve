@@ -137,3 +137,18 @@ def config() -> ProviderConfig:
 def window_declarations() -> ProductWindowDeclarations:
     """Return source-fixed ``WindowGranularity('none')`` contracts for all 12 products."""
     return _WINDOW_DECLARATIONS
+
+
+_MAX_FLOWING_STATION_NO = 41_000
+
+
+def validate_station_id(station: str) -> None:
+    """Enforce canonical 5-digit OPW Hydrometric Area flowing-watercourse IDs (``00001..41000``)."""
+    if (
+        not isinstance(station, str)
+        or len(station) != 5
+        or not station.isascii()
+        or not station.isdigit()
+        or not (1 <= int(station) <= _MAX_FLOWING_STATION_NO)
+    ):
+        raise FatalContractError(f"ie_opw station_id must be a 5-digit ASCII code in 00001..41000: {station!r}")

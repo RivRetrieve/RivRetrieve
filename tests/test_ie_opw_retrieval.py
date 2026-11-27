@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -51,14 +51,16 @@ from rivretrieve._internal.providers.ie_opw.config import (
     window_declarations,
 )
 from rivretrieve._internal.providers.ie_opw.fetch import (
+    IeOpwRequestPlanner,
     complete_zip_url,
     daily_year_json_url,
     fetch,
     validate_station_id,
 )
 from rivretrieve._internal.providers.ie_opw.parse import parse, parse_group
-from rivretrieve._internal.providers.ie_opw.series import PRODUCT_SPECS, SHARED_DAILY_PRODUCTS, source_series
+from rivretrieve._internal.providers.ie_opw.series import PRODUCT_SPECS, source_series
 from rivretrieve._internal.recordings import RecordedRequest, RecordingEnvelope, ReplayTransport
+from rivretrieve._internal.request_planning import ObservationPlan
 from rivretrieve._internal.source_series import InventoryCompleteness, OutcomeStatus, SeriesScope, stable_id
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import (
@@ -81,7 +83,7 @@ class _IeOpwStages:
     observation_source: str = "live"
     config: ProviderConfig = config()
     window_declarations: ProductWindowDeclarations = window_declarations()
-    shared_acquisition_products: tuple[frozenset[ProductId], ...] = SHARED_DAILY_PRODUCTS
+    request_planner: IeOpwRequestPlanner = IeOpwRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
     parse_group = staticmethod(parse_group)
@@ -298,6 +300,54 @@ def test_station_validation_url_builders_and_fetch_grouping_contracts() -> None:
     assert len({item.call_id for item in acq.failed_requests}) == 1
     assert acq.failed_requests[0].call_id is not None
     assert len({item.event_id for item in acq.failed_requests}) == 2
+
+    # IeOpwRequestPlanner shares one GET per (station, param) across multi-station daily triplets
+    # and isolates *_complete.zip singles and singleton daily requests.
+    from rivretrieve._internal.coverage import RequestedInterval
+    from rivretrieve._internal.request_planning import ConsumerNeed
+    from rivretrieve._internal.source_series import SeriesWindow, TimeAxis
+
+    planner = IeOpwRequestPlanner()
+    start_dt = datetime(2025, 1, 1)
+    end_dt = datetime(2025, 1, 5, 23, 59, 59, 999999)
+    planner_needs = tuple(
+        ConsumerNeed(
+            station=station,
+            product=ProductId(pid),
+            scope=SeriesScope(provider_ids=("ie_opw",), station_ids=(station,), product_ids=(pid,)),
+            known_series=(source_series(station, pid, origin="catalogue"),),
+            interval=RequestedInterval(start_dt, end_dt, axis=TimeAxis.NATIVE),
+            window=SeriesWindow(start=start_dt, end=end_dt, axis=TimeAxis.NATIVE),
+            fetch_window=fw,
+            rendered=(),
+        )
+        for station, pid in (
+            ("01041", "discharge_daily_mean"),
+            ("01041", "discharge_daily_min"),
+            ("01041", "stage_daily_mean"),
+            ("01041", "stage_instantaneous"),
+            ("30061", "stage_daily_mean"),
+            ("30061", "stage_daily_max"),
+        )
+    )
+    assert planner.plan_lookups(planner_needs, cfg) == ()
+    plan = planner.plan_observations(planner_needs, {}, cfg)
+    assert [req.request.url for req in plan.requests] == [
+        "https://waterlevel.ie/hydro-data/data/internet/stations/0/01041/Q/year.json",
+        "https://waterlevel.ie/hydro-data/data/internet/stations/0/01041/S/year.json",
+        "https://waterlevel.ie/hydro-data/data/internet/stations/0/01041/S/Waterlevel_complete.zip",
+        "https://waterlevel.ie/hydro-data/data/internet/stations/0/30061/S/year.json",
+    ]
+    assert plan.requests[0].source_coordinates.value == OpwDailyYearJsonEndpointCoordinates("Q")
+    assert plan.requests[0].interpret_group is parse_group
+    assert plan.requests[1].source_coordinates.value == OpwDailyYearJsonCoordinates(
+        "S", "WEB.Day.Mean", "stage_daily_mean"
+    )
+    assert plan.requests[1].interpret_group is None
+    assert plan.requests[2].source_coordinates == cfg.products[ProductId("stage_instantaneous")].coordinates
+    assert plan.requests[2].interpret_group is None
+    assert plan.requests[3].source_coordinates.value == OpwDailyYearJsonEndpointCoordinates("S")
+    assert plan.requests[3].interpret_group is parse_group
 
 
 def test_shared_daily_triplet_decodes_once_caches_subset_and_preserves_unmeasured(
@@ -795,7 +845,6 @@ def test_shared_year_json_driver_equivalence_with_without_parse_group(
 
     import polars.testing as pl_testing
 
-    from rivretrieve._internal.engine import SourceAcquisition
     from tests.test_provider_interpretation_adoption import _assert_driver_results_identical
 
     q_url = daily_year_json_url("01041", "Q")
@@ -873,18 +922,15 @@ def test_shared_year_json_driver_equivalence_with_without_parse_group(
     )
     monkeypatch.setattr(ie_parse_mod, "_decode_year_json_blocks", tracking_decode_blocks)
 
-    captured: list[SourceAcquisition] = []
-
-    class _GroupStages(_IeOpwStages):
-        @staticmethod
-        def fetch(*args: Any, **kwargs: Any) -> SourceAcquisition:
-            acq = fetch(*args, **kwargs)
-            captured.append(acq)
-            return acq
-
+    for mod in (
+        "rivretrieve._internal.engine",
+        "rivretrieve._internal.request_planning",
+        "rivretrieve._internal.transport",
+    ):
+        monkeypatch.setattr(f"{mod}.uuid4", lambda: SimpleNamespace(hex="fixed-acq-id"))
     group_result = drive(
         req,
-        _GroupStages(),
+        _IeOpwStages(),
         provenance=_provenance(req),
         receipts=receipts,
         transport=ReplayTransport((_envelope(q_url, payload_body),)),
@@ -893,13 +939,28 @@ def test_shared_year_json_driver_equivalence_with_without_parse_group(
     assert seen_allowed == [{"WEB.Day.Mean", "WEB.Day.Min", "WEB.Day.Max"}]
     assert seen_retained_keys == [{"WEB.Day.Mean", "WEB.Day.Min", "WEB.Day.Max"}]
 
+    class _NoGroupPlanner:
+        def plan_lookups(self, needs: Any, supplied_config: ProviderConfig) -> Any:
+            return IeOpwRequestPlanner().plan_lookups(needs, supplied_config)
+
+        def plan_observations(self, needs: Any, lookups: Any, supplied_config: ProviderConfig) -> ObservationPlan:
+            plan = IeOpwRequestPlanner().plan_observations(needs, lookups, supplied_config)
+            return ObservationPlan(
+                requests=tuple(replace(item, interpret_group=None) for item in plan.requests),
+                series=plan.series,
+                inventories=plan.inventories,
+                outcomes=plan.outcomes,
+                issues=plan.issues,
+                calls=plan.calls,
+                failed_requests=plan.failed_requests,
+            )
+
     @dataclass(frozen=True)
     class _BaselineNoGroupStages:
         observation_source: str = "live"
         config: ProviderConfig = config()
         window_declarations: ProductWindowDeclarations = window_declarations()
-        shared_acquisition_products: tuple[frozenset[ProductId], ...] = SHARED_DAILY_PRODUCTS
-        fetch = staticmethod(lambda *args, **kwargs: captured[0])
+        request_planner: _NoGroupPlanner = _NoGroupPlanner()
         parse = staticmethod(parse)
 
     json_calls = 0
@@ -908,6 +969,7 @@ def test_shared_year_json_driver_equivalence_with_without_parse_group(
         _BaselineNoGroupStages(),
         provenance=_provenance(req),
         receipts=receipts,
+        transport=ReplayTransport((_envelope(q_url, payload_body),)),
     )
     assert json_calls == 3
     _assert_driver_results_identical(group_result, baseline_result)

@@ -31,8 +31,8 @@ from rivretrieve._internal.providers.ie_opw.config import (
     OpwCompleteZipCoordinates,
     OpwDailyYearJsonCoordinates,
     OpwDailyYearJsonEndpointCoordinates,
+    validate_station_id,
 )
-from rivretrieve._internal.providers.ie_opw.fetch import validate_station_id
 from rivretrieve._internal.providers.ie_opw.series import PRODUCT_BY_ID, reused_series, source_series
 from rivretrieve._internal.source_annotations import (
     OBSERVATION_STRUCTURAL_SCHEMA,

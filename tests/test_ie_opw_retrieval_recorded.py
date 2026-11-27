@@ -26,9 +26,9 @@ from rivretrieve._internal.providers.ie_opw.annotations import (
     IE_OPW_SERIES_SCHEMA,
 )
 from rivretrieve._internal.providers.ie_opw.config import config, window_declarations
-from rivretrieve._internal.providers.ie_opw.fetch import fetch
+from rivretrieve._internal.providers.ie_opw.fetch import IeOpwRequestPlanner, fetch
 from rivretrieve._internal.providers.ie_opw.parse import parse, parse_group
-from rivretrieve._internal.providers.ie_opw.series import PRODUCT_SPECS, SHARED_DAILY_PRODUCTS, source_series
+from rivretrieve._internal.providers.ie_opw.series import PRODUCT_SPECS, source_series
 from rivretrieve._internal.recordings import RecordedRequest, RecordingEnvelope, ReplayTransport
 from rivretrieve._internal.source_series import OutcomeStatus
 from rivretrieve._internal.store import StoreRoot
@@ -65,7 +65,7 @@ class _IeOpwStages:
     observation_source: str = "live"
     config: ProviderConfig = config()
     window_declarations: ProductWindowDeclarations = window_declarations()
-    shared_acquisition_products: tuple[frozenset[ProductId], ...] = SHARED_DAILY_PRODUCTS
+    request_planner: IeOpwRequestPlanner = IeOpwRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
     parse_group = staticmethod(parse_group)

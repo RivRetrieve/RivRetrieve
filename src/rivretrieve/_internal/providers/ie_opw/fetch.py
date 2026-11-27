@@ -1,22 +1,18 @@
-"""Acquire full-history OPW Hydro-Data ``year.json`` and ``*_complete.zip`` payloads."""
+"""Plan and acquire full-history OPW Hydro-Data ``year.json`` and ``*_complete.zip`` payloads."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
 from datetime import datetime
 from typing import Literal
-from uuid import uuid4
 
-from rivretrieve._internal.authentication import CredentialExchangeError
+from rivretrieve._internal.coverage import RequestedInterval
 from rivretrieve._internal.engine import (
     FetchWindow,
-    Payload,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
-    SourceCallOrigin,
     SourceCoordinates,
-    UnknownOriginFact,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
@@ -25,39 +21,29 @@ from rivretrieve._internal.providers.ie_opw.config import (
     OpwDailyYearJsonCoordinates,
     OpwDailyYearJsonEndpointCoordinates,
 )
+from rivretrieve._internal.providers.ie_opw.config import (
+    validate_station_id as validate_station_id,
+)
+from rivretrieve._internal.providers.ie_opw.parse import parse_group
 from rivretrieve._internal.providers.ie_opw.series import (
     COMPLETE_ZIP_BY_PARAM,
     reused_series,
     source_series,
 )
-from rivretrieve._internal.source_acquisition import (
-    FailedSourceRequest,
-    SourceRequestTarget,
-    attempt_request,
+from rivretrieve._internal.request_planning import (
+    ConsumerNeed,
+    LookupResolution,
+    ObservationPlan,
+    PlannedLookup,
+    PlannedObservationRequest,
+    _merge_fetch_windows,
+    execute_planned_acquisition,
 )
-from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries
-from rivretrieve._internal.transport import (
-    HttpMethod,
-    Transport,
-    TransportFailure,
-    TransportRequest,
-    TransportResponse,
-)
+from rivretrieve._internal.source_acquisition import SourceRequestTarget
+from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries, TimeAxis
+from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest
 
 OPW_STATIONS_BASE_URL = "https://waterlevel.ie/hydro-data/data/internet/stations/0"
-_MAX_FLOWING_STATION_NO = 41_000
-
-
-def validate_station_id(station: str) -> None:
-    """Enforce canonical 5-digit OPW Hydrometric Area flowing-watercourse IDs (``00001..41000``)."""
-    if (
-        not isinstance(station, str)
-        or len(station) != 5
-        or not station.isascii()
-        or not station.isdigit()
-        or not (1 <= int(station) <= _MAX_FLOWING_STATION_NO)
-    ):
-        raise FatalContractError(f"ie_opw station_id must be a 5-digit ASCII code in 00001..41000: {station!r}")
 
 
 def daily_year_json_url(station: str, parameter: Literal["Q", "S", "TWater"]) -> str:
@@ -93,18 +79,103 @@ def _request_target(
         return SourceRequestTarget(station, str(product))
 
 
-def _origin(response: TransportResponse) -> SourceCallOrigin:
-    return SourceCallOrigin(
-        url=response.url,
-        request_parameters=response.request_parameters,
-        status_code=response.status_code,
-        retrieved_at=response.retrieved_at,
-        content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
-        source_path=UnknownOriginFact(),
-        query=UnknownOriginFact(),
-        attempts=response.attempts,
-        attempt_traces=response.attempt_traces,
-    )
+def _validated_coordinates(
+    product: ProductId,
+    config: ProviderConfig,
+) -> OpwDailyYearJsonCoordinates | OpwCompleteZipCoordinates:
+    try:
+        product_config = config.products[product]
+    except KeyError as error:
+        raise FatalContractError(f"ie_opw product is absent from provider config: {product}") from error
+    coords = product_config.coordinates.value
+    if not isinstance(coords, (OpwDailyYearJsonCoordinates, OpwCompleteZipCoordinates)):
+        raise FatalContractError(f"ie_opw product has invalid source coordinates: {product}")
+    return coords
+
+
+class IeOpwRequestPlanner:
+    """Coalesce ``{param}/year.json`` triplets per ``(station, parameter)`` and plan ``*_complete.zip`` files."""
+
+    def plan_lookups(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        config: ProviderConfig,
+    ) -> tuple[PlannedLookup, ...]:
+        del needs, config
+        return ()
+
+    def plan_observations(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        lookups: Mapping[tuple[Hashable, str, ProductId], LookupResolution],
+        config: ProviderConfig,
+    ) -> ObservationPlan:
+        del lookups
+        if not needs:
+            return ObservationPlan()
+
+        stations: list[str] = []
+        seen_stations: set[str] = set()
+        year_groups: dict[str, dict[Literal["Q", "S", "TWater"], list[ConsumerNeed]]] = {}
+        zip_items: dict[str, list[tuple[ConsumerNeed, OpwCompleteZipCoordinates]]] = {}
+
+        for need in needs:
+            validate_station_id(need.station)
+            if need.station not in seen_stations:
+                seen_stations.add(need.station)
+                stations.append(need.station)
+                year_groups[need.station] = {}
+                zip_items[need.station] = []
+            coords = _validated_coordinates(need.product, config)
+            if need.rendered != ():
+                raise FatalContractError(
+                    f"ie_opw source-fixed product received unexpected rendered windows: {need.product}"
+                )
+            if isinstance(coords, OpwDailyYearJsonCoordinates):
+                year_groups[need.station].setdefault(coords.parameter, []).append(need)
+            else:
+                zip_items[need.station].append((need, coords))
+
+        requests: list[PlannedObservationRequest] = []
+        for station in stations:
+            for param, group_needs in year_groups[station].items():
+                consumers = tuple(group_needs)
+                coords_box = (
+                    config.products[consumers[0].product].coordinates
+                    if len(consumers) == 1
+                    else SourceCoordinates(OpwDailyYearJsonEndpointCoordinates(param))
+                )
+                requests.append(
+                    PlannedObservationRequest(
+                        consumers=consumers,
+                        request=TransportRequest(
+                            method=HttpMethod.GET,
+                            url=daily_year_json_url(station, param),
+                        ),
+                        source_coordinates=coords_box,
+                        fetch_window=_merge_fetch_windows([need.fetch_window for need in consumers]),
+                        failure_targets=tuple(
+                            _request_target(station, need.product, need.known_series) for need in consumers
+                        ),
+                        interpret_group=parse_group if len(consumers) > 1 else None,
+                    )
+                )
+
+            for need, zip_coords in zip_items[station]:
+                requests.append(
+                    PlannedObservationRequest(
+                        consumers=(need,),
+                        request=TransportRequest(
+                            method=HttpMethod.GET,
+                            url=complete_zip_url(station, zip_coords.parameter, zip_coords.route),
+                        ),
+                        source_coordinates=config.products[need.product].coordinates,
+                        fetch_window=need.fetch_window,
+                        failure_targets=(_request_target(station, need.product, need.known_series),),
+                    )
+                )
+
+        return ObservationPlan(requests=tuple(requests))
 
 
 def fetch(
@@ -123,118 +194,35 @@ def fetch(
         raise FatalContractError("ie_opw fetch requires at least one station and product")
     for station in stations:
         validate_station_id(station)
-
-    year_groups: dict[Literal["Q", "S", "TWater"], list[tuple[ProductId, OpwDailyYearJsonCoordinates]]] = {}
-    zip_products: list[tuple[ProductId, OpwCompleteZipCoordinates]] = []
-
     for product in products:
-        try:
-            product_config = config.products[product]
-        except KeyError as error:
-            raise FatalContractError(f"ie_opw product is absent from provider config: {product}") from error
-        if rendered_windows.get(product, ()) != ():
-            raise FatalContractError(f"ie_opw source-fixed product received unexpected rendered windows: {product}")
-        coords = product_config.coordinates.value
-        if isinstance(coords, OpwDailyYearJsonCoordinates):
-            year_groups.setdefault(coords.parameter, []).append((product, coords))
-        elif isinstance(coords, OpwCompleteZipCoordinates):
-            zip_products.append((product, coords))
-        else:
-            raise FatalContractError(f"ie_opw product has invalid source coordinates: {product}")
+        _validated_coordinates(product, config)
 
-    requested_window = SeriesWindow(
-        start=datetime.fromisoformat(fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(fetch_window.end.isoformat()),
-    )
-    payloads: list[Payload] = []
-    failures: list[FailedSourceRequest] = []
-
-    for station in stations:
-        for param, group_items in year_groups.items():
-            group_products = tuple(product for product, _ in group_items)
-            request = TransportRequest(
-                method=HttpMethod.GET,
-                url=daily_year_json_url(station, param),
-            )
-            response = attempt_request(transport, request)
-            if isinstance(response, (TransportFailure, CredentialExchangeError)):
-                call_id = uuid4().hex
-                for product in group_products:
-                    failures.append(
-                        FailedSourceRequest(
-                            uuid4().hex,
-                            _request_target(station, product, known_series),
-                            requested_window,
-                            request,
-                            response,
-                            call_id=call_id,
-                        )
-                    )
-                continue
-
-            coords_box = (
-                config.products[group_products[0]].coordinates
-                if len(group_products) == 1
-                else SourceCoordinates(OpwDailyYearJsonEndpointCoordinates(param))
-            )
-            payload_scope = (
+    start = datetime.fromisoformat(fetch_window.start.isoformat())
+    end = datetime.fromisoformat(fetch_window.end.isoformat())
+    interval = RequestedInterval(start, end, axis=TimeAxis.NATIVE)
+    window = SeriesWindow(start=start, end=end, axis=TimeAxis.NATIVE)
+    needs = tuple(
+        ConsumerNeed(
+            station=station,
+            product=product,
+            scope=(
                 scope.model_copy(
                     update={
+                        "provider_ids": ("ie_opw",),
                         "station_ids": (station,),
-                        "product_ids": tuple(str(p) for p in group_products),
+                        "product_ids": (str(product),),
                     }
                 )
                 if scope is not None
-                else None
-            )
-            payloads.append(
-                Payload(
-                    source_coordinates=coords_box,
-                    station_products=tuple((station, product) for product in group_products),
-                    fetch_window=fetch_window,
-                    content=response.content,
-                    origin=_origin(response),
-                    prerequisite_calls=response.prerequisite_calls,
-                    scope=payload_scope,
-                    known_series=known_series,
-                    attempt_traces=response.attempt_traces,
-                )
-            )
-
-        for product, coords in zip_products:
-            request = TransportRequest(
-                method=HttpMethod.GET,
-                url=complete_zip_url(station, coords.parameter, coords.route),
-            )
-            response = attempt_request(transport, request)
-            if isinstance(response, (TransportFailure, CredentialExchangeError)):
-                failures.append(
-                    FailedSourceRequest(
-                        uuid4().hex,
-                        _request_target(station, product, known_series),
-                        requested_window,
-                        request,
-                        response,
-                    )
-                )
-                continue
-            pair_scope = (
-                scope.model_copy(update={"station_ids": (station,), "product_ids": (str(product),)})
-                if scope is not None
-                else None
-            )
-            payloads.append(
-                Payload(
-                    source_coordinates=config.products[product].coordinates,
-                    station_products=((station, product),),
-                    fetch_window=fetch_window,
-                    content=response.content,
-                    origin=_origin(response),
-                    prerequisite_calls=response.prerequisite_calls,
-                    scope=pair_scope,
-                    known_series=known_series,
-                    attempt_traces=response.attempt_traces,
-                )
-            )
-
-    return SourceAcquisition(value=tuple(payloads), failed_requests=tuple(failures))
+                else SeriesScope(provider_ids=("ie_opw",), station_ids=(station,), product_ids=(str(product),))
+            ),
+            known_series=known_series,
+            interval=interval,
+            window=window,
+            fetch_window=fetch_window,
+            rendered=rendered_windows.get(product, ()),
+        )
+        for station in stations
+        for product in products
+    )
+    return execute_planned_acquisition(IeOpwRequestPlanner(), needs, config, transport)
