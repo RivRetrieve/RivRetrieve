@@ -159,12 +159,26 @@ def test_recorded_public_edge_cases_1940s_negative_od_unmeasured_and_empty_block
     with pytest.raises(EmptySelectionError, match="ie_opw"):
         rr.fetch(empty_18121, start="2025-01-01", end="2025-12-31", cache="bypass")
 
-    # Querying historic 06025 outside its measured 1972..2004 period returns UNRESOLVED.
-    out_of_range_06025 = rr.fetch(
+    # Querying historic 06025 inside its published 1972..2026-11-22 unmeasured (-1) tail returns EMPTY.
+    empty_tail_06025 = rr.fetch(
         _select_products("06025", "discharge_daily_mean"),
         start="2025-01-01",
         end="2025-12-31",
         cache="bypass",
     )
-    assert out_of_range_06025.data.is_empty()
-    assert [o.status for o in out_of_range_06025.outcomes] == [OutcomeStatus.UNRESOLVED]
+    assert empty_tail_06025.data.is_empty()
+    assert [o.status for o in empty_tail_06025.outcomes] == [OutcomeStatus.EMPTY]
+    assert (
+        rr.annotations(empty_tail_06025, schema=IE_OPW_SERIES_SCHEMA.schema_id).filter(pl.col("measured").not_()).height
+        == 365
+    )
+
+    # Querying historic 06025 before its 1972-01-01 first published slot returns UNRESOLVED.
+    pre_record_06025 = rr.fetch(
+        _select_products("06025", "discharge_daily_mean"),
+        start="1970-01-01",
+        end="1970-12-31",
+        cache="bypass",
+    )
+    assert pre_record_06025.data.is_empty()
+    assert [o.status for o in pre_record_06025.outcomes] == [OutcomeStatus.UNRESOLVED]
