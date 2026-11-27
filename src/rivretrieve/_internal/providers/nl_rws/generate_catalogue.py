@@ -479,10 +479,7 @@ def read_catalogue_sources(
                 method="http_request",
                 instant_type="retrieval",
                 description="Rijkswaterstaat open data copyright and data.overheid.nl CC0-1.0 / Public Domain Mark 1.0 terms",
-                requested_from=(
-                    "https://www.rijkswaterstaat.nl/copyright",
-                    "https://data.overheid.nl/dataset/9442-waterinfo-rijkswateren",
-                ),
+                requested_from=("https://www.rijkswaterstaat.nl/copyright",),
                 retrieved_at_start=retrieved_at,
                 recording_ids=("nl-rws-terms-receipts-2026-11-25",),
             ),
