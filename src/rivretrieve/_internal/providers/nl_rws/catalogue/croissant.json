@@ -78,8 +78,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "687e787c14ffe58453e9929ee87d7df5d7b22ba4c83b4f10b90948d012d3d1de",
-      "contentSize": "9839 B"
+      "sha256": "6c1fdce6c23ee48f85dfb8b3b8d2e6291c55357911212a1840496716b5239ce7",
+      "contentSize": "10081 B"
     },
     {
       "@id": "provenance_facts.parquet",
@@ -118,8 +118,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "6ad4e1456c95ff0da6d0db7031a5e4223cfdee9cb889f3acedffb5909c28c654",
-      "contentSize": "1549 B"
+      "sha256": "0968ff1ccf5db61f6e3927672dffb798f48a9141a3fbceeadfdb70a033007b7f",
+      "contentSize": "1553 B"
     },
     {
       "@id": "format.json",
