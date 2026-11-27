@@ -536,7 +536,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     output = args.out.resolve()
     evidence_root = args.evidence_root.resolve(strict=True)
-    if output.exists() or output.is_relative_to(evidence_root) or evidence_root.is_relative_to(output):
+    if (
+        (output.exists() and any(output.iterdir()))
+        or output.is_relative_to(evidence_root)
+        or evidence_root.is_relative_to(output)
+    ):
         raise FatalContractError("nl_rws catalogue output must be a new path separate from retained inputs")
     if any((parent / ".git").exists() for parent in (output, *output.parents)):
         raise FatalContractError("nl_rws catalogue output must stay outside source checkouts")
