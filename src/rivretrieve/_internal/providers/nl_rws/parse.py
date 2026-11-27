@@ -304,13 +304,13 @@ def _parse_decoded_for_product(
         scope=payload.scope
         or SeriesScope(provider_ids=(PROVIDER_ID,), station_ids=(station,), product_ids=(product_str,)),
         members=tuple(s.series_id for s in series_list),
-        completeness=InventoryCompleteness.INCOMPLETE,
+        member_facts=tuple((s.series_id, tuple(f.facts_id for f in s.facts)) for s in series_list),
+        completeness=InventoryCompleteness.COMPLETE,
         access=product_str,
         origin="response",
         acquired_at=retrieved,
         window=window,
         evidence=(evidence,),
-        reason="Returned series establish this response window, not an exhaustive historical inventory",
     )
     if ann_rows:
         ann_frame = pl.DataFrame(

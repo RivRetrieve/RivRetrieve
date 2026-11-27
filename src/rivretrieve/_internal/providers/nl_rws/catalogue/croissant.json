@@ -78,8 +78,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "36ee8a97b41ed872663e89403471fbf4058a291889c5845d6b491adaf8f25565",
-      "contentSize": "9743 B"
+      "sha256": "6c1fdce6c23ee48f85dfb8b3b8d2e6291c55357911212a1840496716b5239ce7",
+      "contentSize": "10081 B"
     },
     {
       "@id": "provenance_facts.parquet",
@@ -118,8 +118,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "6ad4e1456c95ff0da6d0db7031a5e4223cfdee9cb889f3acedffb5909c28c654",
-      "contentSize": "1549 B"
+      "sha256": "0968ff1ccf5db61f6e3927672dffb798f48a9141a3fbceeadfdb70a033007b7f",
+      "contentSize": "1553 B"
     },
     {
       "@id": "format.json",
@@ -1584,12 +1584,12 @@
       {
         "@type": "sc:PropertyValue",
         "name": "collection_id",
-        "value": "nl_rws-access-2026-11-25-v1"
+        "value": "nl_rws-verification-2026-11-27-v1"
       },
       {
         "@type": "sc:PropertyValue",
         "name": "manifest_sha256",
-        "value": "844e804e231ce902e0ce170a61daa29a4e9daefa9ef6c731f7506a632ddc9169"
+        "value": "0da768dc14796e8e935b36d4b67a50aba522926ed9b2e77c4fed025902606bab"
       },
       {
         "@type": "sc:PropertyValue",

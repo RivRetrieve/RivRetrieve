@@ -80,6 +80,10 @@ CATALOGUE_BUILD_DECLARATIONS = (
     ("src/rivretrieve/_internal/providers/nl_rws/catalogue_series.py", "describe_catalogue"),
 )
 
+NATIVE_TABLE_ACQUISITION_IDS: tuple[str, ...] = ("nl_rws_catalogus_2026_11_25",)
+
+CATALOGUE_SUPPORTING_INPUTS: dict[str, tuple[str, ...]] = {}
+
 _CATALOGUE_SOURCE_FACTS = {
     "station": (
         "source.station.ophalen_catalogus_locations",
