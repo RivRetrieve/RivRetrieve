@@ -166,6 +166,8 @@ def _adapter(
         build = partial(
             build, associations=sources.associations, checked_on=sources.checked_on, provenance=sources.provenance
         )
+    if provider == "nl_rws":
+        native_path = retained_evidence_root / "maintenance/catalogue/nl_rws/official/native.parquet"
     if provider == "br_ana":
         from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence, read_capture_record
         from rivretrieve._internal.providers.br_ana.origins import (
@@ -977,6 +979,10 @@ def _assert_reviewed_crs(
         assert isinstance(origin, Field)
         assert str(origin.native_column) == "KoordErTmIta"
         assert stations["crs"].unique().to_list() == ["EPSG:4258"]
+    elif adapter.provider_id == ProviderId("nl_rws"):
+        assert isinstance(origin, Field)
+        assert str(origin.native_column) == "Coordinatenstelsel"
+        assert stations["crs"].unique().to_list() == ["EPSG:4258"]
     else:
         assert adapter.provider_id == ProviderId("usgs_nwis")
         assert isinstance(origin, Field)
@@ -1383,7 +1389,6 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "cz_chmi",
         "fi_syke",
         "lt_lhmt",
-        "nl_rws",
         "no_nve",
         "th_thaiwater",
         "za_dws",

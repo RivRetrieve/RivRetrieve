@@ -71,6 +71,15 @@ STATION_METADATA_NOTICE = (
 
 STATION_METADATA_FIELDS: tuple[MetadataField, ...] = (MetadataField("station_name", "Naam"),)
 
+CATALOGUE_BUILD_DECLARATIONS = (
+    ("maintenance/catalogue/station_metadata/review.json", None),
+    ("src/rivretrieve/_internal/providers/nl_rws/origins.py", "build_acquisition_provenance"),
+    ("src/rivretrieve/_internal/providers/nl_rws/origins.py", "STATION_METADATA_FIELDS"),
+    ("src/rivretrieve/_internal/providers/nl_rws/origins.py", "STATION_METADATA_NOTICE"),
+    ("src/rivretrieve/_internal/providers/nl_rws/generate_catalogue.py", "build_catalogue"),
+    ("src/rivretrieve/_internal/providers/nl_rws/catalogue_series.py", "describe_catalogue"),
+)
+
 _CATALOGUE_SOURCE_FACTS = {
     "station": (
         "source.station.ophalen_catalogus_locations",
