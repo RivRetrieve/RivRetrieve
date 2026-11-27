@@ -46,9 +46,15 @@ def test_ie_opw_offline_discovery_stations_products_metadata_and_predicates(
     selection = rr.find(provider="ie_opw")
     frame = rr.as_frame(selection)
     assert frame["station_id"].n_unique() == 385
-    assert len(selection.series) == 4572
+    assert len(selection.series) == 3788
     assert len(selection.locations) == 385
     assert all(loc.latitude is not None and loc.longitude is not None for loc in selection.locations)
+
+    all_pairs = rr.as_frame(rr.find(provider="ie_opw", availability=("available", "unknown", "unavailable")))
+    assert all_pairs.height == 385 * 12
+    assert all_pairs.filter(pl.col("availability") == "available").height == 3788
+    assert all_pairs.filter(pl.col("availability") == "unavailable").height == 832
+    assert all_pairs.filter(pl.col("availability") == "unknown").height == 0
 
     # Single-source-per-field metadata at Sandy Mills (01041).
     meta_01041 = rr.metadata(rr.find(provider="ie_opw", station="01041"))
@@ -72,7 +78,7 @@ def test_ie_opw_offline_discovery_stations_products_metadata_and_predicates(
     assert daily_stage_df["unit"].unique().to_list() == ["m"]
 
     daily_q = rr.find(provider="ie_opw", quantity="discharge", frequency="P1D", statistic="mean")
-    assert len(daily_q.series) == 372
+    assert len(daily_q.series) == 197
     daily_q_df = rr.series(daily_q)
     assert daily_q_df["source_unit"].unique().to_list() == ["cumec"]
     assert daily_q_df["unit"].unique().to_list() == ["m3/s"]

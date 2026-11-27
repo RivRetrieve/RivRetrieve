@@ -154,16 +154,18 @@ series_table = rr.series(river_deele)
 station_info = rr.metadata(river_deele)
 ```
 
-The packaged catalogue holds `4,572` selectable series across the `385` river
-stations. To avoid bulk-polling hundreds of per-station `year.json` files during
-catalogue builds, RivRetrieve records only the known `48` unavailable discharge
-entries observed from OPW's published static `layers/30/index.json` index (`13`
-mean, `15` min, `15` max, and `5` instantaneous discharge series marked
-`unavailable` and omitted from default `rr.find`) while leaving unprobed
-per-station availability as `"unknown"` until requested. Daily triplets from
-`{param}/year.json` share a single HTTP file per parameter and station, so
-selecting `P1D` mean, min, and max with `cache="reuse"` performs one download
-per parameter.
+The packaged catalogue holds `3,788` available series and `832` confirmed
+unavailable series (`0` unknown) across all `385` river stations (`4,620`
+station-product pairs), based on full-network checks of OPW's `stations.json`,
+`layers/{10,20,30}/index.json`, daily `year.json` files, and unindexed
+`*_complete.zip` archives (checked on 2026-11-27): `197` gauges provide daily
+mean discharge (`176` daily min/max and instantaneous discharge), `385` provide
+daily min/max and instantaneous stage (`384` daily mean stage, with `07003`
+all-null for mean), and `381` provide daily and instantaneous water temperature.
+Default `rr.find` calls omit confirmed unavailable series unless
+`availability="unavailable"` is requested. Daily triplets from `{param}/year.json`
+share a single HTTP file per parameter and station, so selecting `P1D` mean,
+min, and max with `cache="reuse"` performs one download per parameter.
 
 Note on archive freshness: OPW rebuilds `*_complete.zip` archives overnight, so
 live daily `year.json` files can include recent days slightly ahead of the
@@ -257,5 +259,6 @@ on 2026-11-24:
 - [OPW quality codes](https://waterlevel.ie/hydro-data/html/qualitycodes.html) and [data types](https://waterlevel.ie/hydro-data/html/datatypes.html): integer quality code definitions, ISO 9001:2015 verification caveats, and summary statistics.
 - [OPW flow](https://waterlevel.ie/hydro-data/html/flowdatacollection.html), [water level](https://waterlevel.ie/hydro-data/html/wldatacollection.html), and [water temperature collection](https://waterlevel.ie/hydro-data/html/tempcollectionprocess.html): rating-curve estimation, Poolbeg/Malin Head Ordnance Datum notes, and uncalibrated pressure-transducer water temperature warnings.
 
-The station counts describe the packaged catalogue snapshot (2026-11-23). The
-live example output was retrieved on 2026-11-24.
+The station registry snapshot was checked on 2026-11-23, and the full-network
+series availability census was checked on 2026-11-27. The live example output
+was retrieved on 2026-11-24.

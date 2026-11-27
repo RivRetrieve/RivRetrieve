@@ -85,8 +85,10 @@ def test_ie_opw_guide_is_linked_plain_and_matches_packaged_catalogue() -> None:
 
     assert stations.height == 385
     assert series_frame["station_id"].n_unique() == 385
-    assert series_frame.height == 4_572
-    assert station_products.filter(pl.col("availability") == "unavailable").height == 48
+    assert series_frame.height == 3_788
+    assert station_products.filter(pl.col("availability") == "available").height == 3_788
+    assert station_products.filter(pl.col("availability") == "unavailable").height == 832
+    assert station_products.filter(pl.col("availability") == "unknown").height == 0
 
     # Verify documented EPA-numbered river stations kept and out-of-scope IDs excluded.
     kept_ids = set(stations["station_id"].to_list())

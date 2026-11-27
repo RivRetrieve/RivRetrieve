@@ -194,7 +194,7 @@ def test_source_series_matches_every_packaged_catalogue_series_id_and_facts_id()
     artifact = catalogue_reader("ie_opw").artifact
     assert artifact.station_products.height == 4620
     materialized, _ = catalogue_series(artifact, scope=SeriesScope(provider_ids=("ie_opw",)))
-    assert len(materialized) == 4572
+    assert len(materialized) == 3788
 
     for cat_item in materialized:
         runtime_item = source_series(cat_item.station_id, cat_item.product_id)

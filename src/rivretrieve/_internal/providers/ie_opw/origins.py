@@ -86,7 +86,13 @@ _CATALOGUE_SOURCE_FACTS = {
         "source.series.temporal_semantics",
         "source.series.stage_vertical_reference",
     ),
-    "station_product": ("source.station_product.associations",),
+    "station_product": (
+        "source.station_product.associations",
+        "source.station_product.year_json_q_census",
+        "source.station_product.year_json_s_census",
+        "source.station_product.year_json_twater_census",
+        "source.station_product.complete_zip_census",
+    ),
 }
 
 

@@ -368,7 +368,7 @@ def test_public_failure_isolation_refresh_retention_and_closed_failures(
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
     two_stations = rr.pick(
         rr.find(provider="ie_opw", quantity="discharge", frequency="P1D", statistic="mean"),
-        station=["01041", "01042"],
+        station=["01041", "07012"],
     )
     assert isinstance(two_stations, _Selection)
 
@@ -396,7 +396,7 @@ def test_public_failure_isolation_refresh_retention_and_closed_failures(
     assert partial.data["value"].to_list() == [pytest.approx(5.2)]
     assert {o.station_id: o.status for o in partial.outcomes} == {
         "01041": OutcomeStatus.SUCCESS,
-        "01042": OutcomeStatus.FAILED,
+        "07012": OutcomeStatus.FAILED,
     }
 
     s01041 = _select_products("01041", "discharge_daily_mean")

@@ -385,7 +385,7 @@ def station_product_associations(
     layer_witnesses: dict[str, dict[str, str]],
     station_witnesses: dict[tuple[str, str], tuple[str, str]],
 ) -> pl.DataFrame:
-    """Assemble 386 x 12 station-product availability without bulk scraping."""
+    """Assemble 385 x 12 station-product availability from witnessed sources."""
     kept_ids = set(native.data["station_no"].to_list())
     state: dict[tuple[str, str], tuple[str, str]] = {
         (sid, spec.product_id): ("unknown", _UNPROBED_REASON) for sid in kept_ids for spec in PRODUCT_SPECS
@@ -637,6 +637,50 @@ class CatalogueSources:
     checked_on: date
 
 
+def _verified_capture_http_status(
+    evidence_root: Path,
+    capture: dict[str, object],
+    reference: RecordingReference,
+    *,
+    input_receipt: RetainedInputReceipt,
+    raw_body: bytes,
+) -> int:
+    """Verify capture HTTP receipt against retained inputs when present or required (HTTP 404)."""
+    receipt_path = capture.get("receipt")
+    declared_status = capture.get("http_status")
+    selected = {item.consumer_path: item for item in input_receipt.inputs}
+    if not isinstance(receipt_path, str):
+        if declared_status == 404:
+            raise FatalContractError("OPW HTTP 404 capture requires a retained receipt path")
+        return 200
+    if receipt_path not in selected:
+        if declared_status == 404:
+            raise FatalContractError("OPW HTTP 404 receipt is absent from selected retained inputs")
+        return 200
+    from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+
+    member = selected[receipt_path]
+    verify_retained_input_files(
+        input_receipt.model_copy(update={"inputs": (member,), "declaration_inputs": (), "support_inputs": ()}),
+        evidence_root,
+    )
+    receipt_doc = json.loads((evidence_root / receipt_path).read_bytes())
+    if not isinstance(receipt_doc, dict):
+        raise FatalContractError(f"OPW receipt {receipt_path} must decode as JSON object")
+    status = receipt_doc.get("http_status")
+    if isinstance(status, bool) or not isinstance(status, int) or status not in (200, 404):
+        raise FatalContractError(f"OPW receipt {receipt_path} has unsupported http_status {status!r}")
+    if declared_status is not None and status != declared_status:
+        raise FatalContractError(f"OPW receipt {receipt_path} http_status disagrees with capture declaration")
+    if (
+        receipt_doc.get("sha256") != reference.sha256
+        or receipt_doc.get("byte_size") != len(raw_body)
+        or receipt_doc.get("url") != reference.source_url
+    ):
+        raise FatalContractError(f"OPW receipt {receipt_path} disagrees with body identity or source URL")
+    return status
+
+
 def read_catalogue_sources(
     evidence_root: Path, *, selection_path: str, input_receipt: RetainedInputReceipt
 ) -> CatalogueSources:
@@ -705,6 +749,20 @@ def read_catalogue_sources(
         elif kind == "year_json":
             station_no = capture["station_id"]
             parameter = capture["parameter"]
+            status = _verified_capture_http_status(
+                evidence_root, capture, reference, input_receipt=input_receipt, raw_body=raw
+            )
+            expected_shortnames = {s for (p, s) in YEAR_JSON_BY_PARAM_SHORTNAME if p == parameter}
+            if status == 404:
+                for shortname in sorted(expected_shortnames):
+                    spec = YEAR_JSON_BY_PARAM_SHORTNAME[(parameter, shortname)]
+                    _set_witness(
+                        station_witnesses,
+                        (station_no, spec.product_id),
+                        "unavailable",
+                        f"HTTP 404 on OPW {parameter}/year.json",
+                    )
+                continue
             payload = json.loads(raw)
             if not isinstance(payload, list):
                 raise FatalContractError(f"OPW {station_no}/{parameter}/year.json must decode as JSON list")
@@ -721,6 +779,10 @@ def read_catalogue_sources(
                 if entry.get("ts_unitsymbol") != spec.source_unit:
                     raise FatalContractError(
                         f"Unexpected unit {entry.get('ts_unitsymbol')!r} in {station_no}/{parameter}/year.json"
+                    )
+                if str(shortname) in seen_shortnames:
+                    raise FatalContractError(
+                        f"Duplicate ts_shortname {shortname!r} in {station_no}/{parameter}/year.json"
                     )
                 seen_shortnames.add(str(shortname))
                 data = entry.get("data", [])
@@ -739,15 +801,29 @@ def read_catalogue_sources(
                         "unavailable",
                         f"0 non-null daily rows in OPW {parameter}/year.json ({shortname})",
                     )
-            expected_shortnames = {s for (p, s) in YEAR_JSON_BY_PARAM_SHORTNAME if p == parameter}
-            if seen_shortnames != expected_shortnames:
-                raise FatalContractError(
-                    f"OPW {station_no}/{parameter}/year.json missing series {sorted(expected_shortnames - seen_shortnames)!r}"
+            for shortname in sorted(expected_shortnames - seen_shortnames):
+                spec = YEAR_JSON_BY_PARAM_SHORTNAME[(parameter, shortname)]
+                _set_witness(
+                    station_witnesses,
+                    (station_no, spec.product_id),
+                    "unavailable",
+                    f"Series {shortname} absent in OPW {parameter}/year.json",
                 )
         elif kind == "complete_zip":
             station_no = capture["station_id"]
             parameter = capture["parameter"]
             spec = COMPLETE_ZIP_BY_PARAM[parameter]
+            status = _verified_capture_http_status(
+                evidence_root, capture, reference, input_receipt=input_receipt, raw_body=raw
+            )
+            if status == 404:
+                _set_witness(
+                    station_witnesses,
+                    (station_no, spec.product_id),
+                    "unavailable",
+                    f"HTTP 404 on OPW {parameter}/{spec.route}",
+                )
+                continue
             availability, reason = _check_complete_zip_bytes(raw, station_no=station_no, parameter=parameter)
             _set_witness(station_witnesses, (station_no, spec.product_id), availability, reason)
         else:

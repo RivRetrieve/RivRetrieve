@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import zipfile
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import polars as pl
 import pytest
@@ -14,6 +17,7 @@ from rivretrieve._internal.acquisition_provenance import (
     FactBinding,
     NativeTableIdentity,
     RecordingReference,
+    RetainedInputReceipt,
     SourceStatement,
 )
 from rivretrieve._internal.catalogue_origins import (
@@ -22,13 +26,14 @@ from rivretrieve._internal.catalogue_origins import (
     enforce_catalogue_origins,
     validate_catalogue_origins,
 )
-from rivretrieve._internal.catalogues.native import RetrievedAt
+from rivretrieve._internal.catalogues.native import RetrievedAt, write_native_table
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProviderId
 from rivretrieve._internal.providers.ie_opw.generate_catalogue import (
     _check_complete_zip_bytes,
     catalogue_tables,
     is_excluded_station,
+    read_catalogue_sources,
     station_native_table,
     station_product_associations,
 )
@@ -122,6 +127,10 @@ def _provenance():
                     "source.station.geojson_crs",
                     "source.station.catchment_size_unit",
                     "source.station_product.associations",
+                    "source.station_product.year_json_q_census",
+                    "source.station_product.year_json_s_census",
+                    "source.station_product.year_json_twater_census",
+                    "source.station_product.complete_zip_census",
                     "source.series.fields",
                     "source.product.unit_definitions",
                     "source.series.temporal_semantics",
@@ -274,3 +283,285 @@ def test_complete_zip_parser_distinguishes_empty_and_populated_series() -> None:
             "2025-10-06T00:00:00.000Z;;-1\n2025-10-06T01:00:00.000Z;11.6;254\n",
         )
     assert _check_complete_zip_bytes(pop_buf.getvalue(), station_no="14124", parameter="TWater")[0] == "available"
+
+
+def test_read_catalogue_sources_handles_verified_404_receipts_and_partial_year_json(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    web = evidence / "maintenance/catalogue/ie_opw/official/web"
+    web.mkdir(parents=True)
+
+    stations_bytes = json.dumps([_opw_station("01041")]).encode("utf-8")
+    geojson_bytes = json.dumps(_geojson({"01041": (54.83831806, -7.575758056)})).encode("utf-8")
+    partial_year_bytes = json.dumps(
+        [
+            {
+                "station_no": "01041",
+                "ts_shortname": "WEB.Day.Mean",
+                "ts_unitsymbol": "cumec",
+                "data": [["2025-07-15T00:00:00.000Z", 2.5, 31]],
+            }
+        ]
+    ).encode("utf-8")
+    not_found_body = b"<html><body>404 Not Found</body></html>"
+    not_found_url = "https://waterlevel.ie/hydro-data/data/internet/stations/0/01041/TWater/year.json"
+    not_found_receipt = json.dumps(
+        {
+            "http_status": 404,
+            "sha256": hashlib.sha256(not_found_body).hexdigest(),
+            "byte_size": len(not_found_body),
+            "url": not_found_url,
+        }
+    ).encode("utf-8")
+
+    files = {
+        "maintenance/catalogue/ie_opw/official/web/stations.body": stations_bytes,
+        "maintenance/catalogue/ie_opw/official/web/geojson.body": geojson_bytes,
+        "maintenance/catalogue/ie_opw/official/web/q-year.body": partial_year_bytes,
+        "maintenance/catalogue/ie_opw/official/web/twater-404.body": not_found_body,
+        "maintenance/catalogue/ie_opw/official/web/twater-404.receipt.json": not_found_receipt,
+    }
+    for rel, content in files.items():
+        (evidence / rel).write_bytes(content)
+
+    native = station_native_table(
+        [_opw_station("01041")],
+        _geojson({"01041": (54.83831806, -7.575758056)}),
+        retrieved_at=RetrievedAt(datetime(2026, 11, 27, tzinfo=UTC)),
+    )
+    native_rel = "maintenance/catalogue/ie_opw/official/native.parquet"
+    write_native_table(native, evidence / native_rel)
+    files[native_rel] = (evidence / native_rel).read_bytes()
+
+    ts = datetime(2026, 11, 27, tzinfo=UTC)
+    selection_rel = "maintenance/catalogue/ie_opw/official/selection.json"
+    all_facts = (
+        "source.station.registry",
+        "source.station.catchment_size_unit",
+        "source.station.geojson_crs",
+        "source.station_product.associations",
+        "source.station_product.year_json_q_census",
+        "source.station_product.year_json_s_census",
+        "source.station_product.year_json_twater_census",
+        "source.station_product.complete_zip_census",
+        "source.series.fields",
+        "source.product.unit_definitions",
+        "source.series.temporal_semantics",
+        "source.series.stage_vertical_reference",
+        "source.series.annotations",
+        "source.provider.terms",
+        "source.provider.attribution",
+    )
+    selection_doc = {
+        "schema_version": 1,
+        "checked_on": "2026-11-27",
+        "native_table": native_rel,
+        "native_revision": "b" * 40,
+        "captures": [
+            {
+                "kind": "stations_json",
+                "body": "maintenance/catalogue/ie_opw/official/web/stations.body",
+                "receipt": "maintenance/catalogue/ie_opw/official/web/stations.receipt.json",
+                "recording": {
+                    "recording_id": "opw-hydro-stations-json",
+                    "repository_path": "maintenance/catalogue/ie_opw/official/web/stations.body",
+                    "source_url": "https://waterlevel.ie/hydro-data/data/internet/stations/stations.json",
+                    "retrieved_at": ts.isoformat(),
+                    "media_type": "application/json",
+                    "sha256": hashlib.sha256(stations_bytes).hexdigest(),
+                },
+            },
+            {
+                "kind": "geojson_crs",
+                "body": "maintenance/catalogue/ie_opw/official/web/geojson.body",
+                "receipt": "maintenance/catalogue/ie_opw/official/web/geojson.receipt.json",
+                "recording": {
+                    "recording_id": "opw-geojson-root",
+                    "repository_path": "maintenance/catalogue/ie_opw/official/web/geojson.body",
+                    "source_url": "https://waterlevel.ie/geojson/",
+                    "retrieved_at": ts.isoformat(),
+                    "media_type": "application/json",
+                    "sha256": hashlib.sha256(geojson_bytes).hexdigest(),
+                },
+            },
+            {
+                "kind": "year_json",
+                "station_id": "01041",
+                "parameter": "Q",
+                "body": "maintenance/catalogue/ie_opw/official/web/q-year.body",
+                "recording": {
+                    "recording_id": "opw-01041-q-year-json",
+                    "repository_path": "maintenance/catalogue/ie_opw/official/web/q-year.body",
+                    "source_url": "https://waterlevel.ie/hydro-data/data/internet/stations/0/01041/Q/year.json",
+                    "retrieved_at": ts.isoformat(),
+                    "media_type": "application/json",
+                    "sha256": hashlib.sha256(partial_year_bytes).hexdigest(),
+                },
+            },
+            {
+                "kind": "year_json",
+                "station_id": "01041",
+                "parameter": "TWater",
+                "http_status": 404,
+                "body": "maintenance/catalogue/ie_opw/official/web/twater-404.body",
+                "receipt": "maintenance/catalogue/ie_opw/official/web/twater-404.receipt.json",
+                "recording": {
+                    "recording_id": "opw-01041-twater-year-json",
+                    "repository_path": "maintenance/catalogue/ie_opw/official/web/twater-404.body",
+                    "source_url": not_found_url,
+                    "retrieved_at": ts.isoformat(),
+                    "media_type": "text/html",
+                    "sha256": hashlib.sha256(not_found_body).hexdigest(),
+                },
+            },
+        ],
+        "publication_acquisitions": [
+            {
+                "acquisition_id": "opw-hydro-stations-json",
+                "method": "http_request",
+                "instant_type": "retrieval",
+                "description": "Synthetic OPW stations registry",
+                "requested_from": [
+                    "https://waterlevel.ie/hydro-data/data/internet/stations/stations.json",
+                ],
+                "retrieved_at_start": ts.isoformat(),
+                "recording_ids": ["opw-hydro-stations-json"],
+            },
+            {
+                "acquisition_id": "opw-all",
+                "method": "http_campaign",
+                "instant_type": "retrieval_interval",
+                "description": "Synthetic OPW probe batch",
+                "requested_from": [
+                    "https://waterlevel.ie/geojson/",
+                    "https://waterlevel.ie/hydro-data/data/internet/stations/0/01041/Q/year.json",
+                    not_found_url,
+                ],
+                "retrieved_at_start": ts.isoformat(),
+                "retrieved_at_end": ts.isoformat(),
+                "recording_ids": [
+                    "opw-geojson-root",
+                    "opw-01041-q-year-json",
+                    "opw-01041-twater-year-json",
+                ],
+            },
+        ],
+        "source_bindings": [
+            {
+                "fact_group": "terms_and_registry",
+                "facts": [
+                    "source.station.registry",
+                    "source.station.catchment_size_unit",
+                    "source.provider.terms",
+                    "source.provider.attribution",
+                ],
+                "source_id": "ie_opw",
+                "acquisition_id": "opw-hydro-stations-json",
+            },
+            {
+                "fact_group": "all",
+                "facts": [
+                    f
+                    for f in all_facts
+                    if f
+                    not in {
+                        "source.station.registry",
+                        "source.station.catchment_size_unit",
+                        "source.provider.terms",
+                        "source.provider.attribution",
+                    }
+                ],
+                "source_id": "ie_opw",
+                "acquisition_id": "opw-all",
+            },
+        ],
+        "statements": [
+            {
+                "kind": "license",
+                "exact_text": "CC BY 4.0",
+                "recording_id": "opw-hydro-stations-json",
+                "fact": "source.provider.terms",
+                "verification_status": "verified_public_recording",
+            },
+            {
+                "kind": "citation",
+                "exact_text": "Office of Public Works (http://waterlevel.ie)",
+                "recording_id": "opw-hydro-stations-json",
+                "fact": "source.provider.attribution",
+                "verification_status": "verified_public_recording",
+            },
+        ],
+    }
+    selection_bytes = json.dumps(selection_doc).encode("utf-8")
+    (evidence / selection_rel).write_bytes(selection_bytes)
+
+    input_receipt = RetainedInputReceipt.model_validate(
+        {
+            "schema_version": 3,
+            "code_revision": "d" * 40,
+            "declaration_revision": "d" * 40,
+            "archive_code_revision": "a" * 40,
+            "inputs": [
+                {
+                    "archive_repository": "https://github.com/RivRetrieve/verification-evidence",
+                    "archive_revision": "a" * 40,
+                    "consumer_path": rel,
+                    "collection_id": "ie_opw-synthetic",
+                    "manifest_sha256": "e" * 64,
+                    "artifact_id": f"art-{idx}",
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                    "byte_size": len(content),
+                    "role": (
+                        "derived_input"
+                        if rel.endswith(".parquet")
+                        else "acquisition_receipt"
+                        if rel.endswith(".receipt.json")
+                        else "response_recording"
+                    ),
+                }
+                for idx, (rel, content) in enumerate(files.items())
+            ],
+            "declaration_inputs": [
+                {
+                    "consumer_path": selection_rel,
+                    "declaration": {
+                        "repository": "https://github.com/RivRetrieve/verification-evidence",
+                        "repository_path": "declarations/ie_opw/catalogue.json",
+                        "symbol": None,
+                        "revision": "a" * 40,
+                    },
+                    "sha256": hashlib.sha256(selection_bytes).hexdigest(),
+                    "byte_size": len(selection_bytes),
+                }
+            ],
+            "support_inputs": [],
+        }
+    )
+
+    sources = read_catalogue_sources(evidence, selection_path=selection_rel, input_receipt=input_receipt)
+    assoc = dict(sources.associations.select("product_id", "availability").iter_rows())
+    assert assoc["discharge_daily_mean"] == "available"
+    assert assoc["discharge_daily_min"] == "unavailable"
+    assert assoc["discharge_daily_max"] == "unavailable"
+    assert assoc["water_temperature_daily_mean"] == "unavailable"
+    assert assoc["water_temperature_daily_min"] == "unavailable"
+    assert assoc["water_temperature_daily_max"] == "unavailable"
+    assert assoc["stage_daily_mean"] == "unknown"
+
+    # Tampered 404 receipt must fail closed.
+    bad_receipt = json.dumps({"http_status": 404, "sha256": "0" * 64, "byte_size": 1, "url": not_found_url}).encode(
+        "utf-8"
+    )
+    bad_rel = "maintenance/catalogue/ie_opw/official/web/twater-404.receipt.json"
+    (evidence / bad_rel).write_bytes(bad_receipt)
+    bad_inputs = tuple(
+        item.model_copy(update={"sha256": hashlib.sha256(bad_receipt).hexdigest(), "byte_size": len(bad_receipt)})
+        if item.consumer_path == bad_rel
+        else item
+        for item in input_receipt.inputs
+    )
+    with pytest.raises(FatalContractError, match="disagrees with body identity"):
+        read_catalogue_sources(
+            evidence,
+            selection_path=selection_rel,
+            input_receipt=input_receipt.model_copy(update={"inputs": bad_inputs}),
+        )
