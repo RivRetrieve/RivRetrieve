@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 
 import polars as pl
 import pytest
 
 import rivretrieve as rr
+from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
 from rivretrieve._internal.discovery import _Selection
 from rivretrieve._internal.selection import UnknownStationError
 
@@ -50,11 +52,15 @@ def test_ie_opw_offline_discovery_stations_products_metadata_and_predicates(
     assert len(selection.locations) == 385
     assert all(loc.latitude is not None and loc.longitude is not None for loc in selection.locations)
 
-    all_pairs = rr.as_frame(rr.find(provider="ie_opw", availability=("available", "unknown", "unavailable")))
-    assert all_pairs.height == 385 * 12
-    assert all_pairs.filter(pl.col("availability") == "available").height == 3788
-    assert all_pairs.filter(pl.col("availability") == "unavailable").height == 832
-    assert all_pairs.filter(pl.col("availability") == "unknown").height == 0
+    station_products = load_packaged_catalogue_artifact(
+        Path(__file__).parents[1] / "src/rivretrieve/_internal/providers/ie_opw/catalogue",
+        on_issue="raise",
+    ).station_products
+    assert station_products.height == 385 * 12
+    assert station_products.filter(pl.col("availability") == "available").height == 3788
+    assert station_products.filter(pl.col("availability") == "unavailable").height == 832
+    assert station_products.filter(pl.col("availability") == "unknown").height == 0
+    assert rr.find(provider="ie_opw", station="18121", quantity="temperature", on_issue="ignore").series == ()
 
     # Single-source-per-field metadata at Sandy Mills (01041).
     meta_01041 = rr.metadata(rr.find(provider="ie_opw", station="01041"))
@@ -68,12 +74,12 @@ def test_ie_opw_offline_discovery_stations_products_metadata_and_predicates(
 
     # Physical predicate filtering, unit normalization, UTC time_zone, and Ordnance Datum stage reference.
     daily_stage = rr.find(provider="ie_opw", quantity="stage", frequency="P1D", statistic="mean")
-    assert len(daily_stage.series) == 385
+    assert len(daily_stage.series) == 384
     daily_stage_df = rr.series(daily_stage)
     assert daily_stage_df["time_zone"].unique().to_list() == ["+00:00"]
     assert daily_stage_df["time_zone_state"].unique().to_list() == ["known"]
     assert daily_stage_df["vertical_reference"].unique().to_list() == ["above_sea_level"]
-    assert daily_stage_df["vertical_datum"].null_count() == 385
+    assert daily_stage_df["vertical_datum"].null_count() == 384
     assert daily_stage_df["source_unit"].unique().to_list() == ["m"]
     assert daily_stage_df["unit"].unique().to_list() == ["m"]
 

@@ -162,8 +162,7 @@ station-product pairs), based on full-network checks of OPW's `stations.json`,
 mean discharge (`176` daily min/max and instantaneous discharge), `385` provide
 daily min/max and instantaneous stage (`384` daily mean stage, with `07003`
 all-null for mean), and `381` provide daily and instantaneous water temperature.
-Default `rr.find` calls omit confirmed unavailable series unless
-`availability="unavailable"` is requested. Daily triplets from `{param}/year.json`
+Confirmed unavailable series are excluded from `rr.find`. Daily triplets from `{param}/year.json`
 share a single HTTP file per parameter and station, so selecting `P1D` mean,
 min, and max with `cache="reuse"` performs one download per parameter.
 

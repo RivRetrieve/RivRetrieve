@@ -11,7 +11,7 @@ from polars.testing import assert_frame_equal
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
-from rivretrieve._internal.discovery import _Selection
+from rivretrieve._internal.discovery import EmptySelectionError, _Selection
 from rivretrieve._internal.providers.ie_opw.annotations import (
     IE_OPW_DAILY_STAGE_SCHEMA,
     IE_OPW_SERIES_SCHEMA,
@@ -26,10 +26,8 @@ _SCOPE = "maintenance/observations/ie_opw/retrieval"
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
 
-def _select_products(
-    station: str, *products: str, availability: str | tuple[str, ...] = ("available", "unknown")
-) -> _Selection:
-    selected = rr.find(provider="ie_opw", station=station, availability=availability)
+def _select_products(station: str, *products: str) -> _Selection:
+    selected = rr.find(provider="ie_opw", station=station)
     series_ids = rr.as_frame(selected).filter(pl.col("product_id").is_in(products))["series_id"].to_list()
     assert len(series_ids) == len(products)
     picked = rr.pick(selected, series_id=series_ids)
@@ -155,15 +153,18 @@ def test_recorded_public_edge_cases_1940s_negative_od_unmeasured_and_empty_block
         rr.annotations(temp_03055, schema=IE_OPW_SERIES_SCHEMA.schema_id).filter(pl.col("measured").not_()).height == 1
     )
 
-    assert (
-        "water_temperature_daily_mean"
-        not in rr.as_frame(rr.find(provider="ie_opw", station="18121"))["product_id"].to_list()
-    )
-    missing_18121 = rr.fetch(
-        _select_products("18121", "water_temperature_daily_mean", availability="unavailable"),
+    # Confirmed unavailable water temperature on 18121 is excluded from discovery.
+    empty_18121 = rr.find(provider="ie_opw", station="18121", quantity="temperature")
+    assert empty_18121.series == ()
+    with pytest.raises(EmptySelectionError, match="ie_opw"):
+        rr.fetch(empty_18121, start="2025-01-01", end="2025-12-31", cache="bypass")
+
+    # Querying historic 06025 outside its measured 1972..2004 period returns UNRESOLVED.
+    out_of_range_06025 = rr.fetch(
+        _select_products("06025", "discharge_daily_mean"),
         start="2025-01-01",
         end="2025-12-31",
         cache="bypass",
     )
-    assert missing_18121.data.is_empty()
-    assert [o.status for o in missing_18121.outcomes] == [OutcomeStatus.UNRESOLVED]
+    assert out_of_range_06025.data.is_empty()
+    assert [o.status for o in out_of_range_06025.outcomes] == [OutcomeStatus.UNRESOLVED]

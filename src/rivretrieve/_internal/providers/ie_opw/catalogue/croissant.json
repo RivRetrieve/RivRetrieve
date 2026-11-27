@@ -46,7 +46,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provider.json",
       "encodingFormat": "application/json",
-      "sha256": "968f571a92cd84b8575867de1fb7b2b4aab2b83f5ae4f23255a26ffb55ed3122",
+      "sha256": "ca0e8c698edfdf715ad5e0ff3bc328e7dc080819a7db56d2f9d97673b22044a5",
       "contentSize": "441 B"
     },
     {
@@ -70,56 +70,56 @@
       "@type": "cr:FileObject",
       "contentUrl": "station_products.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "e5c36cc8667ad51a74d516b64a050f01bebbfd03599ecaeeb26920a3744e44df",
-      "contentSize": "7497 B"
+      "sha256": "c2a5665adacb9a2d2bc037763d8a6b6d9a999b5ff00b6f56f346afb28839810b",
+      "contentSize": "22504 B"
     },
     {
       "@id": "provenance.json",
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "20fef2eb6bcdce5b1e196b1243f4b20c16301c46182dd1922b0d3063402c118e",
-      "contentSize": "78464 B"
+      "sha256": "f9c7ab333a3ce6b2f0b6f4660d2b57a2145a22adc4419d76a50034aa5d243952",
+      "contentSize": "1428411 B"
     },
     {
       "@id": "provenance_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "9f97598d508d6085904868c0062e2af2f8954b0c474c3fad699d4b7f54e40232",
-      "contentSize": "2823 B"
+      "sha256": "aade2c6886c560befcecb4484d41a7b859fa07106cc2a16d749f2a2e546234f7",
+      "contentSize": "2880 B"
     },
     {
       "@id": "provenance_acquisitions.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_acquisitions.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "3888d8334c0c582efaf9827af2cd2c768cbd96e2dd1e2de3d693ef07192d9306",
-      "contentSize": "10035 B"
+      "sha256": "e1fcea248cab6a1b5e3a6734b2afc75edccb2a1931bbfb43093294b2c9731083",
+      "contentSize": "17828 B"
     },
     {
       "@id": "provenance_bindings.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_bindings.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "6033c7c53aabfe6981a3f897d4e29be1b9def977b01e3a64b02b0c3e7c7d2d6e",
-      "contentSize": "2410 B"
+      "sha256": "d56a476d061bfb85fdee3b1da5fcd452acf8fe31d664a308c64bff9872cedc86",
+      "contentSize": "2513 B"
     },
     {
       "@id": "provenance_binding_facts.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_binding_facts.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "4e242efeef7e7d51af3f0431d870a2f5be8ee0a754c2e88de75084abffdb1d69",
-      "contentSize": "1362 B"
+      "sha256": "732536b907c5c7aab82ec9356c05bc0d6e7a71b81c7c244cda511007e4230f8a",
+      "contentSize": "1394 B"
     },
     {
       "@id": "provenance_external_inputs.parquet",
       "@type": "cr:FileObject",
       "contentUrl": "provenance_external_inputs.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "04ac22935f95a2f59288fae2f0dc94291fe7333af8ba7e947abfaf8fe8409d45",
-      "contentSize": "1585 B"
+      "sha256": "0c5825364b09d53684e46d0a088c89ab6f9b84be34c59f8cdb02228f989a31fa",
+      "contentSize": "1612 B"
     },
     {
       "@id": "format.json",
@@ -1566,8 +1566,8 @@
     "description": "build_inputs records exact adopted archive members, their supported fact names, and build and declaration revisions. transformations records executable and authored declaration references. Historical acquisition identities remain separate.",
     "conformsTo": "https://github.com/RivRetrieve/RivRetrieve/blob/main/docs/catalogue-evidence.md#profile-3"
   },
-  "version": "2026-11-23",
-  "datePublished": "2026-11-23",
+  "version": "2026-11-27",
+  "datePublished": "2026-11-27",
   "isBasedOn": {
     "@id": "native-table",
     "@type": "sc:MediaObject",
