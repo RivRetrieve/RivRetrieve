@@ -424,7 +424,18 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
     paths = (
         [f"maintenance/catalogue/{provider}/official"]
         if provider
-        in {"ar_ina", "at_ehyd", "au_bom", "ch_foen", "cl_dga", "co_ideam", "dk_vanda", "ee_est", "fi_syke", "pe_senamhi"}
+        in {
+            "ar_ina",
+            "at_ehyd",
+            "au_bom",
+            "ch_foen",
+            "cl_dga",
+            "co_ideam",
+            "dk_vanda",
+            "ee_est",
+            "fi_syke",
+            "pe_senamhi",
+        }
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
     )
     if provider in {"au_bom", "fi_syke"}:
@@ -1308,7 +1319,16 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         from tests.test_br_ana_catalogue_daily import read_catalogue_inputs
 
         *_, provenance, generated = read_catalogue_inputs(retained_evidence_root)
-    elif adapter.provider_id in {"ar_ina", "at_ehyd", "ch_foen", "cl_dga", "co_ideam", "dk_vanda", "ee_est", "pe_senamhi"}:
+    elif adapter.provider_id in {
+        "ar_ina",
+        "at_ehyd",
+        "ch_foen",
+        "cl_dga",
+        "co_ideam",
+        "dk_vanda",
+        "ee_est",
+        "pe_senamhi",
+    }:
         generated = _build(adapter)
         provenance = generated.acquisition_provenance
         source_inputs_before = {
