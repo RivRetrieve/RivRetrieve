@@ -55,6 +55,30 @@ class BrAnaDailySourceCoordinates:
             raise ValueError("ANA consistency must be 1 (Bruto) or 2 (Consistido)")
 
 
+@dataclass(frozen=True, slots=True)
+class BrAnaSharedEndpointCoordinates:
+    """One ANA endpoint response shared across co-published source products."""
+
+    endpoint: Literal["HidroinfoanaSerieTelemetricaAdotada", "HidroSerieCotas", "HidroSerieVazao"]
+
+    def __post_init__(self) -> None:
+        if self.endpoint not in (
+            "HidroinfoanaSerieTelemetricaAdotada",
+            "HidroSerieCotas",
+            "HidroSerieVazao",
+        ):
+            raise ValueError(
+                "ANA shared endpoint must be HidroinfoanaSerieTelemetricaAdotada, HidroSerieCotas, or HidroSerieVazao"
+            )
+
+
+SHARED_ACQUISITION_PRODUCTS: tuple[frozenset[ProductId], ...] = (
+    frozenset((ProductId("discharge_instantaneous"), ProductId("stage_instantaneous"))),
+    frozenset((ProductId("discharge_daily_mean_bruto"), ProductId("discharge_daily_mean_consistido"))),
+    frozenset((ProductId("stage_daily_mean_bruto"), ProductId("stage_daily_mean_consistido"))),
+)
+
+
 # ANA manual PDF page 11: Cota_Adotada (cm), Vazao_Adotada (m3/s),
 # Data_Hora_Medicao = measurement/collection time. No source zone is established.
 _CONFIG = ProviderConfig(
