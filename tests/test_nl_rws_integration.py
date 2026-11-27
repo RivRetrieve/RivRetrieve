@@ -416,6 +416,7 @@ def test_fetch_reuses_cache_for_single_product_and_coacquired_pair(
     assert len(stage_transport.requests) == 1
     assert reused_stage.data["value"].to_list() == pytest.approx([11.95])
     assert reused_stage.data["series_id"].to_list() == first_stage.data["series_id"].to_list()
+    assert reused_stage.data["facts_id"].to_list() == first_stage.data["facts_id"].to_list()
     assert reused_stage.to_polars(annotations=True)["kwaliteitswaardecode"].to_list() == ["00"]
 
     # 2. Co-acquired NVT + GEM24H cache reuse (discharge_m3s_nvt + discharge_m3s_gem24h)
@@ -452,4 +453,6 @@ def test_fetch_reuses_cache_for_single_product_and_coacquired_pair(
     assert len(joint_transport.requests) == calls_after_first
     assert reused_q.data.height == first_q.data.height == 2
     assert sorted(reused_q.data["product_id"].to_list()) == ["discharge_m3s_gem24h", "discharge_m3s_nvt"]
+    assert sorted(reused_q.data["series_id"].to_list()) == sorted(first_q.data["series_id"].to_list())
+    assert sorted(reused_q.data["facts_id"].to_list()) == sorted(first_q.data["facts_id"].to_list())
     assert reused_q.to_polars(annotations=True)["kwaliteitswaardecode"].to_list() == ["00", "00"]

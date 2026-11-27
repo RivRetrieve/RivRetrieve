@@ -167,7 +167,11 @@ def _adapter(
             build, associations=sources.associations, checked_on=sources.checked_on, provenance=sources.provenance
         )
     if provider == "nl_rws":
+        sources = generator.read_catalogue_sources(retained_evidence_root, input_receipt=input_receipt)
         native_path = retained_evidence_root / "maintenance/catalogue/nl_rws/official/native.parquet"
+        build = partial(
+            build, associations=sources.associations, checked_on=sources.checked_on, provenance=sources.provenance
+        )
     if provider == "br_ana":
         from rivretrieve._internal.providers.br_ana.capture import parse_adopted_telemetry_evidence, read_capture_record
         from rivretrieve._internal.providers.br_ana.origins import (
@@ -1135,6 +1139,10 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             ),
         ),
         pytest.param(
+            "nl_rws",
+            marks=pytest.mark.governing("maintenance/catalogue/nl_rws/official"),
+        ),
+        pytest.param(
             "ch_foen",
             marks=pytest.mark.governing(
                 "maintenance/catalogue/ch_foen/official",
@@ -1376,6 +1384,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "co_ideam",
         "dk_vanda",
         "fi_syke",
+        "nl_rws",
         "pe_senamhi",
     }:
         arguments.extend(("--native", str(adapter.native_path)))
@@ -1389,6 +1398,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "cz_chmi",
         "fi_syke",
         "lt_lhmt",
+        "nl_rws",
         "no_nve",
         "th_thaiwater",
         "za_dws",
@@ -1404,6 +1414,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "dk_vanda",
         "fi_syke",
         "fr_hubeau",
+        "nl_rws",
         "pe_senamhi",
     }:
         selected_receipt = product_root / f"{adapter.provider_id}.input-receipt.json"

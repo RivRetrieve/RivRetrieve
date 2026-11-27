@@ -371,3 +371,197 @@ def write_catalogue(
     output.mkdir(parents=True, exist_ok=True)
     for name, content in {**files, **metadata}.items():
         (output / name).write_bytes(content)
+
+
+@dataclass(frozen=True)
+class CatalogueSources:
+    native_table: NativeTable
+    associations: pl.DataFrame
+    checked_on: date
+    provenance: AcquisitionProvenance
+
+
+def read_catalogue_sources(
+    evidence_root: Path,
+    *,
+    input_receipt: object | None = None,
+) -> CatalogueSources:
+    """Read retained nl_rws OphalenCatalogus and native.parquet inputs offline."""
+    from datetime import UTC, datetime
+
+    from rivretrieve._internal.acquisition_provenance import (
+        AcquisitionRecord,
+        FactBinding,
+        NativeTableIdentity,
+        RecordingReference,
+        RetainedInputReceipt,
+        SourceStatement,
+    )
+    from rivretrieve._internal.catalogues.inputs import verify_retained_input_files
+    from rivretrieve._internal.catalogues.native import read_native_table
+    from rivretrieve._internal.providers.nl_rws import origins
+
+    catalogus_rel = "maintenance/catalogue/nl_rws/official/access/01b_catalogus_extended.json"
+    receipts_rel = "maintenance/catalogue/nl_rws/official/access/acquisition-receipts.json"
+    native_rel = "maintenance/catalogue/nl_rws/official/native.parquet"
+
+    selected = {}
+    if isinstance(input_receipt, RetainedInputReceipt):
+        verify_retained_input_files(input_receipt, evidence_root)
+        selected = {item.consumer_path: item for item in input_receipt.inputs}
+
+    catalogus_bytes = (evidence_root / catalogus_rel).read_bytes()
+    catalogus_doc = json.loads(catalogus_bytes)
+    retrieved_at = datetime(2026, 11, 25, 13, 44, 26, tzinfo=UTC)
+    native, associations = station_native_table(catalogus_doc, retrieved_at=RetrievedAt(retrieved_at))
+
+    native_member = selected.get(native_rel)
+    if native_member is not None:
+        retained_native = read_native_table(
+            evidence_root / native_rel,
+            expected_sha256=native_member.sha256,
+            expected_byte_size=native_member.byte_size,
+        )
+        native_rev = native_member.archive_revision
+        native_sha = native_member.sha256
+        native_size = native_member.byte_size
+    else:
+        retained_native = read_native_table(evidence_root / native_rel)
+        native_rev = "983ebb162a4fa6064ec8bee56427fb7d4e0161d3"
+        native_sha = "b9ea91a1285fdc1476592c75e4636f3bbb0ec5b215dc3c715155815ebf92dc0c"
+        native_size = (evidence_root / native_rel).stat().st_size
+
+    if not native.data.equals(retained_native.data):
+        raise FatalContractError("nl_rws recomputed native table differs from its separately retained identity")
+
+    provenance = origins.build_acquisition_provenance(
+        NativeTableIdentity(
+            location_kind="retained",
+            repository_path=native_rel,
+            revision=native_rev,
+            sha256=native_sha,
+            byte_size=native_size,
+        ),
+        (
+            RecordingReference(
+                recording_id="nl-rws-catalogus-extended-2026-11-25",
+                repository_path=catalogus_rel,
+                source_url="https://ddapi20-waterwebservices.rijkswaterstaat.nl/METADATASERVICES/OphalenCatalogus",
+                retrieved_at=retrieved_at,
+                media_type="application/json",
+                sha256="80db05e8f6fd3dbf5d2322e654b13a8e9e0c2b188e70a0731e37129559239919",
+            ),
+            RecordingReference(
+                recording_id="nl-rws-terms-receipts-2026-11-25",
+                repository_path=receipts_rel,
+                source_url="https://www.rijkswaterstaat.nl/copyright",
+                retrieved_at=retrieved_at,
+                media_type="application/json",
+                sha256="f8022d9799e057c00b28ed0c818b5de9a828cbfc668489a822b1285808e47b28",
+            ),
+        ),
+        acquisitions=(
+            AcquisitionRecord(
+                acquisition_id="nl-rws-ophalen-catalogus-2026-11-25",
+                method="http_request",
+                instant_type="retrieval",
+                description="DDAPI 2.0 POST OphalenCatalogus extended metadata response",
+                requested_from=(
+                    "https://ddapi20-waterwebservices.rijkswaterstaat.nl/METADATASERVICES/OphalenCatalogus",
+                ),
+                retrieved_at_start=retrieved_at,
+                recording_ids=("nl-rws-catalogus-extended-2026-11-25",),
+            ),
+            AcquisitionRecord(
+                acquisition_id="nl-rws-terms-2026-11-25",
+                method="http_request",
+                instant_type="retrieval",
+                description="Rijkswaterstaat open data copyright and data.overheid.nl CC0-1.0 / Public Domain Mark 1.0 terms",
+                requested_from=(
+                    "https://www.rijkswaterstaat.nl/copyright",
+                    "https://data.overheid.nl/dataset/9442-waterinfo-rijkswateren",
+                ),
+                retrieved_at_start=retrieved_at,
+                recording_ids=("nl-rws-terms-receipts-2026-11-25",),
+            ),
+        ),
+        source_bindings=(
+            FactBinding(
+                fact_group="nl_rws_catalogus_source",
+                facts=(
+                    "source.station.ophalen_catalogus_locations",
+                    "source.station.etrs89_coordinates",
+                    "source.product.aquo_metadata_catalogue",
+                    "source.station_product.aquo_metadata_location_links",
+                ),
+                source_id="nl_rws",
+                acquisition_id="nl-rws-ophalen-catalogus-2026-11-25",
+            ),
+            FactBinding(
+                fact_group="nl_rws_terms_source",
+                facts=("source.provider.license", "source.provider.citation"),
+                source_id="nl_rws",
+                acquisition_id="nl-rws-terms-2026-11-25",
+            ),
+        ),
+        statements=(
+            SourceStatement(
+                kind="license",
+                exact_text="CC0-1.0",
+                recording_id="nl-rws-terms-receipts-2026-11-25",
+                fact="source.provider.license",
+            ),
+            SourceStatement(
+                kind="citation",
+                exact_text="Bron: Rijkswaterstaat – Waterwebservices",
+                recording_id="nl-rws-terms-receipts-2026-11-25",
+                fact="source.provider.citation",
+            ),
+        ),
+    )
+    return CatalogueSources(native, associations, date(2026, 11, 25), provenance)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Compose an offline official nl_rws catalogue candidate outside source checkouts."""
+    import argparse
+
+    from rivretrieve._internal.acquisition_provenance import RetainedInputReceipt
+    from rivretrieve._internal.providers.nl_rws.origins import STATION_CATALOGUE_ORIGINS
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument("--input-receipt", type=Path, default=None)
+    parser.add_argument("--build-inputs", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args(argv)
+    output = args.out.resolve()
+    evidence_root = args.evidence_root.resolve(strict=True)
+    if output.exists() or output.is_relative_to(evidence_root) or evidence_root.is_relative_to(output):
+        raise FatalContractError("nl_rws catalogue output must be a new path separate from retained inputs")
+    if any((parent / ".git").exists() for parent in (output, *output.parents)):
+        raise FatalContractError("nl_rws catalogue output must stay outside source checkouts")
+    receipt = (
+        RetainedInputReceipt.model_validate_json(args.input_receipt.read_bytes())
+        if args.input_receipt is not None
+        else None
+    )
+    sources = read_catalogue_sources(evidence_root, input_receipt=receipt)
+    catalogue = build_catalogue(
+        sources.native_table,
+        STATION_CATALOGUE_ORIGINS,
+        associations=sources.associations,
+        checked_on=sources.checked_on,
+        provenance=sources.provenance,
+    )
+    write_catalogue(
+        catalogue,
+        output,
+        build_inputs=CatalogueBuildInputs.model_validate_json(args.build_inputs.read_bytes()),
+        native_table=sources.native_table,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
