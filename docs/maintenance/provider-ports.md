@@ -41,8 +41,13 @@ before Step 1 begins.
 
 Use `port/<provider>` as the base branch for all pull requests in Steps 1–7,
 including vision publication and user documentation. Verify the base branch
-when opening each pull request. Merge the port branch into `main` through the
-final pull request once Step 7 is complete and final review is approved.
+when opening each pull request.
+
+Track the final manual review in a separate Step 8 issue. Once Steps 1–7 are
+complete, the designated reviewer checks the provider, verification results
+and user documentation. Keep any review fixes on the port branch. Merge the
+port branch into `main` through the final pull request only after the reviewer
+explicitly approves the completed port.
 
 ## Progress through evidence-backed steps
 
