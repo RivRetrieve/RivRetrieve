@@ -279,9 +279,15 @@ When a suitable published observational dataset is available, usually a regional
 CAMELS dataset, require a bounded comparison with values retrieved through
 RivRetrieve's public API. Match stations confidently and select overlapping dates.
 Use a reproducible random sample without selecting for agreement; ten gauges is a
-useful default, not a rigid requirement. Plot both hydrographs with explicit unit
-conversion and preserved gaps. Inspect for obvious errors and investigate meaningful
-discrepancies without filtering, shifting or fitting values to force agreement.
+useful default, not a rigid requirement. Every gauge counted in the comparison
+must compare actual numeric observations against actual numeric observations on
+aligned timestamps (`n > 0` overlapping non-null pairs): a matched station that
+returns no observations or has no overlapping non-null values in the comparison
+window is not a comparison and must be reported separately as unavailable or
+non-overlapping rather than counted toward the compared sample. Plot both
+hydrographs with explicit unit conversion and preserved gaps. Inspect for obvious
+errors and investigate meaningful discrepancies without filtering, shifting or
+fitting values to force agreement.
 
 A comparison window bounded to a published dataset's coverage, such as a CAMELS
 dataset's end date, is not evidence of the source's actual historical reach. Check
