@@ -15,8 +15,8 @@ Connect the Netherlands Rijkswaterstaat (`nl_rws`) packaged catalogue, series
 identity and annotation schema, and DDAPI 2.0 retrieval stages (`config.py`,
 `fetch.py`, `parse.py`) into RivRetrieve's shared engine and built-in provider
 manifest so that all 10 admitted `nl_rws` products work end-to-end through the
-public discovery (`rr.providers()`, `rr.products()`, `rr.stations()`,
-`rr.find()`, `rr.describe()`) and retrieval (`rr.fetch()`) APIs, with full
+public discovery (`rr.providers()`, `rr.products()`, `rr.find()`,
+`rr.metadata()`, `rr.describe()`) and retrieval (`rr.fetch()`) APIs, with full
 shared contract compliance and focused source-independent integration tests.
 
 ## Scope and Design Decisions
@@ -61,7 +61,8 @@ Register `"nl_rws"` in:
 
 Update the shared contract test lists that enumerate built-in/enrolled
 providers (`tests/test_discovery.py`, `tests/test_internal_catalogue_origins.py`,
-`tests/test_catalogue_origin_certification.py`, and any other
+`tests/test_catalogue_origin_certification.py`, `tests/test_catalogue_evidence.py`,
+`tests/test_packaging_carries_catalogues.py`, and any other
 `BUILTIN_PROVIDER_IDS`-coupled contract tests) so the full shared `--logic-only`
 test suite stays green on `port/nl-rws`.
 
@@ -71,12 +72,14 @@ Verify `nl_rws` end-to-end through RivRetrieve's public APIs using an injected
 fake `Transport` (zero network calls):
 
 - **Public discovery:**
-  - `rr.providers()` includes `"nl_rws"` (`Rijkswaterstaat`, `CC0-1.0`).
+  - `rr.providers()` includes `"nl_rws"` with `credentials=[]` and
+    `access="open"`.
   - `rr.products(provider="nl_rws")` returns all 10 admitted products.
-  - `rr.stations(provider="nl_rws")` returns the 1,706 packaged stations
-    (including `lobith.bovenrijn.tolkamer`).
-  - `rr.find(provider="nl_rws", ...)` resolves stations and products cleanly.
-  - `rr.describe("nl_rws")` returns the packaged `croissant.json` descriptor.
+  - `rr.find(provider="nl_rws", ...)` resolves the 1,706 packaged stations
+    (including `lobith.bovenrijn.tolkamer`) and their products cleanly, and
+    `rr.metadata(...)` returns packaged station metadata.
+  - `rr.describe("nl_rws")` returns the packaged `croissant.json` descriptor
+    (carrying `Rijkswaterstaat` / `CC0-1.0` metadata).
 - **Public retrieval (`rr.fetch()` via `driver.drive`):**
   - **Canonical unit conversion:** `stage_nap_nvt` (`cm → m`),
     `discharge_m3d_nvt` (`m3/d → m3/s`), and `water_temperature_nvt`
