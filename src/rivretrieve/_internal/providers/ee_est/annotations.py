@@ -13,12 +13,12 @@ QUALITY_FLAG_FIELD = AnnotationField(
     dtype="String",
     description=(
         "EstModel OpenAPI Measurement.qualityFlag verbatim string (schema enum: "
-        '"BELOW_LOQ", "OUTLIER", "UNCHECKED"). Verified daily observations through '
-        "the end of the last completed calendar year omit qualityFlag (null); "
-        'current-year operational daily discharge (Q) and stage (H) rows carry "UNCHECKED" '
-        "pending annual WISKI verification, while operational daily water-temperature "
-        "(T) rows continue omitting qualityFlag (null). RivRetrieve preserves the "
-        "publisher label without filtering or ranking."
+        '"BELOW_LOQ", "OUTLIER", "UNCHECKED"). Null does not mean checked: observed '
+        "2026-11-26 across the full daily histories at Ahja (SJA8821000) and Tartu "
+        "(SJA7331000), every row up to 2025-12-31 omits qualityFlag (null), 2026 Q "
+        'and H rows carry "UNCHECKED", 2026 T rows omit qualityFlag (null), and '
+        '"BELOW_LOQ" and "OUTLIER" never appear. RivRetrieve preserves the publisher '
+        "label without filtering or ranking."
     ),
     reference_url=ESTMODEL_SWAGGER_URL,
 )

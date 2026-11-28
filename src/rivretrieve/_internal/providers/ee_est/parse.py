@@ -16,8 +16,7 @@ from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.ee_est.annotations import EE_EST_ESTMODEL_SCHEMA
 from rivretrieve._internal.providers.ee_est.config import EstModelCoordinates, FHydroseireCoordinates
-from rivretrieve._internal.providers.ee_est.fetch import reused_series
-from rivretrieve._internal.providers.ee_est.series import FH_NAMESPACE, source_series
+from rivretrieve._internal.providers.ee_est.series import FH_NAMESPACE, reused_series, source_series
 from rivretrieve._internal.source_annotations import (
     OBSERVATION_STRUCTURAL_SCHEMA,
     AnnotationBundle,

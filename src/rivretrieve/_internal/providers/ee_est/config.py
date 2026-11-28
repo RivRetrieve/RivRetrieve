@@ -74,6 +74,13 @@ class FHydroseireCoordinates:
             raise FatalContractError(f"ee_est jaam_kood must be a positive integer or None: {self.jaam_kood!r}")
 
 
+@dataclass(frozen=True, slots=True)
+class FSeirejaamadLookupCoordinates:
+    """Per-station ``f_seirejaamad`` prerequisite lookup resolving ``jaam_kood`` codes."""
+
+    station_id: str
+
+
 _UNITS: dict[str, Unit] = {
     "m3/s": Unit.M3_S,
     "m": Unit.M,
@@ -125,7 +132,7 @@ _EM_WINDOW = WindowDeclaration(
 )
 
 # Keskkonnaandmed f_hydroseire publishes a 20,000-row response cap and queries
-# UTC timeline_ts_utc directly; 365-day spans keep single-series responses <= 8,784 rows.
+# UTC timeline_ts_utc directly; 365-day spans keep single-series responses <= 8,760 rows.
 _FH_WINDOW = WindowDeclaration(
     WindowGranularity("capped-span"),
     WindowRenderingVocabulary.ISO_INSTANT,

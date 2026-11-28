@@ -378,10 +378,42 @@ def catalogue_product_rows() -> list[dict[str, object]]:
     ]
 
 
+def reused_series(definition: SourceSeries, known_series: tuple[SourceSeries, ...]) -> SourceSeries:
+    """Preserve prior established identity and matching fact IDs when available."""
+    candidate = next((item for item in known_series if item.series_id == definition.series_id), None)
+    if candidate is None:
+        return definition
+    retained = {_fact_signature(fact): fact for fact in candidate.facts}
+    return definition.model_copy(
+        update={
+            "identity": candidate.identity,
+            "facts": tuple(retained.get(_fact_signature(fact), fact) for fact in definition.facts),
+        }
+    )
+
+
+def _fact_signature(fact: PhysicalFacts) -> tuple[object, ...]:
+    return (
+        fact.quantity.value,
+        fact.source_unit.value,
+        fact.normalized_unit,
+        fact.frequency.value,
+        fact.statistic.value,
+        fact.temporal_support.value,
+        fact.day_definition.value,
+        fact.timestamp_anchor.value,
+        fact.time_zone.value,
+        fact.vertical_reference.value,
+        fact.vertical_datum.value,
+        fact.clipping_axis,
+        fact.label_time,
+    )
+
+
 def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
     """Emit concrete source descriptions for every witnessed available pair."""
     descriptions: list[SourceDescription] = []
-    available = associations.filter(pl.col("available")).sort("station_id", "product_id")
+    available = associations.filter(pl.col("available")).sort("station_id", "product_id", "jaam_kood")
     for station_id, jaam_kood, product_id, native_id in available.select(
         "station_id", "jaam_kood", "product_id", "native_id"
     ).iter_rows():

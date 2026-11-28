@@ -3,50 +3,66 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
-from uuid import uuid4
+from types import MappingProxyType
 
-from rivretrieve._internal.authentication import CredentialExchangeError
+from rivretrieve._internal.coverage import RequestedInterval
 from rivretrieve._internal.engine import (
     FetchWindow,
-    Payload,
+    InterpretedPayload,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
-    SourceCallOrigin,
     SourceCoordinates,
-    UnknownOriginFact,
 )
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.primitives import ProductId, ProviderId
-from rivretrieve._internal.providers.ee_est.config import EstModelCoordinates, FHydroseireCoordinates
-from rivretrieve._internal.providers.ee_est.series import FH_NAMESPACE, parse_jaam_kood, source_series
-from rivretrieve._internal.source_acquisition import (
-    FailedSourceRequest,
-    SourceRequestTarget,
-    attempt_request,
-    attempt_series_request,
+from rivretrieve._internal.providers.ee_est.config import (
+    EstModelCoordinates,
+    FHydroseireCoordinates,
+    FSeirejaamadLookupCoordinates,
 )
+from rivretrieve._internal.providers.ee_est.parse import parse
+from rivretrieve._internal.providers.ee_est.series import (
+    FH_NAMESPACE,
+    parse_jaam_kood,
+    reused_series,
+    source_series,
+)
+from rivretrieve._internal.request_planning import (
+    ConsumerNeed,
+    LookupFailureResult,
+    LookupResolution,
+    ObservationPlan,
+    PlannedLookup,
+    PlannedObservationRequest,
+    ResolvedLookup,
+    execute_planned_acquisition,
+)
+from rivretrieve._internal.source_acquisition import FailedSourceRequest
 from rivretrieve._internal.source_series import (
     InventoryCompleteness,
     InventorySnapshot,
     OutcomeStatus,
-    PhysicalFacts,
+    ParsedSeries,
+    RestrictionKind,
     RetrievalOutcome,
     SeriesScope,
     SeriesWindow,
     SourceSeries,
     stable_id,
 )
+from rivretrieve._internal.time_axis import TimeAxis
 from rivretrieve._internal.transport import (
     HttpMethod,
     Transport,
-    TransportFailure,
     TransportRequest,
     TransportResponse,
 )
+
+__all__ = ["EeEstRequestPlanner", "fetch", "reused_series"]
 
 _PROVIDER_ID = ProviderId("ee_est")
 _ESTMODEL_BASE_URL = "https://estmodel.envir.ee/stations"
@@ -54,6 +70,7 @@ _FH_URL = "https://keskkonnaandmed.envir.ee/f_hydroseire"
 _SEIREJAAMAD_URL = "https://keskkonnaandmed.envir.ee/f_seirejaamad"
 _JSON_HEADERS = {"Accept": "application/json"}
 _FH_HEADERS = {"Accept": "application/json", "Accept-Profile": "apijahiala"}
+_SEIREJAAMAD_LOOKUP_KEY = "ee_est_seirejaamad"
 
 
 def _validate_station_id(station: str) -> None:
@@ -66,368 +83,620 @@ def _validate_station_id(station: str) -> None:
         raise FatalContractError(f"ee_est station_id must be a canonical nonblank identifier: {station!r}")
 
 
-def reused_series(definition: SourceSeries, known_series: tuple[SourceSeries, ...]) -> SourceSeries:
-    """Preserve prior established identity and matching fact IDs when available."""
-    candidate = next((item for item in known_series if item.series_id == definition.series_id), None)
-    if candidate is None:
-        return definition
-    retained = {_fact_signature(fact): fact for fact in candidate.facts}
-    return definition.model_copy(
-        update={
-            "identity": candidate.identity,
-            "facts": tuple(retained.get(_fact_signature(fact), fact) for fact in definition.facts),
-        }
-    )
-
-
-def _fact_signature(fact: PhysicalFacts) -> tuple[object, ...]:
-    return (
-        fact.quantity.value,
-        fact.source_unit.value,
-        fact.normalized_unit,
-        fact.frequency.value,
-        fact.statistic.value,
-        fact.temporal_support.value,
-        fact.day_definition.value,
-        fact.timestamp_anchor.value,
-        fact.time_zone.value,
-        fact.vertical_reference.value,
-        fact.vertical_datum.value,
-        fact.clipping_axis,
-        fact.label_time,
-    )
-
-
-def _jaam_kood_from_known(
-    station: str,
-    product: ProductId,
-    aegrida_nimi: str,
-    known_series: tuple[SourceSeries, ...],
-) -> int | None:
+def _extract_jaam_kood(published_id: str | None, aegrida_nimi: str) -> int | None:
+    if published_id is None:
+        return None
     suffix = f":{aegrida_nimi}"
-    for item in known_series:
-        if item.station_id != station or item.product_id != str(product):
-            continue
-        if item.identity.namespace != FH_NAMESPACE or item.identity.published_id is None:
-            continue
-        published = item.identity.published_id
-        if not published.endswith(suffix):
-            continue
-        code_part = published[: -len(suffix)]
-        if code_part.isascii() and code_part.isdigit() and int(code_part) > 0:
-            return int(code_part)
+    if not published_id.endswith(suffix):
+        return None
+    code_part = published_id[: -len(suffix)]
+    if code_part.isascii() and code_part.isdigit() and int(code_part) > 0:
+        return int(code_part)
     return None
 
 
-def _origin(response: TransportResponse, *, acquisition_id: str | None = None) -> SourceCallOrigin:
-    return SourceCallOrigin(
-        url=response.url,
-        request_parameters=response.request_parameters,
-        status_code=response.status_code,
-        retrieved_at=response.retrieved_at,
-        content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
-        source_path=UnknownOriginFact(),
-        query=UnknownOriginFact(),
-        attempts=response.attempts,
-        attempt_traces=response.attempt_traces,
-        acquisition_id=acquisition_id,
+def _resolve_explicit_codes(need: ConsumerNeed, coords: FHydroseireCoordinates) -> tuple[int, ...]:
+    """Extract explicitly requested ``jaam_kood`` codes when scope restriction is EXPLICIT."""
+    if need.scope.restriction is not RestrictionKind.EXPLICIT:
+        return ()
+    codes: list[int] = []
+    for item in need.known_series:
+        if item.station_id != need.station or item.product_id != str(need.product):
+            continue
+        if item.identity.namespace != FH_NAMESPACE or not need.scope.matches(item):
+            continue
+        parsed_code = _extract_jaam_kood(item.identity.published_id, coords.aegrida_nimi)
+        if parsed_code is not None:
+            codes.append(parsed_code)
+    for variant in need.scope.variants:
+        parsed_code = _extract_jaam_kood(variant, coords.aegrida_nimi)
+        if parsed_code is not None:
+            codes.append(parsed_code)
+    return tuple(dict.fromkeys(codes))
+
+
+def _known_codes_for_pair(need: ConsumerNeed, coords: FHydroseireCoordinates) -> tuple[int, ...]:
+    """Extract ``jaam_kood`` codes from caller-supplied ``known_series`` when no packaged table is present."""
+    codes: list[int] = []
+    for item in need.known_series:
+        if item.station_id != need.station or item.product_id != str(need.product):
+            continue
+        if item.identity.namespace != FH_NAMESPACE or not need.scope.matches(item):
+            continue
+        parsed_code = _extract_jaam_kood(item.identity.published_id, coords.aegrida_nimi)
+        if parsed_code is not None:
+            codes.append(parsed_code)
+    return tuple(dict.fromkeys(codes))
+
+
+def _unrestricted_pair_scope(need: ConsumerNeed) -> SeriesScope:
+    return SeriesScope(
+        provider_ids=("ee_est",),
+        station_ids=(need.station,),
+        product_ids=(str(need.product),),
     )
 
 
-def _request_target(
-    station: str,
-    product: ProductId,
-    known_series: tuple[SourceSeries, ...],
-    *,
-    jaam_kood: int | None = None,
-) -> SourceSeries | SourceRequestTarget:
-    matching = tuple(item for item in known_series if item.station_id == station and item.product_id == str(product))
-    if len(matching) == 1:
-        return matching[0]
-    if jaam_kood is not None:
-        return reused_series(source_series(station, str(product), jaam_kood=jaam_kood, origin="mapping"), known_series)
-    return SourceRequestTarget(station, str(product))
+def _validated_need(
+    need: ConsumerNeed, config: ProviderConfig
+) -> tuple[EstModelCoordinates | FHydroseireCoordinates, tuple[RenderedWindow, ...]]:
+    _validate_station_id(need.station)
+    try:
+        product_config = config.products[need.product]
+    except KeyError as error:
+        raise FatalContractError(f"ee_est product is absent from provider config: {need.product}") from error
+    coords = product_config.coordinates.value
+    if not isinstance(coords, (EstModelCoordinates, FHydroseireCoordinates)):
+        raise FatalContractError(f"ee_est product has invalid source coordinates: {need.product}")
+    if not need.rendered:
+        raise FatalContractError(f"ee_est product requires at least one rendered window: {need.product}")
+    for window in need.rendered:
+        if window.bounds is None or window.stop is None:
+            raise FatalContractError(f"ee_est product requires closed bounds and stop: {need.product}")
+    return coords, need.rendered
 
 
-@dataclass(frozen=True, slots=True)
-class _StationCodeLookup:
+def _on_seirejaamad_response(
+    response: TransportResponse,
+    consumers: tuple[ConsumerNeed, ...],
+    acquisition_id: str,
+    config: ProviderConfig,
+) -> ResolvedLookup:
+    del config
+    station = consumers[0].station
+    if any(need.station != station for need in consumers):
+        raise FatalContractError("ee_est /f_seirejaamad lookup cannot span multiple stations")
     codes: tuple[int, ...] = ()
-    lookup_id: str | None = None
-    retrieved_at: datetime | None = None
-    transport_request: TransportRequest | None = None
-    transport_failure: TransportFailure | CredentialExchangeError | None = None
     malformed_reason: str | None = None
-
-
-def _lookup_station_codes(
-    station: str,
-    transport: Transport,
-    calls: list[SourceCallOrigin],
-) -> _StationCodeLookup:
-    """Look up `f_seirejaamad` `kood` integers once per station across hourly products."""
-    request = TransportRequest(
-        method=HttpMethod.GET,
-        url=_SEIREJAAMAD_URL,
-        params={"kkr_kood": f"eq.{station}", "seiretyyp": "eq.HJ", "select": "kkr_kood,kood"},
-        headers=_JSON_HEADERS,
-    )
-    response = attempt_request(transport, request)
-    if isinstance(response, (TransportFailure, CredentialExchangeError)):
-        return _StationCodeLookup(transport_request=request, transport_failure=response)
-
-    lookup_id = uuid4().hex
-    calls.append(_origin(response, acquisition_id=lookup_id))
     try:
         document = json.loads(response.content)
         if not isinstance(document, list):
             raise ValueError("f_seirejaamad lookup response must be a JSON list")
         if len(document) > 1:
             raise ValueError(f"f_seirejaamad lookup returned {len(document)} rows for {station!r}")
-        if not document:
-            codes: tuple[int, ...] = ()
-        else:
+        if document:
             entry = document[0]
             if not isinstance(entry, dict) or entry.get("kkr_kood") != station:
                 raise ValueError(f"f_seirejaamad lookup row contradicts station {station!r}")
             codes = parse_jaam_kood(entry.get("kood"))
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError, FatalContractError) as error:
-        return _StationCodeLookup(
-            lookup_id=lookup_id,
-            retrieved_at=response.retrieved_at,
-            malformed_reason=f"Malformed Keskkonnaandmed f_seirejaamad lookup response: {error}",
-        )
-    return _StationCodeLookup(codes=codes, lookup_id=lookup_id, retrieved_at=response.retrieved_at)
+        malformed_reason = f"Malformed Keskkonnaandmed f_seirejaamad lookup response: {error}"
 
-
-def _materialize_station_code_outcome(
-    station: str,
-    product: ProductId,
-    lookup: _StationCodeLookup,
-    *,
-    known_series: tuple[SourceSeries, ...],
-    requested_window: SeriesWindow,
-    pair_scope: SeriesScope,
-) -> tuple[
-    FailedSourceRequest | None,
-    InventorySnapshot | None,
-    RetrievalOutcome | None,
-    Issue | None,
-]:
-    if lookup.transport_failure is not None:
-        assert lookup.transport_request is not None
-        failure = FailedSourceRequest(
-            uuid4().hex,
-            _request_target(station, product, known_series),
-            requested_window,
-            lookup.transport_request,
-            lookup.transport_failure,
-        )
-        return failure, None, None, None
-
-    assert lookup.lookup_id is not None
-    lookup_id = lookup.lookup_id
-    evidence = (f"source-call:{lookup_id}",)
-    if lookup.malformed_reason is not None:
-        reason = lookup.malformed_reason
-        outcome = RetrievalOutcome(
-            outcome_id=stable_id(lookup_id, station, str(product), "failed"),
-            series_id=None,
-            station_id=station,
-            product_id=str(product),
-            window=requested_window,
-            status=OutcomeStatus.FAILED,
-            reason=reason,
-            retrieved_at=lookup.retrieved_at,
-            calls=(lookup_id,),
-        )
-        inventory = InventorySnapshot(
-            snapshot_id=stable_id(lookup_id, station, str(product), "failed-inventory"),
-            scope=pair_scope,
-            members=(),
-            completeness=InventoryCompleteness.INCOMPLETE,
-            access="Keskkonnaandmed /f_seirejaamad",
-            origin="response",
-            acquired_at=lookup.retrieved_at,
-            window=requested_window,
-            evidence=evidence,
-            reason=reason,
-        )
-        issue = Issue(
-            severity="error",
-            code="source.unsupported_structure",
-            message=reason,
-            details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
-            provider_id=_PROVIDER_ID,
-        )
-        return None, inventory, outcome, issue
-
-    if not lookup.codes:
-        reason = f"Station {station} has no active Keskkonnaandmed f_hydroseire jaam_kood"
-        outcome = RetrievalOutcome(
-            outcome_id=stable_id(lookup_id, station, str(product), "no-match"),
-            series_id=None,
-            station_id=station,
-            product_id=str(product),
-            window=requested_window,
-            status=OutcomeStatus.NO_MATCH,
-            reason=reason,
-            retrieved_at=lookup.retrieved_at,
-            calls=(lookup_id,),
-        )
-        inventory = InventorySnapshot(
-            snapshot_id=stable_id(lookup_id, station, str(product), "no-match-inventory"),
-            scope=pair_scope,
-            members=(),
-            completeness=InventoryCompleteness.COMPLETE,
-            access="Keskkonnaandmed /f_seirejaamad",
-            origin="response",
-            acquired_at=lookup.retrieved_at,
-            window=requested_window,
-            evidence=evidence,
-        )
-        issue = Issue(
-            severity="warning",
-            code="source.no_match",
-            message=reason,
-            details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
-            provider_id=_PROVIDER_ID,
-        )
-        return None, inventory, outcome, issue
-
-    return None, None, None, None
-
-
-def _select_active_jaam_kood(
-    station: str,
-    product: ProductId,
-    coords: FHydroseireCoordinates,
-    codes: tuple[int, ...],
-    lookup_id: str,
-    transport: Transport,
-    *,
-    known_series: tuple[SourceSeries, ...],
-    requested_window: SeriesWindow,
-    pair_scope: SeriesScope,
-    calls: list[SourceCallOrigin],
-) -> tuple[
-    int | None,
-    tuple[str, ...],
-    FailedSourceRequest | None,
-    InventorySnapshot | None,
-    RetrievalOutcome | None,
-    Issue | None,
-]:
-    if len(codes) == 1:
-        return codes[0], (lookup_id,), None, None, None, None
-
-    prereq_ids: list[str] = [lookup_id]
-    for code in codes:
-        probe_req = TransportRequest(
-            method=HttpMethod.GET,
-            url=_FH_URL,
-            params={
-                "jaam_kood": f"eq.{code}",
-                "aegrida_nimi": f"eq.{coords.aegrida_nimi}",
-                "select": "jaam_kood",
-                "limit": "1",
-            },
-            headers=_FH_HEADERS,
-        )
-        probe_resp = attempt_request(transport, probe_req)
-        if isinstance(probe_resp, (TransportFailure, CredentialExchangeError)):
-            failure = FailedSourceRequest(
-                uuid4().hex,
-                _request_target(station, product, known_series),
-                requested_window,
-                probe_req,
-                probe_resp,
-                prerequisite_acquisition_ids=tuple(prereq_ids),
-            )
-            return None, tuple(prereq_ids), failure, None, None, None
-        probe_id = uuid4().hex
-        calls.append(
-            SourceCallOrigin(
-                url=probe_resp.url,
-                request_parameters=probe_resp.request_parameters,
-                status_code=probe_resp.status_code,
-                retrieved_at=probe_resp.retrieved_at,
-                content_type=probe_resp.content_type if probe_resp.content_type is not None else UnknownOriginFact(),
-                source_path=UnknownOriginFact(),
-                query=UnknownOriginFact(),
-                attempts=probe_resp.attempts,
-                attempt_traces=probe_resp.attempt_traces,
-                acquisition_id=probe_id,
-                prerequisite_acquisition_ids=tuple(prereq_ids),
-            )
-        )
-        prereq_ids.append(probe_id)
-        try:
-            probe_rows = json.loads(probe_resp.content)
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            reason = f"Malformed Keskkonnaandmed probe response for jaam_kood {code}: {error}"
+    evidence = (f"source-call:{acquisition_id}",)
+    if malformed_reason is not None:
+        outcomes: list[RetrievalOutcome] = []
+        inventories: list[InventorySnapshot] = []
+        issues: list[Issue] = []
+        for need in consumers:
             outcome = RetrievalOutcome(
-                outcome_id=stable_id(probe_id, station, str(product), "failed"),
+                outcome_id=stable_id(acquisition_id, need.station, str(need.product), "failed"),
                 series_id=None,
-                station_id=station,
-                product_id=str(product),
-                window=requested_window,
+                station_id=need.station,
+                product_id=str(need.product),
+                window=need.window,
                 status=OutcomeStatus.FAILED,
-                reason=reason,
-                retrieved_at=probe_resp.retrieved_at,
-                calls=tuple(prereq_ids),
+                reason=malformed_reason,
+                retrieved_at=response.retrieved_at,
+                calls=(acquisition_id,),
             )
-            inventory = InventorySnapshot(
-                snapshot_id=stable_id(probe_id, station, str(product), "failed-inventory"),
-                scope=pair_scope,
-                members=(),
-                completeness=InventoryCompleteness.INCOMPLETE,
-                access="Keskkonnaandmed /f_hydroseire",
-                origin="response",
-                acquired_at=probe_resp.retrieved_at,
-                window=requested_window,
-                evidence=tuple(f"source-call:{cid}" for cid in prereq_ids),
-                reason=reason,
+            outcomes.append(outcome)
+            inventories.append(
+                InventorySnapshot(
+                    snapshot_id=stable_id(acquisition_id, need.station, str(need.product), "failed-inventory"),
+                    scope=need.scope,
+                    members=(),
+                    completeness=InventoryCompleteness.INCOMPLETE,
+                    access="Keskkonnaandmed /f_seirejaamad",
+                    origin="response",
+                    acquired_at=response.retrieved_at,
+                    window=need.window,
+                    evidence=evidence,
+                    reason=malformed_reason,
+                )
             )
-            issue = Issue(
-                severity="error",
-                code="source.unsupported_structure",
-                message=reason,
-                details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
-                provider_id=_PROVIDER_ID,
+            issues.append(
+                Issue(
+                    severity="error",
+                    code="source.unsupported_structure",
+                    message=malformed_reason,
+                    details={
+                        "station_id": need.station,
+                        "product_id": str(need.product),
+                        "outcome_id": outcome.outcome_id,
+                    },
+                    provider_id=_PROVIDER_ID,
+                )
             )
-            return None, tuple(prereq_ids), None, inventory, outcome, issue
-        if isinstance(probe_rows, list) and probe_rows:
-            return code, tuple(prereq_ids), None, None, None, None
+        return ResolvedLookup(
+            value=None,
+            acquisition_id=acquisition_id,
+            outcomes=tuple(outcomes),
+            inventories=tuple(inventories),
+            issues=tuple(issues),
+        )
 
-    reason = f"No candidate jaam_kood {codes!r} publishes {coords.aegrida_nimi!r} in f_hydroseire"
-    outcome = RetrievalOutcome(
-        outcome_id=stable_id(prereq_ids[-1], station, str(product), "no-match"),
-        series_id=None,
-        station_id=station,
-        product_id=str(product),
-        window=requested_window,
-        status=OutcomeStatus.NO_MATCH,
-        reason=reason,
-        calls=tuple(prereq_ids),
+    if not codes:
+        reason = f"Station {station} has no active Keskkonnaandmed f_hydroseire jaam_kood"
+        outcomes = []
+        inventories = []
+        issues = []
+        for need in consumers:
+            outcome = RetrievalOutcome(
+                outcome_id=stable_id(acquisition_id, need.station, str(need.product), "no-match"),
+                series_id=None,
+                station_id=need.station,
+                product_id=str(need.product),
+                window=need.window,
+                status=OutcomeStatus.NO_MATCH,
+                reason=reason,
+                retrieved_at=response.retrieved_at,
+                calls=(acquisition_id,),
+            )
+            outcomes.append(outcome)
+            inventories.append(
+                InventorySnapshot(
+                    snapshot_id=stable_id(acquisition_id, need.station, str(need.product), "no-match-inventory"),
+                    scope=need.scope,
+                    members=(),
+                    completeness=InventoryCompleteness.COMPLETE,
+                    access="Keskkonnaandmed /f_seirejaamad",
+                    origin="response",
+                    acquired_at=response.retrieved_at,
+                    window=need.window,
+                    evidence=evidence,
+                )
+            )
+            issues.append(
+                Issue(
+                    severity="warning",
+                    code="source.no_match",
+                    message=reason,
+                    details={
+                        "station_id": need.station,
+                        "product_id": str(need.product),
+                        "outcome_id": outcome.outcome_id,
+                    },
+                    provider_id=_PROVIDER_ID,
+                )
+            )
+        return ResolvedLookup(
+            value=(),
+            acquisition_id=acquisition_id,
+            outcomes=tuple(outcomes),
+            inventories=tuple(inventories),
+            issues=tuple(issues),
+        )
+
+    return ResolvedLookup(value=codes, acquisition_id=acquisition_id)
+
+
+@dataclass(frozen=True, slots=True)
+class _PlannedPairSpec:
+    need: ConsumerNeed
+    expected_requests: int
+    expected_per_code: int
+    candidate_codes: tuple[int, ...]
+    protected_series_ids: frozenset[str]
+    access: str
+    inventory_scope: SeriesScope
+    kind: str
+
+
+def _interp_code(interp: InterpretedPayload) -> int | None:
+    coords = interp.context.source_coordinates.value
+    if isinstance(coords, FHydroseireCoordinates):
+        return coords.jaam_kood
+    return None
+
+
+def _failure_code(failure: FailedSourceRequest) -> int | None:
+    params = failure.request.params or {}
+    raw = params.get("jaam_kood")
+    if isinstance(raw, str) and raw.startswith("eq.") and raw[3:].isdigit():
+        return int(raw[3:])
+    return None
+
+
+def _finalize_acquisition(
+    acquisition: SourceAcquisition,
+    pair_specs: Mapping[tuple[str, str], _PlannedPairSpec],
+) -> SourceAcquisition:
+    interps_by_pair: dict[tuple[str, str], list[InterpretedPayload]] = {}
+    for interp in acquisition.interpretations:
+        if len(interp.context.station_products) != 1:
+            raise FatalContractError("ee_est interpretation requires a single station-product pair")
+        station, product = interp.context.station_products[0]
+        interps_by_pair.setdefault((station, str(product)), []).append(interp)
+
+    failures_by_pair: dict[tuple[str, str], list[FailedSourceRequest]] = {}
+    for failure in acquisition.failed_requests:
+        failures_by_pair.setdefault((failure.series.station_id, failure.series.product_id), []).append(failure)
+
+    dropped_by_acq_id: set[str] = set()
+    kept_series: dict[str, SourceSeries] = {}
+    inventories: list[InventorySnapshot] = list(acquisition.inventories)
+
+    for pair_key, spec in pair_specs.items():
+        station, product = pair_key
+        pair_interps = interps_by_pair.get(pair_key, [])
+        pair_failures = failures_by_pair.get(pair_key, [])
+        dropped_codes: set[int] = set()
+
+        if spec.candidate_codes:
+            for code in spec.candidate_codes:
+                code_interps = [ip for ip in pair_interps if _interp_code(ip) == code]
+                code_failures = [f for f in pair_failures if _failure_code(f) == code]
+                if (
+                    not code_failures
+                    and code_interps
+                    and len(code_interps) == spec.expected_per_code
+                    and all(
+                        not ip.parsed.issues
+                        and ip.parsed.rows.is_empty()
+                        and ip.parsed.outcomes
+                        and all(out.status is OutcomeStatus.EMPTY for out in ip.parsed.outcomes)
+                        and all(s.series_id not in spec.protected_series_ids for s in ip.parsed.series)
+                        for ip in code_interps
+                    )
+                ):
+                    dropped_codes.add(code)
+                    dropped_by_acq_id.update(ip.context.acquisition_id for ip in code_interps)
+
+        kept_pair_interps = [ip for ip in pair_interps if _interp_code(ip) not in dropped_codes]
+        pair_members: dict[str, SourceSeries] = {}
+        for ip in kept_pair_interps:
+            for sdef in ip.parsed.series:
+                pair_members[sdef.series_id] = sdef
+                kept_series[sdef.series_id] = sdef
+
+        if pair_interps:
+            instants = tuple(
+                ip.context.origin.retrieved_at
+                for ip in pair_interps
+                if isinstance(ip.context.origin.retrieved_at, datetime)
+            )
+            evidence = tuple(f"source-call:{ip.context.acquisition_id}" for ip in pair_interps)
+            has_failed_outcome = any(
+                out.status in (OutcomeStatus.FAILED, OutcomeStatus.UNSUPPORTED, OutcomeStatus.UNRESOLVED)
+                for ip in pair_interps
+                for out in ip.parsed.outcomes
+            )
+            all_interpreted = len(pair_interps) == spec.expected_requests
+            is_complete = not pair_failures and not has_failed_outcome and all_interpreted
+            reason: str | None = None
+            if not is_complete:
+                reason = (
+                    f"Incomplete Keskkonnaagentuur acquisition for {station}/{product}: "
+                    f"{len(pair_interps)} of {spec.expected_requests} request(s) interpreted, "
+                    f"{len(pair_failures)} request(s) failed"
+                )
+            inventories.append(
+                InventorySnapshot(
+                    snapshot_id=stable_id(
+                        "ee_est",
+                        spec.kind,
+                        station,
+                        product,
+                        spec.need.window.model_dump_json(),
+                        *(ip.context.acquisition_id for ip in pair_interps),
+                    ),
+                    scope=spec.inventory_scope,
+                    members=tuple(pair_members.keys()),
+                    member_facts=tuple(
+                        (sid, tuple(fact.facts_id for fact in sdef.facts)) for sid, sdef in pair_members.items()
+                    ),
+                    completeness=InventoryCompleteness.COMPLETE if is_complete else InventoryCompleteness.INCOMPLETE,
+                    access=spec.access,
+                    origin="response",
+                    acquired_at=max(instants) if instants else None,
+                    window=spec.need.window,
+                    evidence=evidence,
+                    reason=reason,
+                )
+            )
+
+    final_interpretations: list[InterpretedPayload] = []
+    for ip in acquisition.interpretations:
+        if ip.context.acquisition_id in dropped_by_acq_id:
+            stripped = ParsedSeries(
+                ip.parsed.rows,
+                (),
+                (),
+                (),
+                ip.parsed.issues,
+                ip.parsed.annotations,
+            )
+            final_interpretations.append(replace(ip, parsed=stripped))
+        else:
+            stripped = ParsedSeries(
+                ip.parsed.rows,
+                ip.parsed.series,
+                (),
+                ip.parsed.outcomes,
+                ip.parsed.issues,
+                ip.parsed.annotations,
+            )
+            final_interpretations.append(replace(ip, parsed=stripped))
+
+    planned_pairs = set(pair_specs)
+    preserved_series = tuple(
+        sdef for sdef in acquisition.series if (sdef.station_id, sdef.product_id) not in planned_pairs
     )
-    inventory = InventorySnapshot(
-        snapshot_id=stable_id(prereq_ids[-1], station, str(product), "no-match-inventory"),
-        scope=pair_scope,
-        members=(),
-        completeness=InventoryCompleteness.COMPLETE,
-        access="Keskkonnaandmed /f_hydroseire",
-        origin="response",
-        window=requested_window,
-        evidence=tuple(f"source-call:{cid}" for cid in prereq_ids),
+    merged_series = {sdef.series_id: sdef for sdef in preserved_series}
+    merged_series.update(kept_series)
+
+    return replace(
+        acquisition,
+        series=tuple(merged_series.values()),
+        inventories=tuple(inventories),
+        interpretations=tuple(final_interpretations),
     )
-    issue = Issue(
-        severity="warning",
-        code="source.no_match",
-        message=reason,
-        details={"station_id": station, "product_id": str(product), "outcome_id": outcome.outcome_id},
-        provider_id=_PROVIDER_ID,
-    )
-    return None, tuple(prereq_ids), None, inventory, outcome, issue
+
+
+class EeEstRequestPlanner:
+    """Shared-acquisition request planner for Estonia EstModel daily and ``f_hydroseire`` hourly APIs."""
+
+    def __init__(self, station_codes: Mapping[str, tuple[int, ...]] = MappingProxyType({})) -> None:
+        validated: dict[str, tuple[int, ...]] = {}
+        for station_id, codes in station_codes.items():
+            _validate_station_id(station_id)
+            for code in codes:
+                if type(code) is not int or code <= 0:
+                    raise FatalContractError(f"ee_est station_codes invalid jaam_kood {code!r} on {station_id!r}")
+            validated[station_id] = tuple(codes)
+        self._station_codes: Mapping[str, tuple[int, ...]] = MappingProxyType(validated)
+
+    def _synchronous_codes(
+        self, need: ConsumerNeed, coords: FHydroseireCoordinates
+    ) -> tuple[tuple[int, ...], bool] | None:
+        explicit_codes = _resolve_explicit_codes(need, coords)
+        if explicit_codes:
+            return explicit_codes, True
+        if need.station in self._station_codes:
+            return self._station_codes[need.station], False
+        if not self._station_codes:
+            known_codes = _known_codes_for_pair(need, coords)
+            if known_codes:
+                return known_codes, False
+        return None
+
+    def plan_lookups(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        config: ProviderConfig,
+    ) -> tuple[PlannedLookup, ...]:
+        lookups: list[PlannedLookup] = []
+        for need in needs:
+            coords, _ = _validated_need(need, config)
+            if not isinstance(coords, FHydroseireCoordinates):
+                continue
+            if self._synchronous_codes(need, coords) is not None:
+                continue
+            lookups.append(
+                PlannedLookup(
+                    key=(_SEIREJAAMAD_LOOKUP_KEY, need.station),
+                    consumers=(need,),
+                    request=TransportRequest(
+                        method=HttpMethod.GET,
+                        url=_SEIREJAAMAD_URL,
+                        params={
+                            "kkr_kood": f"eq.{need.station}",
+                            "seiretyyp": "eq.HJ",
+                            "select": "kkr_kood,kood",
+                        },
+                        headers=_JSON_HEADERS,
+                    ),
+                    source_coordinates=SourceCoordinates(FSeirejaamadLookupCoordinates(station_id=need.station)),
+                    fetch_window=need.fetch_window,
+                    on_response=_on_seirejaamad_response,
+                    on_failure=None,
+                )
+            )
+        return tuple(lookups)
+
+    def plan_observations(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        lookups: Mapping[tuple[Hashable, str, ProductId], LookupResolution],
+        config: ProviderConfig,
+    ) -> ObservationPlan:
+        requests: list[PlannedObservationRequest] = []
+        outcomes: list[RetrievalOutcome] = []
+        inventories: list[InventorySnapshot] = []
+        issues: list[Issue] = []
+        pair_specs: dict[tuple[str, str], _PlannedPairSpec] = {}
+
+        for need in needs:
+            coords, windows = _validated_need(need, config)
+            unrestricted = _unrestricted_pair_scope(need)
+            inventory_scope = unrestricted if need.scope.restriction is RestrictionKind.ALL else need.scope
+
+            if isinstance(coords, EstModelCoordinates):
+                target = reused_series(
+                    source_series(need.station, str(need.product), origin="mapping"), need.known_series
+                )
+                for window in windows:
+                    assert window.bounds is not None and window.stop is not None
+                    requests.append(
+                        PlannedObservationRequest(
+                            consumers=(need,),
+                            request=TransportRequest(
+                                method=HttpMethod.GET,
+                                url=f"{_ESTMODEL_BASE_URL}/{need.station}/measurements",
+                                params={
+                                    "parameter": coords.parameter,
+                                    "type": coords.aggregation_type,
+                                    "start-year": window.start,
+                                    "end-year": window.stop,
+                                },
+                                headers=_JSON_HEADERS,
+                            ),
+                            source_coordinates=config.products[need.product].coordinates,
+                            fetch_window=window.bounds,
+                            failure_targets=(target,),
+                            interpret_payload=parse,
+                        )
+                    )
+                pair_specs[(need.station, str(need.product))] = _PlannedPairSpec(
+                    need=need,
+                    expected_requests=len(windows),
+                    expected_per_code=len(windows),
+                    candidate_codes=(),
+                    protected_series_ids=frozenset(),
+                    access=f"EstModel /{need.station}/measurements {coords.parameter}:{coords.aggregation_type}",
+                    inventory_scope=inventory_scope,
+                    kind="estmodel-pair-inventory",
+                )
+                continue
+
+            sync = self._synchronous_codes(need, coords)
+            prereq_ids: tuple[str, ...] = ()
+            from_explicit = False
+            if sync is not None:
+                codes, from_explicit = sync
+                if not codes:
+                    reason = f"Station {need.station} has no active Keskkonnaandmed f_hydroseire jaam_kood"
+                    outcome_id = stable_id(
+                        "ee_est", "station_codes", need.station, str(need.product), need.window.model_dump_json()
+                    )
+                    outcomes.append(
+                        RetrievalOutcome(
+                            outcome_id=outcome_id,
+                            series_id=None,
+                            station_id=need.station,
+                            product_id=str(need.product),
+                            window=need.window,
+                            status=OutcomeStatus.NO_MATCH,
+                            reason=reason,
+                        )
+                    )
+                    inventories.append(
+                        InventorySnapshot(
+                            snapshot_id=stable_id(
+                                "ee_est",
+                                "station_codes-no-match",
+                                need.station,
+                                str(need.product),
+                                need.window.model_dump_json(),
+                            ),
+                            scope=need.scope,
+                            members=(),
+                            completeness=InventoryCompleteness.COMPLETE,
+                            access="Packaged ee_est station_codes.json",
+                            origin="catalogue",
+                            window=need.window,
+                            evidence=("catalogue:ee_est:station_codes.json",),
+                        )
+                    )
+                    issues.append(
+                        Issue(
+                            severity="warning",
+                            code="source.no_match",
+                            message=reason,
+                            details={
+                                "station_id": need.station,
+                                "product_id": str(need.product),
+                                "outcome_id": outcome_id,
+                            },
+                            provider_id=_PROVIDER_ID,
+                        )
+                    )
+                    continue
+            else:
+                resolution = lookups.get(((_SEIREJAAMAD_LOOKUP_KEY, need.station), need.station, need.product))
+                if resolution is None:
+                    raise FatalContractError(f"Missing ee_est /f_seirejaamad resolution for {need.station}")
+                if isinstance(resolution, LookupFailureResult):
+                    continue
+                if resolution.value is None or resolution.value == ():
+                    continue
+                raw_codes = resolution.value
+                if not isinstance(raw_codes, tuple) or not all(isinstance(code, int) for code in raw_codes):
+                    raise FatalContractError(f"Invalid ee_est /f_seirejaamad resolution for {need.station}")
+                codes = tuple(code for code in raw_codes if isinstance(code, int))
+                prereq_ids = (resolution.acquisition_id,)
+
+            protected_ids: set[str] = {
+                item.series_id
+                for item in need.known_series
+                if item.station_id == need.station and item.product_id == str(need.product) and need.scope.matches(item)
+            }
+            if from_explicit:
+                for code in codes:
+                    protected_ids.add(
+                        source_series(need.station, str(need.product), jaam_kood=code, origin="mapping").series_id
+                    )
+
+            for code in codes:
+                obs_coords = replace(coords, jaam_kood=code)
+                target = reused_series(
+                    source_series(need.station, str(need.product), jaam_kood=code, origin="mapping"),
+                    need.known_series,
+                )
+                for window in windows:
+                    assert window.bounds is not None and window.stop is not None
+                    requests.append(
+                        PlannedObservationRequest(
+                            consumers=(need,),
+                            request=TransportRequest(
+                                method=HttpMethod.GET,
+                                url=_FH_URL,
+                                params={
+                                    "jaam_kood": f"eq.{code}",
+                                    "aegrida_nimi": f"eq.{coords.aegrida_nimi}",
+                                    "and": f"(timeline_ts_utc.gte.{window.start},timeline_ts_utc.lte.{window.stop})",
+                                    "select": "jaam_kood,aegrida_nimi,timeline_ts_utc,vaartus",
+                                    "order": "timeline_ts_utc.asc",
+                                },
+                                headers=_FH_HEADERS,
+                            ),
+                            source_coordinates=SourceCoordinates(obs_coords),
+                            fetch_window=window.bounds,
+                            prerequisite_acquisition_ids=prereq_ids,
+                            failure_targets=(target,),
+                            interpret_payload=parse,
+                        )
+                    )
+
+            codes_desc = ",".join(str(code) for code in codes)
+            pair_specs[(need.station, str(need.product))] = _PlannedPairSpec(
+                need=need,
+                expected_requests=len(codes) * len(windows),
+                expected_per_code=len(windows),
+                candidate_codes=codes,
+                protected_series_ids=frozenset(protected_ids),
+                access=f"Keskkonnaandmed /f_hydroseire {codes_desc}:{coords.aegrida_nimi}",
+                inventory_scope=inventory_scope,
+                kind="f-hydroseire-pair-inventory",
+            )
+
+        return ObservationPlan(
+            requests=tuple(requests),
+            inventories=tuple(inventories),
+            outcomes=tuple(outcomes),
+            issues=tuple(issues),
+            finalize=lambda acq: _finalize_acquisition(acq, pair_specs),
+        )
 
 
 def fetch(
@@ -440,257 +709,41 @@ def fetch(
     *,
     scope: SeriesScope | None = None,
     known_series: tuple[SourceSeries, ...] = (),
+    station_codes: Mapping[str, tuple[int, ...]] = MappingProxyType({}),
 ) -> SourceAcquisition:
     """Acquire bounded EstModel daily chunks and `f_hydroseire` UTC spans."""
     if not stations or not products:
         raise FatalContractError("ee_est fetch requires at least one station and product")
-    for station in stations:
-        _validate_station_id(station)
-
-    validated_products: list[
-        tuple[ProductId, EstModelCoordinates | FHydroseireCoordinates, tuple[RenderedWindow, ...]]
-    ] = []
-    for product in products:
-        try:
-            product_config = config.products[product]
-        except KeyError as error:
-            raise FatalContractError(f"ee_est product is absent from provider config: {product}") from error
-        coords = product_config.coordinates.value
-        if not isinstance(coords, (EstModelCoordinates, FHydroseireCoordinates)):
-            raise FatalContractError(f"ee_est product has invalid source coordinates: {product}")
-        windows = rendered_windows.get(product, ())
-        if not windows:
-            raise FatalContractError(f"ee_est product requires at least one rendered window: {product}")
-        for window in windows:
-            if window.bounds is None or window.stop is None:
-                raise FatalContractError(f"ee_est product requires closed bounds and stop: {product}")
-        validated_products.append((product, coords, windows))
-
-    requested_window = SeriesWindow(
-        start=datetime.fromisoformat(fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(fetch_window.end.isoformat()),
+    start = datetime.fromisoformat(fetch_window.start.isoformat())
+    end = datetime.fromisoformat(fetch_window.end.isoformat())
+    interval = RequestedInterval(start, end, axis=TimeAxis.NATIVE)
+    window = SeriesWindow(start=start, end=end, axis=TimeAxis.NATIVE)
+    needs = tuple(
+        ConsumerNeed(
+            station=station,
+            product=product,
+            scope=(
+                scope.model_copy(
+                    update={
+                        "provider_ids": ("ee_est",),
+                        "station_ids": (station,),
+                        "product_ids": (str(product),),
+                    }
+                )
+                if scope is not None
+                else SeriesScope(
+                    provider_ids=("ee_est",),
+                    station_ids=(station,),
+                    product_ids=(str(product),),
+                )
+            ),
+            known_series=known_series,
+            interval=interval,
+            window=window,
+            fetch_window=fetch_window,
+            rendered=rendered_windows.get(product, ()),
+        )
+        for station in stations
+        for product in products
     )
-    payloads: list[Payload] = []
-    failures: list[FailedSourceRequest] = []
-    definitions: dict[str, SourceSeries] = {}
-    inventories: list[InventorySnapshot] = []
-    outcomes: list[RetrievalOutcome] = []
-    issues: list[Issue] = []
-    calls: list[SourceCallOrigin] = []
-    station_codes_cache: dict[str, _StationCodeLookup] = {}
-
-    for station in stations:
-        for product, coords, windows in validated_products:
-            unrestricted_scope = SeriesScope(
-                provider_ids=("ee_est",),
-                station_ids=(station,),
-                product_ids=(str(product),),
-            )
-            pair_scope = (scope or unrestricted_scope).model_copy(
-                update={"station_ids": (station,), "product_ids": (str(product),)}
-            )
-            if isinstance(coords, EstModelCoordinates):
-                target = reused_series(source_series(station, str(product), origin="mapping"), known_series)
-                pair_payloads: list[Payload] = []
-                for window in windows:
-                    assert window.bounds is not None and window.stop is not None
-                    chunk_window = SeriesWindow(
-                        start=datetime.fromisoformat(window.bounds.start.isoformat()),
-                        end=datetime.fromisoformat(window.bounds.end.isoformat()),
-                    )
-                    request = TransportRequest(
-                        method=HttpMethod.GET,
-                        url=f"{_ESTMODEL_BASE_URL}/{station}/measurements",
-                        params={
-                            "parameter": coords.parameter,
-                            "type": coords.aggregation_type,
-                            "start-year": window.start,
-                            "end-year": window.stop,
-                        },
-                        headers=_JSON_HEADERS,
-                    )
-                    response = attempt_series_request(transport, request, target, chunk_window)
-                    if isinstance(response, FailedSourceRequest):
-                        failures.append(response)
-                        continue
-                    item_payload = Payload(
-                        source_coordinates=config.products[product].coordinates,
-                        station_products=((station, product),),
-                        fetch_window=window.bounds,
-                        content=response.content,
-                        origin=_origin(response),
-                        prerequisite_calls=response.prerequisite_calls,
-                        scope=pair_scope,
-                        known_series=known_series,
-                        attempt_traces=response.attempt_traces,
-                    )
-                    payloads.append(item_payload)
-                    pair_payloads.append(item_payload)
-                if pair_payloads:
-                    definitions[target.series_id] = target
-                    instants = tuple(
-                        item.origin.retrieved_at
-                        for item in pair_payloads
-                        if isinstance(item.origin.retrieved_at, datetime)
-                    )
-                    inventories.append(
-                        InventorySnapshot(
-                            snapshot_id=stable_id(
-                                "ee_est",
-                                "estmodel-pair-inventory",
-                                station,
-                                str(product),
-                                requested_window.model_dump_json(),
-                                *(item.acquisition_id for item in pair_payloads),
-                            ),
-                            scope=unrestricted_scope,
-                            members=(target.series_id,),
-                            member_facts=((target.series_id, tuple(fact.facts_id for fact in target.facts)),),
-                            completeness=InventoryCompleteness.COMPLETE,
-                            access=f"EstModel /{station}/measurements {coords.parameter}:{coords.aggregation_type}",
-                            origin="response",
-                            acquired_at=max(instants) if instants else None,
-                            window=requested_window,
-                            evidence=tuple(f"source-call:{item.acquisition_id}" for item in pair_payloads),
-                        )
-                    )
-                continue
-
-            jaam_kood = _jaam_kood_from_known(station, product, coords.aegrida_nimi, known_series)
-            prereq_ids: tuple[str, ...] = ()
-            if jaam_kood is None:
-                lookup = station_codes_cache.get(station)
-                if lookup is None:
-                    lookup = _lookup_station_codes(station, transport, calls)
-                    station_codes_cache[station] = lookup
-                fail, inv, out, iss = _materialize_station_code_outcome(
-                    station,
-                    product,
-                    lookup,
-                    known_series=known_series,
-                    requested_window=requested_window,
-                    pair_scope=pair_scope,
-                )
-                if fail is not None:
-                    failures.append(fail)
-                    continue
-                if inv is not None or out is not None or iss is not None:
-                    if inv is not None:
-                        inventories.append(inv)
-                    if out is not None:
-                        outcomes.append(out)
-                    if iss is not None:
-                        issues.append(iss)
-                    continue
-                assert lookup.codes and lookup.lookup_id is not None
-                jaam_kood, prereq_ids, fail, inv, out, iss = _select_active_jaam_kood(
-                    station,
-                    product,
-                    coords,
-                    lookup.codes,
-                    lookup.lookup_id,
-                    transport,
-                    known_series=known_series,
-                    requested_window=requested_window,
-                    pair_scope=pair_scope,
-                    calls=calls,
-                )
-                if fail is not None:
-                    failures.append(fail)
-                    continue
-                if jaam_kood is None:
-                    if inv is not None:
-                        inventories.append(inv)
-                    if out is not None:
-                        outcomes.append(out)
-                    if iss is not None:
-                        issues.append(iss)
-                    continue
-
-            obs_coords = replace(coords, jaam_kood=jaam_kood)
-            target = reused_series(
-                source_series(station, str(product), jaam_kood=jaam_kood, origin="mapping"), known_series
-            )
-            fh_payloads: list[Payload] = []
-            for window in windows:
-                assert window.bounds is not None and window.stop is not None
-                chunk_window = SeriesWindow(
-                    start=datetime.fromisoformat(window.bounds.start.isoformat()),
-                    end=datetime.fromisoformat(window.bounds.end.isoformat()),
-                )
-                request = TransportRequest(
-                    method=HttpMethod.GET,
-                    url=_FH_URL,
-                    params={
-                        "jaam_kood": f"eq.{jaam_kood}",
-                        "aegrida_nimi": f"eq.{coords.aegrida_nimi}",
-                        "and": f"(timeline_ts_utc.gte.{window.start},timeline_ts_utc.lte.{window.stop})",
-                        "select": "jaam_kood,aegrida_nimi,timeline_ts_utc,vaartus",
-                        "order": "timeline_ts_utc.asc",
-                    },
-                    headers=_FH_HEADERS,
-                )
-                attempted = attempt_request(transport, request)
-                if isinstance(attempted, (TransportFailure, CredentialExchangeError)):
-                    failures.append(
-                        FailedSourceRequest(
-                            uuid4().hex,
-                            target,
-                            chunk_window,
-                            request,
-                            attempted,
-                            prerequisite_acquisition_ids=prereq_ids,
-                        )
-                    )
-                    continue
-                item_payload = Payload(
-                    source_coordinates=SourceCoordinates(obs_coords),
-                    station_products=((station, product),),
-                    fetch_window=window.bounds,
-                    content=attempted.content,
-                    origin=_origin(attempted),
-                    prerequisite_calls=attempted.prerequisite_calls,
-                    scope=pair_scope,
-                    known_series=known_series,
-                    attempt_traces=attempted.attempt_traces,
-                    prerequisite_acquisition_ids=prereq_ids,
-                )
-                payloads.append(item_payload)
-                fh_payloads.append(item_payload)
-            if fh_payloads:
-                definitions[target.series_id] = target
-                instants = tuple(
-                    item.origin.retrieved_at for item in fh_payloads if isinstance(item.origin.retrieved_at, datetime)
-                )
-                inventories.append(
-                    InventorySnapshot(
-                        snapshot_id=stable_id(
-                            "ee_est",
-                            "f-hydroseire-pair-inventory",
-                            station,
-                            str(product),
-                            target.series_id,
-                            requested_window.model_dump_json(),
-                            *(item.acquisition_id for item in fh_payloads),
-                        ),
-                        scope=unrestricted_scope,
-                        members=(target.series_id,),
-                        member_facts=((target.series_id, tuple(fact.facts_id for fact in target.facts)),),
-                        completeness=InventoryCompleteness.COMPLETE,
-                        access=f"Keskkonnaandmed /f_hydroseire {jaam_kood}:{coords.aegrida_nimi}",
-                        origin="response",
-                        acquired_at=max(instants) if instants else None,
-                        window=requested_window,
-                        evidence=tuple(f"source-call:{item.acquisition_id}" for item in fh_payloads),
-                    )
-                )
-
-    return SourceAcquisition(
-        value=tuple(payloads),
-        issues=tuple(issues),
-        series=tuple(definitions.values()),
-        inventories=tuple(inventories),
-        outcomes=tuple(outcomes),
-        calls=tuple(calls),
-        failed_requests=tuple(failures),
-    )
+    return execute_planned_acquisition(EeEstRequestPlanner(station_codes=station_codes), needs, config, transport)

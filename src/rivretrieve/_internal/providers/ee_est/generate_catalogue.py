@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import polars as pl
 
@@ -141,8 +141,6 @@ def station_native_table(
 
         candidates = parse_jaam_kood(sj.get("kood"))
         active_matches = [jk for jk in candidates if jk in active_fh_codes]
-        if len(active_matches) > 1:
-            raise FatalContractError(f"Ambiguous active f_hydroseire jaam_kood {active_matches!r} on {code}")
         jaam_kood = active_matches[0] if active_matches else None
         raw_kood = sj.get("kood")
         rows.append(
@@ -170,39 +168,94 @@ def station_product_associations(
     *,
     em_available: Mapping[tuple[str, str], str],
     em_unavailable: Mapping[tuple[str, str], str],
-    fh_available: Mapping[tuple[str, str], str],
+    fh_available: Mapping[tuple[str, str], str] | Mapping[tuple[str, str, int], str],
     fh_unavailable: Mapping[tuple[str, str], str],
 ) -> pl.DataFrame:
     """Assemble exhaustive witnessed availability across all `station × product` pairs."""
+    station_koods = {
+        station_id: parse_jaam_kood(kood_raw)
+        for station_id, kood_raw in native.data.select("kkr_kood", "kood").iter_rows()
+    }
+    fh_available_by_code: dict[tuple[str, str], list[tuple[int, str]]] = {}
+    fh_available_by_pair: dict[tuple[str, str], str] = {}
+    for key, reason in fh_available.items():
+        if len(key) == 3:
+            station_id, product_id, jk = cast("tuple[str, str, int]", key)
+            if type(jk) is not int or jk not in station_koods.get(station_id, ()):
+                raise FatalContractError(f"Unexpected f_hydroseire jaam_kood {jk!r} in witness key {key!r}")
+            fh_available_by_code.setdefault((station_id, product_id), []).append((jk, reason))
+        elif len(key) == 2:
+            fh_available_by_pair[cast("tuple[str, str]", key)] = reason
+        else:
+            raise FatalContractError(f"Unexpected f_hydroseire witness key shape {key!r}")
+
     rows: list[dict[str, object]] = []
     for station_id, jaam_kood in native.data.select("kkr_kood", "jaam_kood").sort("kkr_kood").iter_rows():
         for spec in sorted(PRODUCT_SPECS, key=lambda item: item.product_id):
             key = (station_id, spec.product_id)
             if spec.source_api == "estmodel":
                 if key in em_available:
-                    available, reason = True, em_available[key]
+                    rows.append(
+                        {
+                            "station_id": station_id,
+                            "jaam_kood": jaam_kood,
+                            "product_id": spec.product_id,
+                            "native_id": spec.native_id,
+                            "available": True,
+                            "availability_reason": em_available[key],
+                        }
+                    )
                 elif key in em_unavailable:
-                    available, reason = False, em_unavailable[key]
+                    rows.append(
+                        {
+                            "station_id": station_id,
+                            "jaam_kood": jaam_kood,
+                            "product_id": spec.product_id,
+                            "native_id": spec.native_id,
+                            "available": False,
+                            "availability_reason": em_unavailable[key],
+                        }
+                    )
                 else:
                     raise FatalContractError(f"Missing EstModel witness for {key!r}")
             else:
-                if key in fh_available:
-                    available, reason = True, fh_available[key]
+                if key in fh_available_by_code:
+                    for active_jk, reason in sorted(fh_available_by_code[key], key=lambda item: item[0]):
+                        rows.append(
+                            {
+                                "station_id": station_id,
+                                "jaam_kood": active_jk,
+                                "product_id": spec.product_id,
+                                "native_id": spec.native_id,
+                                "available": True,
+                                "availability_reason": reason,
+                            }
+                        )
+                elif key in fh_available_by_pair:
+                    rows.append(
+                        {
+                            "station_id": station_id,
+                            "jaam_kood": jaam_kood,
+                            "product_id": spec.product_id,
+                            "native_id": spec.native_id,
+                            "available": True,
+                            "availability_reason": fh_available_by_pair[key],
+                        }
+                    )
                 elif key in fh_unavailable:
-                    available, reason = False, fh_unavailable[key]
+                    rows.append(
+                        {
+                            "station_id": station_id,
+                            "jaam_kood": jaam_kood,
+                            "product_id": spec.product_id,
+                            "native_id": spec.native_id,
+                            "available": False,
+                            "availability_reason": fh_unavailable[key],
+                        }
+                    )
                 else:
                     raise FatalContractError(f"Missing f_hydroseire witness for {key!r}")
-            rows.append(
-                {
-                    "station_id": station_id,
-                    "jaam_kood": jaam_kood,
-                    "product_id": spec.product_id,
-                    "native_id": spec.native_id,
-                    "available": available,
-                    "availability_reason": reason,
-                }
-            )
-    return pl.DataFrame(rows, schema=ASSOCIATION_SCHEMA).sort("station_id", "product_id")
+    return pl.DataFrame(rows, schema=ASSOCIATION_SCHEMA).sort("station_id", "product_id", "jaam_kood")
 
 
 def catalogue_tables(
@@ -235,22 +288,30 @@ def catalogue_tables(
     stations = pl.DataFrame(station_rows, schema=STATION_CATALOG_SCHEMA.polars_schema).sort("station_id")
     products = pl.DataFrame(catalogue_product_rows(), schema=PRODUCT_CATALOG_SCHEMA.polars_schema).sort("product_id")
 
-    pair_rows: list[dict[str, object]] = []
-    for station_id, product_id, available, reason in associations.select(
-        "station_id", "product_id", "available", "availability_reason"
-    ).iter_rows():
-        pair_rows.append(
-            {
-                "provider_id": "ee_est",
-                "station_id": station_id,
-                "product_id": product_id,
-                "availability": "available" if available else "unavailable",
-                "availability_reason": reason,
-                "published_record_start_date": None,
-                "published_record_end_date": None,
-                "last_catalogue_check": checked_on,
-            }
-        )
+    grouped_pairs: dict[tuple[str, str], tuple[bool, str]] = {}
+    for station_id, product_id, available, reason in (
+        associations.sort("station_id", "product_id", "jaam_kood")
+        .select("station_id", "product_id", "available", "availability_reason")
+        .iter_rows()
+    ):
+        key = (station_id, product_id)
+        previous = grouped_pairs.get(key)
+        if previous is None or (available and not previous[0]):
+            grouped_pairs[key] = (available, reason)
+
+    pair_rows: list[dict[str, object]] = [
+        {
+            "provider_id": "ee_est",
+            "station_id": station_id,
+            "product_id": product_id,
+            "availability": "available" if available else "unavailable",
+            "availability_reason": reason,
+            "published_record_start_date": None,
+            "published_record_end_date": None,
+            "last_catalogue_check": checked_on,
+        }
+        for (station_id, product_id), (available, reason) in sorted(grouped_pairs.items())
+    ]
     pairs = pl.DataFrame(pair_rows, schema=STATION_PRODUCT_CATALOG_SCHEMA.polars_schema).sort(
         "station_id", "product_id"
     )
@@ -457,6 +518,33 @@ def write_catalogue(
         station_metadata_notice=STATION_METADATA_NOTICE,
         source_descriptions=catalogue.source_descriptions,
     )
+    from rivretrieve._internal.catalogues.descriptor import build_catalogue_descriptor
+    from rivretrieve._internal.catalogues.evidence import EvidenceHeader
+    from rivretrieve._internal.catalogues.evidence_encoding import EVIDENCE_FILENAMES, parse_catalogue_evidence
+
+    evidence = parse_catalogue_evidence(
+        EvidenceHeader.model_validate_json(metadata["provenance.json"]),
+        {filename: metadata[filename] for filename in EVIDENCE_FILENAMES.values()},
+    )
+    station_codes = {
+        station_id: list(parse_jaam_kood(kood))
+        for station_id, kood in native_table.data.select("kkr_kood", "kood").sort("kkr_kood").iter_rows()
+    }
+    metadata["station_codes.json"] = (json.dumps(station_codes, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    metadata.pop("croissant.json")
+    metadata["croissant.json"] = (
+        json.dumps(
+            build_catalogue_descriptor(
+                evidence,
+                (STATION_CATALOGUE_ORIGINS,),
+                {**files, **metadata},
+                station_metadata_notice=STATION_METADATA_NOTICE,
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n"
+    ).encode("utf-8")
     output = Path(out_dir)
     output.mkdir(parents=True, exist_ok=True)
     for name, content in {**files, **metadata}.items():
@@ -510,18 +598,20 @@ def read_catalogue_sources(
     recordings: list[RecordingReference] = [*reg_recordings, *slice_recordings]
     em_available: dict[tuple[str, str], str] = {}
     em_unavailable: dict[tuple[str, str], str] = {}
-    fh_available: dict[tuple[str, str], str] = {}
+    fh_available: dict[tuple[str, str, int], str] = {}
     fh_unavailable: dict[tuple[str, str], str] = {}
 
-    # Witness f_hydroseire availability from verified slice + negative checks
+    # Witness f_hydroseire availability across all listed codes + negative checks
     kkr_by_jk: dict[int, str] = {}
-    for station_id, jaam_kood in native.data.select("kkr_kood", "jaam_kood").iter_rows():
-        if jaam_kood is not None:
-            kkr_by_jk[int(jaam_kood)] = station_id
+    for station_id, kood_raw in native.data.select("kkr_kood", "kood").iter_rows():
+        for jk in parse_jaam_kood(kood_raw):
+            if jk in kkr_by_jk:
+                raise FatalContractError(f"Duplicate f_hydroseire jaam_kood {jk} across stations")
+            kkr_by_jk[jk] = station_id
     for jk, ae in seen_fh_nonnull:
         if jk in kkr_by_jk and ae in FH_AEGRIDA_TO_PRODUCT:
             spec = FH_AEGRIDA_TO_PRODUCT[ae]
-            fh_available[(kkr_by_jk[jk], spec.product_id)] = (
+            fh_available[(kkr_by_jk[jk], spec.product_id, jk)] = (
                 "Non-null hourly observation witnessed in selected Keskkonnaandmed f_hydroseire UTC slice"
             )
 
