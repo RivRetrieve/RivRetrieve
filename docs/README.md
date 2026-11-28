@@ -27,6 +27,7 @@ Provider pages explain their agencies and source-specific conditions:
 - [France: Hub'Eau (`fr_hubeau`)](providers/fr_hubeau.md)
 - [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
 - [Lithuania: LHMT](providers/lt_lhmt.md)
+- [Netherlands: Rijkswaterstaat](providers/nl_rws.md)
 - [Norway: NVE](providers/no_nve.md)
 - [Peru: SENAMHI](providers/pe_senamhi.md)
 - [Poland: IMGW-PIB](providers/pl_imgw.md)

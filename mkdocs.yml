@@ -117,6 +117,7 @@ nav:
       - France (Hub'Eau): providers/fr_hubeau.md
       - France (HydroPortail): providers/fr_hydroportail.md
       - Lithuania (LHMT): providers/lt_lhmt.md
+      - Netherlands (Rijkswaterstaat): providers/nl_rws.md
       - Norway (NVE): providers/no_nve.md
       - Peru (SENAMHI): providers/pe_senamhi.md
       - Poland (IMGW-PIB): providers/pl_imgw.md
