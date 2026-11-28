@@ -27,7 +27,10 @@ on #875 require. Do not merge provider code into `main`.
 - **Product**: a provider-wide series kind. Candidates are water level (`S`) and
   discharge (`Q`) at daily and 15-minute resolution. Step 3
   ([#1100](https://github.com/RivRetrieve/RivRetrieve/issues/1100)) establishes
-  their physical meaning, frequency and statistic.
+  their physical meaning, frequency and statistic. Step 2 publishes product rows
+  asserting only facts already established; facts Step 3 has not established
+  stay `unknown` in the product table rather than being given provisional
+  values.
 - **Station-product**: one station with one product. Availability is set per
   station-product.
 
@@ -36,7 +39,9 @@ on #875 require. Do not merge provider code into `main`.
 Build from retained originals only, with no live calls in the build. Follow the
 `cl_dga`, `fi_syke` and `ie_opw` builders: an evidence root, a selection and an
 input receipt, verifying that the rebuilt native table matches the selected
-originals.
+originals. The `ie_opw` builder
+(`src/rivretrieve/_internal/providers/ie_opw/generate_catalogue.py`) exists only
+on branch `port/ie-opw`; read it there and do not merge it.
 
 Start from the Step 1 collection `ie_epa-access-2026-11-27-v1` in the private
 [verification-evidence](https://github.com/RivRetrieve/verification-evidence)
@@ -66,19 +71,22 @@ included.
 
 ## Coordinates
 
-Publish `station_latitude` and `station_longitude`.
+Map `station_latitude` and `station_longitude` to the catalogue's `latitude`
+and `longitude`.
 
-- Label them `EPSG:4326` only when an EPA or data.gov.ie document states their
-  reference system. Check the HydroNet layer indexes, the app configuration and
-  the data.gov.ie record. Otherwise publish `crs` `"unknown"` and keep the
-  coordinates.
+- Label them `EPSG:4326` only when an EPA or data.gov.ie document states the
+  reference system of these station coordinates. A projection declared only for
+  web-map display layers does not count. Check the HydroNet layer indexes, the
+  app configuration and the data.gov.ie record. Otherwise publish `crs`
+  `"unknown"` and keep the coordinates.
 - Record in the research record, as context only: transforming latitude and
   longitude from WGS84 to Irish Grid (EPSG:29903) reproduces
   `station_carteasting`/`station_cartnorthing` to centimetres at 381 of 385
   stations. `27010`, `03100`, `22011` and `28012` differ by 50–60 m. This does
   not justify the label.
-- Do not use `station_local_x`/`station_local_y`; 14 stations carry latitude and
-  longitude there.
+- Do not use `station_local_x`/`station_local_y`. At 14 stations these fields
+  hold latitude and longitude rather than grid coordinates, so their meaning is
+  inconsistent.
 
 ## Availability
 
@@ -93,7 +101,8 @@ HydroNet makes none, so:
   catalogue. Data can return, for example after rating recalibration.
 - **`unknown`**: the file list has no file for that product. At 2026-11-27 this
   is 188 station-products: discharge at 88 level-only stations and water level
-  at 6 discharge-only stations. The register sometimes contradicts the file
+  at 6 discharge-only stations, each at daily and 15-minute resolution
+  (94 station-parameters × 2). The register sometimes contradicts the file
   list: active level-only `ATH/25046` has `DATA_AVAILABLE` "Water Level and
   Flow". The availability reason should say the file list omits the parameter.
 - **`unavailable`**: not used.
@@ -129,7 +138,8 @@ Leave published record start and end dates `None`.
 ## Native table
 
 Keep a curated set, as `ie_opw` does: identity and region (`station_no`,
-`site_no`, `site_name`), both coordinate pairs, `object_type`, `station_status`,
+`site_no`, `site_name`), `station_latitude`/`station_longitude` and
+`station_carteasting`/`station_cartnorthing`, `object_type`, `station_status`,
 `RESPONSIBLE_BODY`, `STATION_OWNER`, `TYPE_OF_GAUGING`, `catchment_name`,
 `WTO_OBJECT`, `river_name`, `CATCHMENT_SIZE`, `station_gauge_datum`,
 `station_gauge_datum_unit`, `DATA_AVAILABLE`, and the listed-file facts above.
@@ -152,10 +162,12 @@ Record in the research record and provider documentation:
 
 - that availability comes from the file lists, why listed empty files are
   `available` and why missing files are `unknown`;
-- that `unknown` pairs are selectable and that fetching them fails with a
-  reported issue until a file appears;
-- the empty files, the `DATA_AVAILABLE` contradictions and the excluded
-  stations.
+- that `unknown` pairs are selectable; Step 4 settles what fetching them
+  returns;
+- the empty files and the `DATA_AVAILABLE` contradictions;
+- the stations excluded by the Step 1 rule: non-EPA stations hosting files
+  (`26243`, `06036`, `38010`, `30111`, `18027`, `14049`), lakes, reservoirs and
+  springs, spot-only stations, stations with no files, and `DUB/09045`.
 
 Post a safe public summary on #1106. Keep private material out of this
 repository and public issues.
