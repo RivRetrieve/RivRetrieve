@@ -187,6 +187,8 @@ def build_catalogue_descriptor(
         expected_files += ("station_metadata.parquet",)
     if "monitoring_locations.json" in files:
         expected_files += ("monitoring_locations.json",)
+    if "station_codes.json" in files:
+        expected_files += ("station_codes.json",)
     if set(files) != set(expected_files):
         raise FatalContractError(
             "Descriptor requires exactly the public catalogue, source-description and evidence files"

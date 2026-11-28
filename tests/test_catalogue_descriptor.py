@@ -45,7 +45,13 @@ def _descriptor(provider: str) -> dict:
 
 def _inputs(provider: str):
     directory = _path(provider).absolute()
-    extra_files = ("station_metadata.parquet",) + (("monitoring_locations.json",) if provider == "usgs_nwis" else ())
+    extra_files = ("station_metadata.parquet",) + (
+        ("monitoring_locations.json",)
+        if provider == "usgs_nwis"
+        else ("station_codes.json",)
+        if provider == "ee_est"
+        else ()
+    )
     fp = _fingerprint(directory, extra_files=extra_files)
     cached = _INPUTS_CACHE.get(directory)
     if fp is not None and cached is not None and cached[0] == fp:
@@ -89,6 +95,8 @@ def _inputs(provider: str):
         files["station_metadata.parquet"] = (directory / "station_metadata.parquet").read_bytes()
     if provider == "usgs_nwis":
         files["monitoring_locations.json"] = (directory / "monitoring_locations.json").read_bytes()
+    if provider == "ee_est":
+        files["station_codes.json"] = (directory / "station_codes.json").read_bytes()
     if fp is not None and _fingerprint(directory, extra_files=extra_files) == fp:
         _INPUTS_CACHE[directory] = (fp, provenance, origins, files)
         return _detach_evidence(provenance), origins, dict(files)

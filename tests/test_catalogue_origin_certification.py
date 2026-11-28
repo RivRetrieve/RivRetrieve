@@ -1548,6 +1548,8 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     }
     if adapter.provider_id == "usgs_nwis":
         expected_names.add("monitoring_locations.json")
+    elif adapter.provider_id == "ee_est":
+        expected_names.add("station_codes.json")
     expected_names.add("station_metadata.parquet")
     assert rebuilt_names == expected_names
     # Build revisions deliberately change provenance and descriptor byte identities.
@@ -1563,6 +1565,8 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
     }
     if adapter.provider_id == "usgs_nwis":
         unchanged.add("monitoring_locations.json")
+    elif adapter.provider_id == "ee_est":
+        unchanged.add("station_codes.json")
     for name in unchanged:
         committed = (catalogue_dir / name).read_bytes()
         rebuilt = (output / name).read_bytes()

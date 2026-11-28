@@ -303,6 +303,7 @@ class ObservationPlan:
     issues: tuple[Issue, ...] = ()
     calls: tuple[SourceCallOrigin, ...] = ()
     failed_requests: tuple[FailedSourceRequest, ...] = ()
+    finalize: Callable[[SourceAcquisition], SourceAcquisition] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -935,7 +936,7 @@ def execute_planned_acquisition(
                 interpretations.append(InterpretedPayload.from_payload(narrowed, parsed))
 
     unique_defs = tuple({item.series_id: item for item in definitions}.values())
-    return SourceAcquisition(
+    acquisition = SourceAcquisition(
         value=tuple(payloads),
         issues=tuple(issues),
         series=unique_defs,
@@ -946,6 +947,7 @@ def execute_planned_acquisition(
         interpretations=tuple(interpretations),
         call_station_products=tuple(call_station_products),
     )
+    return plan.finalize(acquisition) if plan.finalize is not None else acquisition
 
 
 def _series_window_from_fetch(fetch_window: FetchWindow, axis: TimeAxis) -> SeriesWindow:
