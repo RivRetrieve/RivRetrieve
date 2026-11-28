@@ -81,6 +81,8 @@ def _register() -> tuple[list[dict[str, str]], dict[tuple[str, str], object]]:
         ),
         _station("MON", "37016", CATCHMENT_SIZE="0.00 km²", DATA_AVAILABLE="Spot flows", station_status="Suspended"),
         _station("LIM", "123", station_gauge_datum_unit=""),
+        # Rolling files only: in the universe, but they never set availability.
+        _station("COR", "03100"),
         # Excluded: gaugings only, no files, other agency, lake, spring.
         _station("CAS", "29006"),
         _station("COR", "22049"),
@@ -94,6 +96,7 @@ def _register() -> tuple[list[dict[str, str]], dict[tuple[str, str], object]]:
         ("CAS", "34109A"): _file_list("CAS", "34109A", "S/complete_daymean.zip", "S/complete_15min.zip"),
         ("MON", "37016"): _file_list("MON", "37016", "Q/complete_daymean.zip", "Q/complete_15min.zip"),
         ("LIM", "123"): _file_list("LIM", "123", "S/complete_15min.zip"),
+        ("COR", "03100"): _file_list("COR", "03100", "S/3_months.zip"),
         ("CAS", "29006"): _file_list("CAS", "29006", "Q/complete_gaugings.zip"),
         ("COR", "22049"): _file_list("COR", "22049"),
     }
@@ -110,7 +113,7 @@ def test_universe_keeps_epa_river_gauges_with_listed_series_and_native_identity(
 
     # Gaugings-only, file-less, non-EPA, lake and spring stations stay out; the
     # lettered and short identities are kept exactly as published.
-    assert native.data["station_no"].to_list() == ["10047", "123", "25046", "34109A", "37016"]
+    assert native.data["station_no"].to_list() == ["03100", "10047", "123", "25046", "34109A", "37016"]
     assert native.data.filter(pl.col("station_no") == "34109A")["site_no"].to_list() == ["CAS"]
 
 
@@ -137,6 +140,11 @@ def test_availability_follows_listed_full_history_files_only() -> None:
     pairs = station_product_associations(_native()).select("station_id", "product_id", "availability")
     expected = pl.DataFrame(
         [
+            # Only a rolling file is listed, so every pair stays unknown.
+            ("03100", "discharge_15min", "unknown"),
+            ("03100", "discharge_daily", "unknown"),
+            ("03100", "stage_15min", "unknown"),
+            ("03100", "stage_daily", "unknown"),
             ("10047", "discharge_15min", "available"),
             ("10047", "discharge_daily", "available"),
             ("10047", "stage_15min", "available"),
@@ -246,13 +254,14 @@ def test_series_field_witness_requires_published_parameter_and_unit() -> None:
     check_series_fields(
         _hosted_file("complete_15min.csv", headers), station_no="10050", parameter="Q", file="complete_15min"
     )
-    with pytest.raises(FatalContractError, match="Unit Symbol"):
-        check_series_fields(
-            _hosted_file("complete_15min.csv", {**headers, "Unit Symbol": "l/s"}),
-            station_no="10050",
-            parameter="Q",
-            file="complete_15min",
-        )
+    for key, wrong in (("Unit Symbol", "l/s"), ("Station Parameter Name", "Stage"), ("Station Number", "10049")):
+        with pytest.raises(FatalContractError, match=key):
+            check_series_fields(
+                _hosted_file("complete_15min.csv", {**headers, key: wrong}),
+                station_no="10050",
+                parameter="Q",
+                file="complete_15min",
+            )
 
 
 @pytest.mark.governing(

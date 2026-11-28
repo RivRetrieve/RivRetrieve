@@ -68,9 +68,7 @@ PRODUCT_SPECS: tuple[ProductSpec, ...] = (
     ProductSpec("stage_15min", "S", "complete_15min", "Stage", "stage", "m", "m"),
     ProductSpec("stage_daily", "S", "complete_daymean", "Stage", "stage", "m", "m"),
 )
-PRODUCT_BY_FILE: dict[tuple[Parameter, FullHistoryFile], ProductSpec] = {
-    (spec.parameter, spec.file): spec for spec in PRODUCT_SPECS
-}
+PRODUCT_BY_FILE: dict[tuple[str, str], ProductSpec] = {(spec.parameter, spec.file): spec for spec in PRODUCT_SPECS}
 
 
 def catalogue_product_rows() -> list[dict[str, object]]:

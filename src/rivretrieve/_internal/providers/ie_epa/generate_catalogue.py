@@ -260,7 +260,7 @@ def station_product_associations(native: NativeTable) -> pl.DataFrame:
 
 def check_series_fields(raw: bytes, *, station_no: str, parameter: str, file: str) -> None:
     """Verify that a hosted file's headers state the product's parameter and unit."""
-    spec = next((item for (key, item) in PRODUCT_BY_FILE.items() if key == (parameter, file)), None)
+    spec = PRODUCT_BY_FILE.get((parameter, file))
     if spec is None:
         raise FatalContractError(f"No EPA product is declared for {parameter}/{file}")
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
@@ -442,7 +442,7 @@ def build_catalogue(
 
     products, stations, pairs = catalogue_tables(native_table, associations, checked_on=checked_on)
     enforce_catalogue_origins(ProviderId(PROVIDER_ID), origins, native_table, stations)
-    if provenance is None or provenance.provider_id != PROVIDER_ID:
+    if provenance.provider_id != PROVIDER_ID:
         raise FatalContractError("Official EPA HydroNet catalogue requires selected acquisition provenance")
     statements = {
         statement.kind: statement.exact_text for source in provenance.source_records for statement in source.statements

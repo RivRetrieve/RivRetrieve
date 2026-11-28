@@ -392,9 +392,9 @@ DECLARATIONS = {
         "cz_chmi",
         "dk_vanda",
         "ee_est",
-        "ie_epa",
         "fi_syke",
         "fr_hydroportail",
+        "ie_epa",
         "lt_lhmt",
         "no_nve",
         "pe_senamhi",
@@ -434,8 +434,8 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
             "co_ideam",
             "dk_vanda",
             "ee_est",
-            "ie_epa",
             "fi_syke",
+            "ie_epa",
             "pe_senamhi",
         }
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
@@ -480,8 +480,8 @@ def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> Pro
             "co_ideam",
             "dk_vanda",
             "ee_est",
-            "ie_epa",
             "fi_syke",
+            "ie_epa",
             "pe_senamhi",
             "usgs_nwis",
         }
@@ -1329,8 +1329,8 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "co_ideam",
         "dk_vanda",
         "ee_est",
-        "ie_epa",
         "fi_syke",
+        "ie_epa",
         "pe_senamhi",
     }:
         output.mkdir(mode=0o700)
@@ -1408,8 +1408,8 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "co_ideam",
         "dk_vanda",
         "ee_est",
-        "ie_epa",
         "fi_syke",
+        "ie_epa",
         "pe_senamhi",
     }:
         arguments.extend(("--native", str(adapter.native_path)))
@@ -1437,9 +1437,9 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "co_ideam",
         "dk_vanda",
         "ee_est",
-        "ie_epa",
         "fi_syke",
         "fr_hubeau",
+        "ie_epa",
         "pe_senamhi",
     }:
         selected_receipt = product_root / f"{adapter.provider_id}.input-receipt.json"
