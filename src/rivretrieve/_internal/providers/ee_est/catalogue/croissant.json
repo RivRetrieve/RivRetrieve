@@ -78,7 +78,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "73e20567415b056ea90bbe5dadc8fe790a0d5d21c6be73e3019889b7a2c1a431",
+      "sha256": "8d6b0c0f3386056cb0eccf5b8ffaf87e5bd07130030f5cff674e7a4a7220419a",
       "contentSize": "166888 B"
     },
     {
@@ -152,6 +152,14 @@
       "encodingFormat": "application/x-parquet",
       "sha256": "6955a5a38bafd43374622e49b1a7220c2a50ae384b9c9c23381ebdbab05a152d",
       "contentSize": "7907 B"
+    },
+    {
+      "@id": "station_codes.json",
+      "@type": "cr:FileObject",
+      "contentUrl": "station_codes.json",
+      "encodingFormat": "application/json",
+      "sha256": "6ffe431571ed7e7dbc20016e937dc971c037593ae5236c6616cc40f840e9d338",
+      "contentSize": "1268 B"
     }
   ],
   "recordSet": [
