@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from rivretrieve._internal.providers.fr_hubeau.config import config, window_declarations
-from rivretrieve._internal.providers.fr_hubeau.fetch import fetch
+from rivretrieve._internal.providers.fr_hubeau.fetch import FrHubeauRequestPlanner, fetch
 from rivretrieve._internal.providers.fr_hubeau.parse import parse
 from rivretrieve._internal.providers.registration import LiveStages, ProviderDeclaration
 
@@ -14,6 +14,7 @@ class _Stages:
     observation_source = "live"
     config = config()
     window_declarations = window_declarations()
+    request_planner = FrHubeauRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
 

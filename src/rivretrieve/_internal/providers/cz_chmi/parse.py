@@ -4,6 +4,7 @@ Contributed by: Thiago von Däniken
 """
 
 import json
+from collections.abc import Mapping
 from datetime import datetime
 from math import isfinite
 from typing import cast
@@ -13,40 +14,39 @@ import polars as pl
 from rivretrieve._internal.engine import Payload, ProviderConfig, Rows, Unit, WithIssues
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.provider_series import NATIVE_SCHEMA, UnsupportedSourceStructureError, parse_mapped_series
-from rivretrieve._internal.providers.cz_chmi.config import SERIES_MAPPINGS, CzChmiSourceCoordinates
-from rivretrieve._internal.providers.cz_chmi.fetch import CzChmiRequestCoordinates
+from rivretrieve._internal.provider_series import (
+    NATIVE_SCHEMA,
+    UnsupportedSourceStructureError,
+    parse_mapped_group,
+    parse_mapped_series,
+)
+from rivretrieve._internal.providers.cz_chmi.config import (
+    SERIES_MAPPINGS,
+    CzChmiRequestCoordinates,
+    CzChmiSourceCoordinates,
+)
 from rivretrieve._internal.source_series import ParsedSeries
 
 _NATIVE_UNITS = {Unit.CM: "CM", Unit.M3_S: "M3_S", Unit.DEG_C: "0C"}
 
 
-def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
+def _validate_chmi_payload(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    provider_config: ProviderConfig,
+) -> tuple[str, CzChmiRequestCoordinates, dict[tuple[str, ProductId], tuple[ProductId, str]]]:
     if not payload.station_products:
         raise FatalContractError("cz_chmi payload must contain at least one station-product pair")
     stations = {station_id for station_id, _ in payload.station_products}
     if len(stations) != 1:
         raise FatalContractError("cz_chmi payload station-product pairs must name one station")
     station_id = next(iter(stations))
-    try:
-        document = json.loads(payload.content)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise UnsupportedSourceStructureError("cz_chmi payload content is not valid JSON") from error
-    if not isinstance(document, dict):
-        raise UnsupportedSourceStructureError("cz_chmi payload content must be a JSON object")
-    if document.get("objID") != station_id:
-        raise UnsupportedSourceStructureError("cz_chmi payload station identity differs from its request tag")
-    series = document.get("tsList")
-    if not isinstance(series, list):
-        raise UnsupportedSourceStructureError("cz_chmi tsList must be a list")
-
     request_coordinates = payload.source_coordinates.value
     if not isinstance(request_coordinates, CzChmiRequestCoordinates):
         raise FatalContractError("cz_chmi payload has invalid request coordinates")
 
     requested: dict[str, ProductId] = {}
-    for tagged_station, product_id in payload.station_products:
-        del tagged_station
+    for _, product_id in payload.station_products:
         try:
             product = provider_config.products[product_id]
         except KeyError as error:
@@ -62,9 +62,38 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
     if tuple(requested) != request_coordinates.ts_con_ids:
         raise FatalContractError("cz_chmi payload request coordinates differ from its product tags")
 
-    found: set[str] = set()
+    pair_targets: dict[tuple[str, ProductId], tuple[ProductId, str]] = {}
+    for pair_key in pair_payloads:
+        pair_station, product_id = pair_key
+        if pair_station != station_id:
+            raise FatalContractError("cz_chmi pair payload station contradicts shared payload station")
+        product = provider_config.products[product_id]
+        coordinates = product.coordinates.value
+        assert isinstance(coordinates, CzChmiSourceCoordinates)
+        pair_targets[pair_key] = (product_id, coordinates.ts_con_id)
+    return station_id, request_coordinates, pair_targets
+
+
+def _extract_native_group(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    provider_config: ProviderConfig,
+) -> Mapping[tuple[str, ProductId], WithIssues[Rows] | UnsupportedSourceStructureError]:
+    station_id, request_coordinates, pair_targets = _validate_chmi_payload(payload, pair_payloads, provider_config)
+    try:
+        document = json.loads(payload.content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise UnsupportedSourceStructureError("cz_chmi payload content is not valid JSON") from error
+    if not isinstance(document, dict):
+        raise UnsupportedSourceStructureError("cz_chmi payload content must be a JSON object")
+    if document.get("objID") != station_id:
+        raise UnsupportedSourceStructureError("cz_chmi payload station identity differs from its request tag")
+    series = document.get("tsList")
+    if not isinstance(series, list):
+        raise UnsupportedSourceStructureError("cz_chmi tsList must be a list")
+
+    by_ts_con_id: dict[str, list[dict[str, object]]] = {}
     malformed_identity = False
-    records: list[dict[str, object]] = []
     for raw_series in series:
         if not isinstance(raw_series, dict):
             malformed_identity = True
@@ -74,56 +103,65 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
             # An unassignable source entry must not discard identified siblings.
             malformed_identity = True
             continue
-        if ts_con_id not in requested:
-            continue
-        if ts_con_id in found:
-            raise UnsupportedSourceStructureError("cz_chmi requested time series must occur exactly once")
-        found.add(ts_con_id)
-        product_id = requested[ts_con_id]
-        product = provider_config.products[product_id]
-        if raw_series.get("unit") != _NATIVE_UNITS[product.unit]:
-            raise UnsupportedSourceStructureError(f"cz_chmi native unit differs from config for {product_id}")
-        values = _values(raw_series)
-        for row_number, raw_row in enumerate(values, start=1):
-            if not isinstance(raw_row, list) or len(raw_row) != 2:
-                raise UnsupportedSourceStructureError(f"cz_chmi {ts_con_id} row {row_number} must contain DT and VAL")
-            raw_time, raw_value = raw_row
-            wall_clock = _utc_wall_clock(raw_time, ts_con_id, row_number)
-            if request_coordinates.file_code == "DQ" and any(
-                (wall_clock.hour, wall_clock.minute, wall_clock.second, wall_clock.microsecond)
-            ):
+        by_ts_con_id.setdefault(ts_con_id, []).append(cast("dict[str, object]", raw_series))
+
+    results: dict[tuple[str, ProductId], WithIssues[Rows] | UnsupportedSourceStructureError] = {}
+    for pair_key, (product_id, ts_con_id) in pair_targets.items():
+        try:
+            matches = by_ts_con_id.get(ts_con_id, [])
+            if not matches:
+                detail = "; tsConID identity must be a string" if malformed_identity else ""
                 raise UnsupportedSourceStructureError(
-                    f"cz_chmi {ts_con_id} row {row_number} daily timestamp must label midnight"
+                    f"cz_chmi payload is missing requested time series: {ts_con_id}{detail}"
                 )
-            if raw_value is not None and (isinstance(raw_value, bool) or not isinstance(raw_value, int | float)):
-                raise UnsupportedSourceStructureError(
-                    f"cz_chmi {ts_con_id} row {row_number} value must be numeric or null"
+            if len(matches) > 1:
+                raise UnsupportedSourceStructureError("cz_chmi requested time series must occur exactly once")
+            raw_series = matches[0]
+            product = provider_config.products[product_id]
+            if raw_series.get("unit") != _NATIVE_UNITS[product.unit]:
+                raise UnsupportedSourceStructureError(f"cz_chmi native unit differs from config for {product_id}")
+            values = _values(raw_series)
+            records: list[dict[str, object]] = []
+            for row_number, raw_row in enumerate(values, start=1):
+                if not isinstance(raw_row, list) or len(raw_row) != 2:
+                    raise UnsupportedSourceStructureError(
+                        f"cz_chmi {ts_con_id} row {row_number} must contain DT and VAL"
+                    )
+                raw_time, raw_value = raw_row
+                wall_clock = _utc_wall_clock(raw_time, ts_con_id, row_number)
+                if request_coordinates.file_code == "DQ" and any(
+                    (wall_clock.hour, wall_clock.minute, wall_clock.second, wall_clock.microsecond)
+                ):
+                    raise UnsupportedSourceStructureError(
+                        f"cz_chmi {ts_con_id} row {row_number} daily timestamp must label midnight"
+                    )
+                if raw_value is not None and (isinstance(raw_value, bool) or not isinstance(raw_value, int | float)):
+                    raise UnsupportedSourceStructureError(
+                        f"cz_chmi {ts_con_id} row {row_number} value must be numeric or null"
+                    )
+                try:
+                    number = None if raw_value is None else float(raw_value)
+                except OverflowError as error:
+                    raise UnsupportedSourceStructureError(
+                        f"cz_chmi {ts_con_id} row {row_number} value is not representable as a finite number"
+                    ) from error
+                if number is not None and not isfinite(number):
+                    raise UnsupportedSourceStructureError(f"cz_chmi {ts_con_id} row {row_number} value must be finite")
+                records.append(
+                    {
+                        "station_id": station_id,
+                        "product_id": product_id,
+                        "time": wall_clock,
+                        "value": number,
+                        "time_zone": "+00:00",
+                    }
                 )
-            try:
-                number = None if raw_value is None else float(raw_value)
-            except OverflowError as error:
-                raise UnsupportedSourceStructureError(
-                    f"cz_chmi {ts_con_id} row {row_number} value is not representable as a finite number"
-                ) from error
-            if number is not None and not isfinite(number):
-                raise UnsupportedSourceStructureError(f"cz_chmi {ts_con_id} row {row_number} value must be finite")
-            records.append(
-                {
-                    "station_id": station_id,
-                    "product_id": product_id,
-                    "time": wall_clock,
-                    "value": number,
-                    "time_zone": "+00:00",
-                }
-            )
-    missing = sorted(set(requested) - found)
-    if missing:
-        detail = "; tsConID identity must be a string" if malformed_identity else ""
-        raise UnsupportedSourceStructureError(
-            f"cz_chmi payload is missing requested time series: {', '.join(missing)}{detail}"
-        )
-    rows = pl.DataFrame(records, schema=NATIVE_SCHEMA)
-    return WithIssues(value=rows, issues=())
+            results[pair_key] = WithIssues(value=pl.DataFrame(records, schema=NATIVE_SCHEMA), issues=())
+        except UnsupportedSourceStructureError as error:
+            results[pair_key] = error
+
+    del document, series, by_ts_con_id
+    return results
 
 
 def _values(series: dict[str, object]) -> list[object]:
@@ -164,21 +202,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
 
     from rivretrieve._internal.engine import SourceCoordinates
 
-    request_coordinates = payload.source_coordinates.value
-    if not isinstance(request_coordinates, CzChmiRequestCoordinates):
-        raise FatalContractError("cz_chmi payload has invalid request coordinates")
-    expected_ids = []
-    for _, product in payload.station_products:
-        if product not in provider_config.products:
-            raise FatalContractError("cz_chmi product is absent from provider config")
-        coordinates = provider_config.products[product].coordinates.value
-        if not isinstance(coordinates, CzChmiSourceCoordinates):
-            raise FatalContractError("cz_chmi product has invalid source coordinates")
-        if coordinates.file_code != request_coordinates.file_code:
-            raise FatalContractError("cz_chmi request coordinates combine different annual files")
-        expected_ids.append(coordinates.ts_con_id)
-    if tuple(expected_ids) != request_coordinates.ts_con_ids:
-        raise FatalContractError("cz_chmi request coordinates differ from product tags")
+    _validate_chmi_payload(payload, {}, provider_config)
 
     def narrow(tagged: Payload, product: str) -> Payload:
         coordinates = tagged.source_coordinates.value
@@ -195,6 +219,22 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         provider_config,
         provider="cz_chmi",
         mappings=SERIES_MAPPINGS,
-        native_parse=_parse_native,
         narrow_payload=narrow,
+        native_parse_group=_extract_native_group,
+    )
+
+
+def parse_group(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    provider_config: ProviderConfig,
+) -> Mapping[tuple[str, ProductId], ParsedSeries]:
+    """Decode one shared CHMI annual file once across all co-acquired products."""
+    return parse_mapped_group(
+        payload,
+        pair_payloads,
+        provider_config,
+        provider="cz_chmi",
+        mappings=SERIES_MAPPINGS,
+        native_parse_group=_extract_native_group,
     )

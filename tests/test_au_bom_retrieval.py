@@ -29,13 +29,12 @@ from rivretrieve._internal.observations import ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.au_bom.config import (
-    SHARED_ACQUISITION_PRODUCTS,
     AuBomTimeseriesListCoordinates,
     config,
     window_declarations,
 )
 from rivretrieve._internal.providers.au_bom.declaration import declaration
-from rivretrieve._internal.providers.au_bom.fetch import fetch, resolve_timeseries_list
+from rivretrieve._internal.providers.au_bom.fetch import AuBomRequestPlanner, fetch, resolve_timeseries_list
 from rivretrieve._internal.providers.au_bom.parse import parse
 from rivretrieve._internal.providers.registration import LiveStages
 from rivretrieve._internal.source_series import OutcomeStatus
@@ -58,7 +57,7 @@ class _AuBomStages:
 
     config: ProviderConfig = config()
     window_declarations: ProductWindowDeclarations = window_declarations()
-    shared_acquisition_products: tuple[frozenset[ProductId], ...] = SHARED_ACQUISITION_PRODUCTS
+    request_planner: AuBomRequestPlanner = AuBomRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
 
@@ -118,8 +117,14 @@ def test_config_declares_18_products_with_iso_instant_shared_acquisition() -> No
         assert decl.stop_convention == StopConvention.INCLUSIVE
     assert cfg.products[_DISCHARGE_DAILY].unit == Unit.M3_S
     assert cfg.products[_STAGE_DAILY].unit == Unit.M
-    assert len(SHARED_ACQUISITION_PRODUCTS) == 1
-    assert SHARED_ACQUISITION_PRODUCTS[0] == frozenset(cfg.products)
+    assert isinstance(declaration.observations.stages.request_planner, AuBomRequestPlanner)
+    from rivretrieve._internal.engine import Hourly, IntervalDefinition, UnknownTemporalSupport
+
+    for product_id, product_cfg in cfg.products.items():
+        if "hourly" in str(product_id):
+            assert product_cfg.semantics == Hourly(IntervalDefinition("unknown"))
+        else:
+            assert product_cfg.semantics == UnknownTemporalSupport()
 
 
 def test_resolve_timeseries_list_disambiguates_a_shared_ts_name_by_parametertype_name() -> None:
@@ -362,6 +367,55 @@ def test_parse_values_rejects_a_timestamp_without_the_plus_ten_offset() -> None:
     assert parsed.issues[0].severity == "error"
     assert parsed.issues[0].code == "source.unsupported_structure"
     assert "+10:00" in parsed.issues[0].message
+
+
+def test_parse_values_rejects_unexpected_or_mixed_wall_clock_anchors() -> None:
+    fetch_win = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2026, 9, 1)), WindowEndpoint.from_datetime(datetime(2026, 9, 2))
+    )
+    unexpected = _values_json([("73472010", [("2026-09-01T04:00:00.000+10:00", 1.5, 10, "quality-A")])])
+    parsed_unexpected = parse(
+        Payload(
+            config().products[_DISCHARGE_DAILY].coordinates,
+            (("601001", _DISCHARGE_DAILY),),
+            fetch_win,
+            unexpected,
+            _origin(),
+            (),
+        ),
+        config(),
+    )
+    assert parsed_unexpected.rows.height == 0
+    assert parsed_unexpected.outcomes[0].status is OutcomeStatus.FAILED
+    assert parsed_unexpected.issues[0].code == "source.unsupported_structure"
+    assert "04:00" in parsed_unexpected.issues[0].message
+
+    mixed = _values_json(
+        [
+            (
+                "73472010",
+                [
+                    ("2026-09-01T00:00:00.000+10:00", 1.5, 10, "quality-A"),
+                    ("2026-09-02T02:00:00.000+10:00", 1.6, 10, "quality-A"),
+                ],
+            )
+        ]
+    )
+    parsed_mixed = parse(
+        Payload(
+            config().products[_DISCHARGE_DAILY].coordinates,
+            (("601001", _DISCHARGE_DAILY),),
+            fetch_win,
+            mixed,
+            _origin(),
+            (),
+        ),
+        config(),
+    )
+    assert parsed_mixed.rows.height == 0
+    assert parsed_mixed.outcomes[0].status is OutcomeStatus.FAILED
+    assert parsed_mixed.issues[0].code == "source.unsupported_structure"
+    assert "mixes multiple wall-clock anchors" in parsed_mixed.issues[0].message
 
 
 def test_assembled_drive_shares_one_list_call_and_converts_units() -> None:

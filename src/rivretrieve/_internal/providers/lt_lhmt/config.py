@@ -36,6 +36,11 @@ class LtLhmtSourceCoordinates:
             raise ValueError("native_field must name a Meteo.lt observation field")
 
 
+@dataclass(frozen=True, slots=True)
+class LtLhmtHistoricalRoute:
+    """The one source route that co-publishes both configured products."""
+
+
 _CONFIG = ProviderConfig(
     zone=ZoneValue("+00:00"),
     products={

@@ -28,6 +28,20 @@ from rivretrieve._internal.provider_series import SeriesMapping
 
 
 @dataclass(frozen=True, slots=True)
+class CzChmiRequestCoordinates:
+    """The annual file and selected native series represented by one source call."""
+
+    file_code: str
+    ts_con_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if self.file_code not in ("DQ", "HQ"):
+            raise ValueError("CHMI request file code must be DQ or HQ")
+        if not self.ts_con_ids or len(self.ts_con_ids) != len(set(self.ts_con_ids)):
+            raise ValueError("CHMI request native series must be non-empty and unique")
+
+
+@dataclass(frozen=True, slots=True)
 class CzChmiSourceCoordinates:
     file_code: Literal["DQ", "HQ"]
     ts_con_id: Literal["HD", "QD", "TD", "HH", "QH"]

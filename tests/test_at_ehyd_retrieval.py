@@ -29,7 +29,6 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.observations import ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.at_ehyd.config import (
-    SHARED_ACQUISITION_PRODUCTS,
     AtEhydInfoCoordinates,
     AtEhydOwfCoordinates,
     AtEhydPegelCoordinates,
@@ -37,7 +36,7 @@ from rivretrieve._internal.providers.at_ehyd.config import (
     window_declarations,
 )
 from rivretrieve._internal.providers.at_ehyd.declaration import declaration
-from rivretrieve._internal.providers.at_ehyd.fetch import fetch, resolve_messstellen_info_files
+from rivretrieve._internal.providers.at_ehyd.fetch import AtEhydRequestPlanner, fetch, resolve_messstellen_info_files
 from rivretrieve._internal.providers.at_ehyd.parse import parse, parse_group
 from rivretrieve._internal.providers.at_ehyd.series import OWF_INTERVAL_RULE_TEXT, source_series
 from rivretrieve._internal.providers.registration import LiveStages
@@ -70,7 +69,7 @@ class _AtEhydStages:
 
     config: ProviderConfig = config()
     window_declarations: ProductWindowDeclarations = window_declarations()
-    shared_acquisition_products: tuple[frozenset[ProductId], ...] = SHARED_ACQUISITION_PRODUCTS
+    request_planner: AtEhydRequestPlanner = AtEhydRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
     parse_group = staticmethod(parse_group)
@@ -153,7 +152,7 @@ def _owf_csv(
 def test_declaration_wires_live_stages_and_config_declares_11_source_fixed_products() -> None:
     assert isinstance(declaration.observations, LiveStages)
     assert declaration.observations.stages.observation_source == "live"
-    assert declaration.observations.stages.shared_acquisition_products == SHARED_ACQUISITION_PRODUCTS
+    assert isinstance(declaration.observations.stages.request_planner, AtEhydRequestPlanner)
 
     cfg = config()
     decls = window_declarations()
@@ -170,10 +169,25 @@ def test_declaration_wires_live_stages_and_config_declares_11_source_fixed_produ
     assert cfg.products[ProductId("pegel_bgis_wasserstand")].unit == Unit.CM
     assert cfg.products[ProductId("pegel_longterm_abfluss")].unit == Unit.M3_S
 
-    assert len(SHARED_ACQUISITION_PRODUCTS) == 3
-    all_grouped = set().union(*SHARED_ACQUISITION_PRODUCTS)
-    assert all_grouped == set(cfg.products)
-    assert sum(len(group) for group in SHARED_ACQUISITION_PRODUCTS) == 11
+    assert sum(1 for item in cfg.products.values() if isinstance(item.coordinates.value, AtEhydOwfCoordinates)) == 7
+    assert (
+        sum(
+            1
+            for item in cfg.products.values()
+            if isinstance(item.coordinates.value, AtEhydPegelCoordinates)
+            and item.coordinates.value.subsystem == "pegel_bgis"
+        )
+        == 2
+    )
+    assert (
+        sum(
+            1
+            for item in cfg.products.values()
+            if isinstance(item.coordinates.value, AtEhydPegelCoordinates)
+            and item.coordinates.value.subsystem == "pegel_longterm"
+        )
+        == 2
+    )
 
 
 def test_fetch_deduplicates_messstellen_info_resolves_shifted_filenr_and_isolates_sibling_failures() -> None:

@@ -9,7 +9,7 @@ import polars.testing as pl_testing
 import pytest
 
 import rivretrieve as rr
-from rivretrieve._internal.discovery import _merge_provider_results
+from rivretrieve._internal.discovery import _finalize_provider_result
 from rivretrieve._internal.engine import SourceCallOrigin, UnknownOriginFact
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.observations import (
@@ -875,7 +875,7 @@ def test_pick_to_utc_and_merge_preserve_exact_row_association() -> None:
     with pytest.raises(FatalContractError):
         rr.to_utc(res_bad_utc)
 
-    # _merge_provider_results sorts canonically while keeping tags aligned 1:1
+    # _finalize_provider_result sorts canonically while keeping tags aligned 1:1
     table_b = ObservationAnnotationTable.from_rows(
         schema=schema_b,
         rows=pl.DataFrame(
@@ -902,7 +902,12 @@ def test_pick_to_utc_and_merge_preserve_exact_row_association() -> None:
         ),
         measurement_indices=(0,),
     )
-    res_b = _make_result(
+    table_a_shifted = ObservationAnnotationTable.from_rows(
+        schema=schema_a,
+        rows=table_a.rows,
+        measurement_indices=(1, 2, 3, 4, None),
+    )
+    unsorted_multi = _make_result(
         [
             {
                 "station_id": "s_other",
@@ -910,14 +915,17 @@ def test_pick_to_utc_and_merge_preserve_exact_row_association() -> None:
                 "time": datetime(2026, 1, 1, 0, 0),
                 "time_zone": "+00:00",
                 "value": 9.0,
-            }
+            },
+            *rows_a,
         ],
-        (s_other,),
+        (s_other, s_dst),
         provider_id="provider_a",
-        bundle=AnnotationBundle(observation_tables={"provider_a.daily": table_b}),
+        bundle=AnnotationBundle(
+            observation_tables={"provider_a.obs": table_a_shifted, "provider_a.daily": table_b},
+            series_tables={"provider_a.meta": series_table_a},
+        ),
     )
-    # Reverse input order so canonical sort permutes everything
-    merged = _merge_provider_results((res_b, res_a), (s_other, s_dst))
+    merged = _finalize_provider_result(unsorted_multi, (s_other, s_dst))
     assert merged.to_polars(annotations="tag").select("station_id", "value", "tag").rows() == [
         ("s_dst", 3.0, "dst-first"),
         ("s_dst", 4.0, "dst-second"),
@@ -1588,7 +1596,7 @@ def test_merge_single_station_multi_series_ordered_reuses_without_revalidation(
     )
     monkeypatch.setattr(AnnotationBundle, "merge_sorted", spy_merge_sorted)
 
-    merged = _merge_provider_results((single,), (s_q, s_h))
+    merged = _finalize_provider_result(single, (s_q, s_h))
     assert validate_calls == []
     assert merged.data is single.data
     assert merged._annotations is single._annotations
@@ -1760,7 +1768,7 @@ def test_merge_single_station_multi_series_unsorted_rows_and_annotations_preserv
         lambda res, bundle: (revalidation_calls.append("with_annotations"), orig_with_annotations(res, bundle))[1],
     )
 
-    merged = _merge_provider_results((single,), (s_q, s_h))
+    merged = _finalize_provider_result(single, (s_q, s_h))
     assert revalidation_calls == []
     assert merged.to_polars(annotations="tag").select("product_id", "value", "tag").rows() == [
         ("discharge_daily_mean", None, "q-null"),
@@ -1873,7 +1881,7 @@ def test_merge_single_station_ordered_data_unsorted_annotations_and_contract_gua
         return orig_merge_sorted.__func__(cls, *args, **kwargs)
 
     monkeypatch.setattr(AnnotationBundle, "merge_sorted", spy_merge_sorted)
-    merged = _merge_provider_results((single_ordered,), (s_q,))
+    merged = _finalize_provider_result(single_ordered, (s_q,))
     assert validate_calls == []
     assert merged.data is single_ordered.data
     assert merged.to_polars(annotations="tag")["tag"].to_list() == ["first", "second"]
@@ -1882,7 +1890,7 @@ def test_merge_single_station_ordered_data_unsorted_annotations_and_contract_gua
     # view_scope present -> falls back to full ObservationResult validation
     viewed = rr.pick(single_ordered, station="s1", on_issue="ignore")
     validate_calls.clear()
-    _merge_provider_results((viewed,), (s_q,))
+    _finalize_provider_result(viewed, (s_q,))
     assert "validate_observation_data" in validate_calls
     assert "ZoneValue" in validate_calls
 
@@ -1891,7 +1899,7 @@ def test_merge_single_station_ordered_data_unsorted_annotations_and_contract_gua
         update={"provenance": single_ordered.provenance.model_copy(update={"request": {}})}
     )
     with pytest.raises(FatalContractError, match="normalized requested window"):
-        _merge_provider_results((bad_req,), (s_q,))
+        _finalize_provider_result(bad_req, (s_q,))
 
     # Zero-observation result with invalid outcome contract still raises ObservationDataSchemaError
     zero_obs = _empty_result(provider_id="provider_a").model_copy(
@@ -1910,7 +1918,7 @@ def test_merge_single_station_ordered_data_unsorted_annotations_and_contract_gua
         }
     )
     with pytest.raises(ObservationDataSchemaError, match="unknown source series"):
-        _merge_provider_results((zero_obs,), ())
+        _finalize_provider_result(zero_obs, ())
 
 
 def test_filter_mask_anti_join_sort_validation_and_projection_preserve_duplicate_occurrences(

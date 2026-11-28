@@ -3,46 +3,49 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
 from datetime import datetime
-from uuid import uuid4
 
-from rivretrieve._internal.authentication import CredentialExchangeError
+from rivretrieve._internal.coverage import RequestedInterval
 from rivretrieve._internal.engine import (
     FetchWindow,
-    Payload,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
-    SourceCallOrigin,
     SourceCoordinates,
-    UnknownOriginFact,
     WindowEndpoint,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.nl_rws.config import NlRwsProductCoordinates
+from rivretrieve._internal.providers.nl_rws.parse import parse_group
 from rivretrieve._internal.providers.nl_rws.series import (
     PRODUCT_BY_ID,
     PROVIDER_ID,
     WAARNEMINGEN_EVIDENCE,
     build_physical_facts,
 )
-from rivretrieve._internal.source_acquisition import FailedSourceRequest, attempt_request
+from rivretrieve._internal.request_planning import (
+    ConsumerNeed,
+    LookupResolution,
+    ObservationPlan,
+    PlannedLookup,
+    PlannedObservationRequest,
+    execute_planned_acquisition,
+)
 from rivretrieve._internal.source_series import (
     SeriesScope,
     SeriesWindow,
     SourceIdentity,
     SourceSeries,
+    TimeAxis,
     stable_id,
 )
 from rivretrieve._internal.transport import (
     HttpMethod,
     ReplaySafety,
     Transport,
-    TransportFailure,
     TransportRequest,
-    TransportResponse,
 )
 
 _OBSERVATIONS_URL = "https://ddapi20-waterwebservices.rijkswaterstaat.nl/ONLINEWAARNEMINGENSERVICES/OphalenWaarnemingen"
@@ -60,19 +63,6 @@ def _format_ddapi_instant(endpoint: WindowEndpoint) -> str:
         f"{endpoint.year:04d}-{endpoint.month:02d}-{endpoint.day:02d}"
         f"T{endpoint.hour:02d}:{endpoint.minute:02d}:{endpoint.second:02d}"
         f".{endpoint.microsecond // 1000:03d}+01:00"
-    )
-
-
-def _origin(response: TransportResponse) -> SourceCallOrigin:
-    return SourceCallOrigin(
-        url=response.url,
-        request_parameters=response.request_parameters,
-        status_code=response.status_code,
-        retrieved_at=response.retrieved_at,
-        content_type=response.content_type if response.content_type is not None else UnknownOriginFact(),
-        source_path=UnknownOriginFact(),
-        query=UnknownOriginFact(),
-        attempts=response.attempts,
     )
 
 
@@ -132,6 +122,59 @@ def _failure_series(station: str, product: ProductId, known_series: tuple[Source
     )
 
 
+class NlRwsRequestPlanner:
+    """Coalesce DDAPI 2.0 POST requests across NVT and GEM24H products sharing station, coordinates, and window."""
+
+    def plan_lookups(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        config: ProviderConfig,
+    ) -> tuple[PlannedLookup, ...]:
+        del needs, config
+        return ()
+
+    def plan_observations(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        lookups: Mapping[tuple[Hashable, str, ProductId], LookupResolution],
+        config: ProviderConfig,
+    ) -> ObservationPlan:
+        del lookups
+        groups: dict[tuple[str, tuple[str, str, str], RenderedWindow], list[ConsumerNeed]] = {}
+        for need in needs:
+            coords = _coordinates(need.product, config)
+            for window in need.rendered:
+                if window.bounds is None:
+                    raise FatalContractError("nl_rws requires engine-established window bounds")
+                groups.setdefault((need.station, coords.shared_group_key, window), []).append(need)
+
+        requests: list[PlannedObservationRequest] = []
+        for (station, _, window), group_needs in groups.items():
+            assert window.bounds is not None
+            consumers = tuple(group_needs)
+            primary_coords = _coordinates(consumers[0].product, config)
+            include_wbw = len(consumers) == 1
+            requests.append(
+                PlannedObservationRequest(
+                    consumers=consumers,
+                    request=_build_request(
+                        station=station,
+                        coords=primary_coords,
+                        start=window.bounds.start,
+                        stop=window.bounds.end,
+                        include_wbw=include_wbw,
+                    ),
+                    source_coordinates=SourceCoordinates(primary_coords),
+                    fetch_window=window.bounds,
+                    failure_targets=tuple(
+                        _failure_series(need.station, need.product, need.known_series) for need in consumers
+                    ),
+                    interpret_group=parse_group if len(consumers) > 1 else None,
+                )
+            )
+        return ObservationPlan(requests=tuple(requests))
+
+
 def fetch(
     stations: tuple[str, ...],
     products: tuple[ProductId, ...],
@@ -144,64 +187,38 @@ def fetch(
     known_series: tuple[SourceSeries, ...] = (),
 ) -> SourceAcquisition:
     """Fetch DDAPI 2.0 observations with ProcesType='meting' and adaptive NVT+GEM24H co-acquisition."""
-    coords_by_product = {product: _coordinates(product, config) for product in products}
-
-    # Group products that share both (Grootheid, Eenheid, Hoedanigheid) and identical rendered windows
-    # so NVT + GEM24H on matching short windows co-acquire in a single POST.
-    grouped_products: dict[tuple[tuple[str, str, str], tuple[RenderedWindow, ...]], list[ProductId]] = {}
     for product in products:
-        group_key = (coords_by_product[product].shared_group_key, rendered_windows[product])
-        grouped_products.setdefault(group_key, []).append(product)
-
-    payloads: list[Payload] = []
-    failures: list[FailedSourceRequest] = []
-    for station in stations:
-        for (_, windows), group_prods in grouped_products.items():
-            primary_coords = coords_by_product[group_prods[0]]
-            include_wbw = len(group_prods) == 1
-            for window in windows:
-                if window.bounds is None:
-                    raise FatalContractError("nl_rws requires engine-established window bounds")
-                request = _build_request(
-                    station=station,
-                    coords=primary_coords,
-                    start=window.bounds.start,
-                    stop=window.bounds.end,
-                    include_wbw=include_wbw,
+        _coordinates(product, config)
+    start = datetime.fromisoformat(fetch_window.start.isoformat())
+    end = datetime.fromisoformat(fetch_window.end.isoformat())
+    interval = RequestedInterval(start, end, axis=TimeAxis.NATIVE)
+    window = SeriesWindow(start=start, end=end, axis=TimeAxis.NATIVE)
+    needs = tuple(
+        ConsumerNeed(
+            station=station,
+            product=product,
+            scope=(
+                scope.model_copy(
+                    update={
+                        "provider_ids": (str(PROVIDER_ID),),
+                        "station_ids": (station,),
+                        "product_ids": (str(product),),
+                    }
                 )
-                response = attempt_request(transport, request)
-                call_id = uuid4().hex
-                if isinstance(response, (TransportFailure, CredentialExchangeError)):
-                    win = SeriesWindow(
-                        start=datetime.fromisoformat(window.bounds.start.isoformat()),
-                        end=datetime.fromisoformat(window.bounds.end.isoformat()),
-                    )
-                    for product in group_prods:
-                        failures.append(
-                            FailedSourceRequest(
-                                uuid4().hex,
-                                _failure_series(station, product, known_series),
-                                win,
-                                request,
-                                response,
-                                call_id=call_id,
-                            )
-                        )
-                    continue
-
-                station_products = tuple((station, product) for product in group_prods)
-                payloads.append(
-                    Payload(
-                        source_coordinates=SourceCoordinates(primary_coords),
-                        station_products=station_products,
-                        fetch_window=window.bounds,
-                        content=response.content,
-                        origin=_origin(response),
-                        prerequisite_calls=response.prerequisite_calls,
-                        scope=scope,
-                        known_series=known_series,
-                        attempt_traces=response.attempt_traces,
-                    )
+                if scope is not None
+                else SeriesScope(
+                    provider_ids=(str(PROVIDER_ID),),
+                    station_ids=(station,),
+                    product_ids=(str(product),),
                 )
-
-    return SourceAcquisition(value=tuple(payloads), failed_requests=tuple(failures))
+            ),
+            known_series=known_series,
+            interval=interval,
+            window=window,
+            fetch_window=fetch_window,
+            rendered=rendered_windows[product],
+        )
+        for station in stations
+        for product in products
+    )
+    return execute_planned_acquisition(NlRwsRequestPlanner(), needs, config, transport)

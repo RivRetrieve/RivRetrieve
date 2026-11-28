@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
@@ -614,7 +615,10 @@ class ParsedSeries:
     annotations: AnnotationBundle = field(default_factory=AnnotationBundle.empty)
 
 
-def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -> None:
+def validate_series_definitions(
+    series: tuple[SourceSeries, ...],
+) -> tuple[dict[str, SourceSeries], dict[str, dict[str, PhysicalFacts]]]:
+    """Validate source-series definitions once and return lookup indices by series and fact id."""
     definitions = {item.series_id: item for item in series}
     if len(definitions) != len(series):
         raise FatalContractError("Duplicate concrete series definitions")
@@ -637,6 +641,15 @@ def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -
             facts_by_identity[facts.facts_id] = facts
             fact_map[facts.facts_id] = facts
         series_facts[definition.series_id] = fact_map
+    return definitions, series_facts
+
+
+def validate_rows_against_definitions(
+    rows: pl.DataFrame,
+    definitions: Mapping[str, SourceSeries],
+    series_facts: Mapping[str, Mapping[str, PhysicalFacts]],
+) -> None:
+    """Validate native observation rows against pre-validated series and physical-fact indices."""
     if rows.is_empty():
         return
     columns = set(rows.columns)
@@ -668,3 +681,8 @@ def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -
             admissions[facts_id] = decision
         if decision.status != "supported" or source_unit != facts.source_unit.value:
             raise FatalContractError("Native numeric rows require admitted, matching source-unit facts")
+
+
+def validate_series_rows(rows: pl.DataFrame, series: tuple[SourceSeries, ...]) -> None:
+    definitions, series_facts = validate_series_definitions(series)
+    validate_rows_against_definitions(rows, definitions, series_facts)

@@ -33,12 +33,6 @@ _OBSERVED_PROPERTY_UNIT: dict[str, Unit] = {
 NVT_WINDOW_DAYS = 90
 GEM24H_WINDOW_DAYS = 3650
 
-SHARED_ACQUISITION_PRODUCTS: tuple[frozenset[ProductId], ...] = (
-    frozenset({ProductId("discharge_m3s_nvt"), ProductId("discharge_m3s_gem24h")}),
-    frozenset({ProductId("stage_nap_nvt"), ProductId("stage_nap_gem24h")}),
-    frozenset({ProductId("water_temperature_nvt"), ProductId("water_temperature_gem24h")}),
-)
-
 
 @dataclass(frozen=True, slots=True)
 class NlRwsProductCoordinates:

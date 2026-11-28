@@ -7,7 +7,11 @@ from rivretrieve._internal.engine import FetchWindow, ProviderConfig, RenderedWi
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.pe_senamhi.config import config, window_declarations
-from rivretrieve._internal.providers.pe_senamhi.fetch import SenamhiSourceCoordinates, fetch
+from rivretrieve._internal.providers.pe_senamhi.fetch import (
+    PeSenamhiRequestPlanner,
+    SenamhiSourceCoordinates,
+    fetch,
+)
 from rivretrieve._internal.providers.pe_senamhi.parse import parse, parse_group
 from rivretrieve._internal.providers.registration import LiveStages, ProviderDeclaration
 from rivretrieve._internal.source_series import SeriesScope, SourceSeries
@@ -46,14 +50,7 @@ class _Stages:
     observation_source = "live"
     config = config()
     window_declarations = window_declarations()
-    shared_acquisition_products = (
-        frozenset(
-            product
-            for product, definition in config.products.items()
-            if isinstance(definition.coordinates.value, SenamhiSourceCoordinates)
-            and definition.coordinates.value.subsystem == "monthly_archive"
-        ),
-    )
+    request_planner = PeSenamhiRequestPlanner()
     fetch = staticmethod(_fetch)
     parse = staticmethod(parse)
     parse_group = staticmethod(parse_group)

@@ -24,11 +24,11 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.primitives import ProductId
 from rivretrieve._internal.providers.nl_rws.annotations import NL_RWS_OBSERVATION_SCHEMA
 from rivretrieve._internal.providers.nl_rws.config import (
-    SHARED_ACQUISITION_PRODUCTS,
     config,
     window_declarations,
 )
-from rivretrieve._internal.providers.nl_rws.fetch import fetch
+from rivretrieve._internal.providers.nl_rws.declaration import _Stages
+from rivretrieve._internal.providers.nl_rws.fetch import NlRwsRequestPlanner, fetch
 from rivretrieve._internal.providers.nl_rws.parse import parse, parse_group
 from rivretrieve._internal.source_series import OutcomeStatus
 from rivretrieve._internal.transport import (
@@ -211,8 +211,7 @@ def test_config_and_window_declarations_match_empirically_validated_spans() -> N
         else:
             assert decl.size == 90
 
-    assert len(SHARED_ACQUISITION_PRODUCTS) == 3
-    assert all(isinstance(group, frozenset) and len(group) == 2 for group in SHARED_ACQUISITION_PRODUCTS)
+    assert isinstance(_Stages.request_planner, NlRwsRequestPlanner)
 
 
 def test_fetch_single_product_enforces_meting_and_preserves_milliseconds() -> None:

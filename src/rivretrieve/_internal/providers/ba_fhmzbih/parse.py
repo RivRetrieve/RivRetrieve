@@ -4,6 +4,7 @@ Contributed by: Thiago von Däniken
 """
 
 import json
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from io import BytesIO
@@ -24,8 +25,8 @@ from rivretrieve._internal.providers.ba_fhmzbih.config import (
 from rivretrieve._internal.source_series import OutcomeStatus, ParsedSeries, RetrievalOutcome, SeriesWindow, stable_id
 
 
-def metadata_groups(content: bytes, stations: tuple[str, ...]) -> dict[str, str]:
-    """Resolve publisher station routes without inventing missing group identifiers."""
+def resolve_metadata_groups(content: bytes, stations: tuple[str, ...]) -> tuple[dict[str, str], dict[str, str]]:
+    """Resolve publisher station routes per station without aborting valid siblings."""
     try:
         document = json.loads(content)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -33,17 +34,25 @@ def metadata_groups(content: bytes, stations: tuple[str, ...]) -> dict[str, str]
     if not isinstance(document, list):
         raise UnsupportedSourceStructureError("ba_fhmzbih metadata index must be a JSON array")
     groups: dict[str, str] = {}
-    for station in stations:
+    errors: dict[str, str] = {}
+    for station in dict.fromkeys(stations):
         matches = [row for row in document if isinstance(row, dict) and row.get("metadata_station_no") == station]
         if (
             len(matches) != 1
             or not isinstance(matches[0].get("metadata_site_no"), str)
             or not matches[0]["metadata_site_no"]
         ):
-            raise UnsupportedSourceStructureError(
-                f"ba_fhmzbih metadata index does not resolve exactly one group for station {station}"
-            )
-        groups[station] = matches[0]["metadata_site_no"]
+            errors[station] = f"ba_fhmzbih metadata index does not resolve exactly one group for station {station}"
+        else:
+            groups[station] = matches[0]["metadata_site_no"]
+    return groups, errors
+
+
+def metadata_groups(content: bytes, stations: tuple[str, ...]) -> dict[str, str]:
+    """Resolve publisher station routes without inventing missing group identifiers."""
+    groups, errors = resolve_metadata_groups(content, stations)
+    if errors:
+        raise UnsupportedSourceStructureError(next(iter(errors.values())))
     return groups
 
 
@@ -92,6 +101,37 @@ def interpret_metadata_payload(
     return ParsedSeries(pl.DataFrame(schema=RowsSchema.polars_schema), (), (), tuple(outcomes), tuple(issues))
 
 
+def interpret_metadata_group(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    provider_config: ProviderConfig,
+) -> tuple[tuple[dict[str, str], dict[str, str]], dict[tuple[str, ProductId], ParsedSeries]]:
+    """Decode metadata index JSON once and build per-pair metadata interpretations."""
+    empty_rows = pl.DataFrame(schema=RowsSchema.polars_schema)
+    for _station, product in pair_payloads:
+        if product not in provider_config.products:
+            raise FatalContractError("ba_fhmzbih metadata payload has an undeclared product")
+    stations = tuple(dict.fromkeys(station for station, _ in pair_payloads))
+    try:
+        groups, station_errors = resolve_metadata_groups(payload.content, stations)
+    except UnsupportedSourceStructureError as error:
+        failed_all: dict[tuple[str, ProductId], ParsedSeries] = {}
+        for (station, product), pair_payload in pair_payloads.items():
+            outcome, issue = _metadata_failure(pair_payload, station, product, str(error))
+            failed_all[(station, product)] = ParsedSeries(empty_rows, (), (), (outcome,), (issue,))
+        return ({}, {}), failed_all
+
+    result: dict[tuple[str, ProductId], ParsedSeries] = {}
+    for (station, product), pair_payload in pair_payloads.items():
+        station_error = station_errors.get(station)
+        if station_error is not None:
+            outcome, issue = _metadata_failure(pair_payload, station, product, station_error)
+            result[(station, product)] = ParsedSeries(empty_rows, (), (), (outcome,), (issue,))
+        else:
+            result[(station, product)] = ParsedSeries(empty_rows, (), (), (), ())
+    return (groups, station_errors), result
+
+
 def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssues[Rows]:
     if len(payload.station_products) != 1:
         raise FatalContractError("ba_fhmzbih workbook payload must contain one station-product pair")
@@ -101,60 +141,61 @@ def _parse_native(payload: Payload, provider_config: ProviderConfig) -> WithIssu
         raise FatalContractError("ba_fhmzbih workbook has invalid source coordinates")
     try:
         workbook = openpyxl.load_workbook(BytesIO(payload.content), read_only=True, data_only=True)
-        if len(workbook.worksheets) != 1:
-            workbook.close()
-            raise UnsupportedSourceStructureError(
-                "ba_fhmzbih workbook has multiple worksheets; their source-series relationship is not established"
-            )
-        (sheet,) = workbook.worksheets
-        headers = tuple(
-            tuple(cell for cell in row[:2]) for row in sheet.iter_rows(min_row=1, max_row=8, values_only=True)
-        )
-        expected = (
-            ("#Station Name", headers[0][1]),
-            ("#Station Number", station),
-            ("#Station Parameter Name", coordinates.source_parameter),
-            ("#Timeseries Name", "81 Web Kontinuirani"),
-            ("#Unit Symbol", coordinates.source_unit),
-            ("#Rows", headers[5][1]),
-            ("#", None),
-            ("#Timestamp", "Value"),
-        )
-        if headers != expected or (
-            isinstance(headers[5][1], bool)
-            or not isinstance(headers[5][1], int | float)
-            or not float(headers[5][1]).is_integer()
-        ):
-            raise UnsupportedSourceStructureError("ba_fhmzbih workbook headers differ from the source contract")
-        rows = []
-        invalid_count = 0
-        for timestamp, value, *_ in sheet.iter_rows(min_row=9, values_only=True):
-            if not isinstance(timestamp, datetime):
-                invalid_count += 1
-                continue
-            if isinstance(value, bool):
-                raise UnsupportedSourceStructureError("ba_fhmzbih workbook observation value cannot be boolean")
-            try:
-                native_value = None if value is None else float(value)
-            except OverflowError as error:
+        try:
+            if len(workbook.worksheets) != 1:
                 raise UnsupportedSourceStructureError(
-                    "ba_fhmzbih workbook observation value is not representable as a finite number"
-                ) from error
-            except (TypeError, ValueError):
-                invalid_count += 1
-                continue
-            if native_value is not None and not isfinite(native_value):
-                raise UnsupportedSourceStructureError("ba_fhmzbih workbook observation value must be finite")
-            rows.append(
-                {
-                    "station_id": station,
-                    "product_id": product,
-                    "time": timestamp,
-                    "value": native_value,
-                    "time_zone": "unknown",
-                }
+                    "ba_fhmzbih workbook has multiple worksheets; their source-series relationship is not established"
+                )
+            (sheet,) = workbook.worksheets
+            headers = tuple(
+                tuple(cell for cell in row[:2]) for row in sheet.iter_rows(min_row=1, max_row=8, values_only=True)
             )
-        workbook.close()
+            expected = (
+                ("#Station Name", headers[0][1]),
+                ("#Station Number", station),
+                ("#Station Parameter Name", coordinates.source_parameter),
+                ("#Timeseries Name", "81 Web Kontinuirani"),
+                ("#Unit Symbol", coordinates.source_unit),
+                ("#Rows", headers[5][1]),
+                ("#", None),
+                ("#Timestamp", "Value"),
+            )
+            if headers != expected or (
+                isinstance(headers[5][1], bool)
+                or not isinstance(headers[5][1], int | float)
+                or not float(headers[5][1]).is_integer()
+            ):
+                raise UnsupportedSourceStructureError("ba_fhmzbih workbook headers differ from the source contract")
+            rows = []
+            invalid_count = 0
+            for timestamp, value, *_ in sheet.iter_rows(min_row=9, values_only=True):
+                if not isinstance(timestamp, datetime):
+                    invalid_count += 1
+                    continue
+                if isinstance(value, bool):
+                    raise UnsupportedSourceStructureError("ba_fhmzbih workbook observation value cannot be boolean")
+                try:
+                    native_value = None if value is None else float(value)
+                except OverflowError as error:
+                    raise UnsupportedSourceStructureError(
+                        "ba_fhmzbih workbook observation value is not representable as a finite number"
+                    ) from error
+                except (TypeError, ValueError):
+                    invalid_count += 1
+                    continue
+                if native_value is not None and not isfinite(native_value):
+                    raise UnsupportedSourceStructureError("ba_fhmzbih workbook observation value must be finite")
+                rows.append(
+                    {
+                        "station_id": station,
+                        "product_id": product,
+                        "time": timestamp,
+                        "value": native_value,
+                        "time_zone": "unknown",
+                    }
+                )
+        finally:
+            workbook.close()
     except (FatalContractError, UnsupportedSourceStructureError):
         raise
     except Exception as error:
