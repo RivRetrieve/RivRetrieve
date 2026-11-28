@@ -47,6 +47,7 @@ PROVIDER_COUNTRY = {
     "no_nve": "NOR",
     "pe_senamhi": "PER",
     "pl_imgw": "POL",
+    "si_arso": "SVN",
     "th_thaiwater": "THA",
     "usgs_nwis": "USA",
 }
@@ -62,7 +63,6 @@ PLANNED_COUNTRY = {
     "NLD": "Netherlands",
     "PRT": "Portugal",
     "RWA": "Rwanda",
-    "SVN": "Slovenia",
     "SWE": "Sweden",
     "TWN": "Taiwan",
     "ZAF": "South Africa",

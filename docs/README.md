@@ -31,6 +31,7 @@ Provider pages explain their agencies and source-specific conditions:
 - [Norway: NVE](providers/no_nve.md)
 - [Peru: SENAMHI](providers/pe_senamhi.md)
 - [Poland: IMGW-PIB](providers/pl_imgw.md)
+- [Slovenia: ARSO](providers/si_arso.md)
 - [Switzerland: FOEN](providers/ch_foen.md)
 - [Thailand: ThaiWater](providers/th_thaiwater.md)
 - [United States — USGS](providers/usgs_nwis.md)

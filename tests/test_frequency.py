@@ -966,9 +966,11 @@ def test_cross_provider_packaged_catalogues_canonical_and_round_trip() -> None:
     from tests._catalogue import catalogue_reader
 
     providers = rr.providers()["provider_id"].to_list()
-    assert len(providers) == 21
+    assert len(providers) == 22
     aliases = {
+        "PT5M": "PT300S",
         "PT10M": "PT600S",
+        "PT30M": "PT1800S",
         "PT1H": "PT60M",
         "PT4H": "PT240M",
         "P1W": "P7D",
@@ -1006,4 +1008,4 @@ def test_cross_provider_packaged_catalogues_canonical_and_round_trip() -> None:
     assert not za_reader.read_products(frequency="P1D").data.is_empty()
     assert za_reader.read_products(frequency="PT24H").data.is_empty()
     seen_frequencies |= za_freqs
-    assert {"PT10M", "PT1H", "PT4H", "P1D", "P1W", "P1M", "P1Y"} <= seen_frequencies
+    assert {"PT5M", "PT10M", "PT30M", "PT1H", "PT4H", "P1D", "P1W", "P1M", "P1Y"} <= seen_frequencies
