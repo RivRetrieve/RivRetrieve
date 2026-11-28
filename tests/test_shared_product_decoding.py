@@ -42,6 +42,7 @@ from rivretrieve._internal.engine import (
 from rivretrieve._internal.issues import FatalContractError, Issue
 from rivretrieve._internal.observations import ReceiptAuthorship, ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
+from rivretrieve._internal.request_planning import ObservationPlan, PlannedObservationRequest
 from rivretrieve._internal.source_annotations import (
     OBSERVATION_STRUCTURAL_SCHEMA,
     AnnotationBundle,
@@ -322,24 +323,43 @@ def test_shared_parse_provider_decodes_once_preserves_scope_known_series_annotat
     retained_refs: list[weakref.ref[object]] = []
     raw_bytes = b'{"shared":"payload-' + b"x" * 4096 + b'"}'
 
+    from rivretrieve._internal.transport import HttpMethod, TransportRequest, TransportResponse
+
+    class _BytesTransport:
+        def __init__(self, body: bytes = b"{}", when: datetime | None = None) -> None:
+            self.body = body
+            self.when = when or datetime(2026, 1, 1, tzinfo=UTC)
+
+        def send(self, request):
+            return TransportResponse(
+                content=self.body,
+                status_code=200,
+                retrieved_at=self.when,
+                content_type="application/json",
+                url=request.url,
+                request_parameters=dict(request.params or {}),
+            )
+
+    class _GroupPlanner:
+        def plan_lookups(self, needs, config):
+            return ()
+
+        def plan_observations(self, needs, lookups, config):
+            return ObservationPlan(
+                requests=(
+                    PlannedObservationRequest(
+                        consumers=needs,
+                        request=TransportRequest(HttpMethod.GET, "https://example.invalid/shared"),
+                        source_coordinates=cfg.products[products[0]].coordinates,
+                        fetch_window=needs[0].fetch_window,
+                    ),
+                )
+            )
+
     class _GroupProvider:
-        shared_acquisition_products = (frozenset(products),)
+        request_planner = _GroupPlanner()
         config = cfg
         window_declarations = decls
-
-        def fetch(self, stations, prod_arg, rendered_windows, window, config, transport, *, scope, known_series):
-            payload = Payload(
-                source_coordinates=cfg.products[products[0]].coordinates,
-                station_products=tuple((stations[0], p) for p in prod_arg),
-                fetch_window=window,
-                content=raw_bytes,
-                origin=_origin(),
-                prerequisite_calls=(),
-                scope=scope,
-                known_series=known_series,
-                acquisition_id="shared-acq-1",
-            )
-            return SourceAcquisition(value=(payload,))
 
         def parse_group(
             self,
@@ -401,7 +421,13 @@ def test_shared_parse_provider_decodes_once_preserves_scope_known_series_annotat
             parse_calls += 1
             raise AssertionError("parse() must not be called when parse_group handles >= 2 shared products")
 
-    omit_res = driver_module.drive(req, _GroupProvider(), provenance=_provenance(req), receipts=ReceiptMode.OMIT)
+    omit_res = driver_module.drive(
+        req,
+        _GroupProvider(),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_BytesTransport(raw_bytes),
+    )
     gc.collect()
     assert parse_group_calls == 1
     assert parse_calls == 0
@@ -432,7 +458,11 @@ def test_shared_parse_provider_decodes_once_preserves_scope_known_series_annotat
             return _parsed_for_pair(payload, values=[(datetime(2025, 1, 1), 10.0)])
 
     single_res = driver_module.drive(
-        single_req, _SingleCheckProvider(), provenance=_provenance(single_req), receipts=ReceiptMode.INCLUDE
+        single_req,
+        _SingleCheckProvider(),
+        provenance=_provenance(single_req),
+        receipts=ReceiptMode.INCLUDE,
+        transport=_BytesTransport(raw_bytes),
     )
     assert single_group_calls == 0
     assert single_parse_calls == 1
@@ -440,14 +470,24 @@ def test_shared_parse_provider_decodes_once_preserves_scope_known_series_annotat
 
     # ReceiptMode.INCLUDE on shared request retains exact single publisher receipt.
     parse_group_calls = 0
-    include_res = driver_module.drive(req, _GroupProvider(), provenance=_provenance(req), receipts=ReceiptMode.INCLUDE)
+    include_res = driver_module.drive(
+        req,
+        _GroupProvider(),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.INCLUDE,
+        transport=_BytesTransport(raw_bytes),
+    )
     assert parse_group_calls == 1
     assert len(include_res.receipts.entries) == 1
     assert include_res.receipts.entries[0].content == raw_bytes
     assert include_res.receipts.entries[0].authorship is ReceiptAuthorship.PUBLISHER_PAYLOAD
 
 
-def test_shared_parse_group_enforces_fatal_contracts_and_partial_handoff_interaction() -> None:
+def test_shared_parse_group_enforces_fatal_contracts_and_partial_handoff_interaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rivretrieve._internal.transport import HttpMethod, TransportRequest, TransportResponse
+
     products, cfg, decls = _shared_config()
     req = ObservationRequest(
         provider_id=ProviderId("throwaway"),
@@ -459,24 +499,41 @@ def test_shared_parse_group_enforces_fatal_contracts_and_partial_handoff_interac
         ),
     )
 
+    class _BytesTransport:
+        def __init__(self, body: bytes = b"{}", when: datetime | None = None) -> None:
+            self.body = body
+            self.when = when or datetime(2026, 1, 1, tzinfo=UTC)
+
+        def send(self, request):
+            return TransportResponse(
+                content=self.body,
+                status_code=200,
+                retrieved_at=self.when,
+                content_type="application/json",
+                url=request.url,
+                request_parameters=dict(request.params or {}),
+            )
+
+    class _ContractPlanner:
+        def plan_lookups(self, needs, config):
+            return ()
+
+        def plan_observations(self, needs, lookups, config):
+            return ObservationPlan(
+                requests=(
+                    PlannedObservationRequest(
+                        consumers=needs,
+                        request=TransportRequest(HttpMethod.GET, "https://example.invalid/shared"),
+                        source_coordinates=cfg.products[products[0]].coordinates,
+                        fetch_window=needs[0].fetch_window,
+                    ),
+                )
+            )
+
     class _Base:
-        shared_acquisition_products = (frozenset(products),)
+        request_planner = _ContractPlanner()
         config = cfg
         window_declarations = decls
-
-        def fetch(self, stations, prod_arg, rendered_windows, window, config, transport, *, scope, known_series):
-            payload = Payload(
-                source_coordinates=cfg.products[products[0]].coordinates,
-                station_products=tuple((stations[0], p) for p in prod_arg),
-                fetch_window=window,
-                content=b"{}",
-                origin=_origin(),
-                prerequisite_calls=(),
-                scope=scope,
-                known_series=known_series,
-                acquisition_id="acq-contract",
-            )
-            return SourceAcquisition(value=(payload,))
 
         def parse(self, payload, config):
             return _parsed_for_pair(payload)
@@ -517,21 +574,20 @@ def test_shared_parse_group_enforces_fatal_contracts_and_partial_handoff_interac
         (_FatalInside, "boom inside parse_group"),
     ):
         with pytest.raises(FatalContractError, match=pattern):
-            driver_module.drive(req, provider_cls(), provenance=_provenance(req))
+            driver_module.drive(req, provider_cls(), provenance=_provenance(req), transport=_BytesTransport())
 
     # Partial interpretation handoff: 1st pair reuses handed-off InterpretedPayload; 2nd falls back to parse(), not parse_group().
     fallback_parse_calls = 0
+    orig_exec = driver_module.execute_planned_acquisition
+
+    def _partial_exec(planner, needs, cfg_arg, tr_arg):
+        acq = orig_exec(planner, needs, cfg_arg, tr_arg)
+        shared = acq.value[0]
+        flow_pair = narrow_payload_for_pair(shared, "s1", products[0])
+        flow_parsed = _parsed_for_pair(flow_pair, values=[(datetime(2025, 1, 1), 99.0)])
+        return replace(acq, interpretations=(InterpretedPayload.from_payload(flow_pair, flow_parsed),))
 
     class _PartialHandoff(_Base):
-        def fetch(self, stations, prod_arg, rendered_windows, window, config, transport, *, scope, known_series):
-            acq = super().fetch(
-                stations, prod_arg, rendered_windows, window, config, transport, scope=scope, known_series=known_series
-            )
-            shared = acq.value[0]
-            flow_pair = narrow_payload_for_pair(shared, "s1", products[0])
-            flow_parsed = _parsed_for_pair(flow_pair, values=[(datetime(2025, 1, 1), 99.0)])
-            return replace(acq, interpretations=(InterpretedPayload.from_payload(flow_pair, flow_parsed),))
-
         def parse_group(self, payload, pair_payloads, config):
             raise AssertionError("Only 1 pair remained un-interpreted; parse() should run instead")
 
@@ -540,7 +596,10 @@ def test_shared_parse_group_enforces_fatal_contracts_and_partial_handoff_interac
             fallback_parse_calls += 1
             return _parsed_for_pair(payload, values=[(datetime(2025, 1, 1), 50.0)])
 
-    partial_res = driver_module.drive(req, _PartialHandoff(), provenance=_provenance(req), receipts=ReceiptMode.OMIT)
+    monkeypatch.setattr(driver_module, "execute_planned_acquisition", _partial_exec)
+    partial_res = driver_module.drive(
+        req, _PartialHandoff(), provenance=_provenance(req), receipts=ReceiptMode.OMIT, transport=_BytesTransport()
+    )
     assert fallback_parse_calls == 1
     assert partial_res.canonical_rows.filter(pl.col("product_id") == "flow")["value"].to_list() == [99.0]
     assert partial_res.canonical_rows.filter(pl.col("product_id") == "level")["value"].to_list() == [pytest.approx(0.5)]
@@ -561,28 +620,46 @@ def test_shared_parse_group_refresh_preserves_held_success_on_product_and_shared
     t1 = datetime(2026, 1, 1, tzinfo=UTC)
     t2 = datetime(2026, 1, 2, tzinfo=UTC)
 
+    from rivretrieve._internal.transport import HttpMethod, TransportRequest, TransportResponse
+
+    class _RefreshTransport:
+        def __init__(self, when: datetime) -> None:
+            self.when = when
+
+        def send(self, request):
+            return TransportResponse(
+                content=b"{}",
+                status_code=200,
+                retrieved_at=self.when,
+                content_type="application/json",
+                url=request.url,
+                request_parameters=dict(request.params or {}),
+            )
+
+    class _RefreshPlanner:
+        def plan_lookups(self, needs, config):
+            return ()
+
+        def plan_observations(self, needs, lookups, config):
+            return ObservationPlan(
+                requests=(
+                    PlannedObservationRequest(
+                        consumers=needs,
+                        request=TransportRequest(HttpMethod.GET, "https://example.invalid/shared"),
+                        source_coordinates=cfg.products[products[0]].coordinates,
+                        fetch_window=needs[0].fetch_window,
+                    ),
+                )
+            )
+
     class _RefreshProvider:
-        shared_acquisition_products = (frozenset(products),)
+        request_planner = _RefreshPlanner()
         config = cfg
         window_declarations = decls
 
         def __init__(self, mode: str, when: datetime) -> None:
             self.mode = mode
             self.when = when
-
-        def fetch(self, stations, prod_arg, rendered_windows, window, config, transport, *, scope, known_series):
-            payload = Payload(
-                source_coordinates=cfg.products[products[0]].coordinates,
-                station_products=tuple((stations[0], p) for p in prod_arg),
-                fetch_window=window,
-                content=b"{}",
-                origin=_origin(self.when),
-                prerequisite_calls=(),
-                scope=scope,
-                known_series=known_series,
-                acquisition_id=f"acq-{self.mode}-{self.when.day}",
-            )
-            return SourceAcquisition(value=(payload,))
 
         def parse_group(self, payload, pair_payloads, config):
             out = {}
@@ -603,12 +680,22 @@ def test_shared_parse_group_refresh_preserves_held_success_on_product_and_shared
             raise AssertionError("parse_group handles all shared calls")
 
     seed = driver_module.drive(
-        req, _RefreshProvider("seed", t1), provenance=_provenance(req), cache="reuse", store=store
+        req,
+        _RefreshProvider("seed", t1),
+        provenance=_provenance(req),
+        cache="reuse",
+        store=store,
+        transport=_RefreshTransport(t1),
     )
     assert seed.canonical_rows.height == 2
 
     partial_fail = driver_module.drive(
-        req, _RefreshProvider("fail_level", t2), provenance=_provenance(req), cache="refresh", store=store
+        req,
+        _RefreshProvider("fail_level", t2),
+        provenance=_provenance(req),
+        cache="refresh",
+        store=store,
+        transport=_RefreshTransport(t2),
     )
     flow_row = partial_fail.canonical_rows.filter(pl.col("product_id") == "flow")
     level_row = partial_fail.canonical_rows.filter(pl.col("product_id") == "level")
@@ -618,7 +705,12 @@ def test_shared_parse_group_refresh_preserves_held_success_on_product_and_shared
     assert any(o.product_id == "level" and o.status is OutcomeStatus.FAILED for o in partial_fail.outcomes)
 
     all_fail = driver_module.drive(
-        req, _RefreshProvider("fail_all", t2), provenance=_provenance(req), cache="refresh", store=store
+        req,
+        _RefreshProvider("fail_all", t2),
+        provenance=_provenance(req),
+        cache="refresh",
+        store=store,
+        transport=_RefreshTransport(t2),
     )
     pl_testing.assert_frame_equal(all_fail.canonical_rows.filter(pl.col("product_id") == "level"), level_row)
     assert all_fail.canonical_rows.filter(pl.col("product_id") == "flow")["value"].to_list() == [30.0]
@@ -824,7 +916,6 @@ def test_lt_lhmt_shared_responses_decode_once_across_all_success_and_failure_mod
 
 def test_pe_senamhi_shared_and_phisis_responses_decode_once(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     import json
-    from dataclasses import dataclass
     from types import SimpleNamespace
 
     import rivretrieve as rr
@@ -1107,19 +1198,14 @@ def test_pe_senamhi_shared_and_phisis_responses_decode_once(monkeypatch: pytest.
     assert res_ph.data.height == 2
 
     # 6. Context-change fallback (strip interpretations=()) -> fallback parse_group decodes once (total = 2).
-    @dataclass(frozen=True)
-    class _StrippedStages:
-        config: ProviderConfig = stages.config
-        window_declarations: ProductWindowDeclarations = stages.window_declarations
-        shared_acquisition_products = stages.shared_acquisition_products
-        parse = staticmethod(real_parse)
-        parse_group = staticmethod(real_parse_group) if real_parse_group is not None else None
+    import rivretrieve._internal.driver as driver_module
 
-        @staticmethod
-        def fetch(*args, **kwargs):
-            from dataclasses import replace
-
-            return replace(stages.fetch(*args, **kwargs), interpretations=())
+    orig_pe_exec = driver_module.execute_planned_acquisition
+    monkeypatch.setattr(
+        driver_module,
+        "execute_planned_acquisition",
+        lambda *args, **kwargs: replace(orig_pe_exec(*args, **kwargs), interpretations=()),
+    )
 
     t_fb = _PeTransport(json.dumps(monthly_doc).encode(), retrieved_1)
     decode_count = 0
@@ -1134,7 +1220,7 @@ def test_pe_senamhi_shared_and_phisis_responses_decode_once(monkeypatch: pytest.
     )
     res_fb = drive(
         req_fb,
-        _StrippedStages(),  # type: ignore[arg-type]
+        stages,
         provenance=_provenance(req_fb),
         receipts=ReceiptMode.OMIT,
         transport=t_fb,
@@ -1145,7 +1231,7 @@ def test_pe_senamhi_shared_and_phisis_responses_decode_once(monkeypatch: pytest.
 
 def test_at_ehyd_shared_responses_decode_once(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     import json
-    from dataclasses import dataclass, replace
+    from dataclasses import replace
     from types import SimpleNamespace
 
     import rivretrieve as rr
@@ -1449,17 +1535,14 @@ def test_at_ehyd_shared_responses_decode_once(monkeypatch: pytest.MonkeyPatch, t
         assert {o.status for o in res_lt.outcomes} == expected_statuses
 
     # 4. Context-change fallback on Messstellen/info (strip interpretations=()) -> 1 fallback parse_group decode.
-    @dataclass(frozen=True)
-    class _StrippedAtStages:
-        config: ProviderConfig = stages.config
-        window_declarations: ProductWindowDeclarations = stages.window_declarations
-        shared_acquisition_products = stages.shared_acquisition_products
-        parse = staticmethod(real_parse)
-        parse_group = staticmethod(real_parse_group) if real_parse_group is not None else None
+    import rivretrieve._internal.driver as driver_module
 
-        @staticmethod
-        def fetch(*args, **kwargs):
-            return replace(stages.fetch(*args, **kwargs), interpretations=())
+    orig_at_exec = driver_module.execute_planned_acquisition
+    monkeypatch.setattr(
+        driver_module,
+        "execute_planned_acquisition",
+        lambda *args, **kwargs: replace(orig_at_exec(*args, **kwargs), interpretations=()),
+    )
 
     req_fb = ObservationRequest(
         provider_id=ProviderId("at_ehyd"),
@@ -1476,7 +1559,7 @@ def test_at_ehyd_shared_responses_decode_once(monkeypatch: pytest.MonkeyPatch, t
     )
     t_fb = _AtTransport(ok_handler)
     decode_count = 0
-    res_fb = drive(req_fb, _StrippedAtStages(), provenance=_provenance(req_fb), transport=t_fb)  # type: ignore[arg-type]
+    res_fb = drive(req_fb, stages, provenance=_provenance(req_fb), transport=t_fb)
     assert decode_count == 2  # 1 in fetch + 1 in fallback parse_group (never 1 + 3)
     assert res_fb.canonical_rows["value"].to_list() == [15.5]
 
@@ -1690,7 +1773,13 @@ def test_shared_acquisition_calls_issues_and_reconciliation_recorded_once_per_gr
     from rivretrieve._internal.driver import drive
     from rivretrieve._internal.source_acquisition import FailedSourceRequest, SourceRequestTarget
     from rivretrieve._internal.store import StoreRoot
-    from rivretrieve._internal.transport import HttpMethod, TransportFailure, TransportFailureReason, TransportRequest
+    from rivretrieve._internal.transport import (
+        HttpMethod,
+        TransportFailure,
+        TransportFailureReason,
+        TransportRequest,
+        TransportResponse,
+    )
     from tests.test_internal_driver import _provenance
 
     products, cfg, decls = _shared_config()
@@ -1699,23 +1788,23 @@ def test_shared_acquisition_calls_issues_and_reconciliation_recorded_once_per_gr
     s1 = _series_def(station, p1)
     s2 = _series_def(station, p2)
 
-    class _ProviderWithGroupCallsAndIssues:
-        config = cfg
-        window_declarations = decls
-        shared_acquisition_products = (products,)
-
-        def fetch(self, stations, fetched_products, windows, fetch_window, config, transport, *, scope, known_series):
-            p1_payload = Payload(
-                cfg.products[p1].coordinates,
-                ((station, p1),),
-                fetch_window,
-                b"{}",
-                _origin(),
-                (),
-                scope,
-                known_series,
-                acquisition_id="p1-payload",
+    class _P1Transport:
+        def send(self, request):
+            return TransportResponse(
+                content=b"{}",
+                status_code=200,
+                retrieved_at=datetime(2026, 1, 1, tzinfo=UTC),
+                content_type="application/json",
+                url=request.url,
+                request_parameters=dict(request.params or {}),
             )
+
+    class _GroupCallsAndIssuesPlanner:
+        def plan_lookups(self, needs, config):
+            return ()
+
+        def plan_observations(self, needs, lookups, config):
+            p1_need = next(need for need in needs if need.product == p1)
             aux_origin = SourceCallOrigin(
                 "https://example.invalid/meta",
                 {},
@@ -1782,15 +1871,27 @@ def test_shared_acquisition_calls_issues_and_reconciliation_recorded_once_per_gr
                 TransportFailure(req_p2, TransportFailureReason.HTTP_STATUS, 1, status_code=503),
                 prerequisite_acquisition_ids=("aux-call-1",),
             )
-            return SourceAcquisition(
-                value=(p1_payload,),
-                issues=issues,
+            return ObservationPlan(
+                requests=(
+                    PlannedObservationRequest(
+                        consumers=(p1_need,),
+                        request=TransportRequest(HttpMethod.GET, "https://example.invalid/p1"),
+                        source_coordinates=cfg.products[p1].coordinates,
+                        fetch_window=p1_need.fetch_window,
+                    ),
+                ),
                 series=(s1, s2),
                 inventories=(snapshot,),
                 outcomes=(p2_outcome,),
+                issues=issues,
                 calls=(aux_origin,),
                 failed_requests=(failed_p2,),
             )
+
+    class _ProviderWithGroupCallsAndIssues:
+        config = cfg
+        window_declarations = decls
+        request_planner = _GroupCallsAndIssuesPlanner()
 
         def parse(self, payload, provider_config):
             return _parsed_for_pair(
@@ -1815,6 +1916,7 @@ def test_shared_acquisition_calls_issues_and_reconciliation_recorded_once_per_gr
         provenance=_provenance(req),
         cache="refresh",
         store=StoreRoot(tmp_path / "store"),
+        transport=_P1Transport(),
     )
 
     aux_calls = [c for c in res.provenance.calls_made if c.get("call_id") == "aux-call-1"]

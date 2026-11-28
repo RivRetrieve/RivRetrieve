@@ -35,6 +35,20 @@ _SOURCE_UNITS = {"m": Unit.M, "m³/s": Unit.M3_S, "°C": Unit.DEG_C}
 
 
 @dataclass(frozen=True, slots=True)
+class NoNveSeriesLookupCoordinates:
+    """HydAPI Series metadata lookup selector per station and parameter."""
+
+    parameter: Literal["1000", "1001", "1003"]
+
+
+@dataclass(frozen=True, slots=True)
+class NoNveBatchCoordinates:
+    """HydAPI POST /Observations batch selector mapping requested items per pair."""
+
+    items: tuple[tuple[str, ProductId, NoNveSourceCoordinates], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class NoNveSourceCoordinates:
     """HydAPI observation access selectors, separate from response-owned physical facts."""
 

@@ -251,6 +251,8 @@ def test_public_live_stations_and_routes_share_preparation(live_routes, monkeypa
 
 
 def test_public_live_write_invalidates_before_next_station_read(live_routes, monkeypatch):
+    import rivretrieve._internal.store as store_mod
+
     source, selected, store = live_routes
     # Both stations' level routes are covered. Only station-1's hourly route
     # needs an extended acquisition; station-2 has no selected hourly route.
@@ -258,7 +260,8 @@ def test_public_live_write_invalidates_before_next_station_read(live_routes, mon
     hourly = _selection("fixture_live", (item for item in selected.known_series if item.product_id == "level_hourly"))
     rr.fetch(levels, start="2026-01-01", end="2026-01-04", cache="refresh", on_issue="raise")
     rr.fetch(hourly, start="2026-01-01", end="2026-01-02", cache="refresh", on_issue="raise")
-    before = StoreReader().status(store, ProviderId("fixture_live"))
+    shared_reader = StoreReader()
+    before = shared_reader.status(store, ProviderId("fixture_live"))
     source.calls.clear()
     source.value = 2.0
     reads = []
@@ -270,10 +273,12 @@ def test_public_live_write_invalidates_before_next_station_read(live_routes, mon
         return result
 
     monkeypatch.setattr(StoreReader, "query", recorded_query)
+    monkeypatch.setattr(store_mod, "StoreReader", lambda: shared_reader)
     result = rr.fetch(selected, start="2026-01-01", end="2026-01-04", cache="reuse", on_issue="raise")
-    after = StoreReader().status(store, ProviderId("fixture_live"))
+    after = shared_reader.status(store, ProviderId("fixture_live"))
     assert before.generation_id != after.generation_id
-    assert reads == [(("station-1",), before.manifest.built_at), (("station-2",), after.manifest.built_at)]
+    # Whole-selection rr.fetch reads both already-covered station routes consistently from the opening snapshot.
+    assert reads == [(("station-1",), before.manifest.built_at), (("station-2",), before.manifest.built_at)]
     assert len(source.calls) == 1
     stations, products, window = source.calls[0]
     assert (stations, products) == (("station-1",), ("level_hourly",))
@@ -287,6 +292,13 @@ def test_public_live_write_invalidates_before_next_station_read(live_routes, mon
         }
     )
     pt.assert_frame_equal(result.data.select(expected.columns).sort("station_id", "product_id"), expected)
+    # The committed write invalidated the shared StoreReader before the follow-up read.
+    reads.clear()
+    follow_up = rr.fetch(selected, start="2026-01-01", end="2026-01-04", cache="reuse", on_issue="raise")
+    assert len(source.calls) == 1
+    assert reads
+    assert {built_at for _stations, built_at in reads} == {after.manifest.built_at}
+    pt.assert_frame_equal(follow_up.data.select(expected.columns).sort("station_id", "product_id"), expected)
 
 
 def test_public_fact_reuse_keeps_original_acquisition_and_only_applicable_diagnostics(live_routes, monkeypatch):

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from rivretrieve._internal.providers.au_bom.series import describe_series
+from rivretrieve._internal.providers.au_bom.series import (
+    ALLOWED_09HR_LABEL_TIMES,
+    ALLOWED_24HR_LABEL_TIMES,
+    allowed_label_times,
+    describe_series,
+)
 from rivretrieve._internal.source_series import admission
 
 
@@ -75,14 +80,27 @@ def test_only_daily_frequency_uses_calendar_date_clipping() -> None:
     assert yearly.facts[0].clipping_axis == ClippingAxis.SOURCE_TIMESTAMP
 
 
-def test_discharge_09hr_has_its_own_variant_and_label_time_distinct_from_24hr() -> None:
-    """09hr is a genuinely different daily mean from 24hr, not a less precise version of it."""
-    daily_24hr = describe_series("410730", "1573010", "discharge_daily_mean_24hr", "cumec")
-    daily_09hr = describe_series("410730", "1572010", "discharge_daily_mean_09hr", "cumec")
+def test_discharge_09hr_has_its_own_variant_and_allowed_label_times_distinct_from_24hr() -> None:
+    """09hr and 24hr have distinct variants and distinct allowed +10:00 label-time sets (#1082)."""
+    assert allowed_label_times("discharge_daily_mean_24hr") == ALLOWED_24HR_LABEL_TIMES == {"00:00", "00:30", "02:00"}
+    assert allowed_label_times("discharge_daily_mean_09hr") == ALLOWED_09HR_LABEL_TIMES == {"09:00", "09:30", "11:00"}
+    assert allowed_label_times("discharge_hourly_mean") is None
+
+    daily_24hr = describe_series("601001", "73472010", "discharge_daily_mean_24hr", "cumec", label_time="02:00")
+    daily_09hr = describe_series("601001", "73471010", "discharge_daily_mean_09hr", "cumec", label_time="11:00")
     assert daily_24hr.variant == "24hr"
     assert daily_09hr.variant == "09hr"
-    assert daily_24hr.facts[0].label_time == "00:00"
-    assert daily_09hr.facts[0].label_time == "09:00"
+    assert daily_24hr.facts[0].label_time == "02:00"
+    assert daily_09hr.facts[0].label_time == "11:00"
+
+    empty_24hr = describe_series("601001", "73472010", "discharge_daily_mean_24hr", "cumec")
+    assert empty_24hr.facts[0].label_time is None
+    assert empty_24hr.facts[0].facts_id != daily_24hr.facts[0].facts_id
+
+    with pytest.raises(ValueError, match="label_time"):
+        describe_series("601001", "73472010", "discharge_daily_mean_24hr", "cumec", label_time="09:00")
+    with pytest.raises(ValueError, match="hourly"):
+        describe_series("410730", "1571010", "discharge_hourly_mean", "cumec", label_time="00:00")
 
 
 def test_hourly_products_have_no_label_time_or_variant() -> None:
@@ -93,12 +111,12 @@ def test_hourly_products_have_no_label_time_or_variant() -> None:
 
 def test_products_outside_the_24hr_09hr_pair_stay_unambiguous() -> None:
     """Every au_bom product other than discharge's two daily means has no sibling to disambiguate."""
-    stage = describe_series("410730", "1598010", "stage_daily_mean", "m")
-    monthly = describe_series("410730", "1574010", "discharge_monthly_mean", "cumec")
+    stage = describe_series("410730", "1598010", "stage_daily_mean", "m", label_time="00:00")
+    monthly = describe_series("A5131021", "227553010", "water_temperature_monthly_mean", "°C", label_time="00:30")
     assert stage.variant is None
     assert stage.facts[0].label_time == "00:00"
     assert monthly.variant is None
-    assert monthly.facts[0].label_time == "00:00"
+    assert monthly.facts[0].label_time == "00:30"
 
 
 def test_unrecognized_unit_symbol_leaves_normalized_unit_unset() -> None:

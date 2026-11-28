@@ -228,6 +228,21 @@ RivRetrieve returns that wall-clock value in `time`, paired with
 itself is timezone-naive. BoM's service does not name a time zone (such as
 AEST) for this offset, so RivRetrieve does not supply one.
 
+Although BoM serializes every response in `+10:00`, daily, monthly and yearly
+series remain anchored to the local standard time of the contributing state or
+territory agency (`+08:00` in Western Australia, `+09:30` in South Australia
+and the Northern Territory, `+10:00` in eastern states), with no daylight-saving
+shift. As a result, `24HR` daily, monthly and yearly timestamps arrive at
+`00:00` for `+10:00` series, `00:30` for `+09:30` series, and `02:00` for
+`+08:00` series; `09HR` daily timestamps arrive at `09:00`, `09:30`, and
+`11:00` respectively. Two series at the same station can use different local
+anchors: for example, at South Australian station `A5131021`, daily discharge
+is stamped at `00:00+10:00` while daily water temperature is stamped at
+`00:30+10:00`. RivRetrieve preserves each returned `+10:00` timestamp verbatim
+and records each populated series's established wall-clock anchor in
+`label_time` (`00:00`, `00:30`, or `02:00` for `24HR`, monthly, and yearly
+series; `09:00`, `09:30`, or `11:00` for `09HR` series).
+
 BoM publishes a `Quality Code` and `Quality Code Name` per observation (for
 example `10`/`quality-A`, `-1`/`quality-E`). RivRetrieve keeps the default
 observation table in `result.data` unchanged and preserves both fields as

@@ -300,3 +300,121 @@ def test_public_fetch_reports_a_malformed_values_body_as_an_issue_not_a_crash(mo
 
     assert result.data.is_empty()
     assert any(issue.severity == "error" and issue.code == "source.unsupported_structure" for issue in result.issues)
+
+
+@pytest.mark.parametrize(
+    ("station", "ts_id", "ts_name", "param_name", "unit", "quantity", "frequency", "raw_time", "expected_time", "val"),
+    [
+        # WA (+08:00 local -> 02:00 / 11:00 in +10:00)
+        (
+            "601001",
+            "73472010",
+            "DMQaQc.Merged.DailyMean.24HR",
+            "Water Course Discharge",
+            "cumec",
+            "discharge",
+            "P1D",
+            "2026-08-02T02:00:00.000+10:00",
+            datetime(2026, 8, 2, 2, 0),
+            0.172,
+        ),
+        (
+            "601001",
+            "73471010",
+            "DMQaQc.Merged.DailyMean.09HR",
+            "Water Course Discharge",
+            "cumec",
+            "discharge",
+            "P1D",
+            "2026-08-02T11:00:00.000+10:00",
+            datetime(2026, 8, 2, 11, 0),
+            0.172,
+        ),
+        # SA (+09:30 local -> 00:30 in +10:00; temperature daily and yearly)
+        (
+            "A5131021",
+            "227552010",
+            "DMQaQc.Merged.DailyMean.24HR",
+            "Water Temperature",
+            "°C",
+            "temperature",
+            "P1D",
+            "2026-08-02T00:30:00.000+10:00",
+            datetime(2026, 8, 2, 0, 30),
+            12.5,
+        ),
+        (
+            "A5131021",
+            "227554010",
+            "DMQaQc.Merged.YearlyMean.CalYear",
+            "Water Temperature",
+            "°C",
+            "temperature",
+            "P1Y",
+            "2026-01-01T00:30:00.000+10:00",
+            datetime(2026, 1, 1, 0, 30),
+            15.0,
+        ),
+        # NT (+09:30 local -> 00:30 / 09:30 in +10:00)
+        (
+            "G8100106",
+            "52074010",
+            "DMQaQc.Merged.DailyMean.24HR",
+            "Water Course Discharge",
+            "cumec",
+            "discharge",
+            "P1D",
+            "2026-08-02T00:30:00.000+10:00",
+            datetime(2026, 8, 2, 0, 30),
+            0.002,
+        ),
+        (
+            "G8100106",
+            "52073010",
+            "DMQaQc.Merged.DailyMean.09HR",
+            "Water Course Discharge",
+            "cumec",
+            "discharge",
+            "P1D",
+            "2026-08-02T09:30:00.000+10:00",
+            datetime(2026, 8, 2, 9, 30),
+            0.001,
+        ),
+    ],
+)
+def test_public_fetch_accepts_non_aest_local_standard_time_anchors(
+    monkeypatch: pytest.MonkeyPatch,
+    station: str,
+    ts_id: str,
+    ts_name: str,
+    param_name: str,
+    unit: str,
+    quantity: str,
+    frequency: str,
+    raw_time: str,
+    expected_time: datetime,
+    val: float,
+) -> None:
+    """WA (+08:00 -> 02:00/11:00) and SA/NT (+09:30 -> 00:30/09:30) rows must not fail validation (#1082)."""
+    list_bytes = _list_json(station, [(ts_id, ts_name, param_name, unit)])
+    values_bytes = _values_json([(ts_id, [(raw_time, val, 110, "quality-C")])])
+
+    class _Transport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = dict(request.params or {})
+            if params.get("request") == "getTimeseriesList":
+                return TransportResponse(list_bytes, 200, _RETRIEVED_AT, "application/json", request.url, params)
+            return TransportResponse(values_bytes, 200, _RETRIEVED_AT, "application/json", request.url, params)
+
+    monkeypatch.setattr(discovery, "HttpClient", _Transport)
+    selection = rr.find(provider="au_bom", station=station, quantity=quantity, frequency=frequency, statistic="mean")
+    result = rr.fetch(selection, start="2026-01-01", end="2026-08-05", cache="bypass", on_issue="ignore")
+
+    assert result.data.height == 1
+    assert result.data["time"].to_list() == [expected_time]
+    assert result.data["time_zone"].to_list() == ["+10:00"]
+    assert result.data["value"].to_list() == [pytest.approx(val)]
+    expected_anchor = f"{expected_time.hour:02d}:{expected_time.minute:02d}"
+    matching = [s for s in result.source_series if s.identity.published_id == ts_id]
+    assert len(matching) == 1
+    assert matching[0].facts[0].label_time == expected_anchor

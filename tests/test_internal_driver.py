@@ -52,6 +52,7 @@ from rivretrieve._internal.observations import (
     Receipts,
 )
 from rivretrieve._internal.primitives import IssueSeverity, ProductId, ProviderId
+from rivretrieve._internal.request_planning import ObservationPlan, PlannedObservationRequest
 from rivretrieve._internal.source_series import (
     ClippingAxis,
     InventoryCompleteness,
@@ -287,8 +288,11 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
             ),
         }
     )
+    from rivretrieve._internal.transport import HttpMethod, TransportRequest
+
     shared = provider_id == "lt_lhmt" and equal_renderings
     received: list[tuple[Mapping[ProductId, tuple[RenderedWindow, ...]], FetchWindow]] = []
+    planned_requests: list[PlannedObservationRequest] = []
     planned_with: list[FetchWindow] = []
     real_plan_windows = driver_module.plan_windows
 
@@ -298,9 +302,8 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
 
     monkeypatch.setattr(driver_module, "plan_windows", recording_plan_windows)
 
-    class _CapturingProvider:
+    class _LegacyCapturingProvider:
         window_declarations = declarations
-        shared_acquisition_products = (frozenset(products),) if provider_id == "lt_lhmt" else ()
 
         def __init__(self) -> None:
             self.config = config
@@ -318,7 +321,7 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
             known_series: tuple[SourceSeries, ...],
         ) -> WithIssues[tuple[Payload, ...]]:
             assert stations == ("station-1",)
-            assert len(supplied_products) == (2 if shared else 1)
+            assert len(supplied_products) == 1
             assert set(supplied_products).issubset(products)
             assert supplied_config is config
             received.append((rendered_windows, fetch_window))
@@ -327,13 +330,48 @@ def test_drive_plans_each_requested_product_and_passes_immutable_keyed_rendering
         def parse(self, payload: Payload, supplied_config: ProviderConfig) -> ParsedSeries:
             raise AssertionError("parse must not run")
 
+    class _PlannedCapturingPlanner:
+        def plan_lookups(self, needs, supplied_config):
+            assert supplied_config is config
+            return ()
+
+        def plan_observations(self, needs, lookups, supplied_config):
+            assert supplied_config is config
+            assert {need.station for need in needs} == {"station-1"}
+            assert {need.product for need in needs} == set(products)
+            rendered_map = {need.product: need.rendered for need in needs}
+            from types import MappingProxyType
+
+            received.append((MappingProxyType(rendered_map), needs[0].fetch_window))
+            grouped: dict[tuple[str, tuple[RenderedWindow, ...]], list[object]] = {}
+            for need in needs:
+                grouped.setdefault((need.station, need.rendered), []).append(need)
+            for (station, _rendered), group in grouped.items():
+                planned_requests.append(
+                    PlannedObservationRequest(
+                        consumers=tuple(group),  # type: ignore[arg-type]
+                        request=TransportRequest(HttpMethod.GET, f"https://example.invalid/{station}"),
+                        source_coordinates=product_config.coordinates,
+                        fetch_window=needs[0].fetch_window,
+                    )
+                )
+            return ObservationPlan()
+
+    class _PlannedCapturingProvider(_LegacyCapturingProvider):
+        request_planner = _PlannedCapturingPlanner()
+
+    provider: object = _PlannedCapturingProvider() if provider_id == "lt_lhmt" else _LegacyCapturingProvider()
     result = driver_module.drive(
-        request, _CapturingProvider(), provenance=_provenance(request), receipts=ReceiptMode.OMIT
+        request,
+        provider,  # type: ignore[arg-type]
+        provenance=_provenance(request),
+        receipts=ReceiptMode.OMIT,
     )
 
     assert result.canonical_rows.is_empty()
-    assert len(received) == (1 if shared else 2)
-    assert [tuple(rendered) for rendered, _ in received] == ([products] if shared else [(products[0],), (products[1],)])
+    assert len(received) == (1 if provider_id == "lt_lhmt" else 2)
+    if provider_id == "lt_lhmt":
+        assert len(planned_requests) == (1 if shared else 2)
     rendered_by_product = {product: rendered[product] for rendered, _ in received for product in rendered}
     assert rendered_by_product == {
         ProductId("date_product"): (RenderedWindow("2025-12-30", "2026-01-04"),),
@@ -2277,44 +2315,72 @@ def test_drive_releases_payload_bodies_after_consumers_and_preserves_provenance_
     base2 = sys.getrefcount(body2)
     observed: list[tuple[str, bool, int]] = []
 
+    from rivretrieve._internal.transport import TransportRequest, TransportResponse
+
+    responses = [
+        TransportResponse(
+            content=body1,
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 3, 9, 1, tzinfo=UTC),
+            content_type="application/json",
+            url="https://example.invalid/1",
+            request_parameters={"page": "1"},
+            prerequisite_calls=(prereq,),
+            attempt_traces=(attempt,),
+        ),
+        TransportResponse(
+            content=body2,
+            status_code=200,
+            retrieved_at=datetime(2026, 1, 3, 9, 2, tzinfo=UTC),
+            content_type="application/json",
+            url="https://example.invalid/2",
+            request_parameters={"page": "2"},
+        ),
+    ]
+
+    class _SeqTransport:
+        def send(self, request):
+            return responses.pop(0)
+
+    class _SharedPlanner:
+        def plan_lookups(self, needs, cfg_arg):
+            return ()
+
+        def plan_observations(self, needs, lookups, cfg_arg):
+            flow_need = next(item for item in needs if item.product == "flow")
+            level_need = next(item for item in needs if item.product == "level")
+            return ObservationPlan(
+                requests=(
+                    PlannedObservationRequest(
+                        consumers=(flow_need, level_need),
+                        request=TransportRequest(HttpMethod.GET, "https://example.invalid/1", {"page": "1"}),
+                        source_coordinates=coords,
+                        fetch_window=fetch_window,
+                    ),
+                    PlannedObservationRequest(
+                        consumers=(flow_need,),
+                        request=TransportRequest(HttpMethod.GET, "https://example.invalid/2", {"page": "2"}),
+                        source_coordinates=coords,
+                        fetch_window=fetch_window,
+                    ),
+                )
+            )
+
     class _SharedProvider:
-        shared_acquisition_products = (frozenset(products),)
+        request_planner = _SharedPlanner()
 
         def __init__(self) -> None:
             self.config = config
             self.window_declarations = declarations
 
-        def fetch(self, stations, prod_arg, rendered_windows, window_arg, config_arg, transport, **_kw):
-            p1 = Payload(
-                source_coordinates=coords,
-                station_products=(("station-1", ProductId("flow")), ("station-1", ProductId("level"))),
-                fetch_window=fetch_window,
-                content=body1,
-                origin=_origin("1", datetime(2026, 1, 3, 9, 1, tzinfo=UTC)),
-                prerequisite_calls=(prereq,),
-                attempt_traces=(attempt,),
-                acquisition_id="acq-page-1",
-            )
-            p2 = Payload(
-                source_coordinates=coords,
-                station_products=(("station-1", ProductId("flow")),),
-                fetch_window=fetch_window,
-                content=body2,
-                origin=_origin("2", datetime(2026, 1, 3, 9, 2, tzinfo=UTC)),
-                prerequisite_calls=(),
-                acquisition_id="acq-page-2",
-                prerequisite_acquisition_ids=("acq-page-1",),
-            )
-            return WithIssues((p1, p2))
-
         def parse(self, payload: Payload, config_arg: ProviderConfig) -> ParsedSeries:
             gc.collect()
             body1_held = any(isinstance(r, (Payload, ReceiptEntry)) for r in gc.get_referrers(body1))
-            observed.append(
-                (f"{payload.acquisition_id}:{payload.station_products[0][1]}", body1_held, sys.getrefcount(body1))
-            )
+            is_page1 = payload.origin.request_parameters == {"page": "1"}
+            label = "acq-page-1" if is_page1 else "acq-page-2"
+            observed.append((f"{label}:{payload.station_products[0][1]}", body1_held, sys.getrefcount(body1)))
             station, product = payload.station_products[0]
-            ts = datetime(2026, 1, 1, 12, 0) if payload.acquisition_id == "acq-page-1" else datetime(2026, 1, 2, 12, 0)
+            ts = datetime(2026, 1, 1, 12, 0) if is_page1 else datetime(2026, 1, 2, 12, 0)
             unit_str = config_arg.products[product].unit.value
             qty = "discharge" if product == ProductId("flow") else "stage"
             fact = PhysicalFacts(
@@ -2374,6 +2440,7 @@ def test_drive_releases_payload_bodies_after_consumers_and_preserves_provenance_
         provenance=ObservationProvenance(source="test", provider_id=ProviderId("lt_lhmt")),
         receipts=ReceiptMode.OMIT,
         cache="bypass",
+        transport=_SeqTransport(),
     )
     gc.collect()
     # consumer 1 (flow on page1) sees page1 alive; page2 starts BEFORE level consumer finishes?

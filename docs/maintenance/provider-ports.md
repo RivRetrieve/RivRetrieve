@@ -164,6 +164,16 @@ keep identity and physical interpretation separate.
 can share supported mappings between catalogue publication and parsing; it is not
 a substitute for response-specific identities when the source requires them.
 
+Do not generalize provider-wide temporal facts (`time_zone`, `label_time`,
+`day_definition`, DST behavior) from a single station or region. For providers
+spanning multiple time zones, DST regimes, or federated sub-agencies behind one
+national portal, check at least one station per time zone or regional prefix
+and across distinct products at the same station before hardcoding a
+provider-wide offset or timestamp anchor. Populating a previously unset contract
+field (such as `PhysicalFacts.label_time`, which activates strict row validation
+in `conversion.py`) is a new provider-wide claim and requires the same
+multi-region check rather than reusing single-station evidence.
+
 Preserve observation qualifiers, approval statuses, method notes, unmeasured source
 slots, and non-identity series attributes through declared
 [`AnnotationSchema`](../../src/rivretrieve/_internal/source_annotations.py) definitions
@@ -259,6 +269,11 @@ Extend shared contracts and the [all-provider catalogue rebuild](../../tests/tes
 Use genuine retained responses for distinct supported routes and independently
 established expected results. Check identities, timestamps and values together.
 Verify relevant cache/store behavior, catalogue lineage and distribution contents.
+
+For national or federated providers spanning multiple time zones, DST regimes,
+or regional/sub-agency prefixes, stratify live probes and retained HTTP
+witnesses across those regions and time zones (and across DST transitions where
+applicable) rather than drawing all verification scenarios from a single region.
 
 When a suitable published observational dataset is available, usually a regional
 CAMELS dataset, require a bounded comparison with values retrieved through

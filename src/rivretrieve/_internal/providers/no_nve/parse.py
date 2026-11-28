@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from collections.abc import Mapping
 from datetime import datetime
 from math import isfinite
 from typing import cast
@@ -16,9 +17,9 @@ import polars as pl
 
 from rivretrieve._internal.engine import Payload, ProviderConfig, RowsSchema
 from rivretrieve._internal.issues import FatalContractError, Issue
-from rivretrieve._internal.primitives import ProviderId
+from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.no_nve.annotations import NO_NVE_OBSERVATIONS_SCHEMA
-from rivretrieve._internal.providers.no_nve.config import NoNveSourceCoordinates
+from rivretrieve._internal.providers.no_nve.config import NoNveBatchCoordinates, NoNveSourceCoordinates
 from rivretrieve._internal.providers.no_nve.series import NVE_EVIDENCE, describe_series
 from rivretrieve._internal.source_annotations import (
     OBSERVATION_STRUCTURAL_SCHEMA,
@@ -48,38 +49,36 @@ class SourceStructureError(ValueError):
     """A source series cannot be decoded faithfully."""
 
 
-def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
-    if len(payload.station_products) != 1:
-        raise FatalContractError("no_nve payload must contain exactly one station-product pair")
-    station, product = payload.station_products[0]
-    if product not in provider_config.products:
-        raise FatalContractError("no_nve payload product is undeclared")
-    coordinates = payload.source_coordinates.value
-    configured = provider_config.products[product].coordinates.value
-    if not isinstance(coordinates, NoNveSourceCoordinates) or not isinstance(configured, NoNveSourceCoordinates):
-        raise FatalContractError("no_nve payload source coordinates have invalid type")
-    if (coordinates.parameter, coordinates.resolution_time) != (configured.parameter, configured.resolution_time):
-        raise FatalContractError("no_nve payload coordinates contradict product request")
-    window = SeriesWindow(
-        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
-        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
-    )
-    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
-    content_hash = hashlib.sha256(payload.content).hexdigest()
+def _decode_pair_series_blocks(
+    station: str,
+    product: str,
+    coordinates: NoNveSourceCoordinates,
+    window: SeriesWindow,
+    scope: SeriesScope | None,
+    content_hash: str,
+    retrieved_at_origin: object,
+    retrieved: datetime | None,
+    raw_blocks: list[object],
+    *,
+    expected_versions: set[int] | None = None,
+    pre_error: str | None = None,
+    version_counts_by_key: dict[tuple[str, int, int], int] | None = None,
+    blocks_by_key: dict[tuple[str, int, int], list[dict[str, object]]] | None = None,
+) -> ParsedSeries:
     definitions = []
     rows = []
     ann_rows = []
     outcomes = []
     issues = []
 
-    def unsupported(reason, definition=None):
+    def unsupported(reason: str, definition=None) -> None:
         series_id = definition.series_id if definition else None
         facts_ids = tuple(f.facts_id for f in definition.facts) if definition else ()
         outcomes.append(
             RetrievalOutcome(
                 outcome_id=stable_id(
                     content_hash,
-                    str(payload.origin.retrieved_at),
+                    str(retrieved_at_origin),
                     station,
                     product,
                     series_id,
@@ -106,31 +105,45 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             )
         )
 
-    try:
-        document = json.loads(payload.content)
-        if not isinstance(document, dict) or not isinstance(document.get("data"), list):
-            raise SourceStructureError("HydAPI response lacks data series array")
-        data = document["data"]
-    except (ValueError, UnicodeDecodeError) as exc:
-        unsupported("HydAPI response is unreadable: " + str(exc))
-        data = []
+    if pre_error is not None:
+        unsupported(pre_error)
+        data: list[object] = []
+    else:
+        data = raw_blocks
+
     # An observation response provides no segment identity for repeated versions.
     # Preflight the entire identity before admitting any block: equality or disjoint
     # timestamps cannot establish an undocumented concatenation/deduplication rule.
-    version_counts = Counter(
-        raw["serieVersionNo"]
-        for raw in data
-        if isinstance(raw, dict)
-        and raw.get("stationId") == station
-        and raw.get("parameter") == int(coordinates.parameter)
-        and type(raw.get("serieVersionNo")) is int
-    )
-    refused_versions = set()
-    for raw in data:
+    if version_counts_by_key is None or blocks_by_key is None:
+        local_counts: Counter[tuple[str, int, int]] = Counter()
+        local_blocks: dict[tuple[str, int, int], list[dict[str, object]]] = {}
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            item_obj = cast("dict[str, object]", item)
+            ver_val = item_obj.get("serieVersionNo")
+            if (
+                item_obj.get("stationId") == station
+                and item_obj.get("parameter") == int(coordinates.parameter)
+                and type(ver_val) is int
+            ):
+                key = (station, int(coordinates.parameter), ver_val)
+                local_counts[key] += 1
+                local_blocks.setdefault(key, []).append(item_obj)
+        counts_map: Mapping[tuple[str, int, int], int] = local_counts
+        repeated_map: Mapping[tuple[str, int, int], list[dict[str, object]]] = local_blocks
+    else:
+        counts_map = version_counts_by_key
+        repeated_map = blocks_by_key
+
+    refused_versions: set[int] = set()
+    seen_versions: set[int] = set()
+    for raw_entry in data:
         definition = None
         try:
-            if not isinstance(raw, dict):
+            if not isinstance(raw_entry, dict):
                 raise SourceStructureError("HydAPI series is not an object")
+            raw = cast("dict[str, object]", raw_entry)
             if raw.get("stationId") != station:
                 raise SourceStructureError("HydAPI returned station differs from requested station")
             if raw.get("parameter") != int(coordinates.parameter):
@@ -138,22 +151,19 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             version = raw.get("serieVersionNo")
             if type(version) is not int:
                 raise SourceStructureError("HydAPI series version identifier is absent or malformed")
-            if coordinates.version_number is not None and version != coordinates.version_number:
+            if expected_versions is not None:
+                if version not in expected_versions:
+                    raise SourceStructureError("HydAPI returned version differs from explicitly requested version")
+            elif coordinates.version_number is not None and version != coordinates.version_number:
                 raise SourceStructureError("HydAPI returned version differs from explicitly requested version")
-            if version_counts[version] > 1:
+            seen_versions.add(version)
+            identity_key = (station, int(coordinates.parameter), version)
+            if counts_map.get(identity_key, 0) > 1:
                 if version in refused_versions:
                     continue
                 refused_versions.add(version)
                 # Retain only facts shared by every block, never first-block facts.
-                repeated = [
-                    item
-                    for item in data
-                    if isinstance(item, dict)
-                    and item.get("stationId") == station
-                    and item.get("parameter") == int(coordinates.parameter)
-                    and type(item.get("serieVersionNo")) is int
-                    and item["serieVersionNo"] == version
-                ]
+                repeated = repeated_map[identity_key]
                 methods = [item.get("method") for item in repeated]
                 units = [item.get("unit") for item in repeated]
                 shared_method = (
@@ -239,7 +249,7 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                 RetrievalOutcome(
                     outcome_id=stable_id(
                         content_hash,
-                        str(payload.origin.retrieved_at),
+                        str(retrieved_at_origin),
                         definition.series_id,
                         str(window),
                         "response",
@@ -255,13 +265,59 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             )
         except SourceStructureError as exc:
             unsupported(str(exc), definition)
-    if not data and not outcomes:
+    if expected_versions is not None and pre_error is None:
+        missing_versions = sorted(expected_versions - seen_versions)
+        if not data and not outcomes:
+            reason = "HydAPI response contains no concrete series identity; inventory remains unresolved"
+            outcomes.append(
+                RetrievalOutcome(
+                    outcome_id=stable_id(
+                        content_hash,
+                        str(retrieved_at_origin),
+                        station,
+                        product,
+                        str(window),
+                        reason,
+                    ),
+                    series_id=None,
+                    station_id=station,
+                    product_id=product,
+                    window=window,
+                    status=OutcomeStatus.UNRESOLVED,
+                    reason=reason,
+                    retrieved_at=retrieved,
+                )
+            )
+        elif missing_versions:
+            for missing_ver in missing_versions:
+                reason = "HydAPI response contains no concrete series identity; inventory remains unresolved"
+                outcomes.append(
+                    RetrievalOutcome(
+                        outcome_id=stable_id(
+                            content_hash,
+                            str(retrieved_at_origin),
+                            station,
+                            product,
+                            str(missing_ver),
+                            str(window),
+                            reason,
+                        ),
+                        series_id=None,
+                        station_id=station,
+                        product_id=product,
+                        window=window,
+                        status=OutcomeStatus.UNRESOLVED,
+                        reason=reason,
+                        retrieved_at=retrieved,
+                    )
+                )
+    elif not data and not outcomes:
         reason = "HydAPI response contains no concrete series identity; inventory remains unresolved"
         outcomes.append(
             RetrievalOutcome(
                 outcome_id=stable_id(
                     content_hash,
-                    str(payload.origin.retrieved_at),
+                    str(retrieved_at_origin),
                     station,
                     product,
                     str(window),
@@ -276,11 +332,11 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
                 retrieved_at=retrieved,
             )
         )
-    scope = payload.scope or SeriesScope(provider_ids=("no_nve",), station_ids=(station,), product_ids=(product,))
+    resolved_scope = scope or SeriesScope(provider_ids=("no_nve",), station_ids=(station,), product_ids=(product,))
     inventory = InventorySnapshot(
         snapshot_id=stable_id(
             content_hash,
-            str(payload.origin.retrieved_at),
+            str(retrieved_at_origin),
             "no_nve",
             station,
             product,
@@ -288,12 +344,14 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
             str(retrieved),
             str(coordinates.version_number),
         ),
-        scope=scope,
+        scope=resolved_scope,
         members=tuple(s.series_id for s in definitions),
         completeness=InventoryCompleteness.INCOMPLETE,
-        access="HydAPI explicit version"
-        if coordinates.version_number is not None
-        else "HydAPI source-selected version",
+        access=(
+            "HydAPI explicit version"
+            if expected_versions is not None or coordinates.version_number is not None
+            else "HydAPI source-selected version"
+        ),
         origin="response",
         acquired_at=retrieved,
         window=window,
@@ -322,6 +380,154 @@ def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
         tuple(issues),
         annotations,
     )
+
+
+def parse(payload: Payload, provider_config: ProviderConfig) -> ParsedSeries:
+    if len(payload.station_products) != 1:
+        raise FatalContractError("no_nve payload must contain exactly one station-product pair")
+    station, product = payload.station_products[0]
+    if product not in provider_config.products:
+        raise FatalContractError("no_nve payload product is undeclared")
+    coordinates = payload.source_coordinates.value
+    configured = provider_config.products[product].coordinates.value
+    if not isinstance(coordinates, NoNveSourceCoordinates) or not isinstance(configured, NoNveSourceCoordinates):
+        raise FatalContractError("no_nve payload source coordinates have invalid type")
+    if (coordinates.parameter, coordinates.resolution_time) != (configured.parameter, configured.resolution_time):
+        raise FatalContractError("no_nve payload coordinates contradict product request")
+    window = SeriesWindow(
+        start=datetime.fromisoformat(payload.fetch_window.start.isoformat()),
+        end=datetime.fromisoformat(payload.fetch_window.end.isoformat()),
+    )
+    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+    content_hash = hashlib.sha256(payload.content).hexdigest()
+    pre_error: str | None = None
+    data: list[object] = []
+    try:
+        document = json.loads(payload.content)
+        if not isinstance(document, dict) or not isinstance(document.get("data"), list):
+            raise SourceStructureError("HydAPI response lacks data series array")
+        data = document["data"]
+    except (ValueError, UnicodeDecodeError) as exc:
+        pre_error = "HydAPI response is unreadable: " + str(exc)
+    return _decode_pair_series_blocks(
+        station,
+        product,
+        coordinates,
+        window,
+        payload.scope,
+        content_hash,
+        payload.origin.retrieved_at,
+        retrieved,
+        data,
+        pre_error=pre_error,
+    )
+
+
+def parse_batch_group(
+    payload: Payload,
+    pair_payloads: Mapping[tuple[str, ProductId], Payload],
+    provider_config: ProviderConfig,
+) -> Mapping[tuple[str, ProductId], ParsedSeries]:
+    """Decode one shared POST /Observations payload once across all requested pairs."""
+    batch_coords = payload.source_coordinates.value
+    if not isinstance(batch_coords, NoNveBatchCoordinates):
+        raise FatalContractError("no_nve batch payload source coordinates must be NoNveBatchCoordinates")
+    expected_versions_by_pair: dict[tuple[str, ProductId], set[int]] = {}
+    pair_by_key: dict[tuple[str, int, int], tuple[str, ProductId, NoNveSourceCoordinates]] = {}
+    pairs_by_station_param: dict[tuple[str, int], list[tuple[str, ProductId]]] = {}
+    base_coords_by_pair: dict[tuple[str, ProductId], NoNveSourceCoordinates] = {}
+    for pair_key in pair_payloads:
+        station, product = pair_key
+        if product not in provider_config.products:
+            raise FatalContractError("no_nve payload product is undeclared")
+        configured = provider_config.products[product].coordinates.value
+        if not isinstance(configured, NoNveSourceCoordinates):
+            raise FatalContractError("no_nve payload source coordinates have invalid type")
+        base_coords_by_pair[pair_key] = configured
+    for station, product, item_coords in batch_coords.items:
+        pair_key = (station, product)
+        if pair_key not in pair_payloads:
+            continue
+        configured = base_coords_by_pair[pair_key]
+        if (item_coords.parameter, item_coords.resolution_time) != (configured.parameter, configured.resolution_time):
+            raise FatalContractError("no_nve batch item coordinates contradict product request")
+        if item_coords.version_number is None:
+            raise FatalContractError("no_nve batch item requires an explicit version_number")
+        expected_versions_by_pair.setdefault(pair_key, set()).add(item_coords.version_number)
+        key = (station, int(item_coords.parameter), item_coords.version_number)
+        if key in pair_by_key:
+            raise FatalContractError("no_nve batch coordinates contain ambiguous response identity")
+        pair_by_key[key] = (station, product, item_coords)
+        pairs_by_station_param.setdefault((station, int(item_coords.parameter)), []).append(pair_key)
+
+    retrieved = payload.origin.retrieved_at if isinstance(payload.origin.retrieved_at, datetime) else None
+    content_hash = hashlib.sha256(payload.content).hexdigest()
+    pre_error: str | None = None
+    data: list[object] = []
+    try:
+        document = json.loads(payload.content)
+        if not isinstance(document, dict) or not isinstance(document.get("data"), list):
+            raise SourceStructureError("HydAPI response lacks data series array")
+        data = document["data"]
+    except (ValueError, UnicodeDecodeError) as exc:
+        pre_error = "HydAPI response is unreadable: " + str(exc)
+
+    blocks_by_pair: dict[tuple[str, ProductId], list[object]] = {pair_key: [] for pair_key in pair_payloads}
+    version_counts_by_key: Counter[tuple[str, int, int]] = Counter()
+    blocks_by_key: dict[tuple[str, int, int], list[dict[str, object]]] = {}
+    if pre_error is None:
+        unmatched_blocks: list[object] = []
+        for raw_entry in data:
+            if not isinstance(raw_entry, dict):
+                unmatched_blocks.append(raw_entry)
+                continue
+            raw_obj = cast("dict[str, object]", raw_entry)
+            raw_station = raw_obj.get("stationId")
+            raw_param = raw_obj.get("parameter")
+            raw_ver = raw_obj.get("serieVersionNo")
+            if isinstance(raw_station, str) and type(raw_param) is int and type(raw_ver) is int:
+                identity = (raw_station, raw_param, raw_ver)
+                if identity in pair_by_key:
+                    target_pair = (pair_by_key[identity][0], pair_by_key[identity][1])
+                    blocks_by_pair[target_pair].append(raw_obj)
+                    version_counts_by_key[identity] += 1
+                    blocks_by_key.setdefault(identity, []).append(raw_obj)
+                    continue
+                if (raw_station, raw_param) in pairs_by_station_param:
+                    for target_pair in pairs_by_station_param[(raw_station, raw_param)]:
+                        blocks_by_pair[target_pair].append(raw_obj)
+                    continue
+            unmatched_blocks.append(raw_obj)
+        if unmatched_blocks:
+            first_bad = unmatched_blocks[0]
+            if not isinstance(first_bad, dict):
+                pre_error = "HydAPI series is not an object"
+            else:
+                pre_error = "HydAPI batch response contains unexpected series metadata"
+
+    result: dict[tuple[str, ProductId], ParsedSeries] = {}
+    for pair_key, pair_payload in pair_payloads.items():
+        station, product = pair_key
+        window = SeriesWindow(
+            start=datetime.fromisoformat(pair_payload.fetch_window.start.isoformat()),
+            end=datetime.fromisoformat(pair_payload.fetch_window.end.isoformat()),
+        )
+        result[pair_key] = _decode_pair_series_blocks(
+            station,
+            str(product),
+            base_coords_by_pair[pair_key],
+            window,
+            pair_payload.scope,
+            content_hash,
+            payload.origin.retrieved_at,
+            retrieved,
+            blocks_by_pair[pair_key],
+            expected_versions=expected_versions_by_pair.get(pair_key),
+            pre_error=pre_error,
+            version_counts_by_key=version_counts_by_key,
+            blocks_by_key=blocks_by_key,
+        )
+    return result
 
 
 def _observations(series: dict[str, object]) -> list[object]:

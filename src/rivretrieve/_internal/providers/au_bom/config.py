@@ -5,9 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from rivretrieve._internal.engine import (
-    Daily,
-    DailyLabelTime,
-    DayDefinition,
     Hourly,
     IntervalDefinition,
     ProductConfig,
@@ -56,20 +53,31 @@ class AuBomTimeseriesValuesCoordinates:
     parametertype_name: str
 
 
-def _semantics(frequency: str, native_id: str) -> Daily | Hourly | UnknownTemporalSupport:
-    """Day definition and label time, confirmed live, 2026-11-03 series-identity vision.
+@dataclass(frozen=True, slots=True)
+class AuBomTimeseriesValuesBatchCoordinates:
+    """Batched ``getTimeseriesValues`` route spanning multiple ``(station, product, ts_ids)`` consumers."""
 
-    24HR daily series (DailyMean/Max/Min) are midnight-to-midnight, labeled
-    00:00:00. The 09HR daily mean is 09:00-to-09:00, labeled 09:00:00. Hourly
-    series have no established interval-label convention beyond "unknown"
-    (the only value IntervalDefinition accepts). Monthly and yearly have no
-    corresponding semantics type in the engine; UnknownTemporalSupport is the
-    only available declaration, same as at_ehyd uses for all of its products.
+    items: tuple[tuple[str, ProductId, tuple[str, ...]], ...]
+
+    def __post_init__(self) -> None:
+        if not self.items:
+            raise ValueError("au_bom values batch requires at least one item")
+
+
+def _semantics(frequency: str) -> Hourly | UnknownTemporalSupport:
+    """Product-level temporal semantics for au_bom.
+
+    BoM's default getTimeseriesValues response serializes every timestamp in
+    +10:00 while daily, monthly and yearly aggregations remain anchored to the
+    contributing agency's local standard time (+08:00 in WA, +09:30 in SA/NT,
+    +10:00 in eastern states; #1082). Under +10:00, 24HR daily rows therefore
+    arrive at 00:00, 00:30 or 02:00 and 09HR rows at 09:00, 09:30 or 11:00, and
+    two series at the same station can use different anchors (e.g. SA station
+    A5131021). Daily products therefore cannot declare a single provider-wide
+    DailyLabelTime and use UnknownTemporalSupport, while parse.py establishes
+    each series's exact label_time on PhysicalFacts at response time. Hourly
+    series have no established interval-label convention beyond "unknown".
     """
-    if frequency == "P1D":
-        if native_id.endswith(".09HR"):
-            return Daily(DayDefinition("09:00"), DailyLabelTime("09:00:00"))
-        return Daily(DayDefinition("00:00"), DailyLabelTime("00:00:00"))
     if frequency == "PT1H":
         return Hourly(IntervalDefinition("unknown"))
     return UnknownTemporalSupport()
@@ -85,7 +93,7 @@ _CONFIG = ProviderConfig(
                 )
             ),
             unit=Unit(d.canonical_unit),
-            semantics=_semantics(d.frequency, d.native_id),
+            semantics=_semantics(d.frequency),
         )
         for d in PRODUCT_DEFINITIONS
     },
@@ -102,12 +110,6 @@ _WINDOW = WindowDeclaration(
     stop_convention=StopConvention.INCLUSIVE,
 )
 _WINDOW_DECLARATIONS = ProductWindowDeclarations(dict.fromkeys(_CONFIG.products, _WINDOW))
-
-# One getTimeseriesList call per station resolves every admitted product's
-# live ts_id at once (confirmed live: a station-scoped list call with no
-# parametertype_name filter returns all of that station's series in one
-# response); sharing all 18 products avoids repeating it per product.
-SHARED_ACQUISITION_PRODUCTS: tuple[frozenset[ProductId], ...] = (frozenset(_CONFIG.products),)
 
 
 def config() -> ProviderConfig:

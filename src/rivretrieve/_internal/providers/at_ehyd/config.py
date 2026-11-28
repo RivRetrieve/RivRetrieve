@@ -113,14 +113,6 @@ _SOURCE_FIXED_WINDOW = WindowDeclaration(
 
 _WINDOW_DECLARATIONS = ProductWindowDeclarations(dict.fromkeys(_CONFIG.products, _SOURCE_FIXED_WINDOW))
 
-# Deduplicate Messstellen/info per station across owf products without coupling
-# cached yearbook history to live Pegel Aktuell telemetry requests.
-SHARED_ACQUISITION_PRODUCTS: tuple[frozenset[ProductId], ...] = (
-    frozenset(ProductId(ftyp) for ftyp in IN_SCOPE_OWF_FTYPES),
-    frozenset({ProductId("pegel_bgis_abfluss"), ProductId("pegel_bgis_wasserstand")}),
-    frozenset({ProductId("pegel_longterm_abfluss"), ProductId("pegel_longterm_wasserstand")}),
-)
-
 
 def config() -> ProviderConfig:
     return _CONFIG

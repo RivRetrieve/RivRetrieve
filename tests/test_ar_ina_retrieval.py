@@ -237,7 +237,7 @@ def _ok_response(request: TransportRequest, body: bytes) -> TransportResponse:
 def test_declaration_wires_live_stages_and_exposes_required_attributes() -> None:
     assert isinstance(declaration.observations, LiveStages)
     assert declaration.observations.stages.observation_source == "live"
-    assert not hasattr(declaration.observations.stages, "shared_acquisition_products")
+    assert not hasattr(declaration.observations.stages, "request_planner")
     stages = _ArInaStages()
     assert stages.config is config()
     assert stages.window_declarations is window_declarations()

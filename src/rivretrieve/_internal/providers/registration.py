@@ -16,6 +16,7 @@ from rivretrieve._internal.catalogues.artifact import PackagedCatalogArtifact, l
 from rivretrieve._internal.engine import ProviderConfig
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.registry import EngineProviderModule, ProviderRegistry
+from rivretrieve._internal.request_planning import SourceRequestPlanner
 from rivretrieve._internal.store import StoreRoot, ValidatedStore
 from rivretrieve._internal.store.lifecycle import StoreTransaction
 from rivretrieve._internal.store.resources import FreeSpaceProbe, available_bytes
@@ -275,15 +276,25 @@ def load_manifest(
                 raise FatalContractError(
                     f"Provider {provider_id} live credential bindings do not match declared credentials"
                 )
-            required_stage_members = ("config", "window_declarations", "observation_source", "fetch", "parse")
+            required_stage_members = ("config", "window_declarations", "observation_source", "parse")
+            stages_obj = value.observations.stages
             missing_stage_members = tuple(
-                member for member in required_stage_members if not hasattr(value.observations.stages, member)
+                member for member in required_stage_members if not hasattr(stages_obj, member)
             )
+            has_planner = hasattr(stages_obj, "request_planner")
+            has_fetch = hasattr(stages_obj, "fetch")
+            if not has_planner and not has_fetch:
+                missing_stage_members = (*missing_stage_members, "request_planner/fetch")
             if missing_stage_members:
                 missing = ", ".join(missing_stage_members)
                 raise FatalContractError(
                     f"Provider {provider_id} has malformed LiveStages declaration: "
                     f"stages missing required members: {missing}"
+                )
+            if has_planner and not isinstance(stages_obj.request_planner, SourceRequestPlanner):
+                raise FatalContractError(
+                    f"Provider {provider_id} has malformed LiveStages declaration: "
+                    "stages.request_planner must implement SourceRequestPlanner"
                 )
         if isinstance(value.observations, BulkStore):
             non_callable_operations = tuple(

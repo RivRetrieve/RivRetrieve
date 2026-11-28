@@ -39,6 +39,7 @@ def test_live_stages_share_monthly_requests_and_forward_selection():
 
     from rivretrieve._internal.engine import WindowEndpoint, _make_fetch_window
     from rivretrieve._internal.providers.pe_senamhi.declaration import declaration
+    from rivretrieve._internal.providers.pe_senamhi.fetch import PeSenamhiRequestPlanner
     from rivretrieve._internal.providers.registration import LiveStages
     from rivretrieve._internal.transport import TransportResponse
     from rivretrieve._internal.window_planning import plan_windows
@@ -46,10 +47,7 @@ def test_live_stages_share_monthly_requests_and_forward_selection():
     assert isinstance(declaration.observations, LiveStages)
     assert declaration.required_credentials == ()
     stages = declaration.observations.stages
-    monthly_products = frozenset(
-        product for product in stages.config.products if product.startswith("monthly_archive_")
-    )
-    assert stages.shared_acquisition_products == (monthly_products,)
+    assert isinstance(stages.request_planner, PeSenamhiRequestPlanner)
     products = ("monthly_archive_n_nivelagua", "monthly_archive_n_nivelmedio")
     bounds = _make_fetch_window(
         WindowEndpoint.from_datetime(datetime(2026, 1, 1)),

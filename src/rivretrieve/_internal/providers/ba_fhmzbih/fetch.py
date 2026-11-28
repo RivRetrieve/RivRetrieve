@@ -3,22 +3,20 @@
 Contributed by: Thiago von Däniken
 """
 
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
+from datetime import datetime
+from typing import cast
 
+from rivretrieve._internal.coverage import RequestedInterval
 from rivretrieve._internal.engine import (
     FetchWindow,
-    InterpretedPayload,
-    Payload,
     ProviderConfig,
     RenderedWindow,
     SourceAcquisition,
-    SourceCallOrigin,
     SourceCoordinates,
-    UnknownOriginFact,
 )
 from rivretrieve._internal.issues import FatalContractError
 from rivretrieve._internal.primitives import ProductId
-from rivretrieve._internal.provider_series import UnsupportedSourceStructureError
 from rivretrieve._internal.providers.ba_fhmzbih.config import (
     BaFhmzbihMetadataCoordinates as BaFhmzbihMetadataCoordinates,
 )
@@ -26,16 +24,94 @@ from rivretrieve._internal.providers.ba_fhmzbih.config import (
     BaFhmzbihSourceCoordinates,
 )
 from rivretrieve._internal.providers.ba_fhmzbih.parse import (
-    interpret_metadata_payload,
+    interpret_metadata_group,
+)
+from rivretrieve._internal.providers.ba_fhmzbih.parse import (
+    interpret_metadata_payload as interpret_metadata_payload,
 )
 from rivretrieve._internal.providers.ba_fhmzbih.parse import (
     metadata_groups as metadata_groups,
 )
-from rivretrieve._internal.source_series import SeriesScope, SourceSeries
-from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest, TransportResponse
+from rivretrieve._internal.request_planning import (
+    ConsumerNeed,
+    LookupResolution,
+    ObservationPlan,
+    PlannedLookup,
+    PlannedObservationRequest,
+    ResolvedLookup,
+    _merge_fetch_windows,
+    execute_planned_acquisition,
+)
+from rivretrieve._internal.source_series import SeriesScope, SeriesWindow, SourceSeries, TimeAxis
+from rivretrieve._internal.transport import HttpMethod, Transport, TransportRequest
 
 _METADATA_URL = "https://vodostaji.voda.ba/data/internet/layers/20/index.json"
 _WORKBOOK_ROOT = "https://vodostaji.voda.ba/data/internet/stations"
+
+
+class BaFhmzbihRequestPlanner:
+    """Plan one deduplicated metadata index lookup followed by per-pair workbook GETs."""
+
+    def plan_lookups(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        config: ProviderConfig,
+    ) -> tuple[PlannedLookup, ...]:
+        del config
+        if not needs:
+            return ()
+        for need in needs:
+            if need.rendered != ():
+                raise FatalContractError("ba_fhmzbih source-fixed product received an unexpected rendered window")
+        return (
+            PlannedLookup(
+                key="metadata_index",
+                consumers=needs,
+                request=TransportRequest(
+                    HttpMethod.GET, _METADATA_URL, params=None, headers={"Accept": "application/json"}
+                ),
+                source_coordinates=SourceCoordinates(BaFhmzbihMetadataCoordinates()),
+                fetch_window=_merge_fetch_windows([need.fetch_window for need in needs]),
+                window_in_identity=False,
+                emit_payload=True,
+                resolve_payload=interpret_metadata_group,
+            ),
+        )
+
+    def plan_observations(
+        self,
+        needs: tuple[ConsumerNeed, ...],
+        lookups: Mapping[tuple[Hashable, str, ProductId], LookupResolution],
+        config: ProviderConfig,
+    ) -> ObservationPlan:
+        requests: list[PlannedObservationRequest] = []
+        for need in needs:
+            res = lookups.get(("metadata_index", need.station, need.product))
+            if not isinstance(res, ResolvedLookup):
+                continue
+            groups = cast("tuple[dict[str, str], dict[str, str]]", res.value)[0]
+            if need.station not in groups:
+                continue
+            product_config = config.products[need.product]
+            coordinates = product_config.coordinates.value
+            if not isinstance(coordinates, BaFhmzbihSourceCoordinates):
+                raise FatalContractError(f"ba_fhmzbih product has invalid source coordinates: {need.product}")
+            url = f"{_WORKBOOK_ROOT}/{groups[need.station]}/{need.station}/{coordinates.code}/{coordinates.workbook}"
+            requests.append(
+                PlannedObservationRequest(
+                    consumers=(need,),
+                    request=TransportRequest(
+                        HttpMethod.GET,
+                        url,
+                        params=None,
+                        headers={"Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+                    ),
+                    source_coordinates=product_config.coordinates,
+                    fetch_window=need.fetch_window,
+                    prerequisite_acquisition_ids=(res.acquisition_id,),
+                )
+            )
+        return ObservationPlan(requests=tuple(requests))
 
 
 def fetch(
@@ -51,74 +127,23 @@ def fetch(
 ) -> SourceAcquisition:
     if len(stations) != 1 or len(products) != 1:
         raise FatalContractError("ba_fhmzbih fetch requires exactly one station-product pair")
-    for product in products:
-        if rendered_windows[product] != ():
-            raise FatalContractError("ba_fhmzbih source-fixed product received an unexpected rendered window")
-    metadata_response = transport.send(
-        TransportRequest(HttpMethod.GET, _METADATA_URL, params=None, headers={"Accept": "application/json"})
-    )
-    pairs = tuple((station, product) for station in stations for product in products)
-    metadata_payload = _payload(
-        SourceCoordinates(BaFhmzbihMetadataCoordinates()), pairs, fetch_window, metadata_response, scope, known_series
-    )
-    try:
-        groups = metadata_groups(metadata_response.content, stations)
-    except UnsupportedSourceStructureError as error:
-        # Keep exact source bytes for parse-owned diagnostics and optional receipts.
-        metadata_parsed = interpret_metadata_payload(metadata_payload, config, error=error)
-        return SourceAcquisition(
-            value=(metadata_payload,),
-            interpretations=(InterpretedPayload.from_payload(metadata_payload, metadata_parsed),),
+    start = datetime.fromisoformat(fetch_window.start.isoformat())
+    end = datetime.fromisoformat(fetch_window.end.isoformat())
+    interval = RequestedInterval(start, end, axis=TimeAxis.NATIVE)
+    window = SeriesWindow(start=start, end=end, axis=TimeAxis.NATIVE)
+    needs = tuple(
+        ConsumerNeed(
+            station=station,
+            product=product,
+            scope=scope
+            or SeriesScope(provider_ids=("ba_fhmzbih",), station_ids=(station,), product_ids=(str(product),)),
+            known_series=known_series,
+            interval=interval,
+            window=window,
+            fetch_window=fetch_window,
+            rendered=rendered_windows[product],
         )
-    metadata_parsed = interpret_metadata_payload(metadata_payload, config)
-    payloads = [metadata_payload]
-    for station, product in pairs:
-        product_config = config.products[product]
-        coordinates = product_config.coordinates.value
-        if not isinstance(coordinates, BaFhmzbihSourceCoordinates):
-            raise FatalContractError(f"ba_fhmzbih product has invalid source coordinates: {product}")
-        url = f"{_WORKBOOK_ROOT}/{groups[station]}/{station}/{coordinates.code}/{coordinates.workbook}"
-        response = transport.send(
-            TransportRequest(
-                HttpMethod.GET,
-                url,
-                params=None,
-                headers={"Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
-            ),
-        )
-        payloads.append(
-            _payload(product_config.coordinates, ((station, product),), fetch_window, response, scope, known_series)
-        )
-    del groups
-    return SourceAcquisition(
-        value=tuple(payloads),
-        interpretations=(InterpretedPayload.from_payload(metadata_payload, metadata_parsed),),
+        for station in stations
+        for product in products
     )
-
-
-def _payload(
-    coordinates: SourceCoordinates,
-    pairs: tuple[tuple[str, ProductId], ...],
-    window: FetchWindow,
-    response: TransportResponse,
-    scope: SeriesScope | None,
-    known_series: tuple[SourceSeries, ...],
-) -> Payload:
-    return Payload(
-        coordinates,
-        pairs,
-        window,
-        response.content,
-        SourceCallOrigin(
-            response.url,
-            response.request_parameters,
-            response.status_code,
-            response.retrieved_at,
-            response.content_type if response.content_type else UnknownOriginFact(),
-            UnknownOriginFact(),
-            UnknownOriginFact(),
-        ),
-        response.prerequisite_calls,
-        scope=scope,
-        known_series=known_series,
-    )
+    return execute_planned_acquisition(BaFhmzbihRequestPlanner(), needs, config, transport)

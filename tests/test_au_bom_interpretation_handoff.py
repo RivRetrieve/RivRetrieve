@@ -23,7 +23,8 @@ from rivretrieve._internal.observations import ReceiptMode
 from rivretrieve._internal.primitives import ProductId, ProviderId
 from rivretrieve._internal.providers.au_bom import fetch as au_bom_fetch_mod
 from rivretrieve._internal.providers.au_bom import parse as au_bom_parse_mod
-from rivretrieve._internal.providers.au_bom.config import SHARED_ACQUISITION_PRODUCTS, config, window_declarations
+from rivretrieve._internal.providers.au_bom.config import config, window_declarations
+from rivretrieve._internal.providers.au_bom.fetch import AuBomRequestPlanner
 from rivretrieve._internal.transport import TransportResponse
 from tests.test_internal_driver import _provenance
 
@@ -308,18 +309,19 @@ def test_au_bom_reuses_list_interpretation_across_shared_multi_product_group(
 
     _Stages.config = config()
     _Stages.window_declarations = window_declarations()
-    _Stages.shared_acquisition_products = SHARED_ACQUISITION_PRODUCTS
+    _Stages.request_planner = AuBomRequestPlanner()
+    _Stages.parse = staticmethod(spied_parse)
 
-    def _recording_fetch(*args: Any, **kwargs: Any) -> SourceAcquisition:
-        acquisition = au_bom_fetch_mod.fetch(*args, **kwargs)
+    orig_exec = driver_module.execute_planned_acquisition
+
+    def _recording_exec(*args: Any, **kwargs: Any) -> SourceAcquisition:
+        acquisition = orig_exec(*args, **kwargs)
         assert isinstance(acquisition, SourceAcquisition)
         assert len(acquisition.interpretations) == 3
         captured.append(acquisition)
         return acquisition
 
-    _Stages.fetch = staticmethod(_recording_fetch)
-    _Stages.parse = staticmethod(spied_parse)
-
+    monkeypatch.setattr(driver_module, "execute_planned_acquisition", _recording_exec)
     result = driver_module.drive(req, _Stages(), provenance=_provenance(req), transport=_Transport(), receipts=receipts)
 
     assert decode_calls == 1, f"getTimeseriesList was decoded {decode_calls} times, expected exactly 1"
@@ -332,15 +334,21 @@ def test_au_bom_reuses_list_interpretation_across_shared_multi_product_group(
 
     _BaselineStages.config = config()
     _BaselineStages.window_declarations = window_declarations()
-    _BaselineStages.shared_acquisition_products = SHARED_ACQUISITION_PRODUCTS
-    _BaselineStages.fetch = staticmethod(lambda *args, **kwargs: replace(captured[0], interpretations=()))
+    _BaselineStages.request_planner = AuBomRequestPlanner()
     _BaselineStages.parse = staticmethod(real_parse)
 
+    monkeypatch.setattr(
+        driver_module,
+        "execute_planned_acquisition",
+        lambda *args, **kwargs: replace(captured[0], interpretations=()),
+    )
     baseline = driver_module.drive(req, _BaselineStages(), provenance=_provenance(req), receipts=receipts)
     _assert_driver_results_identical(result, baseline)
 
 
-def test_au_bom_reuses_malformed_list_interpretation_across_shared_multi_product_group() -> None:
+def test_au_bom_reuses_malformed_list_interpretation_across_shared_multi_product_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A malformed getTimeseriesList response hands off per-pair FAILED interpretations across a shared group."""
     station = "410730"
 
@@ -375,17 +383,18 @@ def test_au_bom_reuses_malformed_list_interpretation_across_shared_multi_product
 
     _Stages.config = config()
     _Stages.window_declarations = window_declarations()
-    _Stages.shared_acquisition_products = SHARED_ACQUISITION_PRODUCTS
+    _Stages.request_planner = AuBomRequestPlanner()
+    _Stages.parse = staticmethod(spied_parse)
 
-    def _recording_fetch(*args: Any, **kwargs: Any) -> SourceAcquisition:
-        acquisition = au_bom_fetch_mod.fetch(*args, **kwargs)
+    orig_exec = driver_module.execute_planned_acquisition
+
+    def _recording_exec(*args: Any, **kwargs: Any) -> SourceAcquisition:
+        acquisition = orig_exec(*args, **kwargs)
         assert len(acquisition.interpretations) == 2
         captured.append(acquisition)
         return acquisition
 
-    _Stages.fetch = staticmethod(_recording_fetch)
-    _Stages.parse = staticmethod(spied_parse)
-
+    monkeypatch.setattr(driver_module, "execute_planned_acquisition", _recording_exec)
     result = driver_module.drive(req, _Stages(), provenance=_provenance(req), transport=_Transport())
 
     assert au_bom_fetch_mod.AuBomTimeseriesListCoordinates not in parse_coords
@@ -397,9 +406,13 @@ def test_au_bom_reuses_malformed_list_interpretation_across_shared_multi_product
 
     _BaselineStages.config = config()
     _BaselineStages.window_declarations = window_declarations()
-    _BaselineStages.shared_acquisition_products = SHARED_ACQUISITION_PRODUCTS
-    _BaselineStages.fetch = staticmethod(lambda *args, **kwargs: replace(captured[0], interpretations=()))
+    _BaselineStages.request_planner = AuBomRequestPlanner()
     _BaselineStages.parse = staticmethod(real_parse)
 
+    monkeypatch.setattr(
+        driver_module,
+        "execute_planned_acquisition",
+        lambda *args, **kwargs: replace(captured[0], interpretations=()),
+    )
     baseline = driver_module.drive(req, _BaselineStages(), provenance=_provenance(req))
     _assert_driver_results_identical(result, baseline)

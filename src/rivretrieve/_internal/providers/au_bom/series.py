@@ -226,42 +226,35 @@ _BY_PRODUCT_ID = {d.product_id: d for d in PRODUCT_DEFINITIONS}
 # "°C" already are.
 _NORMALIZED_UNITS = {"cumec": "m3/s", "m": "m", "°C": "degC"}
 
-# Confirmed live 2026-11-03 (planning/visions/2026-11-03-au-bom-series-identity-and-physical-meaning.md):
-# every DailyMax/DailyMin/Monthly/Yearly timestamp checked is a period-start label
-# (00:00+10:00), never the clock time of the actual extreme -- unlike at_ehyd's
+# Confirmed live 2026-11-03 and 2026-11-26 (#1082):
+# Every DailyMax/DailyMin/Monthly/Yearly timestamp checked is a period-start
+# label, never the clock time of the actual extreme -- unlike at_ehyd's
 # Monatsmaxima. timestamp_anchor stays an unestablished EvidenceFact, matching
 # every other provider in this codebase; none currently populates it.
 #
-# label_time and variant (below) correct #645's original choice to leave both
-# unestablished for discharge's two daily means. See
-# planning/visions/2026-11-05-au-bom-selection-ergonomics-correction.md for why.
-#
-# label_time IS populated below, following every other provider's own convention
-# for a daily-or-coarser product (br_ana, ca_eccc, fr_hubeau, cz_chmi, lt_lhmt,
-# jp_mlit, pl_imgw, usgs_nwis all set label_time="00:00"): BoM's own timestamps
-# are the evidence, confirmed live for every admitted series above, and this
-# also lets the shared engine's existing conversion.py check catch a future
-# source row that silently contradicts the established label. The one BoM
-# quirk this field actually exists for: DailyMean.09HR is label_time="09:00",
-# not "00:00" -- a different, genuinely distinct daily mean from DailyMean.24HR,
-# not a less precise version of it. day_definition (a DIFFERENT PhysicalFacts
-# field, consumed by physical_window.py as a *timezone* of the calendar-day
-# boundary) stays unestablished: it cannot correctly express a non-timezone,
-# same-zone 9am-anchored day at all, and forcing a fake offset string into it
-# to get the window math to line up would misrepresent the field to anyone
-# reading it later.
+# BoM's default getTimeseriesValues response serializes every timestamp in
+# +10:00 while daily, monthly and yearly aggregations remain anchored to the
+# contributing agency's local standard time (+08:00 in WA, +09:30 in SA/NT,
+# +10:00 in eastern states; no DST shifts). Under +10:00, each non-empty series
+# has a single constant wall-clock anchor in ALLOWED_24HR_LABEL_TIMES
+# (24HR/CalMonth/CalYear) or ALLOWED_09HR_LABEL_TIMES (09HR), established per
+# series at parse time and validated against every row by conversion.py. Two
+# series at the same station can carry different anchors (e.g. SA station
+# A5131021: discharge at 00:00+10:00, water temperature at 00:30+10:00).
+# Hourly products and empty responses leave label_time=None. day_definition
+# stays unestablished.
+ALLOWED_24HR_LABEL_TIMES: frozenset[str] = frozenset({"00:00", "00:30", "02:00"})
+ALLOWED_09HR_LABEL_TIMES: frozenset[str] = frozenset({"09:00", "09:30", "11:00"})
 
 
-def _label_time(definition: ProductDefinition) -> str | None:
-    """The wall-clock BoM labels every row of this product at, confirmed live.
-
-    Hourly products carry no daily label. Every daily-or-coarser product is
-    labelled at local midnight except DailyMean.09HR, confirmed labelled at
-    09:00 on every row checked.
-    """
+def allowed_label_times(product_id: str) -> frozenset[str] | None:
+    """Return the valid +10:00 wall-clock anchors for ``product_id``, or ``None`` for hourly."""
+    if product_id not in _BY_PRODUCT_ID:
+        raise ValueError(f"au_bom product_id is not admitted: {product_id!r}")
+    definition = _BY_PRODUCT_ID[product_id]
     if definition.frequency == "PT1H":
         return None
-    return "09:00" if definition.native_id.endswith(".09HR") else "00:00"
+    return ALLOWED_09HR_LABEL_TIMES if definition.native_id.endswith(".09HR") else ALLOWED_24HR_LABEL_TIMES
 
 
 def _variant(definition: ProductDefinition) -> str | None:
@@ -287,6 +280,7 @@ def describe_series(
     product_id: str,
     source_unit_symbol: str,
     *,
+    label_time: str | None = None,
     origin: Literal["catalogue", "response", "mapping"] = "response",
 ) -> SourceSeries:
     """Build the one concrete source identity for a station's ts_id under one product.
@@ -301,13 +295,26 @@ def describe_series(
     between the two. Separately, _variant() above resolves discharge's two
     daily-mean products (24hr/09hr) to a named variant, a different kind of
     ambiguity BoM does name.
+
+    ``label_time`` records the per-series +10:00 wall-clock anchor observed in
+    the response (one of ``00:00``/``00:30``/``02:00`` for 24HR/CalMonth/CalYear
+    or ``09:00``/``09:30``/``11:00`` for 09HR), or ``None`` for hourly products
+    and empty/list-only descriptions. ``facts_id`` incorporates ``label_time``
+    so empty and populated responses for the same ``ts_id`` never collide.
     """
     if product_id not in _BY_PRODUCT_ID:
         raise ValueError(f"au_bom series description requires an admitted product_id: {product_id!r}")
+    allowed = allowed_label_times(product_id)
+    if label_time is not None:
+        if allowed is None:
+            raise ValueError(f"au_bom hourly product {product_id!r} does not accept label_time={label_time!r}")
+        if label_time not in allowed:
+            raise ValueError(f"au_bom product {product_id!r} label_time {label_time!r} is not in {sorted(allowed)}")
     definition = _BY_PRODUCT_ID[product_id]
     series_id = stable_id("au_bom", station_no, "KiWIS.ts_id", ts_id)
+    facts_id = stable_id(series_id, label_time) if label_time is not None else stable_id(series_id, "unset")
     facts = PhysicalFacts(
-        facts_id=series_id,
+        facts_id=facts_id,
         quantity=known(definition.quantity, EVIDENCE),
         source_unit=known(source_unit_symbol, EVIDENCE),
         normalized_unit=_NORMALIZED_UNITS.get(source_unit_symbol),
@@ -317,7 +324,7 @@ def describe_series(
         # CALENDAR_DATE clipping is only valid for established daily frequency
         # (enforced by PhysicalFacts itself); monthly/yearly use SOURCE_TIMESTAMP too.
         clipping_axis=ClippingAxis.CALENDAR_DATE if definition.frequency == "P1D" else ClippingAxis.SOURCE_TIMESTAMP,
-        label_time=_label_time(definition),
+        label_time=label_time,
     )
     return SourceSeries(
         series_id=series_id,
