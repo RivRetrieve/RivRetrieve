@@ -710,7 +710,7 @@ def _assert_metadata_source_extensions_and_restore_original(provenance):
     tuple(
         p
         for p in BUILTIN_PROVIDER_IDS
-        if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "pe_senamhi"}
+        if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "ie_epa", "pe_senamhi"}
     ),
 )
 def test_historical_projection_preserves_sources_and_validates_metadata(provider):
@@ -729,7 +729,7 @@ def test_historical_projection_preserves_sources_and_validates_metadata(provider
     tuple(
         p
         for p in BUILTIN_PROVIDER_IDS
-        if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "pe_senamhi"}
+        if p not in {"at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "ie_epa", "pe_senamhi"}
     ),
 )
 def test_historical_projection_rejects_changed_current_producer(provider):

@@ -27,6 +27,7 @@ Provider pages explain their agencies and source-specific conditions:
 - [Finland: Syke](providers/fi_syke.md)
 - [France: Hub'Eau (`fr_hubeau`)](providers/fr_hubeau.md)
 - [France: HydroPortail (`fr_hydroportail`)](providers/fr_hydroportail.md)
+- [Ireland: EPA HydroNet](providers/ie_epa.md)
 - [Lithuania: LHMT](providers/lt_lhmt.md)
 - [Norway: NVE](providers/no_nve.md)
 - [Peru: SENAMHI](providers/pe_senamhi.md)

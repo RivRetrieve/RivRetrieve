@@ -132,7 +132,7 @@ def _adapter(
             return generated
     else:
         build = generator.build_catalogue
-    if provider in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "pe_senamhi"}:
+    if provider in {"ar_ina", "at_ehyd", "ch_foen", "co_ideam", "dk_vanda", "ee_est", "ie_epa", "pe_senamhi"}:
         sources = generator.read_catalogue_sources(
             retained_evidence_root,
             selection_path=f"maintenance/catalogue/{provider}/official/selection.json",
@@ -270,7 +270,7 @@ def _adapter(
     )
 
 
-@pytest.mark.parametrize("provider", ["ar_ina", "at_ehyd", "ch_foen", "co_ideam", "ee_est", "pe_senamhi"])
+@pytest.mark.parametrize("provider", ["ar_ina", "at_ehyd", "ch_foen", "co_ideam", "ee_est", "ie_epa", "pe_senamhi"])
 def test_selected_source_adapter_passes_explicit_source_selection(monkeypatch, tmp_path, provider):
     from types import SimpleNamespace
 
@@ -394,6 +394,7 @@ DECLARATIONS = {
         "ee_est",
         "fi_syke",
         "fr_hydroportail",
+        "ie_epa",
         "lt_lhmt",
         "no_nve",
         "pe_senamhi",
@@ -434,6 +435,7 @@ def _adapter_input_mark(provider: str, *additional_paths: str) -> pytest.MarkDec
             "dk_vanda",
             "ee_est",
             "fi_syke",
+            "ie_epa",
             "pe_senamhi",
         }
         else [f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet"]
@@ -479,6 +481,7 @@ def adapter(request: pytest.FixtureRequest, retained_evidence_root: Path) -> Pro
             "dk_vanda",
             "ee_est",
             "fi_syke",
+            "ie_epa",
             "pe_senamhi",
             "usgs_nwis",
         }
@@ -661,6 +664,13 @@ def _expected_declarations() -> dict[tuple[ProviderId, str], Mapping[str, Catalo
             "latitude": field("kesk_y", EstonianLest97ToWgs84Conversion()),
             "longitude": field("kesk_x", EstonianLest97ToWgs84Conversion()),
             "crs": documented("https://keskkonnaandmed.envir.ee/f_seirejaamad"),
+        },
+        (ProviderId("ie_epa"), "stations"): {
+            "provider_id": authored("ie_epa"),
+            "station_id": field("station_no"),
+            "latitude": field("station_latitude", FloatConversion()),
+            "longitude": field("station_longitude", FloatConversion()),
+            "crs": unpublished("https://epawebapp.epa.ie/Hydronet/output/internet/stations/stations.json"),
         },
         (ProviderId("pl_imgw"), "stations"): {
             "provider_id": authored("pl_imgw"),
@@ -905,6 +915,7 @@ EXPECTED_CRS_COUNTS = {
     (ProviderId("cz_chmi"), "stations"): (831, "unknown"),
     (ProviderId("dk_vanda"), "stations"): (1_565, "EPSG:4326"),
     (ProviderId("ee_est"), "stations"): (60, "EPSG:4326"),
+    (ProviderId("ie_epa"), "stations"): (385, "unknown"),
     # Native publication inventories acquired 2026-09-21.
     (ProviderId("fr_hubeau"), "hydrometrie/referentiel/stations"): (6_475, "EPSG:4326"),
     (ProviderId("fr_hubeau"), "temperature/station"): (872, "EPSG:4326"),
@@ -1137,6 +1148,13 @@ def test_recording_requirement_scopes_preserve_uncovered_paths(tmp_path, monkeyp
             ),
         ),
         pytest.param(
+            "ie_epa",
+            marks=pytest.mark.governing(
+                "maintenance/catalogue/ie_epa/official",
+                "maintenance/catalogue/ie_epa/official/selection.json",
+            ),
+        ),
+        pytest.param(
             "ch_foen",
             marks=pytest.mark.governing(
                 "maintenance/catalogue/ch_foen/official",
@@ -1312,6 +1330,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "dk_vanda",
         "ee_est",
         "fi_syke",
+        "ie_epa",
         "pe_senamhi",
     }:
         output.mkdir(mode=0o700)
@@ -1327,6 +1346,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "co_ideam",
         "dk_vanda",
         "ee_est",
+        "ie_epa",
         "pe_senamhi",
     }:
         generated = _build(adapter)
@@ -1389,6 +1409,7 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "dk_vanda",
         "ee_est",
         "fi_syke",
+        "ie_epa",
         "pe_senamhi",
     }:
         arguments.extend(("--native", str(adapter.native_path)))
@@ -1418,12 +1439,13 @@ def test_native_composition_root_rebuilds_committed_artifacts_without_network(
         "ee_est",
         "fi_syke",
         "fr_hubeau",
+        "ie_epa",
         "pe_senamhi",
     }:
         selected_receipt = product_root / f"{adapter.provider_id}.input-receipt.json"
         selected_receipt.write_text(catalogue_input_receipt.model_dump_json())
         arguments.extend(("--input-receipt", str(selected_receipt)))
-    if adapter.provider_id in {"at_ehyd", "co_ideam", "ee_est", "pe_senamhi"}:
+    if adapter.provider_id in {"at_ehyd", "co_ideam", "ee_est", "ie_epa", "pe_senamhi"}:
         arguments.extend(
             (
                 "--evidence-root",
