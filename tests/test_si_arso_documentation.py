@@ -115,10 +115,16 @@ def test_si_arso_page_selection_discovery_and_catalogue_claims_are_offline(
     assert all_meta.filter(pl.col("drainage_area_value").list.first() == "88888.88").height == 36
     assert all_meta.filter(pl.col("drainage_area_value").list.first() == "99999.99").height == 7
 
-    expected_header = (
+    expected_archive_header = (
+        "| Quantity filter | Source column (`published_id`) | Frequency | Statistic | Source unit | Returned unit |"
+    )
+    expected_operational_header = (
         "| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |"
     )
-    assert page.count(expected_header) == 2
+    assert page.count(expected_archive_header) == 1
+    assert page.count(expected_operational_header) == 1
+    assert "`variant` is `null` on all nine historical archive series" in page
+    assert "as of `2026-11-23`" in page
     for internal_token in ("product_id", "result.outcomes"):
         assert internal_token not in page
 

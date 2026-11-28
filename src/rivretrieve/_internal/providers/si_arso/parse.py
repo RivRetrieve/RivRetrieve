@@ -22,8 +22,8 @@ from rivretrieve._internal.providers.si_arso.annotations import SI_ARSO_SERIES_S
 from rivretrieve._internal.providers.si_arso.config import (
     SiArsoAmpCoordinates,
     SiArsoArchiveCoordinates,
+    SiArsoRouteCoordinates,
 )
-from rivretrieve._internal.providers.si_arso.fetch import SiArsoRouteCoordinates
 from rivretrieve._internal.providers.si_arso.series import (
     ARCHIVE_MISSING_DATUM_MARKERS,
     DEFERRED_AMP_COLUMNS,

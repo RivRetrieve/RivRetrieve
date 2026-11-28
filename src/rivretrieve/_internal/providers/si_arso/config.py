@@ -110,19 +110,30 @@ _AMP_WINDOW = WindowDeclaration(
     stop_convention=StopConvention.INCLUSIVE,
 )
 
-SHARED_ACQUISITION_PRODUCTS: tuple[frozenset[ProductId], ...] = (
-    frozenset(ProductId(spec.product_id) for spec in PRODUCT_SPECS if spec.stream == "archive_daily"),
-    frozenset(ProductId(spec.product_id) for spec in PRODUCT_SPECS if spec.stream == "archive_monthly_extremes"),
-    frozenset(
-        ProductId(spec.product_id) for spec in PRODUCT_SPECS if spec.stream == "amp" and spec.amp_cadence == "t_1"
-    ),
-    frozenset(
-        ProductId(spec.product_id) for spec in PRODUCT_SPECS if spec.stream == "amp" and spec.amp_cadence == "t_7"
-    ),
-    frozenset(
-        ProductId(spec.product_id) for spec in PRODUCT_SPECS if spec.stream == "amp" and spec.amp_cadence == "t_30"
-    ),
-)
+
+@dataclass(frozen=True, slots=True)
+class SiArsoRouteCoordinates:
+    """Source-call route coordinates shared by all co-published products in one HTTP response."""
+
+    stream: Literal["archive_daily", "archive_monthly_extremes", "amp"]
+    b_flag: Literal["b_oddo_CSV", "b_eks_CSV"] | None = None
+    amp_cadence: Literal["t_1", "t_7", "t_30"] | None = None
+
+    def __post_init__(self) -> None:
+        if self.stream == "archive_daily":
+            if self.b_flag != "b_oddo_CSV" or self.amp_cadence is not None:
+                raise ValueError("si_arso archive_daily route requires b_oddo_CSV and no amp_cadence")
+            return
+        if self.stream == "archive_monthly_extremes":
+            if self.b_flag != "b_eks_CSV" or self.amp_cadence is not None:
+                raise ValueError("si_arso archive_monthly_extremes route requires b_eks_CSV and no amp_cadence")
+            return
+        if self.stream == "amp":
+            if self.amp_cadence not in ("t_1", "t_7", "t_30") or self.b_flag is not None:
+                raise ValueError("si_arso amp route requires amp_cadence in {t_1, t_7, t_30} and no b_flag")
+            return
+        raise ValueError(f"Unsupported si_arso route stream: {self.stream!r}")
+
 
 _CONFIG = ProviderConfig(
     zone=ZoneValue("unknown"),
