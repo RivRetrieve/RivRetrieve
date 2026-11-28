@@ -42,6 +42,7 @@ _PROVENANCE_PROVIDER_IDS = {
     "cz_chmi",
     "dk_vanda",
     "ee_est",
+    "ie_epa",
     "fr_hubeau",
     "fr_hydroportail",
     "lt_lhmt",

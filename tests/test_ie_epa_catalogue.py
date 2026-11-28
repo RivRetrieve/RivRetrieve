@@ -253,3 +253,49 @@ def test_series_field_witness_requires_published_parameter_and_unit() -> None:
             parameter="Q",
             file="complete_15min",
         )
+
+
+@pytest.mark.governing(
+    "maintenance/catalogue/ie_epa/official",
+    "maintenance/catalogue/ie_epa/official/selection.json",
+)
+def test_selected_inputs_publish_deterministic_catalogue(
+    retained_evidence_root, catalogue_input_receipt, catalogue_build_inputs, tmp_path
+) -> None:
+    """Build the packaged ie_epa catalogue twice from verified originals and check its counts."""
+    import os
+    from pathlib import Path
+
+    from rivretrieve._internal.catalogues.artifact import load_packaged_catalogue_artifact
+    from rivretrieve._internal.providers.ie_epa.generate_catalogue import main, read_catalogue_sources
+
+    configured = os.environ.get("RIVRETRIEVE_CATALOGUE_PRODUCT_OUTPUT")
+    if not configured:
+        pytest.fail("Reviewed catalogue generation requires restricted product output.", pytrace=False)
+    product_root = Path(configured).resolve()
+    selection = "maintenance/catalogue/ie_epa/official/selection.json"
+    sources = read_catalogue_sources(
+        retained_evidence_root, selection_path=selection, input_receipt=catalogue_input_receipt
+    )
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(catalogue_input_receipt.model_dump_json())
+    build_path = tmp_path / "build-inputs.json"
+    build_path.write_text(catalogue_build_inputs(sources.provenance).model_dump_json())
+    outputs = [product_root / "ie_epa", product_root / "ie_epa-repeat"]
+    for output in outputs:
+        arguments = ["--evidence-root", str(retained_evidence_root), "--selection", selection]
+        arguments += ["--input-receipt", str(receipt_path), "--build-inputs", str(build_path), "--out", str(output)]
+        assert main(arguments) == 0
+        load_packaged_catalogue_artifact(output, on_issue="raise")
+        stations = pl.read_parquet(output / "stations.parquet")
+        assert stations.height == 385
+        assert {"34109A", "26338A"} <= set(stations["station_id"])
+        assert stations["crs"].unique().to_list() == ["unknown"]
+        pairs = pl.read_parquet(output / "station_products.parquet")
+        counts = dict(pairs.group_by("availability").len().iter_rows())
+        assert counts == {"available": 1352, "unknown": 188}
+        assert not (output / "native.parquet").exists()
+    assert {p.name for p in outputs[0].iterdir()} == {p.name for p in outputs[1].iterdir()}
+    for path in outputs[0].iterdir():
+        if path.suffix == ".parquet":
+            pl_testing.assert_frame_equal(pl.read_parquet(path), pl.read_parquet(outputs[1] / path.name))

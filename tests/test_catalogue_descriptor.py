@@ -456,6 +456,7 @@ def test_verbatim_source_terms_remain_separate_and_uninterpreted():
                     "co_ideam": "maintenance/catalogue/co_ideam/official/native.parquet",
                     "dk_vanda": "maintenance/catalogue/dk_vanda/official/native.parquet",
                     "ee_est": "maintenance/catalogue/ee_est/official/native.parquet",
+                    "ie_epa": "maintenance/catalogue/ie_epa/official/native.parquet",
                 }.get(provider, f"src/rivretrieve/_internal/providers/{provider}/catalogue/native.parquet")
             ),
         )

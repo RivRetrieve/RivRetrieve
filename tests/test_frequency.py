@@ -966,7 +966,7 @@ def test_cross_provider_packaged_catalogues_canonical_and_round_trip() -> None:
     from tests._catalogue import catalogue_reader
 
     providers = rr.providers()["provider_id"].to_list()
-    assert len(providers) == 21
+    assert len(providers) == 22
     aliases = {
         "PT10M": "PT600S",
         "PT1H": "PT60M",
