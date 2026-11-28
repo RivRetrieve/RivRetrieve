@@ -221,7 +221,7 @@ def test_public_mixed_missing_member_survives_inspection_bundle_and_narrowing(
     assert narrowed.issues[: len(result.issues)] == result.issues
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_mixed_modern_inventory_retains_unknown_selector_without_fake_identity(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -297,7 +297,7 @@ def test_global_series_ids_do_not_become_missing_in_other_access_coordinates(mon
     assert not any(item.status.value in ("no_match", "unresolved") for item in result.outcomes)
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_response_discovered_global_ids_are_settled_across_station_results(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):

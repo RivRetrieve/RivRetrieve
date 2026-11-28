@@ -174,7 +174,7 @@ def test_authentication_status_does_not_establish_source_absence():
     ]
     + [("failed_requests", "failed")],
 )
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_refresh_restores_disjoint_failed_intervals_without_reviving_successful_empty(
     tmp_path, failure_carrier, failure_status, retained_evidence_root: Path
 ):

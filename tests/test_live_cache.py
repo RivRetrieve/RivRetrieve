@@ -158,7 +158,7 @@ def _bytes(store: Path) -> dict[str, bytes]:
     return {path.relative_to(store).as_posix(): path.read_bytes() for path in store.rglob("*") if path.is_file()}
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, retained_evidence_root: Path
 ) -> None:
@@ -197,7 +197,7 @@ def test_public_daily_repeat_is_local_bypass_untouched_and_daily_axis(
     assert not rr.cache_status("usgs_nwis").exists
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_padded_acquisition_reuses_rows_outside_the_initial_result_window(
     tmp_path: Path, retained_evidence_root: Path
 ) -> None:
@@ -226,7 +226,7 @@ def test_padded_acquisition_reuses_rows_outside_the_initial_result_window(
     assert_frame_equal(extended.canonical_rows.sort("time"), expected_extended.canonical_rows.sort("time"))
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_failed_reacquisition_retains_held_success_with_original_vintage(
     tmp_path: Path, retained_evidence_root: Path
 ) -> None:
@@ -251,7 +251,7 @@ def test_failed_reacquisition_retains_held_success_with_original_vintage(
     )
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 @pytest.mark.parametrize("remaining", [8, 0])
 def test_refresh_replaces_with_fewer_parse_rows_and_empty_answers_are_covered(
     tmp_path: Path, remaining: int, retained_evidence_root: Path
@@ -268,7 +268,7 @@ def test_refresh_replaces_with_fewer_parse_rows_and_empty_answers_are_covered(
     assert StoreReader().status(StoreRoot(store), _PROVIDER).coverage
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_served_intervals_retain_separate_retrieval_instants(tmp_path: Path, retained_evidence_root: Path) -> None:
     class LaterReplay(CountedReplay):
         def send(self, request):
@@ -294,7 +294,7 @@ def test_served_intervals_retain_separate_retrieval_instants(tmp_path: Path, ret
     assert "freshness" not in result.provenance.model_dump_json()
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_unknown_revision_refuses_before_transport(tmp_path: Path, retained_evidence_root: Path) -> None:
     store = tmp_path / "store"
     _drive(store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root))
@@ -327,7 +327,7 @@ def test_interrupted_publication_refuses_before_source_call(tmp_path: Path) -> N
     assert _bytes(residue) == before
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_failed_refresh_does_not_replace_held_concrete_values(tmp_path: Path, retained_evidence_root: Path) -> None:
     store = tmp_path / "store"
     held = _drive(store, CountedReplay(_INSTANT, retained_evidence_root=retained_evidence_root))
@@ -342,7 +342,7 @@ def test_failed_refresh_does_not_replace_held_concrete_values(tmp_path: Path, re
     assert any(item.status is OutcomeStatus.FAILED for item in reused.outcomes)
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 @pytest.mark.parametrize("defect", ["zone", "product"])
 def test_invalid_parse_rows_even_in_padding_do_not_modify_store(
     tmp_path: Path, defect: str, retained_evidence_root: Path
@@ -368,7 +368,7 @@ def test_invalid_parse_rows_even_in_padding_do_not_modify_store(
     assert not store.exists()
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_successful_series_is_written_before_public_issue_policy_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, retained_evidence_root: Path
 ) -> None:
@@ -395,7 +395,7 @@ def test_successful_series_is_written_before_public_issue_policy_raises(
     assert tuple(definitions[item.series_id].station_id for item in status.coverage) == ("07374000",)
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 @pytest.mark.parametrize("declared_failure", [False, True])
 def test_error_issue_preserves_success_but_declared_failure_refuses_rows(
     tmp_path: Path, retained_evidence_root: Path, declared_failure: bool
@@ -440,7 +440,7 @@ def test_error_issue_preserves_success_but_declared_failure_refuses_rows(
         assert any(item.status is OutcomeStatus.SUCCESS for item in manifest.outcomes)
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_unsupported_refetch_retains_covered_native_success_with_its_vintage(tmp_path, retained_evidence_root: Path):
     store = tmp_path / "store"
     held = _drive(

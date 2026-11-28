@@ -29,7 +29,7 @@ def test_public_route_recordings_cover_exact_active_declaration():
 
 
 @pytest.mark.parametrize("product", ROUTES)
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_recorded_public_route_identity_physics_cache_and_receipt(
     monkeypatch, tmp_path, product, retained_evidence_root
 ):
@@ -109,7 +109,7 @@ def test_recorded_public_route_identity_physics_cache_and_receipt(
     assert len(calls) == 3
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_daily_response_label_does_not_establish_filterable_timestamp_anchor(monkeypatch, retained_evidence_root):
     monkeypatch.setattr(
         discovery,
@@ -142,7 +142,7 @@ def test_daily_catalogue_does_not_promote_label_representation_to_anchor():
     assert not narrowed.series
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_authored_non_date_daily_series_is_unsupported_with_peer_preserved(monkeypatch, retained_evidence_root):
     """Authored mutation of exact modern bytes, not evidence of a nonmidnight USGS product."""
     from copy import deepcopy
@@ -200,48 +200,34 @@ def test_authored_non_date_daily_series_is_unsupported_with_peer_preserved(monke
         (
             "435444087462300",
             "03384f9dd532449689539f674a9174a7",
-            "witness-0000",
+            "daily-435444087462300-witness-0000",
             "2006-10-31",
             "2006-11-02",
         ),
         (
             "0167889257",
             "5c93439c924e408d9ca06c2100bc67f3",
-            "witness-0001",
+            "daily-0167889257-witness-0001",
             "2015-07-16",
             "2015-07-18",
         ),
     ],
 )
-@pytest.mark.recorded("tests/test_data/usgs_daily_station_access")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_new_daily_stations_preserve_original_values_receipts_and_reuse(
     monkeypatch, tmp_path, retained_evidence_root, station, variant, filename, start, end
 ):
-    import gzip
-    import hashlib
     from datetime import timedelta
 
-    from rivretrieve._internal.transport import TransportResponse
-
-    root = retained_evidence_root / "tests/test_data/usgs_daily_station_access/public-route-witnesses-2026-11-01-01"
-    content = gzip.decompress((root / f"{filename}.json.gz").read_bytes())
-    receipt = json.loads((root / f"{filename}.receipt.json").read_text())
-    assert hashlib.sha256(content).hexdigest() == receipt["sha256"]
-    assert len(content) == receipt["bytes"]
+    content = body(filename, evidence_root=retained_evidence_root)
+    entry = manifest(retained_evidence_root)[filename]
+    replay = ModernReplay(filename, evidence_root=retained_evidence_root)
     calls = []
 
     class Replay:
         def send(self, request):
-            assert coordinates(request.url, request.params) == coordinates(receipt["url"])
             calls.append(request)
-            return TransportResponse(
-                content,
-                receipt["status"],
-                datetime.fromisoformat(receipt["retrieved_at"]),
-                "application/json",
-                request.url,
-                request.params,
-            )
+            return replay.send(request)
 
     monkeypatch.setattr(discovery, "HttpClient", Replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
@@ -259,7 +245,7 @@ def test_new_daily_stations_preserve_original_values_receipts_and_reuse(
     assert result.data["unit"].unique().to_list() == ["m3/s"]
     assert result.data["time_zone"].unique().to_list() == ["unknown"]
     assert result.receipts.entries[0].content == content
-    assert result.receipts.entries[0].origin.retrieved_at == datetime.fromisoformat(receipt["retrieved_at"])
+    assert result.receipts.entries[0].origin.retrieved_at == datetime.fromisoformat(entry["acquired_utc"])
     assert all(
         item["properties"]["approval_status"] == "Approved" and item["properties"]["qualifier"] is None
         for item in json.loads(content)["features"]
