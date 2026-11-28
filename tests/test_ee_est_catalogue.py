@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import shutil
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import polars as pl
 import pytest
@@ -220,6 +224,89 @@ def test_catalogue_projects_wgs84_and_covers_all_18_products() -> None:
     }
     prov = _provenance()
     assert prov.provider_id == "ee_est"
+
+
+def test_dual_active_jaam_kood_keeps_both_source_series_and_collapses_station_products() -> None:
+    native = station_native_table(
+        [_em_station("SJA5524000", name="Emajõgi: Rannu-Jõesuu", area=3364.0)],
+        [_sj_station("SJA5524000", kood="41022; 41960", nimi="Rannu-Jõesuu HJ", veekogu_nimi="Emajõgi")],
+        active_fh_codes={41022, 41960},
+        retrieved_at=RetrievedAt(datetime(2026, 11, 23, tzinfo=UTC)),
+    )
+    assert native.data["jaam_kood"].to_list() == [41022]
+
+    em_avail = {("SJA5524000", s.product_id): "em" for s in PRODUCT_SPECS if s.source_api == "estmodel"}
+    fh_avail: dict[tuple[str, str, int], str] = {}
+    for spec in PRODUCT_SPECS:
+        if spec.source_api != "f_hydroseire":
+            continue
+        fh_avail[("SJA5524000", spec.product_id, 41022)] = "fh"
+        if spec.product_id == "stage_hourly_mean":
+            fh_avail[("SJA5524000", spec.product_id, 41960)] = "fh"
+
+    associations = station_product_associations(
+        native,
+        em_available=em_avail,
+        em_unavailable={},
+        fh_available=fh_avail,
+        fh_unavailable={},
+    )
+    stage_rows = associations.filter(pl.col("product_id") == "stage_hourly_mean")
+    assert stage_rows["jaam_kood"].to_list() == [41022, 41960]
+
+    _, _, pairs = catalogue_tables(native, associations, checked_on=date(2026, 11, 23))
+    assert pairs.height == 18
+    assert pairs.filter(pl.col("product_id") == "stage_hourly_mean")["availability"].to_list() == ["available"]
+
+    descriptions = describe_associations(associations)
+    stage_descs = [d for d in descriptions.descriptions if d.product_id == "stage_hourly_mean"]
+    assert [d.identity.published_id for d in stage_descs] == ["41022:WL avg", "41960:WL avg"]
+
+
+def test_station_codes_loader_verifies_digest_and_rejects_tampering(tmp_path: Path) -> None:
+    from rivretrieve._internal.providers.ee_est.declaration import _STATION_CODES, _load_station_codes, declaration
+
+    copied = tmp_path / "catalogue"
+    shutil.copytree(declaration.catalogue, copied)
+    assert _load_station_codes(copied) == _STATION_CODES
+
+    sc_path = copied / "station_codes.json"
+    cr_path = copied / "croissant.json"
+    original_sc = sc_path.read_bytes()
+    original_cr = json.loads(cr_path.read_bytes())
+
+    # Checksum mismatch triggers FatalContractError.
+    sc_path.write_bytes(b"{}")
+    with pytest.raises(FatalContractError, match="checksum mismatch"):
+        _load_station_codes(copied)
+
+    # Reject invalid station code payloads even with recomputed digest.
+    for bad_payload in (
+        b"[]",
+        json.dumps({"": [41061]}).encode("utf-8"),
+        json.dumps({"SJA8821000": [True]}).encode("utf-8"),
+        json.dumps({"SJA8821000": [-1]}).encode("utf-8"),
+        json.dumps({"SJA8821000": [41061, 41061]}).encode("utf-8"),
+    ):
+        sc_path.write_bytes(bad_payload)
+        digest = hashlib.sha256(bad_payload).hexdigest()
+        tampered_cr = json.loads(json.dumps(original_cr))
+        for entry in tampered_cr["distribution"]:
+            if entry.get("contentUrl") == "station_codes.json":
+                entry["sha256"] = digest
+        cr_path.write_bytes(json.dumps(tampered_cr).encode("utf-8"))
+        with pytest.raises(FatalContractError):
+            _load_station_codes(copied)
+
+    # Missing distribution digest rejects cleanly.
+    sc_path.write_bytes(original_sc)
+    no_digest_cr = json.loads(json.dumps(original_cr))
+    no_digest_cr["distribution"] = [
+        entry for entry in no_digest_cr["distribution"] if entry.get("contentUrl") != "station_codes.json"
+    ]
+    cr_path.write_bytes(json.dumps(no_digest_cr).encode("utf-8"))
+    with pytest.raises(FatalContractError, match="digest"):
+        _load_station_codes(copied)
 
 
 @pytest.mark.governing(

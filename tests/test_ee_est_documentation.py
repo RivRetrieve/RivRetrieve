@@ -131,10 +131,12 @@ def test_ee_est_page_selection_discovery_and_catalogue_claims_are_offline(
     assert all_series["station_id"].n_unique() == 60
     assert all_series["product_id"].n_unique() == 18
 
-    expected_header = (
-        "| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |"
-    )
+    expected_header = "| Quantity filter | Native series code | Frequency | Statistic | Source unit | Returned unit |"
     assert page.count(expected_header) == 1
+    assert 'rr.pick(all_discharge, frequency="PT1H", statistic="mean")' in page
+    assert "published_id).str.ends_with" not in page
+    assert "8,760" in page
+    assert "polite sequential spacing" not in page
 
     table_rows = re.findall(
         r"^\|\s*`(discharge|stage|temperature)`\s*\|\s*`([^`]+)`\s*\|\s*([^|\n]+?)\s*\|\s*([^|\n]+?)\s*\|\s*([^|\n]+?)\s*\|\s*([^|\n]+?)\s*\|$",
@@ -148,12 +150,16 @@ def test_ee_est_page_selection_discovery_and_catalogue_claims_are_offline(
     unit_map = {"m³/s": "m3/s", "cm": "cm", "m": "m", "°C": "degC"}
     covered_native_suffixes: set[str] = set()
     for qty, native_code, freq_label, stat_label, src_unit_label, ret_unit_label in table_rows:
+        freq_val = freq_map[freq_label]
+        expected_prefix = "<station_id>:" if freq_val == "P1D" else "<jaam_kood>:"
+        assert native_code.startswith(expected_prefix)
+        native_suffix = native_code.split(":", 1)[1]
         sub = all_series.filter(
-            (all_series["quantity"] == qty) & (all_series["published_id"].str.ends_with(f":{native_code}"))
+            (all_series["quantity"] == qty) & (all_series["published_id"].str.ends_with(f":{native_suffix}"))
         )
         assert sub.height in (55, 56, 59)
-        covered_native_suffixes.add(native_code)
-        assert set(sub["frequency"].to_list()) == {freq_map[freq_label]}
+        covered_native_suffixes.add(native_suffix)
+        assert set(sub["frequency"].to_list()) == {freq_val}
         assert set(sub["statistic"].to_list()) == {stat_map[stat_label]}
         assert set(sub["source_unit"].to_list()) == {unit_map[src_unit_label]}
         assert set(sub["unit"].to_list()) == {unit_map[ret_unit_label]}

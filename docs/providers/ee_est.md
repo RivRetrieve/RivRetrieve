@@ -108,32 +108,42 @@ EstModel publishes nine daily series types (`Q`, `H`, `T` across `MEAN`,
 `MAXIMUM`, `MINIMUM`), and Keskkonnaandmed `f_hydroseire` publishes nine hourly
 series types (`Äravool`, `WL`, `WT` across `avg`, `max`, `min`):
 
-| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+| Quantity filter | Native series code | Frequency | Statistic | Source unit | Returned unit |
 |---|---|---|---|---|---|
-| `discharge` | `Q:MEAN` | `P1D` | Mean | m³/s | m³/s |
-| `discharge` | `Q:MAXIMUM` | `P1D` | Maximum | m³/s | m³/s |
-| `discharge` | `Q:MINIMUM` | `P1D` | Minimum | m³/s | m³/s |
-| `discharge` | `Äravool avg` | `PT1H` | Mean | m³/s | m³/s |
-| `discharge` | `Äravool max` | `PT1H` | Maximum | m³/s | m³/s |
-| `discharge` | `Äravool min` | `PT1H` | Minimum | m³/s | m³/s |
-| `stage` | `H:MEAN` | `P1D` | Mean | m | m |
-| `stage` | `H:MAXIMUM` | `P1D` | Maximum | m | m |
-| `stage` | `H:MINIMUM` | `P1D` | Minimum | m | m |
-| `stage` | `WL avg` | `PT1H` | Mean | cm | m |
-| `stage` | `WL max` | `PT1H` | Maximum | cm | m |
-| `stage` | `WL min` | `PT1H` | Minimum | cm | m |
-| `temperature` | `T:MEAN` | `P1D` | Mean | °C | °C |
-| `temperature` | `T:MAXIMUM` | `P1D` | Maximum | °C | °C |
-| `temperature` | `T:MINIMUM` | `P1D` | Minimum | °C | °C |
-| `temperature` | `WT avg` | `PT1H` | Mean | °C | °C |
-| `temperature` | `WT max` | `PT1H` | Maximum | °C | °C |
-| `temperature` | `WT min` | `PT1H` | Minimum | °C | °C |
+| `discharge` | `<station_id>:Q:MEAN` | `P1D` | Mean | m³/s | m³/s |
+| `discharge` | `<station_id>:Q:MAXIMUM` | `P1D` | Maximum | m³/s | m³/s |
+| `discharge` | `<station_id>:Q:MINIMUM` | `P1D` | Minimum | m³/s | m³/s |
+| `discharge` | `<jaam_kood>:Äravool avg` | `PT1H` | Mean | m³/s | m³/s |
+| `discharge` | `<jaam_kood>:Äravool max` | `PT1H` | Maximum | m³/s | m³/s |
+| `discharge` | `<jaam_kood>:Äravool min` | `PT1H` | Minimum | m³/s | m³/s |
+| `stage` | `<station_id>:H:MEAN` | `P1D` | Mean | m | m |
+| `stage` | `<station_id>:H:MAXIMUM` | `P1D` | Maximum | m | m |
+| `stage` | `<station_id>:H:MINIMUM` | `P1D` | Minimum | m | m |
+| `stage` | `<jaam_kood>:WL avg` | `PT1H` | Mean | cm | m |
+| `stage` | `<jaam_kood>:WL max` | `PT1H` | Maximum | cm | m |
+| `stage` | `<jaam_kood>:WL min` | `PT1H` | Minimum | cm | m |
+| `temperature` | `<station_id>:T:MEAN` | `P1D` | Mean | °C | °C |
+| `temperature` | `<station_id>:T:MAXIMUM` | `P1D` | Maximum | °C | °C |
+| `temperature` | `<station_id>:T:MINIMUM` | `P1D` | Minimum | °C | °C |
+| `temperature` | `<jaam_kood>:WT avg` | `PT1H` | Mean | °C | °C |
+| `temperature` | `<jaam_kood>:WT max` | `PT1H` | Maximum | °C | °C |
+| `temperature` | `<jaam_kood>:WT min` | `PT1H` | Minimum | °C | °C |
 
-In `rr.series(...)`, each `published_id` combines the station or site key with
-the native series code shown above (for example `"SJA8821000:Q:MEAN"` on daily
-EstModel series and `"41061:Äravool avg"` on hourly `f_hydroseire` series).
-RivRetrieve retrieves published daily and hourly aggregates directly; it does
-not compute daily summaries from hourly data.
+In `rr.series(...)`, `variant` is always `null` for `ee_est` (so
+`rr.pick(sel, variant="Q:MEAN")` matches nothing). Instead, `published_id`
+carries the full native series code shown above (for example
+`"SJA8821000:Q:MEAN"` on daily EstModel series and `"41061:Äravool avg"` on
+hourly `f_hydroseire` series); if a station lists multiple `f_seirejaamad` site
+codes, each code with data appears as its own `<jaam_kood>:<aegrida_nimi>`
+series. RivRetrieve retrieves published daily and hourly aggregates directly; it
+does not compute daily summaries from hourly data.
+
+Reported 2026-11-26 for September 2025 data across eight stations, each daily
+EstModel `Q` value differed from the average of that day's hourly `Äravool avg`
+values by a per-station median of `3.5` to `5.6` %, with single-day differences
+up to `13` %; in June 2025 data at Ahja (`SJA8821000`), single-day differences
+reached `−16 % / +11 %`. Stage (`H` vs `WL`) agreed within about `1` % in the
+same September 2025 comparison.
 
 RivRetrieve multiplies hourly stage (`WL avg`, `WL max`, `WL min`) by `0.01` to
 convert centimetres (`cm`) to metres (`m`) and preserves `"cm"` in
@@ -155,19 +165,14 @@ the `60` river stations (`48` unsupported pairs are omitted):
 
 A listed series need not span every requested year, and daily `MEAN` series
 often extend further back in time than `MAXIMUM` or `MINIMUM`. Inspect available
-series offline and pick a specific `series_id` when needed:
+series offline and filter by frequency and statistic when needed:
 
 ```python
-import polars as pl
-
 all_discharge = rr.find(provider="ee_est", station="SJA8821000", quantity="discharge")
 candidates = rr.series(all_discharge)
 metadata = rr.metadata(all_discharge)
 
-hourly_mean_id = candidates.filter(
-    pl.col("published_id").str.ends_with(":Äravool avg")
-)["series_id"].item()
-hourly_mean = rr.pick(all_discharge, series_id=hourly_mean_id)
+hourly_mean = rr.pick(all_discharge, frequency="PT1H", statistic="mean")
 ```
 
 ## Stage references, coordinates, and metadata
@@ -203,14 +208,14 @@ operational measurements. Keskkonnaandmed `f_hydroseire` hourly records begin
 on `2012-01-01T00:00:00Z` and update operationally with an observed lag of
 roughly three to four days behind the current date.
 
-- **EstModel chunking and pacing:** Requests query whole calendar years via
-  `start-year` and `end-year` in spans of up to `25` calendar years. EstModel is
-  fronted by Cloudflare rate protection that returns HTTP `429 Too Many
-  Requests` on rapid bursts; RivRetrieve applies polite sequential spacing and
-  handles retries safely, and `cache="reuse"` avoids repeated multi-decade calls.
+- **EstModel chunking and transport policy:** Requests query whole calendar
+  years via `start-year` and `end-year` in spans of up to `25` calendar years.
+  The provider relies on the shared transport policy and `cache="reuse"` to
+  avoid repeated multi-decade calls; a live burst of `24` multi-decade calls
+  returned only HTTP `200` responses.
 - **`f_hydroseire` row ceiling:** Keskkonnaandmed enforces a `20,000`-row cap
   per response and discourages unindexed `limit`/`offset` paging. RivRetrieve
-  splits hourly requests into `365`-day spans (at most `8,784` hourly rows per
+  splits hourly requests into `365`-day spans (at most `8,760` hourly rows per
   series) and raises a structural issue instead of truncating results if an
   upstream response ever reaches `20,000` rows.
 
@@ -232,12 +237,14 @@ The two APIs follow distinct timestamp conventions:
   (`"vaartus": null`), whereas unrecorded periods return no rows.
 
 EstModel includes a per-row `qualityFlag` field (`UNCHECKED`, `BELOW_LOQ`,
-`OUTLIER` in the EstModel OpenAPI schema). Verified historical calendar years
-(`<= 2025`, plus observed 2026 water temperature rows) carry `null`, whereas
-current-year operational discharge and stage rows carry `"UNCHECKED"` until
-annual hydrological review. RivRetrieve returns all published observations
-without filtering by `qualityFlag` and preserves the raw flag under schema
-`ee_est.estmodel` (observation scope):
+`OUTLIER` in the EstModel OpenAPI schema). Note that `null` does not mean
+checked, and hourly `f_hydroseire` series carry no annotations at all, even
+though they are operational telemetry. Observed `2026-11-26` across the full
+daily histories at Ahja (`SJA8821000`) and Tartu (`SJA7331000`), every row up
+to `2025-12-31` is `null`, `2026` `Q` and `H` rows are `"UNCHECKED"`, `2026`
+`T` rows are `null`, and `"BELOW_LOQ"` and `"OUTLIER"` never appear. RivRetrieve
+returns all published observations without filtering by `qualityFlag` and
+preserves the raw flag under schema `ee_est.estmodel` (observation scope):
 
 ```python
 result = rr.fetch(selection, start="2026-01-01", end="2026-01-07")

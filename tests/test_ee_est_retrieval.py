@@ -39,11 +39,11 @@ from rivretrieve._internal.providers.ee_est.config import (
     config,
     window_declarations,
 )
-from rivretrieve._internal.providers.ee_est.fetch import fetch
+from rivretrieve._internal.providers.ee_est.fetch import EeEstRequestPlanner, fetch
 from rivretrieve._internal.providers.ee_est.parse import parse
 from rivretrieve._internal.providers.ee_est.series import PRODUCT_SPECS, source_series
 from rivretrieve._internal.recordings import RecordedRequest, RecordingEnvelope, ReplayTransport
-from rivretrieve._internal.source_series import OutcomeStatus, SeriesScope, stable_id
+from rivretrieve._internal.source_series import InventoryCompleteness, OutcomeStatus, SeriesScope, stable_id
 from rivretrieve._internal.store import StoreRoot
 from rivretrieve._internal.transport import (
     TRANSPORT_POLICY,
@@ -54,6 +54,7 @@ from rivretrieve._internal.transport import (
     TransportRequest,
     TransportResponse,
 )
+from rivretrieve._internal.window_planning import plan_windows
 from tests._catalogue import catalogue_reader
 from tests.test_internal_driver import _provenance
 
@@ -64,6 +65,16 @@ _RETRIEVED_AT = datetime(2026, 11, 23, 13, 0, tzinfo=UTC)
 class _EeEstStages:
     config: ProviderConfig = config()
     window_declarations: ProductWindowDeclarations = window_declarations()
+    fetch = staticmethod(fetch)
+    parse = staticmethod(parse)
+
+
+@dataclass(frozen=True)
+class _PlannedEeEstStages:
+    observation_source: str = "live"
+    config: ProviderConfig = config()
+    window_declarations: ProductWindowDeclarations = window_declarations()
+    request_planner: EeEstRequestPlanner = EeEstRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
 
@@ -623,3 +634,460 @@ def test_parse_sorts_out_of_order_rows_and_rejects_invalid_calendar_dates() -> N
         datetime(2024, 1, 1, 2, 0),
     ]
     assert unsorted_fh.rows["value"].to_list() == pytest.approx([10.0, 15.0, 20.0])
+
+
+def test_partial_chunk_failure_marks_estmodel_inventory_incomplete(tmp_path: Path) -> None:
+    class _PartialEstModelTransport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = dict(request.params or {})
+            if params["start-year"] == "2000":
+                return TransportResponse(
+                    content=json.dumps(
+                        [
+                            {
+                                "parameter": "Q",
+                                "startDate": "2024-12-31",
+                                "endDate": "2024-12-31",
+                                "value": 4.2,
+                                "unit": "m³/s",
+                            }
+                        ]
+                    ).encode("utf-8"),
+                    status_code=200,
+                    retrieved_at=_RETRIEVED_AT,
+                    content_type="application/json",
+                    url=request.url,
+                    request_parameters=MappingProxyType(params),
+                )
+            raise TransportFailure(
+                request,
+                TransportFailureReason.HTTP_STATUS,
+                1,
+                status_code=503,
+                category=TransportFailureCategory.HTTP_STATUS,
+            )
+
+    fw_em = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+        WindowEndpoint.from_datetime(datetime(2026, 1, 1)),
+    )
+    em_product = ProductId("discharge_daily_mean")
+    em_acq = fetch(
+        ("SJA8821000",),
+        (em_product,),
+        {em_product: plan_windows(fw_em, window_declarations().products[em_product])},
+        fw_em,
+        config(),
+        _PartialEstModelTransport(),
+        known_series=(source_series("SJA8821000", "discharge_daily_mean"),),
+    )
+    assert len(em_acq.value) == 1
+    assert len(em_acq.failed_requests) == 1
+    assert len(em_acq.inventories) == 1
+    assert em_acq.inventories[0].completeness is InventoryCompleteness.INCOMPLETE
+    assert em_acq.inventories[0].reason is not None
+
+    req = ObservationRequest(
+        provider_id=ProviderId("ee_est"),
+        stations=("SJA8821000",),
+        products=(ProductId("discharge_daily_mean"),),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+            WindowEndpoint.from_datetime(datetime(2026, 1, 1)),
+        ),
+        known_series=(source_series("SJA8821000", "discharge_daily_mean"),),
+    )
+    res = drive(
+        req,
+        _PlannedEeEstStages(),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_PartialEstModelTransport(),
+        cache="bypass",
+        store=StoreRoot(tmp_path / "store"),
+    )
+    assert res.canonical_rows["time"].to_list() == [datetime(2024, 12, 31)]
+    assert res.canonical_rows["value"].to_list() == pytest.approx([4.2])
+    assert {o.status for o in res.outcomes} == {OutcomeStatus.SUCCESS, OutcomeStatus.FAILED}
+    assert res.inventories
+    assert all(inv.completeness is InventoryCompleteness.INCOMPLETE for inv in res.inventories)
+
+
+def test_partial_chunk_failure_marks_f_hydroseire_inventory_incomplete(tmp_path: Path) -> None:
+    class _PartialFhTransport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = dict(request.params or {})
+            if "2024-01-01T00:00:00Z" in params["and"]:
+                return TransportResponse(
+                    content=json.dumps(
+                        [
+                            {
+                                "jaam_kood": 41061,
+                                "aegrida_nimi": "WL avg",
+                                "timeline_ts_utc": "2024-01-01T00:00:00",
+                                "vaartus": 100.0,
+                            }
+                        ]
+                    ).encode("utf-8"),
+                    status_code=200,
+                    retrieved_at=_RETRIEVED_AT,
+                    content_type="application/json",
+                    url=request.url,
+                    request_parameters=MappingProxyType(params),
+                )
+            raise TransportFailure(
+                request,
+                TransportFailureReason.HTTP_STATUS,
+                1,
+                status_code=503,
+                category=TransportFailureCategory.HTTP_STATUS,
+            )
+
+    fw_fh = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2024, 1, 1, 0, 0)),
+        WindowEndpoint.from_datetime(datetime(2025, 1, 5, 23, 0)),
+    )
+    fh_product = ProductId("stage_hourly_mean")
+    fh_acq = fetch(
+        ("SJA8821000",),
+        (fh_product,),
+        {fh_product: plan_windows(fw_fh, window_declarations().products[fh_product])},
+        fw_fh,
+        config(),
+        _PartialFhTransport(),
+        known_series=(source_series("SJA8821000", "stage_hourly_mean", jaam_kood=41061),),
+        station_codes={"SJA8821000": (41061,)},
+    )
+    assert len(fh_acq.value) == 1
+    assert len(fh_acq.failed_requests) == 1
+    assert len(fh_acq.inventories) == 1
+    assert fh_acq.inventories[0].completeness is InventoryCompleteness.INCOMPLETE
+    assert fh_acq.inventories[0].reason is not None
+
+    planner = EeEstRequestPlanner(station_codes={"SJA8821000": (41061,)})
+    req = ObservationRequest(
+        provider_id=ProviderId("ee_est"),
+        stations=("SJA8821000",),
+        products=(ProductId("stage_hourly_mean"),),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2024, 1, 1, 0, 0)),
+            WindowEndpoint.from_datetime(datetime(2025, 1, 5, 23, 0)),
+        ),
+        known_series=(source_series("SJA8821000", "stage_hourly_mean", jaam_kood=41061),),
+    )
+    res = drive(
+        req,
+        _PlannedEeEstStages(request_planner=planner),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_PartialFhTransport(),
+        cache="bypass",
+        store=StoreRoot(tmp_path / "store"),
+    )
+    assert res.canonical_rows["time"].to_list() == [datetime(2024, 1, 1, 0, 0)]
+    assert res.canonical_rows["value"].to_list() == pytest.approx([1.0])
+    assert {o.status for o in res.outcomes} == {OutcomeStatus.SUCCESS, OutcomeStatus.FAILED}
+    assert res.inventories
+    assert all(inv.completeness is InventoryCompleteness.INCOMPLETE for inv in res.inventories)
+
+
+def test_dual_code_one_active_one_empty_complete_without_phantom_series(tmp_path: Path) -> None:
+    s_41022 = source_series("SJA5524000", "stage_hourly_mean", jaam_kood=41022)
+    s_41960 = source_series("SJA5524000", "stage_hourly_mean", jaam_kood=41960)
+    seen_params: list[dict[str, str]] = []
+
+    class _OneActiveTransport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = dict(request.params or {})
+            seen_params.append(params)
+            assert "limit" not in params
+            if params["jaam_kood"] == "eq.41022":
+                rows = [
+                    {
+                        "jaam_kood": 41022,
+                        "aegrida_nimi": "WL avg",
+                        "timeline_ts_utc": "2026-10-01T00:00:00",
+                        "vaartus": 34.5,
+                    }
+                ]
+            else:
+                assert params["jaam_kood"] == "eq.41960"
+                rows = []
+            return TransportResponse(
+                content=json.dumps(rows).encode("utf-8"),
+                status_code=200,
+                retrieved_at=_RETRIEVED_AT,
+                content_type="application/json",
+                url=request.url,
+                request_parameters=MappingProxyType(params),
+            )
+
+    req = ObservationRequest(
+        provider_id=ProviderId("ee_est"),
+        stations=("SJA5524000",),
+        products=(ProductId("stage_hourly_mean"),),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2026, 10, 1, 0, 0)),
+            WindowEndpoint.from_datetime(datetime(2026, 10, 1, 23, 0)),
+        ),
+        known_series=(s_41022,),
+    )
+    res = drive(
+        req,
+        _PlannedEeEstStages(request_planner=EeEstRequestPlanner(station_codes={"SJA5524000": (41022, 41960)})),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_OneActiveTransport(),
+        cache="bypass",
+        store=StoreRoot(tmp_path / "store"),
+    )
+    assert [p["jaam_kood"] for p in seen_params] == ["eq.41022", "eq.41960"]
+    assert res.canonical_rows["value"].to_list() == pytest.approx([0.345])
+    assert res.canonical_rows["series_id"].to_list() == [s_41022.series_id]
+    assert [s.series_id for s in res.source_series] == [s_41022.series_id]
+    assert s_41960.series_id not in {o.series_id for o in res.outcomes}
+    assert all(
+        inv.completeness is InventoryCompleteness.COMPLETE
+        and inv.members == (s_41022.series_id,)
+        and sum(1 for ev in inv.evidence if ev.startswith("source-call:")) == 2
+        for inv in res.inventories
+    )
+
+
+def test_dual_code_both_active_keeps_two_separate_series(tmp_path: Path) -> None:
+    s_41022 = source_series("SJA5524000", "stage_hourly_mean", jaam_kood=41022)
+    s_41960 = source_series("SJA5524000", "stage_hourly_mean", jaam_kood=41960)
+
+    class _BothActiveTransport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = dict(request.params or {})
+            code = 41022 if params["jaam_kood"] == "eq.41022" else 41960
+            vaartus = 100.0 if code == 41022 else 200.0
+            return TransportResponse(
+                content=json.dumps(
+                    [
+                        {
+                            "jaam_kood": code,
+                            "aegrida_nimi": "WL avg",
+                            "timeline_ts_utc": "2026-10-01T00:00:00",
+                            "vaartus": vaartus,
+                        }
+                    ]
+                ).encode("utf-8"),
+                status_code=200,
+                retrieved_at=_RETRIEVED_AT,
+                content_type="application/json",
+                url=request.url,
+                request_parameters=MappingProxyType(params),
+            )
+
+    req = ObservationRequest(
+        provider_id=ProviderId("ee_est"),
+        stations=("SJA5524000",),
+        products=(ProductId("stage_hourly_mean"),),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2026, 10, 1, 0, 0)),
+            WindowEndpoint.from_datetime(datetime(2026, 10, 1, 23, 0)),
+        ),
+        known_series=(s_41022,),
+    )
+    res = drive(
+        req,
+        _PlannedEeEstStages(request_planner=EeEstRequestPlanner(station_codes={"SJA5524000": (41022, 41960)})),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_BothActiveTransport(),
+        cache="bypass",
+        store=StoreRoot(tmp_path / "store"),
+    )
+    by_sid = {row["series_id"]: row["value"] for row in res.canonical_rows.to_dicts()}
+    assert by_sid == {s_41022.series_id: pytest.approx(1.0), s_41960.series_id: pytest.approx(2.0)}
+    assert {s.identity.published_id for s in res.source_series} == {"41022:WL avg", "41960:WL avg"}
+    assert res.inventories
+    assert all(
+        inv.completeness is InventoryCompleteness.COMPLETE
+        and set(inv.members) == {s_41022.series_id, s_41960.series_id}
+        for inv in res.inventories
+    )
+
+
+def test_dual_code_one_active_one_failed_marks_inventory_incomplete(tmp_path: Path) -> None:
+    s_41022 = source_series("SJA5524000", "stage_hourly_mean", jaam_kood=41022)
+
+    class _OneFailedTransport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = dict(request.params or {})
+            if params["jaam_kood"] == "eq.41022":
+                return TransportResponse(
+                    content=json.dumps(
+                        [
+                            {
+                                "jaam_kood": 41022,
+                                "aegrida_nimi": "WL avg",
+                                "timeline_ts_utc": "2026-10-01T00:00:00",
+                                "vaartus": 50.0,
+                            }
+                        ]
+                    ).encode("utf-8"),
+                    status_code=200,
+                    retrieved_at=_RETRIEVED_AT,
+                    content_type="application/json",
+                    url=request.url,
+                    request_parameters=MappingProxyType(params),
+                )
+            raise TransportFailure(
+                request,
+                TransportFailureReason.HTTP_STATUS,
+                1,
+                status_code=503,
+                category=TransportFailureCategory.HTTP_STATUS,
+            )
+
+    req = ObservationRequest(
+        provider_id=ProviderId("ee_est"),
+        stations=("SJA5524000",),
+        products=(ProductId("stage_hourly_mean"),),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2026, 10, 1, 0, 0)),
+            WindowEndpoint.from_datetime(datetime(2026, 10, 1, 23, 0)),
+        ),
+        known_series=(s_41022,),
+    )
+    res = drive(
+        req,
+        _PlannedEeEstStages(request_planner=EeEstRequestPlanner(station_codes={"SJA5524000": (41022, 41960)})),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_OneFailedTransport(),
+        cache="bypass",
+        store=StoreRoot(tmp_path / "store"),
+    )
+    assert res.canonical_rows["value"].to_list() == pytest.approx([0.5])
+    assert {o.status for o in res.outcomes} == {OutcomeStatus.SUCCESS, OutcomeStatus.FAILED}
+    assert res.inventories
+    assert all(inv.completeness is InventoryCompleteness.INCOMPLETE for inv in res.inventories)
+
+
+def test_drive_request_planner_deduplicates_lookup_and_handles_empty_station_codes(tmp_path: Path) -> None:
+    seirejaamad_calls = 0
+
+    class _PlannerTransport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            nonlocal seirejaamad_calls
+            params = dict(request.params or {})
+            if request.url.endswith("/f_seirejaamad"):
+                seirejaamad_calls += 1
+                raw: object = [{"kkr_kood": "SJA8821000", "kood": "41061"}]
+            elif request.url.endswith("/f_hydroseire"):
+                raw = [
+                    {
+                        "jaam_kood": 41061,
+                        "aegrida_nimi": params["aegrida_nimi"].removeprefix("eq."),
+                        "timeline_ts_utc": "2024-03-30T00:00:00",
+                        "vaartus": 2.0,
+                    }
+                ]
+            else:
+                raw = [
+                    {"parameter": "Q", "startDate": "2024-03-30", "endDate": "2024-03-30", "value": 9.5, "unit": "m³/s"}
+                ]
+            return TransportResponse(
+                content=json.dumps(raw).encode("utf-8"),
+                status_code=200,
+                retrieved_at=_RETRIEVED_AT,
+                content_type="application/json",
+                url=request.url,
+                request_parameters=MappingProxyType(params),
+            )
+
+    req = ObservationRequest(
+        provider_id=ProviderId("ee_est"),
+        stations=("SJA8821000",),
+        products=(
+            ProductId("discharge_daily_mean"),
+            ProductId("stage_hourly_mean"),
+            ProductId("discharge_hourly_mean"),
+            ProductId("water_temperature_hourly_mean"),
+        ),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2024, 3, 30, 0, 0)),
+            WindowEndpoint.from_datetime(datetime(2024, 3, 30, 23, 0)),
+        ),
+    )
+    res = drive(
+        req,
+        _PlannedEeEstStages(),
+        provenance=_provenance(req),
+        receipts=ReceiptMode.OMIT,
+        transport=_PlannerTransport(),
+        cache="bypass",
+        store=StoreRoot(tmp_path / "store-dedup"),
+    )
+    assert seirejaamad_calls == 1
+    assert res.canonical_rows.height == 4
+    assert {o.status for o in res.outcomes} == {OutcomeStatus.SUCCESS}
+
+    # All candidate codes empty settles as NO_MATCH with COMPLETE inventory; empty station_codes skips HTTP.
+    class _AllEmptyTransport:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def send(self, request: TransportRequest) -> TransportResponse:
+            self.calls += 1
+            return TransportResponse(
+                content=b"[]",
+                status_code=200,
+                retrieved_at=_RETRIEVED_AT,
+                content_type="application/json",
+                url=request.url,
+                request_parameters=MappingProxyType(dict(request.params or {})),
+            )
+
+    t_empty = _AllEmptyTransport()
+    req_all_empty = ObservationRequest(
+        provider_id=ProviderId("ee_est"),
+        stations=("SJA0000001",),
+        products=(ProductId("stage_hourly_mean"),),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2026, 10, 1, 0, 0)),
+            WindowEndpoint.from_datetime(datetime(2026, 10, 1, 23, 0)),
+        ),
+    )
+    res_all_empty = drive(
+        req_all_empty,
+        _PlannedEeEstStages(request_planner=EeEstRequestPlanner(station_codes={"SJA0000001": (41888, 41889)})),
+        provenance=_provenance(req_all_empty),
+        receipts=ReceiptMode.OMIT,
+        transport=t_empty,
+        cache="bypass",
+        store=StoreRoot(tmp_path / "store-all-empty"),
+    )
+    assert t_empty.calls == 2
+    assert res_all_empty.canonical_rows.is_empty()
+    assert res_all_empty.source_series == ()
+    assert [o.status for o in res_all_empty.outcomes] == [OutcomeStatus.NO_MATCH]
+    assert res_all_empty.inventories and res_all_empty.inventories[0].completeness is InventoryCompleteness.COMPLETE
+    assert res_all_empty.inventories[0].members == ()
+
+    t_none = _AllEmptyTransport()
+    req_none = ObservationRequest(
+        provider_id=ProviderId("ee_est"),
+        stations=("SJB9999999",),
+        products=(ProductId("stage_hourly_mean"),),
+        window=RequestedWindow(
+            WindowEndpoint.from_datetime(datetime(2026, 10, 1, 0, 0)),
+            WindowEndpoint.from_datetime(datetime(2026, 10, 1, 23, 0)),
+        ),
+    )
+    res_none = drive(
+        req_none,
+        _PlannedEeEstStages(request_planner=EeEstRequestPlanner(station_codes={"SJB9999999": ()})),
+        provenance=_provenance(req_none),
+        receipts=ReceiptMode.OMIT,
+        transport=t_none,
+        cache="bypass",
+        store=StoreRoot(tmp_path / "store-none"),
+    )
+    assert t_none.calls == 0
+    assert [o.status for o in res_none.outcomes] == [OutcomeStatus.NO_MATCH]
+    assert res_none.inventories and res_none.inventories[0].completeness is InventoryCompleteness.COMPLETE

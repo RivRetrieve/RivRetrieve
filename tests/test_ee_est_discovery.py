@@ -103,3 +103,10 @@ def test_ee_est_offline_discovery_stations_products_metadata_and_predicates(
     descriptor = rr.describe("ee_est")
     assert descriptor["license"] == "CC BY 4.0"
     assert descriptor["citation"] == "Estonian Environment Agency (Keskkonnaagentuur)"
+
+    from rivretrieve._internal.providers.ee_est.declaration import _STATION_CODES, _load_station_codes, declaration
+
+    assert len(_STATION_CODES) == 60
+    assert _STATION_CODES["SJA5524000"] == (41022, 41960)
+    assert _STATION_CODES["SJA8821000"] == (41061,)
+    assert _load_station_codes(declaration.catalogue) == _STATION_CODES
