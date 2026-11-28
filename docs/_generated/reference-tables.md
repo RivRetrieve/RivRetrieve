@@ -174,6 +174,7 @@ Counts describe packaged inventory accounting only. They do not establish countr
 | `fr_hubeau` | live | none | 7347 | 15283 | 5014 | 0 |
 | `fr_hydroportail` | live | none | 6409 | 59 | 12759 | 0 |
 | `lt_lhmt` | live | none | 97 | 0 | 194 | 0 |
+| `nl_rws` | live | none | 1706 | 2101 | 14959 | 0 |
 | `no_nve` | live | `NVE_API_KEY` | 4902 | 14847 | 0 | 29271 |
 | `pe_senamhi` | live | none | 771 | 1170 | 10395 | 0 |
 | `pl_imgw` | bulk store | none | 1301 | 0 | 3903 | 0 |
@@ -316,6 +317,16 @@ Access coordinates and declared units come from products.parquet. These are inte
 | `fr_hydroportail` | `stage_instantaneous` | `m` |
 | `lt_lhmt` | `discharge_daily_mean` | `m3/s` |
 | `lt_lhmt` | `stage_daily_mean` | `m` |
+| `nl_rws` | `discharge_m3d_nvt` | `m3/s` |
+| `nl_rws` | `discharge_m3s_gem24h` | `m3/s` |
+| `nl_rws` | `discharge_m3s_nvt` | `m3/s` |
+| `nl_rws` | `stage_msl_nvt` | `m` |
+| `nl_rws` | `stage_nap_gem24h` | `m` |
+| `nl_rws` | `stage_nap_nvt` | `m` |
+| `nl_rws` | `stage_plaatslr_nvt` | `m` |
+| `nl_rws` | `stage_taw_nvt` | `m` |
+| `nl_rws` | `water_temperature_gem24h` | `degC` |
+| `nl_rws` | `water_temperature_nvt` | `degC` |
 | `no_nve` | `discharge_daily_mean` | `m3/s` |
 | `no_nve` | `discharge_hourly_mean` | `m3/s` |
 | `no_nve` | `discharge_instantaneous` | `m3/s` |
