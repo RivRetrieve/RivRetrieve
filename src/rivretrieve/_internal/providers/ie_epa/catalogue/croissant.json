@@ -77,8 +77,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "18763e9d29ab3d4ecef49ae7382e6bf9d35a5f73f8bf76d25c2a28ff3e37821c",
-      "contentSize": "1564043 B"
+      "sha256": "aaad89074a1d11e554ab3075eb4ad69962dc1aca88b53cb816171a79e84a983d",
+      "contentSize": "1550970 B"
     },
     {
       "@id": "provenance_facts.parquet",
@@ -1574,7 +1574,7 @@
   "isBasedOn": {
     "@id": "native-table",
     "@type": "sc:MediaObject",
-    "identifier": "local-3029ea3a317e8039c7c08e311175ee6a647abc9e",
+    "identifier": "ie-epa-catalogue-native",
     "name": "Adopted retained input",
     "sha256": "055cee1be891af3bbe19e230629e105c73378d13f2b94c1f78e85883f1b42a82",
     "contentSize": "37428 B",
@@ -1587,22 +1587,22 @@
       {
         "@type": "sc:PropertyValue",
         "name": "collection_id",
-        "value": "local-provisional"
+        "value": "ie_epa-catalogue-native-2026-11-28-v1"
       },
       {
         "@type": "sc:PropertyValue",
         "name": "manifest_sha256",
-        "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        "value": "eee5fe9fd6ac6110d983734f627405e43b5386f25b4ae1424dae4244ae521126"
       },
       {
         "@type": "sc:PropertyValue",
         "name": "artifact_id",
-        "value": "local-3029ea3a317e8039c7c08e311175ee6a647abc9e"
+        "value": "ie-epa-catalogue-native"
       },
       {
         "@type": "sc:PropertyValue",
         "name": "role",
-        "value": "response_recording"
+        "value": "derived_input"
       },
       {
         "@type": "sc:PropertyValue",
