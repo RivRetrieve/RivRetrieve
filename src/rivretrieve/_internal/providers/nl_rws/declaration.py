@@ -2,12 +2,8 @@
 
 from pathlib import Path
 
-from rivretrieve._internal.providers.nl_rws.config import (
-    SHARED_ACQUISITION_PRODUCTS,
-    config,
-    window_declarations,
-)
-from rivretrieve._internal.providers.nl_rws.fetch import fetch
+from rivretrieve._internal.providers.nl_rws.config import config, window_declarations
+from rivretrieve._internal.providers.nl_rws.fetch import NlRwsRequestPlanner, fetch
 from rivretrieve._internal.providers.nl_rws.parse import parse, parse_group
 from rivretrieve._internal.providers.registration import LiveStages, ProviderDeclaration
 
@@ -18,7 +14,7 @@ class _Stages:
     observation_source = "live"
     config = config()
     window_declarations = window_declarations()
-    shared_acquisition_products = SHARED_ACQUISITION_PRODUCTS
+    request_planner = NlRwsRequestPlanner()
     fetch = staticmethod(fetch)
     parse = staticmethod(parse)
     parse_group = staticmethod(parse_group)
