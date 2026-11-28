@@ -62,8 +62,8 @@
       "@type": "cr:FileObject",
       "contentUrl": "stations.parquet",
       "encodingFormat": "application/x-parquet",
-      "sha256": "0a7b74a5719760273eb11624ec9785a9f507b11fba18b7230e8573499ea1b655",
-      "contentSize": "11976 B"
+      "sha256": "317bb3ef1bb17ae5b6d7f4afbd9e5005bf7af760a9b1d44d5ebce177fde4ddb1",
+      "contentSize": "11973 B"
     },
     {
       "@id": "station_products.parquet",
@@ -78,7 +78,7 @@
       "@type": "cr:FileObject",
       "contentUrl": "provenance.json",
       "encodingFormat": "application/json",
-      "sha256": "91f1d89be0b4d256e6e817290bba09cd071505400d753e93295b50388a4419cc",
+      "sha256": "2c810040dcaf0dc689d97abd47f38d6465574961b338f9d1fe5374527830b899",
       "contentSize": "3283750 B"
     },
     {
