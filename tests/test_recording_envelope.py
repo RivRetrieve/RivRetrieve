@@ -269,6 +269,10 @@ def test_v2_round_trip_never_serializes_credential_values(tmp_path: Path) -> Non
 
 
 def test_v2_refuses_unknown_or_case_colliding_ordinary_headers() -> None:
+    profile_request = RecordedRequest(
+        HttpMethod.GET, "https://example.test", ordinary_headers={"Accept-Profile": "apijahiala"}
+    )
+    assert dict(profile_request.ordinary_headers) == {"Accept-Profile": "apijahiala"}
     with pytest.raises(ValueError, match="explicitly"):
         RecordedRequest(HttpMethod.GET, "https://example.test", ordinary_headers={"X-Unclassified": "value"})
     with pytest.raises(ValueError, match="case-insensitively"):

@@ -56,6 +56,7 @@ ACQUISITION_PROVENANCE_ENROLLED_PROVIDERS = frozenset(
         "cl_dga",
         "co_ideam",
         "cz_chmi",
+        "ee_est",
         "fi_syke",
         "fr_hubeau",
         "fr_hydroportail",

@@ -1,0 +1,433 @@
+"""Published Estonian Keskkonnaagentuur series identities and physical facts.
+
+Step 3 establishes frequency, statistic, interval temporal support, stage
+gauge-zero vertical reference (with source-silent datum), fixed ``+00:00`` UTC
+time zone on ``f_hydroseire`` (`timeline_ts_utc` only, never DST-folded
+``timeline_ts_local``), and conservative temporal silence (``day_definition``,
+``timestamp_anchor``, EstModel ``time_zone``) with ``label_time="00:00"`` on
+EstModel daily series (`ClippingAxis.CALENDAR_DATE`).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from functools import cache
+from typing import Literal
+
+import polars as pl
+
+from rivretrieve._internal.catalogues.products import product_row
+from rivretrieve._internal.catalogues.source_series import SourceDescription, SourceDescriptions
+from rivretrieve._internal.issues import FatalContractError
+from rivretrieve._internal.provider_series import SeriesMapping
+from rivretrieve._internal.source_series import PhysicalFacts, SourceIdentity, SourceSeries, stable_id
+
+ESTMODEL_NAMESPACE = "EE_EST.estmodel.series"
+FH_NAMESPACE = "EE_EST.f_hydroseire.series"
+
+_ASSOCIATION_EVIDENCE = "catalogue:ee_est:source.station_product.associations"
+_EM_FIELD_EVIDENCE = "catalogue:ee_est:source.series.fields"
+_FH_FIELD_EVIDENCE = "catalogue:ee_est:source.series.hourly_fields"
+_TEMPORAL_EVIDENCE = "catalogue:ee_est:source.series.temporal_semantics"
+_STAGE_VERTICAL_EVIDENCE = "catalogue:ee_est:source.series.stage_vertical_reference"
+
+
+@dataclass(frozen=True, slots=True)
+class ProductSpec:
+    """Native source mapping and verified physical contract for one ee_est product."""
+
+    product_id: str
+    source_api: Literal["estmodel", "f_hydroseire"]
+    native_id: str
+    quantity: Literal["discharge", "stage", "temperature"]
+    source_unit: str
+    frequency: Literal["P1D", "PT1H"]
+    statistic: Literal["mean", "max", "min"]
+    em_parameter: str | None = None
+    em_type: str | None = None
+    fh_aegrida_nimi: str | None = None
+
+    def series_mapping(self) -> SeriesMapping:
+        """Build verified Step 3 source mapping preserving explicit temporal/vertical silence."""
+        is_em = self.source_api == "estmodel"
+        namespace = ESTMODEL_NAMESPACE if is_em else FH_NAMESPACE
+        evidence: list[str] = [_ASSOCIATION_EVIDENCE, _TEMPORAL_EVIDENCE]
+        if not is_em:
+            evidence.append(_FH_FIELD_EVIDENCE)
+        if self.quantity == "stage":
+            evidence.append(_STAGE_VERTICAL_EVIDENCE)
+        identity_evidence = (_EM_FIELD_EVIDENCE,) if is_em else (_EM_FIELD_EVIDENCE, _FH_FIELD_EVIDENCE)
+        return SeriesMapping(
+            namespace=namespace,
+            published_id=self.native_id,
+            quantity=self.quantity,
+            source_unit=self.source_unit,
+            normalized_unit=self.source_unit,
+            frequency=self.frequency,
+            statistic=self.statistic,
+            time_zone=None if is_em else "+00:00",
+            evidence=tuple(evidence),
+            identity_evidence=identity_evidence,
+            temporal_support="interval",
+            day_definition=None,
+            timestamp_anchor=None,
+            vertical_reference="gauge_zero" if self.quantity == "stage" else None,
+            vertical_datum=None,
+            label_time="00:00" if is_em else None,
+        )
+
+
+PRODUCT_SPECS: tuple[ProductSpec, ...] = (
+    # EstModel daily series (estmodel.envir.ee/stations/{code}/measurements)
+    ProductSpec(
+        "discharge_daily_mean",
+        "estmodel",
+        "Q:MEAN",
+        "discharge",
+        "m3/s",
+        "P1D",
+        "mean",
+        em_parameter="Q",
+        em_type="MEAN",
+    ),
+    ProductSpec(
+        "discharge_daily_max",
+        "estmodel",
+        "Q:MAXIMUM",
+        "discharge",
+        "m3/s",
+        "P1D",
+        "max",
+        em_parameter="Q",
+        em_type="MAXIMUM",
+    ),
+    ProductSpec(
+        "discharge_daily_min",
+        "estmodel",
+        "Q:MINIMUM",
+        "discharge",
+        "m3/s",
+        "P1D",
+        "min",
+        em_parameter="Q",
+        em_type="MINIMUM",
+    ),
+    ProductSpec(
+        "stage_daily_mean",
+        "estmodel",
+        "H:MEAN",
+        "stage",
+        "m",
+        "P1D",
+        "mean",
+        em_parameter="H",
+        em_type="MEAN",
+    ),
+    ProductSpec(
+        "stage_daily_max",
+        "estmodel",
+        "H:MAXIMUM",
+        "stage",
+        "m",
+        "P1D",
+        "max",
+        em_parameter="H",
+        em_type="MAXIMUM",
+    ),
+    ProductSpec(
+        "stage_daily_min",
+        "estmodel",
+        "H:MINIMUM",
+        "stage",
+        "m",
+        "P1D",
+        "min",
+        em_parameter="H",
+        em_type="MINIMUM",
+    ),
+    ProductSpec(
+        "water_temperature_daily_mean",
+        "estmodel",
+        "T:MEAN",
+        "temperature",
+        "degC",
+        "P1D",
+        "mean",
+        em_parameter="T",
+        em_type="MEAN",
+    ),
+    ProductSpec(
+        "water_temperature_daily_max",
+        "estmodel",
+        "T:MAXIMUM",
+        "temperature",
+        "degC",
+        "P1D",
+        "max",
+        em_parameter="T",
+        em_type="MAXIMUM",
+    ),
+    ProductSpec(
+        "water_temperature_daily_min",
+        "estmodel",
+        "T:MINIMUM",
+        "temperature",
+        "degC",
+        "P1D",
+        "min",
+        em_parameter="T",
+        em_type="MINIMUM",
+    ),
+    # Keskkonnaandmed PostgREST hourly series (keskkonnaandmed.envir.ee/f_hydroseire)
+    ProductSpec(
+        "discharge_hourly_mean",
+        "f_hydroseire",
+        "Äravool avg",
+        "discharge",
+        "m3/s",
+        "PT1H",
+        "mean",
+        fh_aegrida_nimi="Äravool avg",
+    ),
+    ProductSpec(
+        "discharge_hourly_max",
+        "f_hydroseire",
+        "Äravool max",
+        "discharge",
+        "m3/s",
+        "PT1H",
+        "max",
+        fh_aegrida_nimi="Äravool max",
+    ),
+    ProductSpec(
+        "discharge_hourly_min",
+        "f_hydroseire",
+        "Äravool min",
+        "discharge",
+        "m3/s",
+        "PT1H",
+        "min",
+        fh_aegrida_nimi="Äravool min",
+    ),
+    ProductSpec(
+        "stage_hourly_mean",
+        "f_hydroseire",
+        "WL avg",
+        "stage",
+        "cm",
+        "PT1H",
+        "mean",
+        fh_aegrida_nimi="WL avg",
+    ),
+    ProductSpec(
+        "stage_hourly_max",
+        "f_hydroseire",
+        "WL max",
+        "stage",
+        "cm",
+        "PT1H",
+        "max",
+        fh_aegrida_nimi="WL max",
+    ),
+    ProductSpec(
+        "stage_hourly_min",
+        "f_hydroseire",
+        "WL min",
+        "stage",
+        "cm",
+        "PT1H",
+        "min",
+        fh_aegrida_nimi="WL min",
+    ),
+    ProductSpec(
+        "water_temperature_hourly_mean",
+        "f_hydroseire",
+        "WT avg",
+        "temperature",
+        "degC",
+        "PT1H",
+        "mean",
+        fh_aegrida_nimi="WT avg",
+    ),
+    ProductSpec(
+        "water_temperature_hourly_max",
+        "f_hydroseire",
+        "WT max",
+        "temperature",
+        "degC",
+        "PT1H",
+        "max",
+        fh_aegrida_nimi="WT max",
+    ),
+    ProductSpec(
+        "water_temperature_hourly_min",
+        "f_hydroseire",
+        "WT min",
+        "temperature",
+        "degC",
+        "PT1H",
+        "min",
+        fh_aegrida_nimi="WT min",
+    ),
+)
+
+PRODUCT_BY_ID: dict[str, ProductSpec] = {spec.product_id: spec for spec in PRODUCT_SPECS}
+EM_KEY_TO_PRODUCT: dict[tuple[str, str], ProductSpec] = {
+    (spec.em_parameter, spec.em_type): spec
+    for spec in PRODUCT_SPECS
+    if spec.source_api == "estmodel" and spec.em_parameter is not None and spec.em_type is not None
+}
+FH_AEGRIDA_TO_PRODUCT: dict[str, ProductSpec] = {
+    spec.fh_aegrida_nimi: spec
+    for spec in PRODUCT_SPECS
+    if spec.source_api == "f_hydroseire" and spec.fh_aegrida_nimi is not None
+}
+
+
+def parse_jaam_kood(kood_str: object) -> tuple[int, ...]:
+    """Parse integer `jaam_kood` candidates from semicolon-delimited `f_seirejaamad.kood`."""
+    if kood_str is None:
+        return ()
+    if not isinstance(kood_str, str):
+        raise FatalContractError(f"Expected string or null kood in f_seirejaamad, got {type(kood_str).__name__}")
+    codes: list[int] = []
+    for part in kood_str.split(";"):
+        token = part.strip()
+        if not token:
+            continue
+        if not token.isdigit():
+            raise FatalContractError(f"Unexpected non-numeric kood token {token!r} in f_seirejaamad")
+        code = int(token)
+        if code not in codes:
+            codes.append(code)
+    return tuple(codes)
+
+
+@cache
+def _series_mapping(product_id: str) -> SeriesMapping:
+    spec = PRODUCT_BY_ID.get(product_id)
+    if spec is None:
+        raise FatalContractError(f"Unsupported ee_est product {product_id!r}")
+    return spec.series_mapping()
+
+
+@cache
+def _physical_facts(product_id: str) -> PhysicalFacts:
+    return _series_mapping(product_id).physical_facts()
+
+
+def source_series_identity(
+    station_id: str,
+    spec: ProductSpec,
+    *,
+    jaam_kood: int | None = None,
+    origin: Literal["catalogue", "mapping", "response"] = "mapping",
+) -> SourceIdentity:
+    """Build the concrete publisher SourceIdentity shared by catalogue and runtime parse."""
+    mapping = _series_mapping(spec.product_id)
+    if spec.source_api == "estmodel":
+        published_id = f"{station_id}:{spec.native_id}"
+        id_evidence: tuple[str, ...] = (_EM_FIELD_EVIDENCE,)
+    else:
+        if jaam_kood is None:
+            raise FatalContractError(
+                f"Missing jaam_kood on available f_hydroseire series {station_id}/{spec.product_id}"
+            )
+        published_id = f"{jaam_kood}:{spec.native_id}"
+        id_evidence = (_EM_FIELD_EVIDENCE, _FH_FIELD_EVIDENCE)
+    return SourceIdentity(
+        namespace=mapping.namespace,
+        published_id=published_id,
+        origin=origin,
+        evidence=id_evidence,
+    )
+
+
+def source_series(
+    station_id: str,
+    product_id: str,
+    *,
+    jaam_kood: int | None = None,
+    origin: Literal["catalogue", "mapping", "response"] = "response",
+) -> SourceSeries:
+    """Build one concrete SourceSeries whose series_id and facts_id match the packaged catalogue."""
+    spec = PRODUCT_BY_ID.get(product_id)
+    if spec is None:
+        raise FatalContractError(f"Unsupported ee_est product {product_id!r}")
+    identity = source_series_identity(station_id, spec, jaam_kood=jaam_kood, origin=origin)
+    return SourceSeries(
+        series_id=stable_id("ee_est", station_id, identity.namespace, identity.published_id),
+        provider_id="ee_est",
+        station_id=station_id,
+        product_id=product_id,
+        identity=identity,
+        facts=(_physical_facts(product_id),),
+    )
+
+
+def catalogue_product_rows() -> list[dict[str, object]]:
+    """Build deterministic product catalogue rows matching `PRODUCT_CATALOG_SCHEMA`."""
+    return [
+        product_row(
+            provider_id="ee_est",
+            product_id=spec.product_id,
+            native_id=spec.native_id,
+            facts=_physical_facts(spec.product_id),
+        )
+        for spec in sorted(PRODUCT_SPECS, key=lambda item: item.product_id)
+    ]
+
+
+def reused_series(definition: SourceSeries, known_series: tuple[SourceSeries, ...]) -> SourceSeries:
+    """Preserve prior established identity and matching fact IDs when available."""
+    candidate = next((item for item in known_series if item.series_id == definition.series_id), None)
+    if candidate is None:
+        return definition
+    retained = {_fact_signature(fact): fact for fact in candidate.facts}
+    return definition.model_copy(
+        update={
+            "identity": candidate.identity,
+            "facts": tuple(retained.get(_fact_signature(fact), fact) for fact in definition.facts),
+        }
+    )
+
+
+def _fact_signature(fact: PhysicalFacts) -> tuple[object, ...]:
+    return (
+        fact.quantity.value,
+        fact.source_unit.value,
+        fact.normalized_unit,
+        fact.frequency.value,
+        fact.statistic.value,
+        fact.temporal_support.value,
+        fact.day_definition.value,
+        fact.timestamp_anchor.value,
+        fact.time_zone.value,
+        fact.vertical_reference.value,
+        fact.vertical_datum.value,
+        fact.clipping_axis,
+        fact.label_time,
+    )
+
+
+def describe_associations(associations: pl.DataFrame) -> SourceDescriptions:
+    """Emit concrete source descriptions for every witnessed available pair."""
+    descriptions: list[SourceDescription] = []
+    available = associations.filter(pl.col("available")).sort("station_id", "product_id", "jaam_kood")
+    for station_id, jaam_kood, product_id, native_id in available.select(
+        "station_id", "jaam_kood", "product_id", "native_id"
+    ).iter_rows():
+        spec = PRODUCT_BY_ID.get(product_id)
+        if spec is None:
+            raise FatalContractError(f"Unsupported ee_est product {product_id!r}")
+        identity = source_series_identity(station_id, spec, jaam_kood=jaam_kood, origin="mapping")
+        descriptions.append(
+            SourceDescription(
+                product_id=product_id,
+                station_id=station_id,
+                native_coordinate=native_id,
+                identity=identity,
+                facts=(_physical_facts(spec.product_id),),
+            )
+        )
+    return SourceDescriptions(provider_id="ee_est", descriptions=tuple(descriptions))
