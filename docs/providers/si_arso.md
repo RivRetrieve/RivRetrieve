@@ -106,7 +106,7 @@ ARSO publishes surface-water data through two distinct streams:
 
 **Validated historical archive (`Verificirani podatki`):**
 
-| Quantity filter | Source field / `variant` | Frequency | Statistic | Source unit | Returned unit |
+| Quantity filter | Source column (`published_id`) | Frequency | Statistic | Source unit | Returned unit |
 |---|---|---|---|---|---|
 | `discharge` | `pretok (m3/s)` | `P1D` | Unknown | m3/s | m³/s |
 | `discharge` | `Q_MIN` | `P1M` | Minimum | m3/s | m³/s |
@@ -117,6 +117,11 @@ ARSO publishes surface-water data through two distinct streams:
 | `temperature` | `temp. vode (°C)` | `P1D` | Unknown | °C | °C |
 | `temperature` | `Tv_MIN` | `P1M` | Minimum | °C | °C |
 | `temperature` | `Tv_MAX` | `P1M` | Maximum | °C | °C |
+
+In `rr.series(...)`, `variant` is `null` on all nine historical archive series
+(so `rr.pick(sel, variant="Q_MIN")` matches nothing); `published_id` carries the
+source column or extreme code shown above, and ordinary filters such as
+`frequency="P1D"` or `frequency="P1M", statistic="max"` select archive series.
 
 **Operational telemetry (`Začasni podatki`):**
 
@@ -230,7 +235,8 @@ Every row returned in `rr.series(result, annotations=True)` exposes ARSO's
 quality designation in the `si_arso.series` annotation `data_status` (`String`,
 series scope):
 
-- `Verificirani podatki`: quality-controlled archive records through `2024-12-31`.
+- `Verificirani podatki`: quality-controlled archive records (extending through
+  `2024-12-31` as of `2026-11-23`).
 - `Začasni podatki`: provisional near-real-time telemetry from rolling `amp/`
   windows, subject to revision, rating-curve updates, or temporary sensor
   outages (published as `"-"`, omitted as missing rows cleanly).
