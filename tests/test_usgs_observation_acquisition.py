@@ -25,7 +25,8 @@ PARAMS = {
     "parameter_code": "00060",
     "statistic_id": "00003",
     "datetime": "2000-01-01/2000-01-07",
-    "limit": "10000",
+    "limit": "50000",
+    "skipGeometry": "true",
 }
 
 
@@ -138,7 +139,9 @@ def test_late_failure_preserves_bytes_and_cannot_certify_complete(late):
         next_url().replace("/v1/", "/v0/"),
         next_url().replace("https://", "http://"),
         next_url() + "#fragment",
-        next_url() + "&limit=10000",
+        next_url() + "&limit=50000",
+        next_url(skipGeometry="false"),
+        next_url(limit="10000"),
     ],
 )
 def test_next_link_rejects_scope_or_origin_changes_before_network(url):
@@ -764,7 +767,8 @@ def test_continuous_pages_detect_equivalent_published_instants(alias, value):
         "monitoring_location_id": LOCATION,
         "parameter_code": "00060",
         "datetime": "2024-01-01T00:00:00Z/2024-01-07T00:00:00Z",
-        "limit": "10000",
+        "limit": "50000",
+        "skipGeometry": "true",
         "cursor": "next",
     }
     first, second = page(first_feature, sibling, next_url=first_url + "?" + urlencode(params)), page(repeated)
@@ -1028,7 +1032,8 @@ def test_usgs_paginated_retrieval_single_decode_and_memoized_series_facts(monkey
         "monitoring_location_id": LOCATION,
         "parameter_code": "00060",
         "datetime": "2023-12-30T00:00:00Z/2024-01-05T23:59:59.999999Z",
-        "limit": "10000",
+        "limit": "50000",
+        "skipGeometry": "true",
         "cursor": "p2",
     }
     p1 = page(*page1_features, next_url=cont_url + "?" + urlencode(cont_params))
@@ -1249,3 +1254,40 @@ def test_cross_page_duplicate_precedence_over_malformed_links():
         o.status is OutcomeStatus.UNSUPPORTED and "repeats a logical series/time observation" in (o.reason or "")
         for o in acquired.outcomes
     )
+
+
+@pytest.mark.parametrize(
+    ("product_id", "rendered"),
+    [
+        (ProductId("discharge_daily_mean"), engine.RenderedWindow("2000-01-01", "2000-01-07")),
+        (
+            ProductId("discharge_instantaneous"),
+            engine.RenderedWindow(
+                "2024-01-01T00:00:00Z",
+                "2024-01-07T00:00:00Z",
+                engine._make_fetch_window(
+                    engine.WindowEndpoint.from_datetime(datetime(2024, 1, 1)),
+                    engine.WindowEndpoint.from_datetime(datetime(2024, 1, 7)),
+                ),
+            ),
+        ),
+    ],
+)
+def test_observation_requests_skip_geometry_and_use_50000_page_limit(product_id, rendered):
+    transport = Transport(page())
+    window = rendered.bounds or engine._make_fetch_window(
+        engine.WindowEndpoint.from_datetime(datetime(2000, 1, 1)),
+        engine.WindowEndpoint.from_datetime(datetime(2000, 1, 7, 23, 59, 59, 999999)),
+    )
+    fetch(
+        (STATION,),
+        (product_id,),
+        {product_id: (rendered,)},
+        window,
+        config(),
+        transport,
+        monitoring_locations={STATION: LOCATION},
+    )
+    assert len(transport.requests) == 1
+    assert transport.requests[0].params["limit"] == 50000
+    assert transport.requests[0].params["skipGeometry"] == "true"

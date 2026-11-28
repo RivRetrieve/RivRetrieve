@@ -48,6 +48,7 @@ from rivretrieve._internal.transport import (
 )
 
 _BASE_URL = "https://api.waterdata.usgs.gov/ogcapi/v1/collections/"
+_PAGE_LIMIT = 50000
 
 
 def fetch(
@@ -425,7 +426,8 @@ def _request(coordinates: UsgsNwisSourceCoordinates, window: RenderedWindow, sel
         "monitoring_location_id": coordinates.monitoring_location_id,
         "parameter_code": coordinates.parameter_code,
         "datetime": f"{window.start}/{window.stop}",
-        "limit": 10000,
+        "limit": _PAGE_LIMIT,
+        "skipGeometry": "true",
     }
     if coordinates.statistic_code is not None:
         params["statistic_id"] = coordinates.statistic_code
