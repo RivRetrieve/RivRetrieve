@@ -281,7 +281,7 @@ def test_selected_inputs_publish_deterministic_catalogue(
     receipt_path.write_text(catalogue_input_receipt.model_dump_json())
     build_path = tmp_path / "build-inputs.json"
     build_path.write_text(catalogue_build_inputs(sources.provenance).model_dump_json())
-    outputs = [product_root / "ie_epa", product_root / "ie_epa-repeat"]
+    outputs = [product_root / "ie_epa-selected", product_root / "ie_epa-selected-repeat"]
     for output in outputs:
         arguments = ["--evidence-root", str(retained_evidence_root), "--selection", selection]
         arguments += ["--input-receipt", str(receipt_path), "--build-inputs", str(build_path), "--out", str(output)]
