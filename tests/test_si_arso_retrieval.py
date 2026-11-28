@@ -785,3 +785,114 @@ def test_si_arso_parse_group_pair_context_isolation_and_parse_parity() -> None:
             ),
             by_group[k].annotations.series_tables["si_arso.series"].rows,
         )
+
+
+def test_si_arso_request_planner_partial_cache_reuse_shared_failure_and_multistation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import polars as pl
+
+    from rivretrieve._internal.engine import WindowEndpoint
+    from rivretrieve._internal.providers.si_arso.declaration import declaration
+    from rivretrieve._internal.providers.si_arso.fetch import SiArsoRequestPlanner
+    from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
+
+    stages = declaration.observations.stages
+    assert isinstance(stages.request_planner, SiArsoRequestPlanner)
+    assert not hasattr(stages, "shared_acquisition_products")
+
+    oddo_v1 = (
+        "Datum;vodostaj (cm);pretok (m3/s);temp. vode (°C)\r\n"
+        "01.01.2024;142;223.499;4.4\r\n"
+        "02.01.2024;138;213.818;4.6\r\n"
+        "31.12.2024;72;69.675;2.3\r\n"
+    ).encode()
+    # Second response carries a distinct discharge value to prove cached Q is untouched.
+    oddo_v2 = (
+        "Datum;vodostaj (cm);pretok (m3/s);temp. vode (°C)\r\n"
+        "01.01.2024;142;999.000;4.4\r\n"
+        "02.01.2024;138;998.000;4.6\r\n"
+        "31.12.2024;72;997.000;2.3\r\n"
+    ).encode()
+    oddo_2070 = (
+        "Datum;vodostaj (cm);pretok (m3/s);temp. vode (°C)\r\n01.01.2024;80;12.500;5.1\r\n02.01.2024;82;13.100;5.3\r\n"
+    ).encode()
+
+    calls: list[dict[str, str]] = []
+    phase = {"step": 1}
+
+    class _PlannerTransport:
+        def send(self, request: TransportRequest) -> TransportResponse:
+            params = dict(request.params or {})
+            calls.append(params)
+            if phase["step"] == 3:
+                raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
+            station = params.get("p_postaja")
+            if station == "2070":
+                body = oddo_2070
+            elif phase["step"] == 1:
+                body = oddo_v1
+            else:
+                body = oddo_v2
+            return TransportResponse(
+                content=body,
+                status_code=200,
+                retrieved_at=datetime(2026, 11, 28, 10, phase["step"], tzinfo=UTC),
+                content_type="text/csv; charset=utf-8",
+                url=request.url,
+                request_parameters=params,
+            )
+
+    monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(discovery, "_credentialed_transport", lambda provider_id, values: _PlannerTransport())
+
+    # 1. Warm cache for discharge only at 1060.
+    sel_q = rr.find(provider="si_arso", station="1060", quantity="discharge", frequency="P1D")
+    warm = rr.fetch(sel_q, start="2024-01-01", end="2024-01-02", cache="reuse", on_issue="raise")
+    assert len(calls) == 1
+    assert warm.data.sort("time")["value"].to_list() == pytest.approx([223.499, 213.818])
+
+    # 2. Fetch all 3 P1D series by explicit ID with cache="reuse": 1 shared GET for stage+temperature;
+    #    cached discharge rows and vintage remain untouched.
+    phase["step"] = 2
+    sel_all = rr.find(provider="si_arso", station="1060", frequency="P1D")
+    chosen = rr.pick(sel_all, series_id=tuple(rr.series(sel_all)["series_id"]))
+    mixed = rr.fetch(chosen, start="2024-01-01", end="2024-01-02", cache="reuse", on_issue="raise")
+    assert len(calls) == 2
+    assert mixed.issues == ()
+    q_after = mixed.data.filter(pl.col("product_id") == "archive_discharge_daily").sort("time")
+    h_after = mixed.data.filter(pl.col("product_id") == "archive_stage_daily").sort("time")
+    t_after = mixed.data.filter(pl.col("product_id") == "archive_temperature_daily").sort("time")
+    assert q_after["value"].to_list() == pytest.approx([223.499, 213.818])
+    assert h_after["value"].to_list() == pytest.approx([1.42, 1.38])
+    assert t_after["value"].to_list() == pytest.approx([4.4, 4.6])
+    q_sid = q_after["series_id"][0]
+    q_vintages = {item.retrieved_at for item in rr.cache_status("si_arso").coverage if item.series_id == q_sid}
+    assert q_vintages == {datetime(2026, 11, 28, 10, 1, tzinfo=UTC)}
+
+    # 3. Whole-selection multi-station fetch coalesces to 1 GET per station (2 total across 1060 and 2070).
+    calls.clear()
+    sel_multi = rr.find(provider="si_arso", station=["1060", "2070"], frequency="P1D")
+    res_multi = rr.fetch(sel_multi, start="2024-01-01", end="2024-01-02", cache="bypass", on_issue="raise")
+    assert len(calls) == 2
+    assert sorted(c["p_postaja"] for c in calls) == ["1060", "2070"]
+    assert res_multi.issues == ()
+    assert res_multi.data.filter(pl.col("station_id") == "2070").height > 0
+
+    # 4. Shared transport failure attaches one call_id across all 3 co-published products.
+    phase["step"] = 3
+    calls.clear()
+    oddo_prods = tuple(
+        primitives.ProductId(p) for p in ("archive_discharge_daily", "archive_stage_daily", "archive_temperature_daily")
+    )
+    fw = _make_fetch_window(
+        WindowEndpoint.from_datetime(datetime(2024, 1, 1, 0, 0)),
+        WindowEndpoint.from_datetime(datetime(2024, 1, 2, 23, 59, 59)),
+    )
+    rendered = {prod: window_planning.plan_windows(fw, config._WINDOWS.products[prod]) for prod in oddo_prods}
+    acq = fetch.fetch(("1060",), oddo_prods, rendered, fw, config._CONFIG, _PlannerTransport())
+    assert len(calls) == 1
+    assert acq.value == ()
+    assert len(acq.failed_requests) == 3
+    assert len({item.call_id for item in acq.failed_requests}) == 1
+    assert sorted(item.series.product_id for item in acq.failed_requests) == sorted(str(p) for p in oddo_prods)
