@@ -155,9 +155,30 @@ leaves `9.99999e+37` in numeric values, and it keeps the corresponding
 distinguish explicitly flagged missing observations from gaps where no row was
 published.
 
+Pass `annotations=True` to `result.to_polars(...)` or `result.to_pandas(...)`
+to include `statuswaarde` and `kwaliteitswaardecode` alongside the readings, or
+call `rr.annotations(result)` to inspect the annotation schema and table. See
+[Source annotations](../usage.md#source-annotations) for general options. A
+period with no published observation supplies no row, and a failed request
+remains an issue alongside any successful records; check
+[issues](../usage.md#issues) before interpreting an empty result.
+
 ## Terms of use and attribution
 
 Rijkswaterstaat publishes Waterwebservices data under Public Domain Mark 1.0 /
 CC0 1.0. Recommended attribution is `"Bron: Rijkswaterstaat – Waterwebservices"`.
 See [Rijkswaterstaat Waterdata](https://rijkswaterstaatdata.nl/onze-data/waterdata/)
 for current service terms.
+
+## Sources
+
+Publisher pages and endpoints checked on 2026-11-25 through 2026-11-28:
+
+- [Rijkswaterstaat Waterdata](https://rijkswaterstaatdata.nl/onze-data/waterdata/): service overview, licence, and attribution guidance.
+- Rijkswaterstaat Waterwebservices DDAPI 2.0 (`https://ddapi20-waterwebservices.rijkswaterstaat.nl`): `OphalenCatalogus` and `OphalenWaarnemingen` endpoints.
+- [Aquo standard](https://www.aquo.nl/): parameter, unit, vertical-datum, aggregation, and quality-code definitions (`Kwaliteitswaardecode`).
+- E-STREAMS (do Nascimento et al., 2024, *Scientific Data*): independent hydrological cross-check against 6 matched Rijkswaterstaat stations with overlapping daily discharge records (10,787 daily pairs, 4 exact matches and `r >= 0.9999` across all 6).
+
+The station count describes the packaged catalogue. The example was retrieved
+live on 2026-11-28. The [private verification archive](https://github.com/RivRetrieve/verification-evidence#readme)
+retains commands, source checks, exact output and limitations.
