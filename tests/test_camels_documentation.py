@@ -19,7 +19,7 @@ STATIONS = ["01013500", "01022500", "01030500"]
 RECORDINGS = [f"daily-camels-{station}-2015-2026" for station in STATIONS]
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_complete_camels_page(monkeypatch, tmp_path, capsys, retained_evidence_root: Path):
     import rivretrieve._internal.discovery as discovery
 

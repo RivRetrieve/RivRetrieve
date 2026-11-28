@@ -20,7 +20,7 @@ CURRENT = "0df18b246e8f48ec8e6547a92070e94a"
 ENDED = "4d186669708e4dc18f84d271efb953a1"
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     content = body(RECORDING, evidence_root=retained_evidence_root)
@@ -82,7 +82,7 @@ def test_recorded_singleton_identity_units_export_and_native_cache(monkeypatch, 
     pt.assert_frame_equal(pl.read_parquet(standalone), result.data)
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_authored_unknown_explicit_series_remains_unresolved_not_successful_empty(
     monkeypatch, retained_evidence_root: Path
 ):
@@ -118,7 +118,7 @@ def test_authored_unknown_explicit_series_remains_unresolved_not_successful_empt
     assert any(item.code == "source.inventory_unresolved" for item in result.issues)
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_narrowed_public_request_does_not_persist_unrelated_catalogue_claims(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -153,7 +153,7 @@ def test_narrowed_public_request_does_not_persist_unrelated_catalogue_claims(
     assert inspected
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_known_explicit_series_across_access_routes_reuse_independently(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -171,7 +171,7 @@ def test_known_explicit_series_across_access_routes_reuse_independently(
     pt.assert_frame_equal(reused.data, broad.data)
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_usgs_subset_cache_cannot_satisfy_all_and_refresh_preserves_peer(
     monkeypatch, tmp_path, retained_evidence_root: Path
 ):
@@ -220,7 +220,7 @@ def test_usgs_subset_cache_cannot_satisfy_all_and_refresh_preserves_peer(
     pt.assert_frame_equal(restored.data, narrow.data)
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_recorded_ended_series_successful_empty_is_reusable(monkeypatch, tmp_path, retained_evidence_root: Path):
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
     name = "daily-02196000-ended-empty"

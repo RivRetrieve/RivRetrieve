@@ -12,10 +12,12 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from rivretrieve._internal.transport import HttpMethod, TransportResponse
 
+DEFAULT_DIRECTORY = "tests/test_data/usgs_modern_skip_geometry"
 
-def manifest(evidence_root: Path):
-    directory = evidence_root / "tests/test_data/usgs_modern"
-    paths = sorted(directory.glob("*-manifest.jsonl"))
+
+def manifest(evidence_root: Path, directory: str = DEFAULT_DIRECTORY):
+    root = evidence_root / directory
+    paths = sorted(root.glob("*-manifest.jsonl"))
     if not paths:
         raise FileNotFoundError("Retained USGS recording manifests are required")
     return {
@@ -23,9 +25,9 @@ def manifest(evidence_root: Path):
     }
 
 
-def body(name, evidence_root: Path):
-    entry = manifest(evidence_root)[name]
-    content = (evidence_root / "tests/test_data/usgs_modern" / entry["file"]).read_bytes()
+def body(name, evidence_root: Path, directory: str = DEFAULT_DIRECTORY):
+    entry = manifest(evidence_root, directory=directory)[name]
+    content = (evidence_root / directory / entry["file"]).read_bytes()
     assert len(content) == entry["bytes"]
     assert hashlib.sha256(content).hexdigest() == entry["sha256"]
     return content
@@ -39,9 +41,10 @@ def coordinates(url, params=None):
 
 
 class ModernReplay:
-    def __init__(self, *names, evidence_root: Path):
+    def __init__(self, *names, evidence_root: Path, directory: str = DEFAULT_DIRECTORY):
         self.evidence_root = evidence_root
-        self.manifest = manifest(evidence_root)
+        self.directory = directory
+        self.manifest = manifest(evidence_root, directory=directory)
         self.entries = {coordinates(self.manifest[name]["original_url"]): name for name in names}
         self.calls = []
 
@@ -53,7 +56,7 @@ class ModernReplay:
         name = self.entries[key]
         entry = self.manifest[name]
         return TransportResponse(
-            content=body(name, self.evidence_root),
+            content=body(name, self.evidence_root, directory=self.directory),
             status_code=entry["status"],
             retrieved_at=datetime.fromisoformat(entry["acquired_utc"]),
             content_type=entry["headers"].get("Content-Type"),

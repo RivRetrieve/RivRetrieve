@@ -27,7 +27,7 @@ def test_every_retained_source_body_has_exact_hash_and_acquisition_manifest(reta
     assert {item["name"] for item in supplemental} == supplemental_names
     supplemental_files = {item["file"] for item in supplemental}
     assert len(supplemental_files) == 3
-    captures = manifest(retained_evidence_root)
+    captures = manifest(retained_evidence_root, directory="tests/test_data/usgs_modern")
     assert {name: captures[name] for name in supplemental_names} == {item["name"]: item for item in supplemental}
     legacy_captures = [item for name, item in captures.items() if name not in supplemental_names]
     hashes = dict(
@@ -95,7 +95,9 @@ def test_bounded_2010_observations_match_legacy_published_instants_and_numbers(
             datetime.fromisoformat(feature["properties"]["time"]).astimezone(UTC),
             str(Decimal(feature["properties"]["value"])),
         )
-        for feature in json.loads(body(name, evidence_root=retained_evidence_root))["features"]
+        for feature in json.loads(
+            body(name, evidence_root=retained_evidence_root, directory="tests/test_data/usgs_modern")
+        )["features"]
     ]
     lower, upper = datetime(2010, 6, 1, 5, tzinfo=UTC), datetime(2010, 6, 2, 4, 59, 59, tzinfo=UTC)
     rows = [row for row in rows if lower <= row[0] <= upper]
@@ -117,7 +119,9 @@ def test_present_null_publisher_recording_is_not_an_empty_answer(retained_eviden
     from rivretrieve._internal.providers.usgs_nwis.parse import parse
     from tests.test_usgs_modern_parse import payload
 
-    original = body("daily-11465200-present-null", evidence_root=retained_evidence_root)
+    original = body(
+        "daily-11465200-present-null", evidence_root=retained_evidence_root, directory="tests/test_data/usgs_modern"
+    )
     base = payload({"type": "FeatureCollection", "features": []})
     coordinates = replace(base.source_coordinates.value, monitoring_location_id="USGS-11465200")
     result = parse(
@@ -151,7 +155,11 @@ def test_shared_documentation_bytes_keep_independent_historical_acquisitions(ret
     shared = [item for item in historical if item["file"].startswith("new/")]
     assert len(shared) == 6
     for item in shared:
-        current = next(record for record in manifest(retained_evidence_root).values() if record["file"] == item["file"])
+        current = next(
+            record
+            for record in manifest(retained_evidence_root, directory="tests/test_data/usgs_modern").values()
+            if record["file"] == item["file"]
+        )
         assert item["sha256"] == current["sha256"]
         assert item["acquired_utc"] != current["acquired_utc"]
         assert item["final_url"] is None

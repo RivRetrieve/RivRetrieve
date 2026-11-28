@@ -1,18 +1,14 @@
 """Offline modern series discovery, exact finite paging, and unknown source facts."""
 
-import gzip
-import hashlib
 import importlib
-import json
-from datetime import datetime
 
 import polars.testing as pt
 import pytest
 
 import rivretrieve as rr
 import rivretrieve._internal.discovery as discovery
-from rivretrieve._internal.transport import TransportFailure, TransportFailureReason, TransportResponse
-from tests.usgs_modern_recordings import ModernReplay, body, coordinates
+from rivretrieve._internal.transport import TransportFailure, TransportFailureReason
+from tests.usgs_modern_recordings import ModernReplay, body
 
 pytestmark = pytest.mark.usefixtures("reuse_packaged_catalogues")
 
@@ -37,7 +33,7 @@ def test_offline_discovery_exposes_both_siblings_and_exact_descriptions(monkeypa
         assert restored.scope == selection.scope
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_v1_pagination_keeps_exact_pages_clips_and_reuses_all(monkeypatch, tmp_path, retained_evidence_root):
     fetch_module = importlib.import_module("rivretrieve._internal.providers.usgs_nwis.fetch")
     original = fetch_module._request
@@ -68,10 +64,7 @@ def test_v1_pagination_keeps_exact_pages_clips_and_reuses_all(monkeypatch, tmp_p
     pt.assert_frame_equal(result.data, reused.data)
 
 
-@pytest.mark.recorded(
-    "research/usgs-modern-coverage/probes/modern-02246518-discharge_instantaneous-start.json.gz",
-    "research/usgs-modern-coverage/probes/modern-02246518-discharge_instantaneous-start.receipt.json",
-)
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_unknown_continuous_statistic_is_broad_compatible_not_instantaneous(
     retained_evidence_root, monkeypatch, tmp_path
 ):
@@ -84,10 +77,7 @@ def test_unknown_continuous_statistic_is_broad_compatible_not_instantaneous(
     )
     assert unknown
     assert not rr.find(provider="usgs_nwis", station=station, quantity="discharge", statistic="instantaneous").series
-    path = retained_evidence_root / "research/usgs-modern-coverage/probes/modern-02246518-discharge_instantaneous-start"
-    receipt = json.loads(path.with_suffix(".receipt.json").read_text())
-    content = gzip.decompress(path.with_suffix(".json.gz").read_bytes())
-    assert hashlib.sha256(content).hexdigest() == receipt["sha256"]
+    replay = ModernReplay("continuous-02246518-2015-start", evidence_root=retained_evidence_root)
     calls = []
 
     class Replay:
@@ -96,15 +86,7 @@ def test_unknown_continuous_statistic_is_broad_compatible_not_instantaneous(
             if "/daily/" in request.url:
                 # Authored independent access failure, not publisher evidence.
                 raise TransportFailure(request, TransportFailureReason.HTTP_STATUS, 1, status_code=503)
-            assert coordinates(request.url, request.params) == coordinates(receipt["url"])
-            return TransportResponse(
-                content,
-                receipt["status"],
-                datetime.fromisoformat(receipt["retrieved_at"]),
-                receipt["headers"]["Content-Type"],
-                request.url,
-                request.params,
-            )
+            return replay.send(request)
 
     monkeypatch.setattr(discovery, "HttpClient", Replay)
     monkeypatch.setenv("RIVRETRIEVE_CACHE_DIR", str(tmp_path))
@@ -138,7 +120,7 @@ def test_unknown_continuous_statistic_is_broad_compatible_not_instantaneous(
     pt.assert_frame_equal(result.data, reused.data)
 
 
-@pytest.mark.recorded("tests/test_data/usgs_modern")
+@pytest.mark.recorded("tests/test_data/usgs_modern_skip_geometry")
 def test_unrestricted_snapshot_does_not_hide_newly_encountered_real_identity(
     monkeypatch, tmp_path, retained_evidence_root
 ):

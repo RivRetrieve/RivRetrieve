@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from tests.usgs_modern_recordings import ModernReplay, body, manifest
+from tests.usgs_modern_recordings import DEFAULT_DIRECTORY, ModernReplay, body, manifest
 
 
 def test_replay_requires_manifests_in_supplied_root(tmp_path):
@@ -16,7 +16,7 @@ def test_replay_requires_manifests_in_supplied_root(tmp_path):
 
 
 def test_replay_reads_and_validates_only_explicit_inputs(tmp_path):
-    directory = tmp_path / "tests/test_data/usgs_modern"
+    directory = tmp_path / DEFAULT_DIRECTORY
     directory.mkdir(parents=True)
     content = b'{"authored":true}'
     entry = {
