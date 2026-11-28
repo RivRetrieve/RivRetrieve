@@ -44,10 +44,10 @@ Already satisfied on `port/si-arso` (no rework needed):
   selectable, `5,628` series), `EPSG:3912 -> EPSG:4326` coordinate transform,
   and preserved `88888.88` / `99999.99` catchment sentinels.
 - **External benchmark numeric overlap (#1097):**
-  `research/si-arso-benchmark-comparison.md` already reports exact overlapping
-  non-null day counts (`18/18` WMO/GRDC gauges across `219,874` gauge-days;
-  `7/7` WoKaS ARSO-ID gauges) and reports Caravan / GRDC-Caravan / LamaH-CE
-  separately as `0` Slovenian stations.
+  `research/si-arso-benchmark-comparison.md` (in `verification-evidence`)
+  already reports exact overlapping non-null day counts (`18/18` WMO/GRDC gauges
+  across `219,874` gauge-days; `7/7` WoKaS ARSO-ID gauges) and reports Caravan /
+  GRDC-Caravan / LamaH-CE separately as `0` Slovenian stations.
 - **Single-region temporal facts (#1085):** Slovenia is a single national
   timezone; ARSO `amp/` is fixed `CET` (`+01:00`) year-round and historical
   archive CSVs carry `time_zone="unknown"`.
@@ -63,13 +63,14 @@ Already satisfied on `port/si-arso` (no rework needed):
 ## 1. Shared source request planning (#1094)
 
 `si_arso` currently uses the legacy `shared_acquisition_products` declaration
-(`src/rivretrieve/_internal/providers/si_arso/declaration.py`) and manual
-request grouping in `src/rivretrieve/_internal/providers/si_arso/fetch.py`.
+(`src/rivretrieve/_internal/providers/si_arso/declaration.py` and
+`SHARED_ACQUISITION_PRODUCTS` in `config.py`) and manual request grouping in
+`src/rivretrieve/_internal/providers/si_arso/fetch.py`.
 
 - Migrate `si_arso` to a `SiArsoRequestPlanner` implementing
   `SourceRequestPlanner` (following `LtLhmtRequestPlanner` and
   `EeEstRequestPlanner` on `main`), declare `request_planner` on `_Stages`, and
-  remove `shared_acquisition_products`.
+  remove `shared_acquisition_products` / `SHARED_ACQUISITION_PRODUCTS`.
 - Keep single-pass `parse_group` decoding across co-published columns in each
   shared route (`b_oddo_CSV` daily `Q`/`H`/`T`, `b_eks_CSV` monthly min/max,
   and `amp/` `t_1`, `t_7`, `t_30`). Route direct `fetch()` calls through
@@ -155,16 +156,25 @@ Keep `tests/test_si_arso_documentation.py` aligned with the updated guide.
   merge the acceptance receipt into VE `main` via PR.
 
 ### `RivRetrieve`
-- Land the planner, test, and documentation updates on `port/si-arso` through a
-  PR into `port/si-arso`.
-- Linearly rebase `port/si-arso` onto current `origin/main` (0 merge commits;
-  push with `--force-with-lease`), resolving conflicts so `cl_dga`, `ee_est`,
-  and `si_arso` are all represented (**22 providers / 21 countries**).
-- Regenerate all cross-provider artifacts that depend on the provider set:
-  `README.md` provider/country counts and table, `docs/assets/coverage-map.png`,
-  `docs/_generated/reference-tables.md`, `docs/catalogue-provenance.md`, and
-  `tests/test_frequency.py`. Verify `docs/scripts/generate_station_catalogue.py`
-  runs cleanly with the station explorer v3 catalogue (#1110).
+- First, linearly rebase `port/si-arso` onto current `origin/main` (0 merge
+  commits; push with `--force-with-lease`) so the `#1094` request-planning
+  infrastructure (`request_planning.py`) is present on the branch, resolving
+  cross-provider conflicts so `cl_dga`, `ee_est`, and `si_arso` are all
+  represented (**22 providers / 21 countries**).
+- Land the `#1094` planner, recorded replay test, and documentation updates on
+  `port/si-arso` through a PR into `port/si-arso`. If `origin/main` advances
+  before final certification, perform a final linear rebase onto `origin/main`
+  (`--force-with-lease`) before recording the final acceptance receipt.
+- Update and regenerate all cross-provider files that depend on the provider
+  set:
+  - script-regenerated artifacts: `docs/assets/coverage-map.png` and
+    `docs/_generated/reference-tables.md`;
+  - hand-updated prose and tests: `README.md` provider/country counts and table
+    (**22 providers / 21 countries**), `docs/catalogue-provenance.md`
+    (**23 enrolled providers** including deferred South Africa), and
+    `tests/test_frequency.py`;
+  - verify `docs/scripts/generate_station_catalogue.py` runs cleanly with the
+    station explorer v3 catalogue (#1110).
 - Rebuild `si_arso/catalogue/` through `verify.py --catalogue-inputs` only if
   required by provenance or origin certification after VE `main` merges;
   otherwise keep the certified catalogue intact.
